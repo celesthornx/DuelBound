@@ -1,0 +1,395 @@
+[
+  {
+    "time": 1787135942524,
+    "admin": "Mango Gravity",
+    "abilityId": "voidblink",
+    "type": "save",
+    "changes": [
+      {
+        "field": "cooldown",
+        "from": 13,
+        "to": 0.5
+      }
+    ]
+  },
+  {
+    "time": 1787120902607,
+    "admin": "Mango Gravity",
+    "abilityId": "triburst",
+    "type": "reset",
+    "changes": [
+      {
+        "field": "bulletCount",
+        "from": 8,
+        "to": 3
+      },
+      {
+        "field": "speed",
+        "from": 2000,
+        "to": 620
+      },
+      {
+        "field": "range",
+        "from": 100,
+        "to": 220
+      },
+      {
+        "field": "spreadDegrees",
+        "from": 6,
+        "to": 12
+      },
+      {
+        "field": "cooldown",
+        "from": 0.5,
+        "to": 4
+      }
+    ]
+  },
+  {
+    "time": 1787120855361,
+    "admin": "Mango Gravity",
+    "abilityId": "triburst",
+    "type": "save",
+    "changes": [
+      {
+        "field": "bulletCount",
+        "from": 10,
+        "to": 8
+      },
+      {
+        "field": "spreadDegrees",
+        "from": 10,
+        "to": 6
+      }
+    ]
+  },
+  {
+    "time": 1787120817023,
+    "admin": "Mango Gravity",
+    "abilityId": "triburst",
+    "type": "save",
+    "changes": [
+      {
+        "field": "damage",
+        "from": 10,
+        "to": 1
+      },
+      {
+        "field": "range",
+        "from": 1200,
+        "to": 100
+      },
+      {
+        "field": "spreadDegrees",
+        "from": 5,
+        "to": 10
+      }
+    ]
+  },
+  {
+    "time": 1787120717528,
+    "admin": "Mango Gravity",
+    "abilityId": "triburst",
+    "type": "save",
+    "changes": [
+      {
+        "field": "spreadDegrees",
+        "from": 90,
+        "to": 5
+      }
+    ]
+  },
+  {
+    "time": 1787120691158,
+    "admin": "Mango Gravity",
+    "abilityId": "triburst",
+    "type": "save",
+    "changes": [
+      {
+        "field": "spreadDegrees",
+        "from": 1,
+        "to": 90
+      }
+    ]
+  },
+  {
+    "time": 1787120650083,
+    "admin": "Mango Gravity",
+    "abilityId": "triburst",
+    "type": "save",
+    "changes": [
+      {
+        "field": "damage",
+        "from": 0.5,
+        "to": 10
+      }
+    ]
+  },
+  {
+    "time": 1787120633321,
+    "admin": "Mango Gravity",
+    "abilityId": "triburst",
+    "type": "save",
+    "changes": [
+      {
+        "field": "spreadDegrees",
+        "from": 0,
+        "to": 1
+      }
+    ]
+  },
+  {
+    "time": 1787120628992,
+    "admin": "Mango Gravity",
+    "abilityId": "triburst",
+    "type": "save",
+    "changes": [
+      {
+        "field": "spreadDegrees",
+        "from": 1,
+        "to": 0
+      }
+    ]
+  },
+  {
+    "time": 1787120555814,
+    "admin": "Mango Gravity",
+    "abilityId": "triburst",
+    "type": "save",
+    "changes": [
+      {
+        "field": "speed",
+        "from": 100,
+        "to": 2000
+      }
+    ]
+  },
+  {
+    "time": 1787120483821,
+    "admin": "Mango Gravity",
+    "abilityId": "triburst",
+    "type": "save",
+    "changes": [
+      {
+        "field": "speed",
+        "from": 1000,
+        "to": 100
+      }
+    ]
+  },
+  {
+    "time": 1787120442003,
+    "admin": "Mango Gravity",
+    "abilityId": "triburst",
+    "type": "save",
+    "changes": [
+      {
+        "field": "damage",
+        "from": 1,
+        "to": 0.5
+      }
+    ]
+  },
+  {
+    "time": 1787120326842,
+    "admin": "Mango Gravity",
+    "abilityId": "triburst",
+    "type": "save",
+    "changes": [
+      {
+        "field": "cooldown",
+        "from": 0,
+        "to": 0.5
+      }
+    ]
+  },
+  {
+    "time": 1787120306754,
+    "admin": "Mango Gravity",
+    "abilityId": "triburst",
+    "type": "save",
+    "changes": [
+      {
+        "field": "spreadDegrees",
+        "from": 2,
+        "to": 1
+      }
+    ]
+  },
+  {
+    "time": 1787120281095,
+    "admin": "Mango Gravity",
+    "abilityId": "triburst",
+    "type": "save",
+    "changes": [
+      {
+        "field": "bulletCount",
+        "from": 3,
+        "to": 10
+      },
+      {
+        "field": "speed",
+        "from": 620,
+        "to": 1000
+      },
+      {
+        "field": "range",
+        "from": 220,
+        "to": 1200
+      },
+      {
+        "field": "spreadDegrees",
+        "from": 12,
+        "to": 2
+      },
+      {
+        "field": "cooldown",
+        "from": 4,
+        "to": 0
+      }
+    ]
+  },
+  {
+    "time": 1787120065693,
+    "admin": "Mango Gravity",
+    "abilityId": "ricochet",
+    "type": "reset",
+    "changes": [
+      {
+        "field": "maxBounces",
+        "from": 10,
+        "to": 3
+      }
+    ]
+  },
+  {
+    "time": 1787120013786,
+    "admin": "Mango Gravity",
+    "abilityId": "ricochet",
+    "type": "save",
+    "changes": [
+      {
+        "field": "maxBounces",
+        "from": 3,
+        "to": 10
+      }
+    ]
+  },
+  {
+    "time": 1787119924050,
+    "admin": "Mango Gravity",
+    "abilityId": "triburst",
+    "type": "reset",
+    "changes": [
+      {
+        "field": "bulletCount",
+        "from": 10,
+        "to": 3
+      }
+    ]
+  },
+  {
+    "time": 1787119909523,
+    "admin": "Mango Gravity",
+    "abilityId": "triburst",
+    "type": "save",
+    "changes": [
+      {
+        "field": "bulletCount",
+        "from": 3,
+        "to": 10
+      }
+    ]
+  },
+  {
+    "time": 1787119889055,
+    "admin": "Mango Gravity",
+    "abilityId": "triburst",
+    "type": "reset",
+    "changes": [
+      {
+        "field": "spreadDegrees",
+        "from": 0,
+        "to": 12
+      }
+    ]
+  },
+  {
+    "time": 1787119861997,
+    "admin": "Mango Gravity",
+    "abilityId": "triburst",
+    "type": "save",
+    "changes": [
+      {
+        "field": "spreadDegrees",
+        "from": 12,
+        "to": 0
+      }
+    ]
+  },
+  {
+    "time": 1787119844542,
+    "admin": "Mango Gravity",
+    "abilityId": "quickreload",
+    "type": "save",
+    "changes": [
+      {
+        "field": "reloadSpeedPercent",
+        "from": 100,
+        "to": 80
+      }
+    ]
+  },
+  {
+    "time": 1787119805288,
+    "admin": "Mango Gravity",
+    "abilityId": "quickreload",
+    "type": "save",
+    "changes": [
+      {
+        "field": "reloadSpeedPercent",
+        "from": 40,
+        "to": 100
+      }
+    ]
+  },
+  {
+    "time": 1787119737647,
+    "admin": "Mango Gravity",
+    "abilityId": "shockwave",
+    "type": "save",
+    "changes": [
+      {
+        "field": "dashDurationPercent",
+        "from": 55,
+        "to": 80
+      }
+    ]
+  },
+  {
+    "time": 1787119724858,
+    "admin": "Mango Gravity",
+    "abilityId": "shockwave",
+    "type": "reset",
+    "changes": [
+      {
+        "field": "radius",
+        "from": 150,
+        "to": 75
+      }
+    ]
+  },
+  {
+    "time": 1787119601641,
+    "admin": "Mango Gravity",
+    "abilityId": "shockwave",
+    "type": "save",
+    "changes": [
+      {
+        "field": "radius",
+        "from": 75,
+        "to": 150
+      }
+    ]
+  }
+]

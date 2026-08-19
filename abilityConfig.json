@@ -1,0 +1,35 @@
+{
+  "triburst": {
+    "bulletCount": 3,
+    "damage": 1,
+    "speed": 620,
+    "range": 220,
+    "spreadDegrees": 12,
+    "cooldown": 4
+  },
+  "shockwave": {
+    "damage": 1,
+    "radius": 75,
+    "dashDurationPercent": 80
+  },
+  "timewarp": {
+    "slowPercent": 45,
+    "duration": 2.5,
+    "cooldown": 11
+  },
+  "decoy": {
+    "duration": 6,
+    "moveSpeed": 221,
+    "cooldown": 16
+  },
+  "ricochet": {
+    "maxBounces": 3
+  },
+  "voidblink": {
+    "cooldown": 0.5
+  },
+  "quickreload": {
+    "reloadSpeedPercent": 80,
+    "ammoPenalty": 2
+  }
+}

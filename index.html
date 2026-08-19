@@ -1,0 +1,3366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DUEL ARENA</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Share+Tech+Mono&display=swap');
+
+  :root{
+    --void: #0a0d14;
+    --void-2: #10151f;
+    --grid: #1a2130;
+    --p1: #3fd0ff;
+    --p1-dim: #1c4a5c;
+    --p2: #ff5f6d;
+    --p2-dim: #5c2530;
+    --cover: #2a3140;
+    --cover-edge: #4a5568;
+    --ink: #e8edf5;
+    --ink-dim: #6b7688;
+  }
+
+  *{ box-sizing: border-box; }
+
+  body{
+    margin:0;
+    background: radial-gradient(ellipse at center, var(--void-2) 0%, var(--void) 70%);
+    color: var(--ink);
+    font-family: 'Chakra Petch', sans-serif;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding: 18px 10px 30px;
+    min-height:100vh;
+  }
+
+  h1{
+    font-family:'Chakra Petch', sans-serif;
+    font-weight:700;
+    font-size: 28px;
+    letter-spacing: 6px;
+    margin: 6px 0 2px;
+    background: linear-gradient(90deg, var(--p1), var(--ink) 50%, var(--p2));
+    -webkit-background-clip:text;
+    background-clip:text;
+    -webkit-text-fill-color: transparent;
+  }
+  .sub{
+    font-family:'Share Tech Mono', monospace;
+    font-size:11px;
+    letter-spacing:3px;
+    color: var(--ink-dim);
+    margin-bottom: 14px;
+  }
+
+  .stage{
+    position:relative;
+    border: 1px solid var(--grid);
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.02), 0 20px 60px rgba(0,0,0,0.5), inset 0 0 80px rgba(63,208,255,0.03);
+  }
+
+  canvas{ display:block; background: var(--void); }
+
+  .hud{
+    position:absolute;
+    top:0; left:0; right:0;
+    display:flex;
+    justify-content:space-between;
+    padding: 10px 14px;
+    pointer-events:none;
+    font-family:'Share Tech Mono', monospace;
+  }
+  .side{ display:flex; flex-direction:column; gap:6px; min-width:150px; }
+  .side.right{ align-items:flex-end; }
+  .name{ font-size:13px; letter-spacing:2px; font-weight:700; }
+  .name.p1{ color: var(--p1); }
+  .name.p2{ color: var(--p2); }
+  .score{ display:flex; gap:5px; }
+  .side.right .score{ flex-direction:row-reverse; }
+  .pip{ width:14px; height:14px; border:1.5px solid var(--ink-dim); border-radius:2px; transform: rotate(45deg); }
+  .pip.filled.p1{ background: var(--p1); border-color: var(--p1); box-shadow:0 0 8px var(--p1); }
+  .pip.filled.p2{ background: var(--p2); border-color: var(--p2); box-shadow:0 0 8px var(--p2); }
+
+  .bars{ display:flex; flex-direction:column; gap:3px; width:130px; }
+  .side.right .bars{ align-items:flex-end; }
+  .barlabel{ font-size:9px; letter-spacing:1px; color:var(--ink-dim); }
+  .barrow{ display:flex; gap:3px; }
+  .side.right .barrow{ flex-direction:row-reverse; }
+  .ammodot{ width:9px; height:9px; border-radius:50%; border:1px solid var(--ink-dim); }
+  .ammodot.on.p1{ background:var(--p1); border-color:var(--p1); box-shadow:0 0 5px var(--p1); }
+  .ammodot.on.p2{ background:var(--p2); border-color:var(--p2); box-shadow:0 0 5px var(--p2); }
+  .dashtrack{ width:130px; height:5px; background:var(--grid); border-radius:3px; overflow:hidden; }
+  .dashfill{ height:100%; width:100%; transition:width .08s linear; }
+  .dashfill.p1{ background:var(--p1); }
+  .dashfill.p2{ background:var(--p2); }
+
+  .center-msg{
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    flex-direction:column;
+    pointer-events:none;
+    font-family:'Chakra Petch', sans-serif;
+  }
+  .center-msg .big{
+    font-size: 46px; font-weight:700; letter-spacing:4px;
+    text-shadow: 0 0 20px rgba(0,0,0,0.8);
+  }
+  .center-msg .small{
+    margin-top:8px;
+    font-family:'Share Tech Mono', monospace;
+    font-size:12px; letter-spacing:2px; color: var(--ink-dim);
+  }
+
+  .legend{
+    display:flex; justify-content:center; gap: 46px;
+    margin-top: 16px;
+    font-family:'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-dim);
+  }
+  .legend .col{ text-align:left; }
+  .legend .col b{ display:block; margin-bottom:5px; letter-spacing:2px; font-size:11px; }
+  .legend .col.p1 b{ color: var(--p1); }
+  .legend .col.p2 b{ color: var(--p2); }
+  .legend .row{ margin:2px 0; }
+  .key{
+    display:inline-block; border:1px solid var(--ink-dim); border-radius:3px;
+    padding:1px 6px; margin-right:6px; font-size:10px; color: var(--ink);
+  }
+
+  /* ---- Menu overlay ---- */
+  .menu-overlay{
+    position:absolute; inset:0;
+    background: rgba(10,13,20,0.94);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap: 22px;
+    z-index: 10;
+  }
+  .menu-title{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 11px; letter-spacing: 4px; color: var(--ink-dim);
+  }
+  .menu-group{
+    display:flex; flex-direction:column; gap:10px; align-items:center;
+  }
+  .menu-row{ display:flex; gap:12px; }
+  .menu-btn{
+    background: transparent;
+    border: 1px solid var(--ink-dim);
+    color: var(--ink);
+    font-family:'Chakra Petch', sans-serif;
+    font-weight:600;
+    letter-spacing:2.5px;
+    font-size:13px;
+    padding: 12px 22px;
+    cursor:pointer;
+    transition: all .15s ease;
+    min-width: 190px;
+  }
+  .menu-btn:hover{ border-color: var(--p1); background: rgba(63,208,255,0.08); box-shadow:0 0 16px rgba(63,208,255,0.25); }
+  .menu-btn.accent-2:hover{ border-color: var(--p2); background: rgba(255,95,109,0.08); box-shadow:0 0 16px rgba(255,95,109,0.25); }
+  .menu-btn.diff{ min-width: 120px; font-size:11px; padding: 9px 14px; }
+  .menu-btn.diff.selected{ border-color: var(--p1); color:#000; background: var(--p1); }
+  .menu-back{
+    background:none; border:none; color:var(--ink-dim);
+    font-family:'Share Tech Mono', monospace; font-size:10px; letter-spacing:2px;
+    cursor:pointer; text-decoration:underline; margin-top: 4px;
+  }
+  .hidden{ display:none !important; }
+  canvas.mouse-aim{ cursor: none; }
+
+  /* ---- Credits & shop ---- */
+  .credits-display{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 13px; letter-spacing: 2px;
+    color: #ffce54;
+    border: 1px solid rgba(255,206,84,0.35);
+    background: rgba(255,206,84,0.06);
+    padding: 6px 14px;
+    border-radius: 3px;
+  }
+  .menu-btn.shop-entry{ border-color:#ffce54; color:#ffce54; }
+  .menu-btn.shop-entry:hover{ background: rgba(255,206,84,0.1); box-shadow:0 0 16px rgba(255,206,84,0.3); border-color:#ffce54; }
+
+  .menu-btn.leaderboard-entry{ border-color:var(--p1); color:var(--p1); }
+  .menu-btn.leaderboard-entry:hover{ background: rgba(63,208,255,0.1); box-shadow:0 0 16px rgba(63,208,255,0.3); border-color:var(--p1); }
+
+  .menu-btn.settings-entry{ border-color: var(--ink-dim); color: var(--ink); }
+  .menu-btn.settings-entry:hover{ background: rgba(255,255,255,0.06); box-shadow:0 0 16px rgba(255,255,255,0.15); border-color: var(--ink); }
+
+  .settings-note{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 10px; line-height: 1.6; letter-spacing: 0.5px;
+    color: var(--ink-dim);
+    max-width: 380px;
+    text-align: center;
+    margin-bottom: 6px;
+  }
+  .settings-row{
+    display:flex; align-items:center; justify-content:space-between;
+    width: 340px; max-width: 90%;
+    padding: 10px 14px;
+    border: 1px solid var(--grid);
+    background: rgba(255,255,255,0.02);
+  }
+  .settings-label{
+    font-family:'Chakra Petch', sans-serif;
+    font-weight:600; letter-spacing:1.5px; font-size:12px;
+  }
+  .settings-label.p1{ color: var(--p1); }
+  .settings-label.p2{ color: var(--p2); }
+  .toggle-btn{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 11px; letter-spacing: 2px; font-weight:600;
+    padding: 6px 16px;
+    border: 1px solid var(--ink-dim);
+    background: transparent;
+    color: var(--ink-dim);
+    cursor: pointer;
+    transition: all .15s ease;
+    min-width: 52px;
+  }
+  .toggle-btn.on{
+    border-color: #5dffa0; color: #5dffa0;
+    background: rgba(93,255,160,0.1);
+    box-shadow: 0 0 10px rgba(93,255,160,0.3);
+  }
+  .toggle-btn:hover{ border-color: var(--ink); color: var(--ink); }
+  .toggle-btn.on:hover{ border-color: #5dffa0; color: #5dffa0; }
+
+  .menu-btn.admin-entry{ border-color: #ff5f6d; color: #ff5f6d; }
+  .menu-btn.admin-entry:hover{ background: rgba(255,95,109,0.1); box-shadow:0 0 16px rgba(255,95,109,0.3); border-color: #ff5f6d; }
+
+  .admin-panel{ width: 460px; }
+  .admin-section-label{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 11px; letter-spacing: 3px;
+    color: #ff5f6d;
+    margin-top: 10px;
+    width: 100%; text-align: left;
+    border-bottom: 1px solid rgba(255,95,109,0.3);
+    padding-bottom: 6px;
+  }
+  .admin-select{
+    width: 100%;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--grid);
+    color: var(--ink);
+    font-family:'Chakra Petch', sans-serif;
+    font-weight:600; letter-spacing:1px; font-size: 13px;
+    padding: 10px 12px;
+    cursor: pointer;
+  }
+  .admin-fields{
+    display:grid; grid-template-columns: 1fr 1fr;
+    gap: 10px 14px;
+    width: 100%;
+  }
+  .admin-field{
+    display:flex; flex-direction:column; gap:4px;
+  }
+  .admin-field label{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 9px; letter-spacing: 1.5px; color: var(--ink-dim);
+  }
+  .admin-field input{
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--grid);
+    color: var(--ink);
+    font-family:'Share Tech Mono', monospace;
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+  .admin-field input:focus{ outline: none; border-color: #ff5f6d; }
+  .admin-status-msg{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 10px; letter-spacing: 1px;
+    color: #5dffa0;
+    min-height: 14px;
+    text-align: center;
+  }
+  .admin-status-msg.error{ color: #ff5f6d; }
+  .admin-btn-row{ display:flex; gap: 10px; width: 100%; }
+  .admin-btn-row .menu-btn{ flex:1; min-width: 0; font-size: 11px; padding: 10px 8px; }
+  .admin-save-btn{ border-color: #5dffa0; color: #5dffa0; }
+  .admin-save-btn:hover{ background: rgba(93,255,160,0.1); box-shadow:0 0 16px rgba(93,255,160,0.3); border-color:#5dffa0; }
+  .admin-reset-btn{ border-color: var(--ink-dim); color: var(--ink-dim); }
+  .admin-reset-btn:hover{ background: rgba(255,255,255,0.06); border-color: var(--ink); color: var(--ink); }
+  .admin-reset-all-btn{
+    width: 100%; border-color: #ff5f6d; color: #ff5f6d; font-size: 11px;
+  }
+  .admin-reset-all-btn:hover{ background: rgba(255,95,109,0.1); box-shadow:0 0 16px rgba(255,95,109,0.3); }
+  .admin-log{
+    width: 100%; max-height: 140px; overflow-y: auto;
+    font-family:'Share Tech Mono', monospace;
+    font-size: 10px; line-height: 1.7;
+    color: var(--ink-dim);
+    text-align: left;
+  }
+  .admin-log .log-row{ border-bottom: 1px solid var(--grid); padding: 4px 0; }
+  .admin-log .log-time{ color: #ff5f6d; margin-right: 8px; }
+
+  .stats-line{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 10px; letter-spacing: 2px;
+    color: var(--ink-dim);
+    margin-top: -6px;
+  }
+
+  .account-panel{
+    display:flex; flex-direction:column; align-items:center; gap:8px;
+    padding: 10px 16px;
+    border: 1px solid var(--grid);
+    background: rgba(255,255,255,0.02);
+  }
+  .account-status{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 9px; letter-spacing: 1.5px;
+    color: var(--ink-dim);
+    text-align:center;
+  }
+
+  .leaderboard-row{
+    display:flex; align-items:center; gap:12px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--grid);
+    font-family:'Share Tech Mono', monospace;
+    font-size: 12px;
+  }
+  .leaderboard-row.top3{ color: #ffce54; }
+  .lb-rank{ width: 32px; color: var(--ink-dim); }
+  .leaderboard-row.top3 .lb-rank{ color: #ffce54; }
+  .lb-name{ flex:1; text-align:left; letter-spacing:1px; }
+  .lb-value{ font-weight:600; }
+
+  .shop-panel{
+    width: 620px; max-width: 92%;
+    max-height: 460px;
+    display:flex; flex-direction:column; align-items:center;
+    gap: 14px;
+  }
+  .shop-header{ display:flex; align-items:center; gap:18px; }
+  .shop-tabs{ display:flex; gap:8px; }
+  .shop-tab{
+    background:transparent; border:1px solid var(--ink-dim); color:var(--ink-dim);
+    font-family:'Chakra Petch', sans-serif; font-weight:600; letter-spacing:2px;
+    font-size:11px; padding:8px 16px; cursor:pointer; transition: all .15s ease;
+  }
+  .shop-tab.selected{ border-color:#ffce54; color:#ffce54; background: rgba(255,206,84,0.08); }
+  .shop-tab:hover{ color: var(--ink); }
+
+  .shop-body{
+    width:100%; max-height: 300px; overflow-y:auto;
+    padding: 4px 6px;
+  }
+  .shop-section-label{
+    font-family:'Share Tech Mono', monospace; font-size:10px; letter-spacing:2px;
+    color: var(--ink-dim); margin: 10px 0 8px; text-align:left;
+  }
+  .shop-section-label.p1{ color: var(--p1); }
+  .shop-section-label.p2{ color: var(--p2); }
+  .skin-grid, .power-grid{
+    display:grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+    margin-bottom: 6px;
+  }
+  .power-grid{ grid-template-columns: repeat(2, 1fr); }
+  .skin-card, .power-card{
+    border: 1px solid var(--grid);
+    background: rgba(255,255,255,0.02);
+    padding: 10px 8px;
+    cursor:pointer;
+    text-align:center;
+    transition: all .12s ease;
+    position:relative;
+  }
+  .skin-card:hover, .power-card:hover{ border-color: var(--ink-dim); background: rgba(255,255,255,0.05); }
+  .skin-swatch{
+    width: 30px; height:30px; border-radius:50%; margin: 0 auto 8px;
+    box-shadow: 0 0 10px currentColor;
+  }
+  .skin-name, .power-name{
+    font-size: 10px; letter-spacing: 1px; font-family:'Share Tech Mono', monospace;
+    color: var(--ink); margin-bottom: 4px;
+  }
+  .power-desc{
+    font-size: 9px; color: var(--ink-dim); line-height:1.4; margin-bottom:6px;
+  }
+  .item-price{ font-size:10px; color:#ffce54; font-family:'Share Tech Mono', monospace; }
+  .item-price.free{ color: var(--ink-dim); }
+  .skin-card.owned, .power-card.owned{ border-color: rgba(63,208,255,0.3); }
+  .skin-card.equipped, .power-card.equipped{
+    border-color: #ffce54; background: rgba(255,206,84,0.08);
+    box-shadow: 0 0 14px rgba(255,206,84,0.2);
+  }
+  .skin-card.equipped::after, .power-card.equipped::after{
+    content: 'EQUIPPED'; position:absolute; top:4px; right:6px;
+    font-size:7px; letter-spacing:1px; color:#ffce54; font-family:'Share Tech Mono', monospace;
+  }
+  .skin-card.locked, .power-card.locked{ opacity: 0.55; }
+  .skin-card.unaffordable, .power-card.unaffordable{ opacity: 0.4; cursor:not-allowed; }
+
+  .rarity-badge{
+    display:inline-block; margin-bottom:6px;
+    font-size:7px; letter-spacing:1px; font-family:'Share Tech Mono', monospace;
+    padding: 2px 6px; border-radius: 3px; border: 1px solid;
+  }
+  .rarity-badge.rarity-common{
+    color: var(--ink-dim); border-color: var(--ink-dim);
+    background: rgba(255,255,255,0.04);
+  }
+  .rarity-badge.rarity-rare{
+    color: #c58bff; border-color: #b06bff;
+    background: rgba(176,107,255,0.12);
+    box-shadow: 0 0 8px rgba(176,107,255,0.35);
+  }
+  .rarity-badge.rarity-epic{
+    color: #ffab7a; border-color: #ff6b35;
+    background: rgba(255,107,53,0.12);
+    box-shadow: 0 0 8px rgba(255,107,53,0.4);
+  }
+  .rarity-badge.rarity-legendary{
+    color: #ffe89a; border-color: #ffd23f;
+    background: rgba(255,210,63,0.14);
+    box-shadow: 0 0 10px rgba(255,210,63,0.55);
+    animation: legendary-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes legendary-pulse{
+    0%, 100% { box-shadow: 0 0 6px rgba(255,210,63,0.4); }
+    50% { box-shadow: 0 0 14px rgba(255,210,63,0.8); }
+  }
+  .rarity-badge.rarity-mythic{
+    color: #ffffff; border-color: #ff5fc4;
+    background: rgba(255,95,196,0.14);
+    animation: mythic-shift 2.4s linear infinite;
+  }
+  @keyframes mythic-shift{
+    0%   { box-shadow: 0 0 10px rgba(63,208,255,0.7);  border-color: #3fd0ff; }
+    33%  { box-shadow: 0 0 10px rgba(255,95,196,0.7);  border-color: #ff5fc4; }
+    66%  { box-shadow: 0 0 10px rgba(255,210,63,0.7);  border-color: #ffd23f; }
+    100% { box-shadow: 0 0 10px rgba(63,208,255,0.7);  border-color: #3fd0ff; }
+  }
+  .rarity-badge.rarity-ascendant{
+    color: #ffffff; border-color: #ffffff;
+    background: rgba(255,255,255,0.1);
+    animation: ascendant-shift 1.4s linear infinite;
+  }
+  @keyframes ascendant-shift{
+    0%   { box-shadow: 0 0 14px rgba(255,255,255,0.9); border-color: #ffffff; transform: scale(1); }
+    20%  { box-shadow: 0 0 14px rgba(63,208,255,0.9);  border-color: #3fd0ff; transform: scale(1.04); }
+    40%  { box-shadow: 0 0 14px rgba(176,107,255,0.9); border-color: #b06bff; transform: scale(1); }
+    60%  { box-shadow: 0 0 14px rgba(255,95,196,0.9);  border-color: #ff5fc4; transform: scale(1.04); }
+    80%  { box-shadow: 0 0 14px rgba(255,210,63,0.9);  border-color: #ffd23f; transform: scale(1); }
+    100% { box-shadow: 0 0 14px rgba(255,255,255,0.9); border-color: #ffffff; transform: scale(1); }
+  }
+
+  .power-slots-note{
+    font-size:9px; color: var(--ink-dim); font-family:'Share Tech Mono', monospace;
+    letter-spacing:1px; margin-top:4px;
+  }
+
+  .exit-btn{
+    position:absolute; top:10px; left:50%; transform: translateX(-50%);
+    background: rgba(10,13,20,0.7);
+    border: 1px solid var(--ink-dim);
+    color: var(--ink-dim);
+    font-family:'Share Tech Mono', monospace;
+    font-size: 10px; letter-spacing: 2px;
+    padding: 5px 14px;
+    cursor:pointer;
+    z-index: 5;
+    transition: all .15s ease;
+  }
+  .exit-btn:hover{ border-color: var(--p2); color: var(--p2); background: rgba(255,95,109,0.08); }
+
+  .mute-btn{
+    position:absolute; top:10px; right:10px;
+    background: rgba(10,13,20,0.7);
+    border: 1px solid var(--ink-dim);
+    color: var(--ink);
+    font-size: 14px;
+    line-height:1;
+    width: 30px; height: 30px;
+    border-radius: 3px;
+    cursor:pointer;
+    z-index: 5;
+    transition: all .15s ease;
+  }
+  .mute-btn:hover{ border-color: var(--p1); background: rgba(63,208,255,0.08); }
+</style>
+</head>
+<body>
+
+<h1>DUEL ARENA</h1>
+<div class="sub">FIRST TO 3 ROUNDS WINS</div>
+
+<div class="stage">
+  <canvas id="game" width="900" height="540"></canvas>
+  <div class="hud">
+    <div class="side left">
+      <div class="name p1">PLAYER ONE</div>
+      <div class="score" id="scoreP1"></div>
+      <div class="bars">
+        <div class="barlabel">AMMO</div>
+        <div class="barrow" id="ammoP1"></div>
+        <div class="barlabel">DASH</div>
+        <div class="dashtrack"><div class="dashfill p1" id="dashP1"></div></div>
+        <div class="barlabel hidden" id="abilityLabelP1">Q / RIGHT-CLICK</div>
+        <div class="dashtrack hidden" id="abilityTrackP1"><div class="dashfill p1" id="abilityP1" style="background:#ffce54;"></div></div>
+      </div>
+    </div>
+    <div class="side right">
+      <div class="name p2" id="p2Label">PLAYER TWO</div>
+      <div class="score" id="scoreP2"></div>
+      <div class="bars">
+        <div class="barlabel">AMMO</div>
+        <div class="barrow" id="ammoP2"></div>
+        <div class="barlabel">DASH</div>
+        <div class="dashtrack"><div class="dashfill p2" id="dashP2"></div></div>
+        <div class="barlabel hidden" id="abilityLabelP2">"." KEY</div>
+        <div class="dashtrack hidden" id="abilityTrackP2"><div class="dashfill p2" id="abilityP2" style="background:#ffce54;"></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="center-msg" id="centerMsg"></div>
+
+  <!-- MAIN MENU -->
+  <div class="menu-overlay" id="menuMain">
+    <div class="menu-title">SELECT MODE</div>
+    <div class="credits-display" id="creditsDisplayMain">◈ <span id="creditsAmountMain">0</span> CREDITS</div>
+    <div class="stats-line" id="statsLineMain">0 KILLS &middot; 0 WINS</div>
+
+    <div class="account-panel">
+      <div class="account-status" id="accountStatus">NOT SIGNED IN &mdash; PROGRESS WON'T BE SAVED</div>
+      <div id="googleSignInBtn"></div>
+      <button class="menu-back hidden" id="signOutBtn">sign out</button>
+    </div>
+
+    <div class="menu-group">
+	<button class="menu-btn" id="btnLocal">LOCAL 2 PLAYER</button>
+	<button class="menu-btn" id="btnOnline">ONLINE MULTIPLAYER</button>
+	<button class="menu-btn accent-2" id="btnAI">VS COMPUTER</button>
+      	<button class="menu-btn shop-entry" id="btnShop">SHOP</button>
+      	<button class="menu-btn leaderboard-entry" id="btnLeaderboard">LEADERBOARDS</button>
+      	<button class="menu-btn settings-entry" id="btnSettings">SETTINGS</button>
+      	<button class="menu-btn admin-entry hidden" id="btnAdmin">ADMIN</button>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="menu-overlay hidden" id="menuSettings">
+    <div class="shop-panel">
+      <div class="menu-title">PLAYER SETTINGS</div>
+      <div class="settings-note">
+        Auto-aim keeps a player's facing locked onto the opponent automatically
+        &mdash; handy if aiming with keyboard-only movement feels difficult.
+        It needs a clear line of sight to engage, and overrides Mouse Aim
+        when both are active.
+      </div>
+      <div class="settings-row">
+        <span class="settings-label p1">PLAYER ONE AUTO-AIM</span>
+        <button class="toggle-btn" id="toggleAutoAimP1">OFF</button>
+      </div>
+      <div class="settings-row">
+        <span class="settings-label p2">PLAYER TWO AUTO-AIM</span>
+        <button class="toggle-btn" id="toggleAutoAimP2">OFF</button>
+      </div>
+      <button class="menu-back" id="btnBackSettings">&larr; back</button>
+    </div>
+  </div>
+
+  <!-- ADMIN PANEL -->
+  <div class="menu-overlay hidden" id="menuAdmin">
+    <div class="shop-panel admin-panel">
+      <div class="menu-title">DUEL ARENA // ADMIN</div>
+      <div class="admin-section-label">ABILITY BALANCE</div>
+
+      <select class="admin-select" id="adminAbilitySelect"></select>
+
+      <div class="admin-fields" id="adminFields"></div>
+
+      <div class="admin-status-msg" id="adminStatusMsg"></div>
+
+      <div class="admin-btn-row">
+        <button class="menu-btn admin-save-btn" id="btnAdminSave">SAVE CHANGES</button>
+        <button class="menu-btn admin-reset-btn" id="btnAdminReset">RESET ABILITY</button>
+      </div>
+      <button class="menu-btn admin-reset-all-btn" id="btnAdminResetAll">RESET ALL ABILITIES</button>
+
+      <div class="admin-section-label">ADMIN LOG</div>
+      <div class="admin-log" id="adminLogBody"></div>
+
+      <button class="menu-back" id="btnBackAdmin">&larr; back</button>
+    </div>
+  </div>
+
+  <!-- LEADERBOARDS -->
+  <div class="menu-overlay hidden" id="menuLeaderboard">
+    <div class="shop-panel">
+      <div class="menu-title">LEADERBOARDS</div>
+      <div class="shop-tabs">
+        <button class="shop-tab selected" id="lbTabCredits" data-sort="credits">CREDITS</button>
+        <button class="shop-tab" id="lbTabKills" data-sort="kills">KILLS</button>
+        <button class="shop-tab" id="lbTabWins" data-sort="wins">WINS</button>
+      </div>
+      <div class="shop-body" id="leaderboardBody"></div>
+      <button class="menu-back" id="btnBackLeaderboard">&larr; back</button>
+    </div>
+  </div>
+
+  <!-- DIFFICULTY MENU -->
+  <div class="menu-overlay hidden" id="menuDiff">
+    <div class="menu-title">SELECT DIFFICULTY</div>
+    <div class="menu-row">
+      <button class="menu-btn diff" data-diff="easy">EASY</button>
+      <button class="menu-btn diff" data-diff="normal">NORMAL</button>
+      <button class="menu-btn diff" data-diff="hard">HARD</button>
+    </div>
+    <button class="menu-back" id="btnBackDiff">&larr; back</button>
+  </div>
+
+  <!-- AIM STYLE MENU -->
+  <div class="menu-overlay hidden" id="menuAim">
+    <div class="menu-title" id="menuAimTitle">SELECT AIM STYLE</div>
+    <div class="hidden" id="onlineStatusWrap">
+      <div class="credits-display" id="onlineStatusMsg" style="color:var(--p1); border-color:rgba(63,208,255,0.35); background:rgba(63,208,255,0.06);">CONNECTING...</div>
+    </div>
+    <div class="menu-group" id="aimButtonsGroup">
+      <button class="menu-btn" id="btnAimMove">MOVEMENT AIM<br><span style="font-size:9px;color:var(--ink-dim);letter-spacing:1.5px;">FACE THE WAY YOU MOVE</span></button>
+      <button class="menu-btn accent-2" id="btnAimMouse">MOUSE AIM<br><span style="font-size:9px;color:var(--ink-dim);letter-spacing:1.5px;">AIM FREELY, MOVE INDEPENDENTLY</span></button>
+    </div>
+    <button class="menu-back" id="btnBackAim">&larr; back</button>
+  </div>
+
+  <!-- SHOP -->
+  <div class="menu-overlay hidden" id="menuShop">
+    <div class="shop-panel">
+      <div class="shop-header">
+        <div class="menu-title">SHOP</div>
+        <div class="credits-display" id="creditsDisplayShop">◈ <span id="creditsAmountShop">0</span> CREDITS</div>
+      </div>
+      <div class="shop-tabs">
+        <button class="shop-tab selected" id="tabSkins" data-tab="skins">SKINS SHOP</button>
+        <button class="shop-tab" id="tabPowers" data-tab="powers">POWERS SHOP</button>
+        <button class="shop-tab" id="tabAbilities" data-tab="abilities">ABILITIES SHOP</button>
+      </div>
+      <div class="shop-body" id="shopBody"></div>
+      <button class="menu-back" id="btnBackShop">&larr; back</button>
+    </div>
+  </div>
+
+  <!-- EXIT BUTTON -->
+  <button class="exit-btn hidden" id="exitBtn" title="Exit to menu">EXIT</button>
+  <button class="mute-btn" id="muteBtn" title="Mute / unmute sound">&#128266;</button>
+</div>
+
+<div class="legend" id="legend">
+  <div class="col p1">
+    <b>PLAYER ONE</b>
+    <div class="row"><span class="key">W A S D</span>move</div>
+    <div class="row"><span class="key">SPACE</span>shoot</div>
+    <div class="row"><span class="key">SHIFT</span>dash</div>
+  </div>
+  <div class="col p2" id="p2Legend">
+    <b>PLAYER TWO</b>
+    <div class="row"><span class="key">&larr; &uarr; &darr; &rarr;</span>move</div>
+    <div class="row"><span class="key">ENTER</span>shoot</div>
+    <div class="row"><span class="key">/ ?</span>dash</div>
+  </div>
+</div>
+
+<script>
+(function(){
+
+  // ---- Audio (sound effects are synthesized live with the Web Audio API
+  // -- no external files needed for those. Music is a separate <audio>
+  // element loading bgm.mp3, see below). ----
+  let audioCtx = null;
+  let sfxGain = null;
+  let audioMuted = false;
+  const SFX_VOLUME = 0.8;
+  const BGM_VOLUME = 0.35;
+
+  function getAudioCtx(){
+    if(!audioCtx){
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      sfxGain = audioCtx.createGain();
+      sfxGain.gain.value = audioMuted ? 0 : SFX_VOLUME;
+      sfxGain.connect(audioCtx.destination);
+    }
+    if(audioCtx.state === 'suspended'){
+      audioCtx.resume();
+    }
+    return audioCtx;
+  }
+
+  function toggleMute(){
+    audioMuted = !audioMuted;
+
+    if(sfxGain){
+        sfxGain.gain.value = audioMuted ? 0 : SFX_VOLUME;
+    }
+
+    bgm.volume = audioMuted ? 0 : BGM_VOLUME;
+    if(audioMuted){
+      bgm.pause();
+    } else if(started){
+      bgm.play().catch(()=>{});
+    }
+
+    const btn = document.getElementById('muteBtn');
+    if(btn) btn.textContent = audioMuted ? '\u{1F507}' : '\u{1F50A}';
+}
+  // Quick descending "pew" for shots.
+  function playShootSound(){
+    try{
+      const ctx = getAudioCtx();
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(780, now);
+      osc.frequency.exponentialRampToValueAtTime(160, now + 0.09);
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+      osc.connect(gain);
+      gain.connect(sfxGain);
+      osc.start(now);
+      osc.stop(now + 0.11);
+    } catch(e){ /* audio unavailable -- fail silently */ }
+  }
+
+  // Filtered noise burst + a low thud for bullet impacts that deal real damage.
+  function playHitSound(){
+    try{
+      const ctx = getAudioCtx();
+      const now = ctx.currentTime;
+
+      const bufferSize = Math.floor(ctx.sampleRate * 0.18);
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for(let i=0;i<bufferSize;i++){
+        data[i] = (Math.random()*2-1) * (1 - i/bufferSize);
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(2000, now);
+      filter.frequency.exponentialRampToValueAtTime(200, now + 0.18);
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.35, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      noise.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(sfxGain);
+      noise.start(now);
+      noise.stop(now + 0.18);
+
+      const osc = ctx.createOscillator();
+      const oscGain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(160, now);
+      osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+      oscGain.gain.setValueAtTime(0.3, now);
+      oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+      osc.connect(oscGain);
+      oscGain.connect(sfxGain);
+      osc.start(now);
+      osc.stop(now + 0.15);
+    } catch(e){ /* audio unavailable -- fail silently */ }
+  }
+
+  // Bright metallic "ping" for a shot that was absorbed by a Kevlar shield
+  // charge instead of dealing real damage -- deliberately NOT the same
+  // sound as playHitSound so a blocked shot never sounds like a real hit.
+  function playShieldSound(){
+    try{
+      const ctx = getAudioCtx();
+      const now = ctx.currentTime;
+      [1400, 2100].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, now);
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.22, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+        osc.connect(gain);
+        gain.connect(sfxGain);
+        osc.start(now + i*0.02);
+        osc.stop(now + 0.24);
+      });
+    } catch(e){ /* audio unavailable -- fail silently */ }
+  }
+
+  // Three quick overlapping "pews" for the Triburst ability, distinct
+  // from a single normal shot.
+  function playAbilitySound(){
+    try{
+      const ctx = getAudioCtx();
+      const now = ctx.currentTime;
+      [0, 0.045, 0.09].forEach(delay => {
+        const t = now + delay;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(820, t);
+        osc.frequency.exponentialRampToValueAtTime(220, t + 0.08);
+        gain.gain.setValueAtTime(0.15, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+        osc.connect(gain);
+        gain.connect(sfxGain);
+        osc.start(t);
+        osc.stop(t + 0.1);
+      });
+    } catch(e){ /* audio unavailable -- fail silently */ }
+  }
+
+  // Deep noise boom + sub-bass thump for the Shockwave ability's blast.
+  function playShockwaveSound(){
+    try{
+      const ctx = getAudioCtx();
+      const now = ctx.currentTime;
+
+      const bufferSize = Math.floor(ctx.sampleRate * 0.3);
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for(let i=0;i<bufferSize;i++){
+        data[i] = (Math.random()*2-1) * (1 - i/bufferSize);
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(1200, now);
+      filter.frequency.exponentialRampToValueAtTime(120, now + 0.3);
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.4, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+      noise.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(sfxGain);
+      noise.start(now);
+      noise.stop(now + 0.3);
+
+      const osc = ctx.createOscillator();
+      const oscGain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(110, now);
+      osc.frequency.exponentialRampToValueAtTime(30, now + 0.28);
+      oscGain.gain.setValueAtTime(0.5, now);
+      oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      osc.connect(oscGain);
+      oscGain.connect(sfxGain);
+      osc.start(now);
+      osc.stop(now + 0.28);
+    } catch(e){ /* audio unavailable -- fail silently */ }
+  }
+
+  // Descending pitch-bent tone with a shimmering high overtone, for the
+  // Time Warp ability -- meant to sound distinctly "sci-fi stasis" rather
+  // than an impact.
+  function playTimeWarpSound(){
+    try{
+      const ctx = getAudioCtx();
+      const now = ctx.currentTime;
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(520, now);
+      osc.frequency.exponentialRampToValueAtTime(90, now + 0.45);
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.18, now + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.48);
+      osc.connect(gain);
+      gain.connect(sfxGain);
+      osc.start(now);
+      osc.stop(now + 0.5);
+
+      const shimmer = ctx.createOscillator();
+      const shimmerGain = ctx.createGain();
+      shimmer.type = 'triangle';
+      shimmer.frequency.setValueAtTime(1800, now);
+      shimmer.frequency.exponentialRampToValueAtTime(2600, now + 0.4);
+      shimmerGain.gain.setValueAtTime(0, now);
+      shimmerGain.gain.linearRampToValueAtTime(0.06, now + 0.05);
+      shimmerGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+      shimmer.connect(shimmerGain);
+      shimmerGain.connect(sfxGain);
+      shimmer.start(now);
+      shimmer.stop(now + 0.4);
+    } catch(e){ /* audio unavailable -- fail silently */ }
+  }
+
+  // Shimmering "duplicate" sound for when a Decoy is spawned.
+  function playDecoySpawnSound(){
+    try{
+      const ctx = getAudioCtx();
+      const now = ctx.currentTime;
+      [660, 830, 990].forEach((freq, i) => {
+        const t = now + i*0.05;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, t);
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.12, t + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+        osc.connect(gain);
+        gain.connect(sfxGain);
+        osc.start(t);
+        osc.stop(t + 0.32);
+      });
+    } catch(e){ /* audio unavailable -- fail silently */ }
+  }
+
+  // Soft "puff" for a bullet passing harmlessly through a Decoy.
+  function playDecoyPoofSound(){
+    try{
+      const ctx = getAudioCtx();
+      const now = ctx.currentTime;
+      const bufferSize = Math.floor(ctx.sampleRate * 0.12);
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for(let i=0;i<bufferSize;i++){
+        data[i] = (Math.random()*2-1) * (1 - i/bufferSize);
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(900, now);
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.18, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      noise.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(sfxGain);
+      noise.start(now);
+      noise.stop(now + 0.12);
+    } catch(e){ /* audio unavailable -- fail silently */ }
+  }
+
+  // Quick metallic ping for a Ricochet bounce off cover or the border.
+  function playRicochetSound(){
+    try{
+      const ctx = getAudioCtx();
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(1100 + Math.random()*300, now);
+      osc.frequency.exponentialRampToValueAtTime(500, now + 0.07);
+      gain.gain.setValueAtTime(0.13, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+      osc.connect(gain);
+      gain.connect(sfxGain);
+      osc.start(now);
+      osc.stop(now + 0.08);
+    } catch(e){ /* audio unavailable -- fail silently */ }
+  }
+
+  // Sharp inward-then-outward "crack" for Void Blink -- a fast downward
+  // sweep (the void pulling in) immediately followed by a bright upward
+  // one (snapping back into existence).
+  function playVoidBlinkSound(){
+    try{
+      const ctx = getAudioCtx();
+      const now = ctx.currentTime;
+
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sawtooth';
+      osc1.frequency.setValueAtTime(900, now);
+      osc1.frequency.exponentialRampToValueAtTime(80, now + 0.09);
+      gain1.gain.setValueAtTime(0.16, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+      osc1.connect(gain1);
+      gain1.connect(sfxGain);
+      osc1.start(now);
+      osc1.stop(now + 0.1);
+
+      const t2 = now + 0.08;
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'square';
+      osc2.frequency.setValueAtTime(200, t2);
+      osc2.frequency.exponentialRampToValueAtTime(1600, t2 + 0.1);
+      gain2.gain.setValueAtTime(0.14, t2);
+      gain2.gain.exponentialRampToValueAtTime(0.001, t2 + 0.12);
+      osc2.connect(gain2);
+      gain2.connect(sfxGain);
+      osc2.start(t2);
+      osc2.stop(t2 + 0.12);
+    } catch(e){ /* audio unavailable -- fail silently */ }
+  }
+
+  // ---- MP3 BACKGROUND MUSIC ----
+const bgm = new Audio("bgm.mp3");
+bgm.loop = true;
+bgm.volume = audioMuted ? 0 : BGM_VOLUME;
+
+function startMusic() {
+    if (audioMuted) return;
+    bgm.play().catch(error => {
+        console.log("Music waiting for user interaction:", error);
+    });
+}
+
+function stopMusic() {
+    bgm.pause();
+    bgm.currentTime = 0;
+}
+  // ---- Online multiplayer (WebSocket) & account server (HTTP) ----
+  // If this page is opened via http://<serverIP>:3000 (the recommended
+  // way -- see server.js), the host/port are picked up automatically.
+  // FALLBACK_SERVER_HOST is only used if you double-click index.html
+  // directly instead; edit it to match the LAN IP of whichever computer
+  // is running `node server.js`. Find it with `ipconfig getifaddr en0`
+  // (Mac) or `ipconfig` (Windows, look for IPv4). Note: Google Sign-In
+  // will NOT work when opened this way -- it requires a real http origin.
+  const FALLBACK_SERVER_HOST = "192.168.3.3:3000";
+
+const SERVER_HOST = (window.location.protocol === "file:")
+    ? FALLBACK_SERVER_HOST
+    : window.location.host;
+
+const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+const httpProtocol = window.location.protocol === "https:" ? "https:" : "http:";
+
+const ONLINE_SERVER_URL = wsProtocol + "//" + SERVER_HOST;
+const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
+
+  // Must be the exact same Client ID as GOOGLE_CLIENT_ID in server.js.
+  const GOOGLE_CLIENT_ID = "626321723959-98drobgk7pc43cf004psnfg0af816d10.apps.googleusercontent.com";
+
+  let socket = null;
+  let myPlayerID = null;
+  let onlineOpponentReady = false;
+  let onlineOpponentColor = null;
+
+  function setOnlineStatus(text){
+    const el = document.getElementById('onlineStatusMsg');
+    if(el) el.textContent = text;
+  }
+
+  function maybeRevealAimButtons(){
+    if(mode==='online' && myPlayerID !== null && onlineOpponentReady){
+      document.getElementById('aimButtonsGroup').classList.remove('hidden');
+    }
+  }
+
+  function closeOnlineConnection(){
+    if(socket){
+      try{ socket.close(); } catch(e){}
+    }
+    socket = null;
+    myPlayerID = null;
+    onlineOpponentReady = false;
+    onlineOpponentColor = null;
+  }
+
+  function connectOnline(){
+    closeOnlineConnection();
+    setOnlineStatus('CONNECTING...');
+    document.getElementById('aimButtonsGroup').classList.add('hidden');
+
+    socket = new WebSocket(ONLINE_SERVER_URL);
+
+    socket.onopen = function(){
+      console.log("Connected to server!");
+    };
+
+    socket.onerror = function(){
+      setOnlineStatus('CONNECTION FAILED \u2014 IS THE SERVER RUNNING?');
+    };
+
+    socket.onclose = function(){
+      if(mode === 'online' && started){
+        centerMsg.innerHTML = '<div class="big" style="color:var(--p2)">DISCONNECTED</div><div class="small">RETURNING TO MENU</div>';
+        setTimeout(exitToMenu, 1400);
+      }
+    };
+
+    socket.onmessage = function(event){
+
+      let data;
+      try{
+        data = JSON.parse(event.data);
+      } catch(e){
+        return;
+      }
+
+      if(data.type === "serverFull"){
+        setOnlineStatus('SERVER FULL \u2014 ONLY 2 PLAYERS ALLOWED');
+        return;
+      }
+
+      if(data.type === "welcome"){
+        myPlayerID = data.id;
+        console.log("You are Player " + myPlayerID);
+        setOnlineStatus(onlineOpponentReady ? 'OPPONENT FOUND \u2014 CHOOSE AIM STYLE' : 'WAITING FOR OPPONENT...');
+        maybeRevealAimButtons();
+        return;
+      }
+
+      if(data.type === "opponentJoined"){
+        onlineOpponentReady = true;
+        setOnlineStatus('OPPONENT FOUND \u2014 CHOOSE AIM STYLE');
+        maybeRevealAimButtons();
+        return;
+      }
+
+      if(data.type === "opponentLeft"){
+        onlineOpponentReady = false;
+        if(started){
+          centerMsg.innerHTML = '<div class="big" style="color:var(--p2)">OPPONENT LEFT</div><div class="small">RETURNING TO MENU</div>';
+          setTimeout(exitToMenu, 1400);
+        } else {
+          setOnlineStatus('OPPONENT DISCONNECTED \u2014 WAITING FOR OPPONENT...');
+          document.getElementById('aimButtonsGroup').classList.add('hidden');
+        }
+        return;
+      }
+
+      // Opponent's position update -- stored as a smoothing target rather
+      // than snapped directly onto p2, so their movement reads smoothly
+      // between network updates instead of jittering/teleporting.
+      if(data.type === "position"){
+        if(p2){
+          p2.netX = data.x;
+          p2.netY = data.y;
+          p2.facing = data.facing;
+        }
+        return;
+      }
+
+      // A bullet the opponent fired. It's always aimed at MY local player,
+      // so it's tagged owner:'p2' here regardless of what id the sender
+      // used locally (every client calls its own local player 'p1').
+      if(data.type === "bullet"){
+        bullets.push({
+          x: data.x,
+          y: data.y,
+          vx: data.vx,
+          vy: data.vy,
+          owner: 'p2',
+          color: data.color,
+          range: data.range,
+          traveled: 0,
+          bounces: data.bounces || 0,
+          damage: data.damage || 1
+        });
+        playShootSound();
+        return;
+      }
+
+      // The player who actually got hit is the one with ground-truth
+      // knowledge of their own position, so THEY decide every hit --
+      // chip damage or a round-ending elimination -- on their own client
+      // (see updateBullets) and report the result here. This is what
+      // keeps the opponent's health bar accurate and the hit sound tied
+      // to real damage instead of firing on every bullet that merely
+      // LOOKS like it connected on a network-delayed position.
+      if(data.type === "damage"){
+        if(p2){
+          const wasShieldBlock = data.shieldCharges < p2.shieldCharges;
+          p2.health = data.health;
+          p2.shieldCharges = data.shieldCharges;
+          if(wasShieldBlock){
+            playShieldSound();
+            spawnHitFlash(p2.x, p2.y, '#ffce54');
+          } else {
+            playHitSound();
+            spawnHitFlash(p2.x, p2.y, '#ffffff');
+          }
+        }
+        if(data.eliminated && mode==='online' && state==='playing'){
+          endRound('p1');
+        }
+        return;
+      }
+
+      // The opponent's Shockwave blast. They only tell us it happened and
+      // where -- exactly like bullets, only the player who might have been
+      // hit (me, using my own real position) gets to decide whether it
+      // actually landed, then reports back via the usual 'damage' message.
+      if(data.type === "shockwave"){
+        spawnHitFlash(data.x, data.y, '#ff6b35');
+        playShockwaveSound();
+        if(p1 && p1.alive && !p1.dashing && mode==='online' && state==='playing'){
+          const dist = Math.hypot(data.x - p1.x, data.y - p1.y);
+          if(dist <= (data.radius || SHOCKWAVE_RADIUS)){
+            applyRealHitToP1(SHOCKWAVE_DAMAGE);
+          }
+        }
+        return;
+      }
+
+      // The opponent used Time Warp on us. Unlike bullets/Shockwave this
+      // is a targeted debuff, not a positional hit, so there's nothing to
+      // range-check -- just apply the slow to our own real p1.
+      if(data.type === "timewarp"){
+        playTimeWarpSound();
+        if(p1 && mode==='online' && state==='playing'){
+          p1.slowT = data.duration || TIME_WARP_DURATION;
+          spawnHitFlash(p1.x, p1.y, '#b06bff');
+        }
+        return;
+      }
+
+      // The opponent's Decoy. It should look exactly like a real player to
+      // us -- no special-casing, no "this is fake" flag rendered -- so we
+      // color it using p2's real (synced) color and render at full
+      // opacity. Only the person who actually cast it ever sees it faded.
+      if(data.type === "decoy"){
+        if(mode !== 'online') return;
+        const theirs = decoys.find(d => !d.isMine);
+        if(!theirs){
+          decoys.push({
+            x: data.x, y: data.y, facing: data.facing,
+            life: data.life,
+            color: (p2 ? p2.color : '#ff5f6d'),
+            ownerId: 'p2',
+            isMine: false,
+            netX: data.x, netY: data.y,
+            trail: []
+          });
+        } else {
+          theirs.netX = data.x;
+          theirs.netY = data.y;
+          theirs.facing = data.facing;
+          theirs.life = data.life;
+        }
+        return;
+      }
+
+      // The opponent's chosen skin color, so they don't always render as
+      // the default red on your screen.
+      if(data.type === "skin"){
+        onlineOpponentColor = data.color;
+        if(p2){
+          p2.color = data.color;
+        }
+        return;
+      }
+
+      if(data.type === "rematch"){
+        if(mode==='online' && state==='matchEnd'){
+          fullReset();
+        }
+        return;
+      }
+    };
+  }
+
+  // ---- Account / Google Sign-In ----
+  // Progress is stored server-side (accounts.json, keyed by your Google
+  // account) instead of in the browser, so it follows you between devices
+  // and survives page reloads. Playing without signing in still works --
+  // credits/skins/powers just stay session-only, exactly as before.
+  let sessionToken = null;
+  let accountName = null;
+  let loggedIn = false;
+  let isAdmin = false; // UX-only flag; every real admin action is re-verified server-side
+  let stats = { kills: 0, wins: 0 };
+
+  function setAccountStatus(text){
+    const el = document.getElementById('accountStatus');
+    if(el) el.textContent = text;
+  }
+
+  function applyAccount(account){
+    accountName = account.name;
+    credits = account.credits;
+    stats.kills = account.kills;
+    stats.wins = account.wins;
+    ownedSkins.clear();
+    (account.ownedSkins || ['cyan','red']).forEach(id => ownedSkins.add(id));
+    ownedPowers.clear();
+    (account.ownedPowers || []).forEach(id => ownedPowers.add(id));
+    equippedPowers.clear();
+    (account.equippedPowers || []).forEach(id => equippedPowers.add(id));
+    equippedPowersP2.clear();
+    (account.equippedPowersP2 || []).forEach(id => equippedPowersP2.add(id));
+    ownedAbilities.clear();
+    (account.ownedAbilities || []).forEach(id => ownedAbilities.add(id));
+    equippedAbilities.clear();
+    (account.equippedAbilities || []).forEach(id => equippedAbilities.add(id));
+    equippedAbilitiesP2.clear();
+    (account.equippedAbilitiesP2 || []).forEach(id => equippedAbilitiesP2.add(id));
+    p1SkinId = account.p1SkinId || 'cyan';
+    p2SkinId = account.p2SkinId || 'red';
+    autoAimP1 = !!account.autoAimP1;
+    autoAimP2 = !!account.autoAimP2;
+    updateCreditsDisplay();
+  }
+
+  async function handleGoogleCredential(response){
+    setAccountStatus('SIGNING IN...');
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential: response.credential })
+      });
+      if(!res.ok) throw new Error('sign-in failed');
+      const data = await res.json();
+      sessionToken = data.sessionToken;
+      applyAccount(data.account);
+      loggedIn = true;
+      setAccountStatus('SIGNED IN AS ' + accountName.toUpperCase());
+      const gBtn = document.getElementById('googleSignInBtn');
+      const oBtn = document.getElementById('signOutBtn');
+      if(gBtn) gBtn.classList.add('hidden');
+      if(oBtn) oBtn.classList.remove('hidden');
+      // The button's visibility is just UX -- every actual admin request
+      // is independently re-verified server-side regardless of this flag.
+      isAdmin = !!data.isAdmin;
+      const adminBtn = document.getElementById('btnAdmin');
+      if(adminBtn) adminBtn.classList.toggle('hidden', !isAdmin);
+    } catch(e){
+      setAccountStatus('SIGN-IN FAILED \u2014 IS THE SERVER RUNNING?');
+    }
+  }
+
+  function signOut(){
+    sessionToken = null;
+    loggedIn = false;
+    accountName = null;
+    isAdmin = false;
+    setAccountStatus('NOT SIGNED IN \u2014 PROGRESS WON\u2019T BE SAVED');
+    const gBtn = document.getElementById('googleSignInBtn');
+    const oBtn = document.getElementById('signOutBtn');
+    if(gBtn) gBtn.classList.remove('hidden');
+    if(oBtn) oBtn.classList.add('hidden');
+    const adminBtn = document.getElementById('btnAdmin');
+    if(adminBtn) adminBtn.classList.add('hidden');
+    try{
+      if(window.google && google.accounts && google.accounts.id){
+        google.accounts.id.disableAutoSelect();
+      }
+    } catch(e){}
+  }
+
+  function saveProgress(){
+    if(!loggedIn || !sessionToken) return;
+    fetch(ACCOUNT_SERVER_URL + '/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionToken: sessionToken,
+        credits: credits,
+        kills: stats.kills,
+        wins: stats.wins,
+        ownedSkins: Array.from(ownedSkins),
+        ownedPowers: Array.from(ownedPowers),
+        equippedPowers: Array.from(equippedPowers),
+        equippedPowersP2: Array.from(equippedPowersP2),
+        ownedAbilities: Array.from(ownedAbilities),
+        equippedAbilities: Array.from(equippedAbilities),
+        equippedAbilitiesP2: Array.from(equippedAbilitiesP2),
+        p1SkinId: p1SkinId,
+        p2SkinId: p2SkinId,
+        autoAimP1: autoAimP1,
+        autoAimP2: autoAimP2
+      })
+    }).catch(()=>{ /* server unreachable -- keep playing, just not saved */ });
+  }
+
+  let googleInitAttempts = 0;
+  function tryInitGoogle(){
+    googleInitAttempts++;
+    if(window.google && google.accounts && google.accounts.id){
+      try{
+        google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: handleGoogleCredential,
+          auto_select: false
+        });
+        google.accounts.id.renderButton(document.getElementById('googleSignInBtn'), {
+          theme: 'filled_black', size: 'medium', text: 'signin_with'
+        });
+      } catch(e){
+        setAccountStatus('GOOGLE SIGN-IN UNAVAILABLE');
+      }
+    } else if(googleInitAttempts < 50){
+      setTimeout(tryInitGoogle, 200);
+    } else {
+      setAccountStatus('GOOGLE SIGN-IN UNAVAILABLE (OFFLINE?)');
+    }
+  }
+
+  // ---- Leaderboards ----
+  let leaderboardSort = 'credits';
+
+  async function renderLeaderboard(){
+    const body = document.getElementById('leaderboardBody');
+    if(!body) return;
+    body.innerHTML = '<div class="power-slots-note">LOADING...</div>';
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/leaderboard?sort=' + leaderboardSort);
+      const data = await res.json();
+      body.innerHTML = '';
+      if(!data.entries || !data.entries.length){
+        body.innerHTML = '<div class="power-slots-note">NO PLAYERS YET \u2014 BE THE FIRST!</div>';
+        return;
+      }
+      data.entries.forEach((entry, i)=>{
+        const row = document.createElement('div');
+        row.className = 'leaderboard-row' + (i < 3 ? ' top3' : '');
+        row.innerHTML = `
+          <span class="lb-rank">#${i+1}</span>
+          <span class="lb-name">${entry.name}</span>
+          <span class="lb-value">${entry[leaderboardSort]}</span>
+        `;
+        body.appendChild(row);
+      });
+    } catch(e){
+      body.innerHTML = '<div class="power-slots-note">COULD NOT REACH SERVER</div>';
+    }
+  }
+
+
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  const centerMsg = document.getElementById('centerMsg');
+  const scoreP1El = document.getElementById('scoreP1');
+  const scoreP2El = document.getElementById('scoreP2');
+  const ammoP1El = document.getElementById('ammoP1');
+  const ammoP2El = document.getElementById('ammoP2');
+  const dashP1El = document.getElementById('dashP1');
+  const dashP2El = document.getElementById('dashP2');
+  const p2Label = document.getElementById('p2Label');
+  const p2Legend = document.getElementById('p2Legend');
+
+  const menuMain = document.getElementById('menuMain');
+  const menuDiff = document.getElementById('menuDiff');
+  const menuAim = document.getElementById('menuAim');
+  const menuShop = document.getElementById('menuShop');
+  const btnLocal = document.getElementById('btnLocal');
+  const btnOnline = document.getElementById('btnOnline');
+  const btnAI = document.getElementById('btnAI');
+  const btnShop = document.getElementById('btnShop');
+  const btnBackDiff = document.getElementById('btnBackDiff');
+  const btnBackAim = document.getElementById('btnBackAim');
+  const btnBackShop = document.getElementById('btnBackShop');
+  const btnAimMove = document.getElementById('btnAimMove');
+  const btnAimMouse = document.getElementById('btnAimMouse');
+  const diffBtns = document.querySelectorAll('.menu-btn.diff');
+  const tabSkins = document.getElementById('tabSkins');
+  const tabPowers = document.getElementById('tabPowers');
+  const tabAbilities = document.getElementById('tabAbilities');
+  const shopBody = document.getElementById('shopBody');
+  const creditsAmountMain = document.getElementById('creditsAmountMain');
+  const creditsAmountShop = document.getElementById('creditsAmountShop');
+  const exitBtn = document.getElementById('exitBtn');
+
+  const ROUNDS_TO_WIN = 3;
+  const MAX_AMMO = 6;
+  const RELOAD_TIME = 1.3;
+  const DASH_COOLDOWN = 3.0;
+  const DASH_DURATION = 0.16;
+  const DASH_SPEED = 780;
+  const MOVE_SPEED = 260;
+  const BULLET_SPEED = 620;
+  const PLAYER_R = 15;
+  const BULLET_R = 4;
+
+  const covers = [
+    { x: W/2 - 18, y: H/2 - 70, w: 36, h: 140 },
+    { x: 210, y: 120, w: 100, h: 22 },
+    { x: W-310, y: H-142, w: 100, h: 22 },
+    { x: 150, y: H-180, w: 22, h: 110 },
+    { x: W-172, y: 70, w: 22, h: 110 },
+  ];
+
+  const DIFF = {
+    easy:   { tol: 0.38, shootCdMin: 1.4, shootCdMax: 2.1, dodgeChance: 0.28, aimBurst: 0.10, dashSkill: 0.25, reactionMul: 1.6 },
+    normal: { tol: 0.22, shootCdMin: 0.9, shootCdMax: 1.3, dodgeChance: 0.55, aimBurst: 0.22, dashSkill: 0.55, reactionMul: 1.0 },
+    hard:   { tol: 0.12, shootCdMin: 0.55, shootCdMax: 0.85, dodgeChance: 0.85, aimBurst: 0.34, dashSkill: 0.85, reactionMul: 0.55 },
+  };
+
+  let mode = 'local'; // 'local' | 'ai' | 'online'
+  let difficulty = 'normal';
+  let aimMode = 'movement'; // 'movement' | 'mouse' -- only ever applies to p1, only offered vs AI
+
+  // Player Settings: auto-aim keeps a player's facing locked onto the
+  // opponent automatically -- free accessibility toggle (not a shop
+  // item), independent per player, requires line of sight to engage.
+  let autoAimP1 = false;
+  let autoAimP2 = false;
+
+  // ---- Shop / progression (session-only, resets on page reload) ----
+  let credits = 100;
+  let shopTab = 'skins';
+
+  const SKINS = [
+    { id:'cyan',   name:'CYAN CLASSIC',   color:'#3fd0ff', price:0 },
+    { id:'red',    name:'CRIMSON CLASSIC',color:'#ff5f6d', price:0 },
+    { id:'violet', name:'VIOLET SURGE',   color:'#b06bff', price:50 },
+    { id:'gold',   name:'GOLD RUSH',      color:'#ffce54', price:75 },
+    { id:'green',  name:'TOXIC GREEN',    color:'#5dffa0', price:75 },
+    { id:'white',  name:'GHOST WHITE',    color:'#f5f5f5', price:100 },
+    { id:'pink',   name:'HOT PINK',       color:'#ff5fc4', price:100 },
+    { id:'orange', name:'BLAZE ORANGE',   color:'#ff9142', price:60 },
+  ];
+  const ownedSkins = new Set(['cyan','red']);
+  let p1SkinId = 'cyan';
+  let p2SkinId = 'red';
+
+  const POWERS = [
+    { id:'extramag',    name:'EXTRA MAG',     desc:'+2 max ammo (8 total)',              price:60 },
+    { id:'rapidreload', name:'RAPID RELOAD',  desc:'35% faster ammo regen',              price:70 },
+    { id:'quickdash',   name:'QUICK DASH',    desc:'40% shorter dash cooldown',          price:80 },
+    { id:'kevlar',      name:'KEVLAR VEST',   desc:'Absorb your first hit each round',   price:120 },
+  ];
+  const ownedPowers = new Set();
+  const equippedPowers = new Set();       // Player One's equipped loadout
+  const equippedPowersP2 = new Set();     // Player Two's equipped loadout -- same owned pool, separate slots
+  const MAX_EQUIPPED_POWERS = 2;
+
+  const ABILITIES = [
+    { id:'quickreload', name:'QUICK RELOAD', rarity:'common',    qTriggered:false, desc:'Reload significantly faster, but magazine capacity is reduced (4 instead of 6).', price:90 },
+    { id:'triburst',    name:'TRIBURST',     rarity:'rare',      qTriggered:true,  cooldown:4.0,  desc:'Fire 3 bullets in a narrow cone (Q or right-click). Shorter range than a normal shot. Doesn\'t use ammo.', price:150 },
+    { id:'shockwave',   name:'SHOCKWAVE',    rarity:'epic',      qTriggered:false, desc:'Your dash detonates a damaging blast where you land, but the dash covers less distance.', price:200 },
+    { id:'timewarp',    name:'TIME WARP',    rarity:'legendary', qTriggered:true,  cooldown:11.0, desc:'Temporarily slows your opponent (Q or right-click), but has a long cooldown.', price:280 },
+    { id:'decoy',       name:'DECOY',        rarity:'mythic',    qTriggered:true,  cooldown:16.0, desc:'Spawn a fake copy of yourself that wanders on its own and never shoots (Q or right-click). Looks identical to your opponent -- but faded on your own screen, so you always know it\'s fake. Lasts 6s.', price:350 },
+    { id:'ricochet',    name:'RICOCHET',     rarity:'mythic',    qTriggered:false, desc:'Your bullets bounce off cover and the arena border instead of disappearing -- up to 3 bounces before they finally fade out. Always on, no cooldown.', price:320 },
+    { id:'voidblink',   name:'VOID BLINK',   rarity:'ascendant', qTriggered:true,  cooldown:13.0, desc:'Instantly teleport. Movement Aim: Q blinks to a random spot. Mouse Aim: Q blinks randomly, or right-click blinks to your crosshair.', price:420 },
+  ];
+  const ownedAbilities = new Set();
+  const equippedAbilities = new Set();     // Player One's equipped ability
+  const equippedAbilitiesP2 = new Set();   // Player Two's equipped ability -- same owned pool, separate slot
+  const MAX_EQUIPPED_ABILITIES = 1;
+
+  // These start as the DEFAULT values (used if the admin server config
+  // can't be reached, and as the basis for "Reset"). They're `let`, not
+  // `const`, specifically so applyAbilityConfig() can overwrite them at
+  // runtime when the admin balance editor is used -- every existing call
+  // site below keeps working unchanged, it just reads live numbers.
+  let ABILITY_BULLET_COUNT = 3;
+  let ABILITY_CONE_ANGLE = Math.PI/15; // ~12 degrees between adjacent bullets
+  let ABILITY_RANGE = 220; // noticeably shorter than a normal shot's effectively unlimited range
+  let TRIBURST_SPEED = 620; // independent of the base BULLET_SPEED so it can be tuned on its own
+  let TRIBURST_DAMAGE = 1;
+  let QUICK_RELOAD_TIME_MULT = 0.4; // ~2.5x faster reload
+  let QUICK_RELOAD_AMMO_PENALTY = 2; // magazine capacity reduced by this much
+  let SHOCKWAVE_RADIUS = 75;
+  let SHOCKWAVE_DAMAGE = 1;
+  let TIME_WARP_SLOW_MULT = 0.45; // opponent moves at 45% speed while slowed
+  let TIME_WARP_DURATION = 2.5;
+  let SHOCKWAVE_DASH_DURATION_MULT = 0.55; // ~45% shorter dash
+  let DECOY_DURATION = 6.0;
+  let DECOY_MOVE_SPEED = MOVE_SPEED * 0.85;
+  let RICOCHET_MAX_BOUNCES = 3;
+
+  // Frozen copies of the values above, exactly as first initialized --
+  // used to build the defaults the server falls back to and what the
+  // admin "Reset" buttons restore. This must stay in sync with the
+  // block above (same numbers) but never mutates.
+  const ABILITY_CONFIG_DEFAULTS = {
+    triburst: { bulletCount:3, damage:1, speed:620, range:220, spreadDegrees:12, cooldown:4.0 },
+    shockwave: { damage:1, radius:75, dashDurationPercent:55 },
+    timewarp: { slowPercent:45, duration:2.5, cooldown:11.0 },
+    decoy: { duration:6.0, moveSpeed: Math.round(MOVE_SPEED*0.85), cooldown:16.0 },
+    ricochet: { maxBounces:3 },
+    voidblink: { cooldown:13.0 },
+    quickreload: { reloadSpeedPercent:40, ammoPenalty:2 }
+  };
+
+  // Applies a fetched (or reset-to-default) config object onto the live
+  // gameplay constants above, and onto the ABILITIES array's cooldown
+  // fields (mutating the objects in place -- ABILITIES itself stays
+  // const, but its entries' properties are perfectly mutable).
+  function applyAbilityConfig(cfg){
+    if(!cfg) return;
+    if(cfg.triburst){
+      ABILITY_BULLET_COUNT = cfg.triburst.bulletCount;
+      ABILITY_CONE_ANGLE = cfg.triburst.spreadDegrees * Math.PI/180;
+      ABILITY_RANGE = cfg.triburst.range;
+      TRIBURST_SPEED = cfg.triburst.speed;
+      TRIBURST_DAMAGE = cfg.triburst.damage;
+      const a = ABILITIES.find(x=>x.id==='triburst'); if(a) a.cooldown = cfg.triburst.cooldown;
+    }
+    if(cfg.shockwave){
+      SHOCKWAVE_RADIUS = cfg.shockwave.radius;
+      SHOCKWAVE_DASH_DURATION_MULT = cfg.shockwave.dashDurationPercent/100;
+      SHOCKWAVE_DAMAGE = cfg.shockwave.damage;
+    }
+    if(cfg.timewarp){
+      TIME_WARP_SLOW_MULT = cfg.timewarp.slowPercent/100;
+      TIME_WARP_DURATION = cfg.timewarp.duration;
+      const a = ABILITIES.find(x=>x.id==='timewarp'); if(a) a.cooldown = cfg.timewarp.cooldown;
+    }
+    if(cfg.decoy){
+      DECOY_DURATION = cfg.decoy.duration;
+      DECOY_MOVE_SPEED = cfg.decoy.moveSpeed;
+      const a = ABILITIES.find(x=>x.id==='decoy'); if(a) a.cooldown = cfg.decoy.cooldown;
+    }
+    if(cfg.ricochet){
+      RICOCHET_MAX_BOUNCES = cfg.ricochet.maxBounces;
+    }
+    if(cfg.voidblink){
+      const a = ABILITIES.find(x=>x.id==='voidblink'); if(a) a.cooldown = cfg.voidblink.cooldown;
+    }
+    if(cfg.quickreload){
+      QUICK_RELOAD_TIME_MULT = cfg.quickreload.reloadSpeedPercent/100;
+      QUICK_RELOAD_AMMO_PENALTY = cfg.quickreload.ammoPenalty;
+    }
+  }
+
+  // Every player (signed in or not) fetches the current live balance
+  // numbers -- reading this is not privileged, only writing to it is
+  // (see the admin panel below). Falls back to defaults silently if the
+  // server can't be reached.
+  let liveAbilityConfig = null;
+  async function fetchAbilityConfig(){
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/admin/abilities');
+      if(!res.ok) return;
+      const data = await res.json();
+      liveAbilityConfig = data.config;
+      applyAbilityConfig(data.config);
+    } catch(e){ /* offline/unreachable -- just keep the built-in defaults */ }
+  }
+
+  // ---- Admin Panel (Ability Balance Editor) ----
+  // Field metadata for the UI only (labels + client-side min/max for a
+  // responsive form). The server enforces its OWN copy of these limits
+  // independently -- this here is convenience, not security.
+  const ADMIN_FIELD_DEFS = {
+    damage:              { label: 'Damage',              min: 0,  max: 10,   step: 1 },
+    speed:               { label: 'Bullet Speed',        min: 0,  max: 2000, step: 10 },
+    range:               { label: 'Range',                min: 0,  max: 1200, step: 10 },
+    cooldown:            { label: 'Cooldown (sec)',       min: 0,  max: 60,   step: 0.5 },
+    duration:            { label: 'Duration (sec)',       min: 0,  max: 60,   step: 0.5 },
+    bulletCount:         { label: 'Bullet Count',         min: 1,  max: 10,   step: 1 },
+    spreadDegrees:       { label: 'Spread (degrees)',     min: 0,  max: 90,   step: 1 },
+    radius:              { label: 'Blast Radius',         min: 0,  max: 500,  step: 5 },
+    dashDurationPercent: { label: 'Dash Duration (%)',    min: 10, max: 100,  step: 5 },
+    slowPercent:         { label: 'Slow Speed (%)',       min: 0,  max: 100,  step: 5 },
+    moveSpeed:           { label: 'Move Speed',           min: 0,  max: 1000, step: 10 },
+    maxBounces:          { label: 'Max Bounces',          min: 0,  max: 10,   step: 1 },
+    reloadSpeedPercent:  { label: 'Reload Speed (%)',     min: 5,  max: 100,  step: 5 },
+    ammoPenalty:         { label: 'Ammo Penalty',         min: 0,  max: 5,    step: 1 }
+  };
+  // Which fields apply to each ability, and the order to show them in.
+  // Only fields the ability actually uses appear -- e.g. Void Blink gets
+  // nothing but a cooldown, since teleporting has no speed/range/damage.
+  const ADMIN_ABILITY_FIELDS = {
+    triburst:    ['bulletCount','damage','speed','range','spreadDegrees','cooldown'],
+    shockwave:   ['damage','radius','dashDurationPercent'],
+    timewarp:    ['slowPercent','duration','cooldown'],
+    decoy:       ['duration','moveSpeed','cooldown'],
+    ricochet:    ['maxBounces'],
+    voidblink:   ['cooldown'],
+    quickreload: ['reloadSpeedPercent','ammoPenalty']
+  };
+
+  let adminSelectedAbility = 'triburst';
+
+  function populateAdminAbilitySelect(){
+    const sel = document.getElementById('adminAbilitySelect');
+    if(!sel) return;
+    sel.innerHTML = '';
+    ABILITIES.forEach(ab=>{
+      const opt = document.createElement('option');
+      opt.value = ab.id;
+      opt.textContent = ab.name + ' (' + ab.rarity.toUpperCase() + ')';
+      sel.appendChild(opt);
+    });
+    sel.value = adminSelectedAbility;
+  }
+
+  function renderAdminFields(){
+    const container = document.getElementById('adminFields');
+    if(!container) return;
+    container.innerHTML = '';
+    const abilityId = adminSelectedAbility;
+    const fieldKeys = ADMIN_ABILITY_FIELDS[abilityId] || [];
+    const values = (liveAbilityConfig && liveAbilityConfig[abilityId]) || ABILITY_CONFIG_DEFAULTS[abilityId] || {};
+
+    fieldKeys.forEach(key=>{
+      const def = ADMIN_FIELD_DEFS[key];
+      if(!def) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'admin-field';
+      wrap.innerHTML = `
+        <label>${def.label}</label>
+        <input type="number" data-field="${key}" min="${def.min}" max="${def.max}" step="${def.step}" value="${values[key]}">
+      `;
+      container.appendChild(wrap);
+    });
+  }
+
+  function setAdminStatus(text, isError){
+    const el = document.getElementById('adminStatusMsg');
+    if(!el) return;
+    el.textContent = text;
+    el.classList.toggle('error', !!isError);
+  }
+
+  function collectAdminFieldValues(){
+    const container = document.getElementById('adminFields');
+    const values = {};
+    if(!container) return values;
+    container.querySelectorAll('input[data-field]').forEach(input=>{
+      values[input.dataset.field] = Number(input.value);
+    });
+    return values;
+  }
+
+  async function adminSaveAbility(){
+    if(!sessionToken){ setAdminStatus('NOT SIGNED IN', true); return; }
+    const values = collectAdminFieldValues();
+    setAdminStatus('SAVING...');
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/admin/abilities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionToken, action: 'save', abilityId: adminSelectedAbility, values })
+      });
+      if(res.status === 403){ setAdminStatus('FORBIDDEN \u2014 ADMIN ONLY', true); return; }
+      if(!res.ok){ setAdminStatus('SAVE FAILED', true); return; }
+      const data = await res.json();
+      liveAbilityConfig[adminSelectedAbility] = data.config;
+      applyAbilityConfig({ [adminSelectedAbility]: data.config });
+      renderAdminFields();
+      setAdminStatus('SAVED');
+      renderAdminLog();
+    } catch(e){
+      setAdminStatus('COULD NOT REACH SERVER', true);
+    }
+  }
+
+  async function adminResetAbility(){
+    if(!sessionToken){ setAdminStatus('NOT SIGNED IN', true); return; }
+    setAdminStatus('RESETTING...');
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/admin/abilities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionToken, action: 'resetAbility', abilityId: adminSelectedAbility })
+      });
+      if(res.status === 403){ setAdminStatus('FORBIDDEN \u2014 ADMIN ONLY', true); return; }
+      if(!res.ok){ setAdminStatus('RESET FAILED', true); return; }
+      const data = await res.json();
+      liveAbilityConfig[adminSelectedAbility] = data.config;
+      applyAbilityConfig({ [adminSelectedAbility]: data.config });
+      renderAdminFields();
+      setAdminStatus('RESET TO DEFAULT');
+      renderAdminLog();
+    } catch(e){
+      setAdminStatus('COULD NOT REACH SERVER', true);
+    }
+  }
+
+  async function adminResetAll(){
+    if(!sessionToken){ setAdminStatus('NOT SIGNED IN', true); return; }
+    setAdminStatus('RESETTING ALL...');
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/admin/abilities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionToken, action: 'resetAll' })
+      });
+      if(res.status === 403){ setAdminStatus('FORBIDDEN \u2014 ADMIN ONLY', true); return; }
+      if(!res.ok){ setAdminStatus('RESET FAILED', true); return; }
+      const data = await res.json();
+      liveAbilityConfig = data.config;
+      applyAbilityConfig(data.config);
+      renderAdminFields();
+      setAdminStatus('ALL ABILITIES RESET TO DEFAULT');
+      renderAdminLog();
+    } catch(e){
+      setAdminStatus('COULD NOT REACH SERVER', true);
+    }
+  }
+
+  function formatAdminLogTime(ts){
+    const d = new Date(ts);
+    const hh = String(d.getHours()).padStart(2,'0');
+    const mm = String(d.getMinutes()).padStart(2,'0');
+    return hh + ':' + mm;
+  }
+
+  async function renderAdminLog(){
+    const body = document.getElementById('adminLogBody');
+    if(!body || !sessionToken) return;
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/admin/log?sessionToken=' + encodeURIComponent(sessionToken));
+      if(!res.ok){ body.innerHTML = '<div class="log-row">Could not load log.</div>'; return; }
+      const data = await res.json();
+      if(!data.log || !data.log.length){
+        body.innerHTML = '<div class="log-row">No changes yet.</div>';
+        return;
+      }
+      body.innerHTML = data.log.map(entry=>{
+        const time = formatAdminLogTime(entry.time);
+        const abilityDef = ABILITIES.find(a=>a.id===entry.abilityId);
+        const abilityName = abilityDef ? abilityDef.name : entry.abilityId;
+        let desc;
+        if(entry.type === 'resetAll'){
+          desc = 'Reset ALL abilities to default';
+        } else if(!entry.changes.length){
+          desc = abilityName + ' \u2014 no changes';
+        } else {
+          desc = entry.changes.map(c=>{
+            const fieldLabel = (ADMIN_FIELD_DEFS[c.field] && ADMIN_FIELD_DEFS[c.field].label) || c.field;
+            return abilityName + ' ' + fieldLabel + ': ' + c.from + ' \u2192 ' + c.to;
+          }).join('<br>');
+        }
+        return `<div class="log-row"><span class="log-time">${time}</span>${desc}</div>`;
+      }).join('');
+    } catch(e){
+      body.innerHTML = '<div class="log-row">Could not load log.</div>';
+    }
+  }
+
+  // Decoy entities live in an array, not a single slot -- both players
+  // could independently equip and cast Decoy, so up to two can coexist
+  // (mine + the opponent's). isMine distinguishes "I created this, show
+  // it faded" from "I received this over the network, render it
+  // identical to a real player" -- see triggerDecoy/updateDecoys.
+  let decoys = [];
+
+  function skinColor(id){ const s = SKINS.find(s=>s.id===id); return s ? s.color : '#3fd0ff'; }
+
+  function updateCreditsDisplay(){
+    creditsAmountMain.textContent = credits;
+    creditsAmountShop.textContent = credits;
+    const statsEl = document.getElementById('statsLineMain');
+    if(statsEl) statsEl.textContent = stats.kills + ' KILLS \u00b7 ' + stats.wins + ' WINS';
+  }
+
+  function renderShop(){
+    shopBody.innerHTML = '';
+    if(shopTab==='skins'){
+      shopBody.appendChild(buildSkinRow('PLAYER ONE', 'p1', p1SkinId, (id)=>{ p1SkinId = id; }));
+      shopBody.appendChild(buildSkinRow('PLAYER TWO', 'p2', p2SkinId, (id)=>{ p2SkinId = id; }));
+    } else if(shopTab==='powers'){
+      const note = document.createElement('div');
+      note.className = 'power-slots-note';
+      note.textContent = `EQUIP UP TO ${MAX_EQUIPPED_POWERS} POWERS EACH \u2014 BOTH PLAYERS SHARE WHAT YOU'VE UNLOCKED`;
+      shopBody.appendChild(note);
+      shopBody.appendChild(buildPowerGrid('PLAYER ONE', 'p1', equippedPowers));
+      shopBody.appendChild(buildPowerGrid('PLAYER TWO', 'p2', equippedPowersP2));
+    } else {
+      const note = document.createElement('div');
+      note.className = 'power-slots-note';
+      note.textContent = `EQUIP UP TO ${MAX_EQUIPPED_ABILITIES} ABILITY EACH \u2014 P1 USES Q/RIGHT-CLICK, P2 USES "."  \u2014 BOTH PLAYERS SHARE WHAT YOU'VE UNLOCKED`;
+      shopBody.appendChild(note);
+      shopBody.appendChild(buildAbilityGrid('PLAYER ONE', 'p1', equippedAbilities));
+      shopBody.appendChild(buildAbilityGrid('PLAYER TWO', 'p2', equippedAbilitiesP2));
+    }
+  }
+
+  function buildSkinRow(label, side, currentId, onEquip){
+    const wrap = document.createElement('div');
+    const lbl = document.createElement('div');
+    lbl.className = 'shop-section-label ' + side;
+    lbl.textContent = label + ' SKIN';
+    wrap.appendChild(lbl);
+    const grid = document.createElement('div');
+    grid.className = 'skin-grid';
+    SKINS.forEach(skin=>{
+      const owned = ownedSkins.has(skin.id);
+      const equipped = currentId === skin.id;
+      const affordable = credits >= skin.price;
+      const card = document.createElement('div');
+      card.className = 'skin-card' + (owned?' owned':'') + (equipped?' equipped':'') + (!owned?' locked':'') + (!owned && !affordable ? ' unaffordable':'');
+      card.innerHTML = `
+        <div class="skin-swatch" style="background:${skin.color}; color:${skin.color};"></div>
+        <div class="skin-name">${skin.name}</div>
+        <div class="item-price ${skin.price===0?'free':''}">${skin.price===0 ? 'OWNED' : '\u25c8 '+skin.price}</div>
+      `;
+      card.addEventListener('click', ()=>{
+        if(owned){
+          onEquip(skin.id);
+          renderShop();
+          saveProgress();
+        } else if(affordable){
+          credits -= skin.price;
+          ownedSkins.add(skin.id);
+          onEquip(skin.id);
+          updateCreditsDisplay();
+          renderShop();
+          saveProgress();
+        }
+      });
+      grid.appendChild(card);
+    });
+    wrap.appendChild(grid);
+    return wrap;
+  }
+
+  // label/side identify which player's section this is (for the header
+  // and CSS accent color); equippedSet is THAT player's own equip slots
+  // (equippedPowers or equippedPowersP2) -- ownedPowers itself is shared,
+  // so anything either player has unlocked shows up as equippable here.
+  function buildPowerGrid(label, side, equippedSet){
+    const wrap = document.createElement('div');
+    const lbl = document.createElement('div');
+    lbl.className = 'shop-section-label ' + side;
+    lbl.textContent = label + ' POWERS';
+    wrap.appendChild(lbl);
+    const grid = document.createElement('div');
+    grid.className = 'power-grid';
+    POWERS.forEach(pw=>{
+      const owned = ownedPowers.has(pw.id);
+      const equipped = equippedSet.has(pw.id);
+      const affordable = credits >= pw.price;
+      const slotsFull = equippedSet.size >= MAX_EQUIPPED_POWERS;
+      const card = document.createElement('div');
+      card.className = 'power-card' + (owned?' owned':'') + (equipped?' equipped':'') + (!owned?' locked':'') + (!owned && !affordable ? ' unaffordable':'');
+      card.innerHTML = `
+        <div class="power-name">${pw.name}</div>
+        <div class="power-desc">${pw.desc}</div>
+        <div class="item-price">${owned ? (equipped ? 'TAP TO UNEQUIP' : (slotsFull ? 'SLOTS FULL' : 'TAP TO EQUIP')) : '\u25c8 '+pw.price}</div>
+      `;
+      card.addEventListener('click', ()=>{
+        if(owned){
+          if(equipped){
+            equippedSet.delete(pw.id);
+          } else if(equippedSet.size < MAX_EQUIPPED_POWERS){
+            equippedSet.add(pw.id);
+          }
+          renderShop();
+          saveProgress();
+        } else if(affordable){
+          credits -= pw.price;
+          ownedPowers.add(pw.id);
+          if(equippedSet.size < MAX_EQUIPPED_POWERS) equippedSet.add(pw.id);
+          updateCreditsDisplay();
+          renderShop();
+          saveProgress();
+        }
+      });
+      grid.appendChild(card);
+    });
+    wrap.appendChild(grid);
+    return wrap;
+  }
+
+  function buildAbilityGrid(label, side, equippedSet){
+    const wrap = document.createElement('div');
+    const lbl = document.createElement('div');
+    lbl.className = 'shop-section-label ' + side;
+    lbl.textContent = label + ' ABILITY';
+    wrap.appendChild(lbl);
+    const grid = document.createElement('div');
+    grid.className = 'power-grid';
+    ABILITIES.forEach(ab=>{
+      const owned = ownedAbilities.has(ab.id);
+      const equipped = equippedSet.has(ab.id);
+      const affordable = credits >= ab.price;
+      const slotsFull = equippedSet.size >= MAX_EQUIPPED_ABILITIES;
+      const card = document.createElement('div');
+      card.className = 'power-card' + (owned?' owned':'') + (equipped?' equipped':'') + (!owned?' locked':'') + (!owned && !affordable ? ' unaffordable':'');
+      card.innerHTML = `
+        <div class="rarity-badge rarity-${ab.rarity}">${ab.rarity.toUpperCase()}</div>
+        <div class="power-name">${ab.name}</div>
+        <div class="power-desc">${ab.desc}</div>
+        <div class="item-price">${owned ? (equipped ? 'TAP TO UNEQUIP' : (slotsFull ? 'SLOTS FULL' : 'TAP TO EQUIP')) : '\u25c8 '+ab.price}</div>
+      `;
+      card.addEventListener('click', ()=>{
+        if(owned){
+          if(equipped){
+            equippedSet.delete(ab.id);
+          } else if(equippedSet.size < MAX_EQUIPPED_ABILITIES){
+            equippedSet.add(ab.id);
+          }
+          renderShop();
+          saveProgress();
+        } else if(affordable){
+          credits -= ab.price;
+          ownedAbilities.add(ab.id);
+          if(equippedSet.size < MAX_EQUIPPED_ABILITIES) equippedSet.add(ab.id);
+          updateCreditsDisplay();
+          renderShop();
+          saveProgress();
+        }
+      });
+      grid.appendChild(card);
+    });
+    wrap.appendChild(grid);
+    return wrap;
+  }
+
+  let mouseX = W/2, mouseY = H/2;
+  let mouseIsDown = false;
+
+  canvas.addEventListener('mousemove', (e)=>{
+    const rect = canvas.getBoundingClientRect();
+    mouseX = (e.clientX - rect.left) * (W/rect.width);
+    mouseY = (e.clientY - rect.top) * (H/rect.height);
+  });
+  canvas.addEventListener('mousedown', (e)=>{
+    if(e.button===0){
+      if(!mouseIsDown) keysPressed['mouseclick'] = true;
+      mouseIsDown = true;
+    } else if(e.button===2){
+      keysPressed['rightclick'] = true;
+    }
+  });
+  window.addEventListener('mouseup', (e)=>{ if(e.button===0) mouseIsDown = false; });
+  canvas.addEventListener('contextmenu', (e)=>{ e.preventDefault(); });
+
+  function makePlayer(id, x, y, color, keys, facing, isAI, opts){
+    opts = opts || {};
+    const maxAmmo = opts.maxAmmo || MAX_AMMO;
+    return {
+      id, x, y, color, keys, facing, isAI,
+      netX: x, netY: y, // interpolation targets for network-driven players (online opponent)
+      maxAmmo,
+      reloadTime: opts.reloadTime || RELOAD_TIME,
+      dashCooldownMax: opts.dashCooldownMax || DASH_COOLDOWN,
+      dashDuration: opts.dashDuration || DASH_DURATION,
+      shieldCharges: opts.shieldCharges || 0,
+      hasAbility: opts.hasAbility || false,
+      abilityId: opts.abilityId || null,
+      abilityCooldownMax: opts.abilityCooldownMax || 4.0,
+      hasShockwave: opts.hasShockwave || false,
+      hasRicochet: opts.hasRicochet || false,
+      abilityCd: 0,
+      slowT: 0, // remaining Time Warp slow duration, if any
+      ammo: maxAmmo, reloadT: 0,
+      shootCd: 0,
+      dashCd: 0, dashT: 0,
+      alive: true, health: 3, maxHealth: 3, score: 0, trail: [],
+      ai: { shootCd: Math.random()*0.6, strafeDir: Math.random()<0.5?1:-1, strafeTimer: 1+Math.random(), dodgeCd:0, reactDelay:0 }
+    };
+  }
+
+  const P1KEYS = { up:'w', down:'s', left:'a', right:'d', shoot:' ', dash:'shift', ability:'q' };
+  const P2KEYS = { up:'arrowup', down:'arrowdown', left:'arrowleft', right:'arrowright', shoot:'enter', dash:'/', ability:'.' };
+
+let p1, p2;
+let bullets = [];
+let effects = []; // transient hit/shield flashes: {x,y,color,life,maxLife}
+
+function spawnHitFlash(x, y, color){
+  effects.push({ x, y, color, life: 0.32, maxLife: 0.32 });
+}
+let state = "menu";
+let roundTimer, msgTimer;
+let scoreCarry = null;
+  let started = false;
+
+  const keysDown = {};
+  const keysPressed = {};
+
+  window.addEventListener('keydown', (e)=>{
+    const k = e.key.toLowerCase();
+    if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright',' ','enter','/','shift','r'].includes(k)){
+      e.preventDefault();
+    }
+    if(!keysDown[k]) keysPressed[k] = true;
+    keysDown[k] = true;
+    if(k==='r' && state==='matchEnd'){
+      if(mode==='online' && socket && socket.readyState===WebSocket.OPEN){
+        socket.send(JSON.stringify({type:'rematch'}));
+      }
+      fullReset();
+    }
+  });
+  window.addEventListener('keyup', (e)=>{ keysDown[e.key.toLowerCase()] = false; });
+
+  function buildLoadoutOpts(powersSet, abilitiesSet){
+    const hasQuickReload = abilitiesSet.has('quickreload');
+    const hasShockwave = abilitiesSet.has('shockwave');
+    const equippedQAbility = ABILITIES.find(a => a.qTriggered && abilitiesSet.has(a.id));
+    return {
+      maxAmmo: Math.max(1, MAX_AMMO + (powersSet.has('extramag') ? 2 : 0) - (hasQuickReload ? QUICK_RELOAD_AMMO_PENALTY : 0)),
+      reloadTime: RELOAD_TIME * (powersSet.has('rapidreload') ? 0.65 : 1) * (hasQuickReload ? QUICK_RELOAD_TIME_MULT : 1),
+      dashCooldownMax: DASH_COOLDOWN * (powersSet.has('quickdash') ? 0.6 : 1),
+      dashDuration: DASH_DURATION * (hasShockwave ? SHOCKWAVE_DASH_DURATION_MULT : 1),
+      shieldCharges: powersSet.has('kevlar') ? 1 : 0,
+      hasAbility: !!equippedQAbility,
+      abilityId: equippedQAbility ? equippedQAbility.id : null,
+      abilityCooldownMax: equippedQAbility ? equippedQAbility.cooldown : 4.0,
+      hasShockwave: hasShockwave,
+      hasRicochet: abilitiesSet.has('ricochet'),
+    };
+  }
+
+  function resetPositions(){
+    const p1Opts = buildLoadoutOpts(equippedPowers, equippedAbilities);
+    const p2Opts = buildLoadoutOpts(equippedPowersP2, equippedAbilitiesP2);
+    const onlineFlipped = (mode === "online" && myPlayerID === 2);
+
+    if(onlineFlipped){
+
+    p1 = makePlayer(
+        'p1',
+        W-130,
+        H/2,
+        skinColor(p1SkinId),
+        P1KEYS,
+        Math.PI,
+        false,
+        p1Opts
+    );
+
+}
+else{
+
+    p1 = makePlayer(
+        'p1',
+        130,
+        H/2,
+        skinColor(p1SkinId),
+        P1KEYS,
+        0,
+        false,
+        p1Opts
+    );
+
+}
+    if(mode === "online"){
+    // The opponent's player object is driven entirely by network
+    // messages (position/bullet/damage), never by local input or AI --
+    // but it must exist so the normal HUD/draw/collision code works for
+    // it. Its color comes from the "skin" message the opponent sends
+    // (see beginGame), not from our own local p2SkinId preference. Its
+    // stats are managed entirely on THEIR OWN client/account -- we never
+    // apply our local p2Opts to a real network opponent.
+    const oppColor = onlineOpponentColor || skinColor('red');
+    if(onlineFlipped){
+        p2 = makePlayer('p2', 130, H/2, oppColor, P2KEYS, 0, false);
+    } else {
+        p2 = makePlayer('p2', W-130, H/2, oppColor, P2KEYS, Math.PI, false);
+    }
+}
+else{
+    // Local 2P or vs AI: p2 is fully local ground truth, so it gets the
+    // Player Two loadout (same owned pool as Player One, separate equip
+    // slots -- see the shop's Player Two sections).
+    p2 = makePlayer(
+        'p2',
+        W-130,
+        H/2,
+        skinColor(p2SkinId),
+        P2KEYS,
+        Math.PI,
+        mode==='ai',
+        p2Opts
+    );
+}
+    if(scoreCarry){
+    p1.score = scoreCarry.p1;
+
+    if(p2){
+        p2.score = scoreCarry.p2;
+    }
+}
+    bullets = [];
+    decoys = [];
+  }
+
+  function circleRectCollide(cx, cy, r, rect){
+    const nx = Math.max(rect.x, Math.min(cx, rect.x+rect.w));
+    const ny = Math.max(rect.y, Math.min(cy, rect.y+rect.h));
+    const dx = cx-nx, dy = cy-ny;
+    return (dx*dx+dy*dy) < r*r;
+  }
+
+  function resolvePlayerCover(p){
+    for(const c of covers){
+      const nx = Math.max(c.x, Math.min(p.x, c.x+c.w));
+      const ny = Math.max(c.y, Math.min(p.y, c.y+c.h));
+      const dx = p.x-nx, dy = p.y-ny;
+      const dist = Math.hypot(dx,dy);
+      if(dist < PLAYER_R && dist > 0.0001){
+        const push = (PLAYER_R-dist);
+        p.x += (dx/dist)*push;
+        p.y += (dy/dist)*push;
+      } else if(dist === 0){
+        p.x += PLAYER_R;
+      }
+    }
+    p.x = Math.max(PLAYER_R, Math.min(W-PLAYER_R, p.x));
+    p.y = Math.max(PLAYER_R, Math.min(H-PLAYER_R, p.y));
+  }
+
+  // sample-based line of sight check against cover rects
+  function hasLOS(x1,y1,x2,y2){
+    const steps = 24;
+    for(let i=1;i<steps;i++){
+      const t = i/steps;
+      const x = x1+(x2-x1)*t, y = y1+(y2-y1)*t;
+      for(const c of covers){
+        if(x>c.x && x<c.x+c.w && y>c.y && y<c.y+c.h) return false;
+      }
+    }
+    return true;
+  }
+
+  function opponentOf(p){ 
+    if(mode === "online") return null;
+    return p.id==='p1' ? p2 : p1;
+}
+  function aiThink(p, dt){
+    const opp = opponentOf(p);
+    const d = DIFF[difficulty];
+    const ai = p.ai;
+    const dx = opp.x-p.x, dy = opp.y-p.y;
+    const dist = Math.hypot(dx,dy) || 0.001;
+    const dirX = dx/dist, dirY = dy/dist;
+    const angleToOpp = Math.atan2(dy,dx);
+
+    ai.shootCd -= dt;
+    ai.dodgeCd -= dt;
+    ai.strafeTimer -= dt;
+    if(ai.strafeTimer<=0){
+      ai.strafeDir *= -1;
+      ai.strafeTimer = 0.6 + Math.random()*1.1;
+    }
+
+    let moveX = 0, moveY = 0;
+
+    const preferredMin = 190, preferredMax = 380;
+    const perpX = -dirY*ai.strafeDir, perpY = dirX*ai.strafeDir;
+
+    if(dist > preferredMax){
+      moveX = dirX; moveY = dirY;
+    } else if(dist < preferredMin){
+      moveX = -dirX; moveY = -dirY;
+    } else {
+      moveX = perpX*0.75 + dirX*0.25*ai.strafeDir*0.3;
+      moveY = perpY*0.75 + dirY*0.25*ai.strafeDir*0.3;
+    }
+
+    // dodge incoming bullets
+    let dodging = false;
+    if(ai.dodgeCd<=0){
+      for(const b of bullets){
+        if(b.owner===p.id) continue;
+        const bx = b.x-p.x, by = b.y-p.y;
+        const bdist = Math.hypot(bx,by);
+        if(bdist>260) continue;
+        const bvlen = Math.hypot(b.vx,b.vy) || 1;
+        const bvx = b.vx/bvlen, bvy = b.vy/bvlen;
+        const toBullet = Math.atan2(-by,-bx);
+        const closing = (bx*b.vx + by*b.vy) < 0;
+        const perpDist = Math.abs(bx*bvy - by*bvx);
+        if(closing && perpDist < 34 && Math.random() < d.dodgeChance){
+          const dodgeDir = (bx*bvy - by*bvx) > 0 ? 1 : -1;
+          moveX = -bvy*dodgeDir;
+          moveY = bvx*dodgeDir;
+          dodging = true;
+          ai.dodgeCd = 0.5;
+          if(Math.random() < d.dashSkill*0.6){
+            ai.wantDash = true;
+          }
+          break;
+        }
+      }
+    }
+
+    const mlen = Math.hypot(moveX,moveY);
+    if(mlen>0.001){ moveX/=mlen; moveY/=mlen; }
+
+    // occasional aim burst: snap movement to line up a clean shot
+    const facingIfMoving = Math.atan2(moveY,moveX);
+    let angDiff = Math.atan2(Math.sin(angleToOpp-facingIfMoving), Math.cos(angleToOpp-facingIfMoving));
+    if(!dodging && Math.random() < d.aimBurst*dt*10 && ai.shootCd<=0.15){
+      moveX = dirX; moveY = dirY;
+      angDiff = 0;
+    }
+
+    let wantShoot = false;
+    const los = hasLOS(p.x,p.y,opp.x,opp.y);
+    if(!dodging && p.ammo>0 && ai.shootCd<=0 && los && Math.abs(angDiff) < d.tol){
+      wantShoot = true;
+      ai.shootCd = d.shootCdMin + Math.random()*(d.shootCdMax-d.shootCdMin);
+    }
+
+    let wantDash = false;
+    if(ai.wantDash && p.dashCd<=0){
+      wantDash = true;
+      ai.wantDash = false;
+    }
+    // occasional offensive dash to close distance when out of ammo
+    if(!wantDash && p.ammo===0 && dist>preferredMax && p.dashCd<=0 && Math.random()<d.dashSkill*dt*2){
+      wantDash = true;
+      moveX = dirX; moveY = dirY;
+    }
+
+    return { mx: moveX, my: moveY, shoot: wantShoot, dash: wantDash };
+  }
+
+  function updatePlayer(p, dt){
+    if(!p.alive) return;
+    if(p.shootCd > 0) p.shootCd -= dt;
+    if(p.abilityCd > 0) p.abilityCd -= dt;
+    if(p.slowT > 0) p.slowT -= dt;
+    let mx=0, my=0, wantShoot=false, wantDash=false, wantAbility=false;
+    let abilityFromQ=false, abilityFromRightClick=false;
+
+    if(p.isAI){
+      const inp = aiThink(p, dt);
+      mx = inp.mx; my = inp.my; wantShoot = inp.shoot; wantDash = inp.dash;
+    } else {
+      const k = p.keys;
+      if(keysDown[k.up]) my -= 1;
+      if(keysDown[k.down]) my += 1;
+      if(keysDown[k.left]) mx -= 1;
+      if(keysDown[k.right]) mx += 1;
+      if(mx!==0||my!==0){ const len=Math.hypot(mx,my); mx/=len; my/=len; }
+      wantShoot = !!keysPressed[k.shoot];
+      wantDash = !!keysPressed[k.dash];
+      if(p.id === 'p1'){
+        abilityFromQ = p.hasAbility && !!keysPressed['q'];
+        abilityFromRightClick = p.hasAbility && !!keysPressed['rightclick'];
+        wantAbility = abilityFromQ || abilityFromRightClick;
+      } else {
+        // Player Two has no separate mouse cursor to right-click with, so
+        // they get one dedicated key that always behaves like "Q" (e.g.
+        // Void Blink always teleports randomly for them, never to a
+        // crosshair -- there isn't one).
+        abilityFromQ = p.hasAbility && !!keysPressed[k.ability];
+        wantAbility = abilityFromQ;
+      }
+      if(
+    p.id==='p1' &&
+    aimMode==='mouse' &&
+    mouseIsDown &&
+    p.shootCd <= 0 &&
+    p.ammo > 0
+){
+    wantShoot = true;
+    mouseIsDown = false;
+}
+    }
+
+    const moving = (mx!==0||my!==0);
+    let autoAimApplied = false;
+    const wantsAutoAim = (p.id==='p1' && autoAimP1) || (p.id==='p2' && autoAimP2);
+    if(wantsAutoAim && !p.isAI){
+      const autoAimTarget = (p.id === 'p1') ? p2 : p1;
+      if(autoAimTarget && autoAimTarget.alive && hasLOS(p.x, p.y, autoAimTarget.x, autoAimTarget.y)){
+        p.facing = Math.atan2(autoAimTarget.y - p.y, autoAimTarget.x - p.x);
+        autoAimApplied = true;
+      }
+    }
+    if(!autoAimApplied){
+      if(p.id==='p1' && !p.isAI && aimMode==='mouse'){
+        p.facing = Math.atan2(mouseY - p.y, mouseX - p.x);
+      } else if(moving){
+        p.facing = Math.atan2(my,mx);
+      }
+    }
+
+    if(wantDash && p.dashCd<=0 && !p.dashing){
+      p.dashing = true;
+      p.dashT = p.dashDuration;
+      p.dashCd = p.dashCooldownMax;
+    }
+
+    const slowMult = (p.slowT > 0) ? TIME_WARP_SLOW_MULT : 1;
+    let speed = MOVE_SPEED * slowMult;
+    if(p.dashing){
+      speed = DASH_SPEED * slowMult;
+      p.dashT -= dt;
+      p.trail.push({x:p.x,y:p.y,life:0.25});
+      p.x += Math.cos(p.facing)*speed*dt;
+      p.y += Math.sin(p.facing)*speed*dt;
+      if(p.dashT<=0){
+        p.dashing=false;
+        if(p.hasShockwave){
+          triggerShockwave(p);
+        }
+      }
+    } else if(moving){
+      p.x += mx*speed*dt;
+      p.y += my*speed*dt;
+    }
+if(mode === "online" && p.id === "p1" && socket && socket.readyState === WebSocket.OPEN && myPlayerID !== null){
+
+   socket.send(JSON.stringify({
+    type:"position",
+    id: myPlayerID,
+    x:p.x,
+    y:p.y,
+    facing:p.facing
+}));
+
+}
+    if(p.dashCd>0) p.dashCd -= dt;
+
+    resolvePlayerCover(p);
+
+    p.trail.forEach(t=>t.life -= dt);
+    p.trail = p.trail.filter(t=>t.life>0);
+
+    if(p.ammo < p.maxAmmo){
+      p.reloadT += dt;
+      if(p.reloadT >= p.reloadTime){ p.reloadT = 0; p.ammo++; }
+    }
+
+    if(wantShoot && p.ammo>0){
+    	p.ammo--;
+    	p.reloadT = 0;
+    	p.shootCd = 0.35;
+      const bx = p.x + Math.cos(p.facing)*(PLAYER_R+6);
+      const by = p.y + Math.sin(p.facing)*(PLAYER_R+6);
+      let bullet = {
+    type:"bullet",
+    x:bx,
+    y:by,
+    vx:Math.cos(p.facing)*BULLET_SPEED,
+    vy:Math.sin(p.facing)*BULLET_SPEED,
+    owner:p.id,
+    color:p.color,
+    damage:1,
+    bounces: p.hasRicochet ? RICOCHET_MAX_BOUNCES : 0
+};
+
+bullets.push(bullet);
+playShootSound();
+
+if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
+
+    socket.send(JSON.stringify(bullet));
+
+}
+    }
+
+    if(wantAbility && p.abilityCd<=0){
+      p.abilityCd = p.abilityCooldownMax;
+
+      if(p.abilityId === 'triburst'){
+        const mid = Math.floor(ABILITY_BULLET_COUNT/2);
+        for(let i=0; i<ABILITY_BULLET_COUNT; i++){
+          const offset = (i - mid) * ABILITY_CONE_ANGLE;
+          const ang = p.facing + offset;
+          const bx = p.x + Math.cos(ang)*(PLAYER_R+6);
+          const by = p.y + Math.sin(ang)*(PLAYER_R+6);
+          const abilityBullet = {
+            type:"bullet",
+            x:bx,
+            y:by,
+            vx:Math.cos(ang)*TRIBURST_SPEED,
+            vy:Math.sin(ang)*TRIBURST_SPEED,
+            owner:p.id,
+            color:p.color,
+            range:ABILITY_RANGE,
+            traveled:0,
+            damage:TRIBURST_DAMAGE,
+            bounces: p.hasRicochet ? RICOCHET_MAX_BOUNCES : 0
+          };
+          bullets.push(abilityBullet);
+          if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
+            socket.send(JSON.stringify(abilityBullet));
+          }
+        }
+        playAbilitySound();
+      } else if(p.abilityId === 'timewarp'){
+        triggerTimeWarp(p);
+      } else if(p.abilityId === 'decoy'){
+        triggerDecoy(p);
+      } else if(p.abilityId === 'voidblink'){
+        if(aimMode === 'mouse' && abilityFromRightClick){
+          triggerVoidBlink(p, mouseX, mouseY);
+        } else {
+          const spot = getRandomArenaPosition();
+          triggerVoidBlink(p, spot.x, spot.y);
+        }
+      }
+    }
+  }
+
+  // Time Warp: a targeted debuff, not a positional hit, so there's no
+  // range check -- it just tells the opponent "you're slowed now" and
+  // they apply it to themselves, same low-stakes trust model already
+  // used for things like credits. In online mode this is only ever
+  // reachable with p.id==='p1' (the opponent is never locally controlled
+  // there), so the network branch stays p1-vs-p2 specifically.
+  function triggerTimeWarp(p){
+    playTimeWarpSound();
+    const target = (p.id === 'p1') ? p2 : p1;
+    if(!target) return;
+
+    target.slowT = TIME_WARP_DURATION;
+    spawnHitFlash(target.x, target.y, '#b06bff');
+
+    if(mode === "online" && p.id === 'p1' && socket && socket.readyState === WebSocket.OPEN){
+      socket.send(JSON.stringify({ type:'timewarp', duration: TIME_WARP_DURATION }));
+    }
+  }
+
+  // Online only: called on the player who actually got hit (their own
+  // position is ground truth). Applies real damage to p1, reports the
+  // result to the opponent so their view stays in sync, and ends the
+  // round if this was the killing blow. Shared by bullets and Shockwave.
+  function applyRealHitToP1(dmg){
+    dmg = dmg || 1;
+    let eliminated = false;
+    if(p1.shieldCharges > 0){
+      p1.shieldCharges--;
+      playShieldSound();
+      spawnHitFlash(p1.x, p1.y, '#ffce54');
+    } else {
+      p1.health -= dmg;
+      playHitSound();
+      spawnHitFlash(p1.x, p1.y, '#ffffff');
+      if(p1.health <= 0){
+        p1.alive = false;
+        eliminated = true;
+      }
+    }
+    if(socket && socket.readyState === WebSocket.OPEN){
+      socket.send(JSON.stringify({
+        type: "damage",
+        health: p1.health,
+        shieldCharges: p1.shieldCharges,
+        eliminated: eliminated
+      }));
+    }
+    if(eliminated){
+      endRound('p2');
+    }
+  }
+
+  // Local / AI only: both players' positions are local ground truth, so
+  // whoever lands a hit can apply it directly. Used both for regular
+  // bullets (either player can be the target) and for p1-only ability
+  // effects like Shockwave (always targets p2).
+  function applyLocalHitToP2(dmg){
+    dmg = dmg || 1;
+    if(p2.shieldCharges > 0){
+      p2.shieldCharges--;
+      playShieldSound();
+      spawnHitFlash(p2.x, p2.y, '#ffce54');
+    } else {
+      p2.health -= dmg;
+      playHitSound();
+      spawnHitFlash(p2.x, p2.y, '#ffffff');
+      if(p2.health <= 0){
+        p2.alive = false;
+        endRound('p1');
+      }
+    }
+  }
+
+  function applyLocalHitToP1(dmg){
+    dmg = dmg || 1;
+    if(p1.shieldCharges > 0){
+      p1.shieldCharges--;
+      playShieldSound();
+      spawnHitFlash(p1.x, p1.y, '#ffce54');
+    } else {
+      p1.health -= dmg;
+      playHitSound();
+      spawnHitFlash(p1.x, p1.y, '#ffffff');
+      if(p1.health <= 0){
+        p1.alive = false;
+        endRound('p2');
+      }
+    }
+  }
+
+  // Shockwave ability: triggered when a dash with Shockwave equipped ends.
+  // Always shows the blast at the dasher's own landing spot; only actually
+  // damages someone if they were within radius when it went off.
+  function triggerShockwave(p){
+    spawnHitFlash(p.x, p.y, '#ff6b35');
+    playShockwaveSound();
+
+    if(mode === "online"){
+      // Non-authoritative here -- just tell the opponent a blast went off
+      // at this position. THEY decide whether their real p1 was in range
+      // (see the 'shockwave' message handler), same trust model as bullets.
+      // Only ever reachable with p.id==='p1' online (p2 is never locally
+      // controlled there).
+      if(p.id === 'p1' && socket && socket.readyState === WebSocket.OPEN){
+        socket.send(JSON.stringify({ type:'shockwave', x:p.x, y:p.y, radius:SHOCKWAVE_RADIUS }));
+      }
+    } else {
+      const target = (p.id === 'p1') ? p2 : p1;
+      if(target && target.alive && !target.dashing){
+        const dist = Math.hypot(p.x-target.x, p.y-target.y);
+        if(dist <= SHOCKWAVE_RADIUS){
+          if(p.id === 'p1') applyLocalHitToP2(SHOCKWAVE_DAMAGE); else applyLocalHitToP1(SHOCKWAVE_DAMAGE);
+        }
+      }
+    }
+  }
+
+  // Void Blink: picks a random spot on the arena floor that isn't inside
+  // a cover block (generous padding so the player doesn't land clipped
+  // into one). Falls back to the arena center after enough failed tries,
+  // which should never realistically happen given the arena's open space.
+  function getRandomArenaPosition(){
+    let x, y, tries = 0;
+    do {
+      x = PLAYER_R + Math.random()*(W - PLAYER_R*2);
+      y = PLAYER_R + Math.random()*(H - PLAYER_R*2);
+      tries++;
+    } while(isInsideAnyCover(x,y) && tries < 30);
+    return { x, y };
+  }
+
+  function isInsideAnyCover(x,y){
+    for(const c of covers){
+      if(x > c.x-PLAYER_R && x < c.x+c.w+PLAYER_R && y > c.y-PLAYER_R && y < c.y+c.h+PLAYER_R){
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Instantly relocates the player. No special network message needed --
+  // the existing per-frame position broadcast (see updatePlayer) picks up
+  // the new spot and sends it like any other movement, so the opponent
+  // just sees you snap to the new position almost immediately.
+  function triggerVoidBlink(p, x, y){
+    spawnHitFlash(p.x, p.y, '#ffffff');
+    p.x = Math.max(PLAYER_R, Math.min(W-PLAYER_R, x));
+    p.y = Math.max(PLAYER_R, Math.min(H-PLAYER_R, y));
+    resolvePlayerCover(p);
+    spawnHitFlash(p.x, p.y, '#ffffff');
+    playVoidBlinkSound();
+  }
+
+  // Decoy: spawns a bot-driven fake copy of the caster. isMine=true marks
+  // the copy WE created on this client -- rendered faded, purely for our
+  // own reference. In online mode the opponent receives continuous
+  // position updates and renders their local copy (isMine=false) at full
+  // opacity, indistinguishable from a real player -- that's the trick.
+  // ownerId tracks whose bullets should NOT be fooled by it (their own).
+  function triggerDecoy(p){
+    playDecoySpawnSound();
+    // Replace any previous decoy owned by this same player (shouldn't
+    // normally coexist given the cooldown, but be safe) -- never touch
+    // one belonging to someone else.
+    decoys = decoys.filter(d => d.ownerId !== p.id);
+    decoys.push({
+      x: p.x, y: p.y, facing: p.facing,
+      life: DECOY_DURATION,
+      wanderAngle: p.facing,
+      wanderTimer: 0.4,
+      color: p.color,
+      ownerId: p.id,
+      isMine: true,
+      trail: []
+    });
+  }
+
+  function updateDecoys(dt){
+    for(let i=decoys.length-1; i>=0; i--){
+      const d = decoys[i];
+      d.life -= dt;
+      if(d.life <= 0){ decoys.splice(i,1); continue; }
+
+      d.trail.forEach(t=>t.life -= dt);
+      d.trail = d.trail.filter(t=>t.life>0);
+
+      if(d.isMine){
+        // We created this one -- actually simulate its wandering movement
+        // and (in online mode) keep broadcasting it to the opponent.
+        d.wanderTimer -= dt;
+        if(d.wanderTimer <= 0){
+          d.wanderAngle += (Math.random()-0.5)*2.6;
+          d.wanderTimer = 0.45 + Math.random()*0.65;
+        }
+        d.x += Math.cos(d.wanderAngle)*DECOY_MOVE_SPEED*dt;
+        d.y += Math.sin(d.wanderAngle)*DECOY_MOVE_SPEED*dt;
+        d.facing = d.wanderAngle;
+        d.trail.push({x:d.x, y:d.y, life:0.25});
+        resolvePlayerCover(d);
+
+        if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
+          socket.send(JSON.stringify({
+            type:'decoy', x:d.x, y:d.y, facing:d.facing, life:d.life
+          }));
+        }
+      } else {
+        // Received over the network -- smooth toward the latest update,
+        // same pattern used for the opponent's real position.
+        const follow = Math.min(1, dt*14);
+        d.x += ((d.netX!==undefined ? d.netX : d.x) - d.x) * follow;
+        d.y += ((d.netY!==undefined ? d.netY : d.y) - d.y) * follow;
+        d.trail.push({x:d.x, y:d.y, life:0.25});
+      }
+    }
+  }
+
+  function drawDecoys(){
+    for(const d of decoys){
+      for(const t of d.trail){
+        ctx.globalAlpha = Math.max(0, t.life/0.25) * (d.isMine ? 0.15 : 0.35);
+        ctx.fillStyle = d.color;
+        ctx.beginPath(); ctx.arc(t.x, t.y, PLAYER_R*0.8, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.save();
+      if(d.isMine){
+        ctx.globalAlpha = 0.4; // faded -- only ever seen this way by whoever cast it
+      }
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = d.color;
+      ctx.translate(d.x, d.y);
+      ctx.rotate(d.facing);
+      ctx.fillStyle = d.color;
+      ctx.beginPath();
+      ctx.moveTo(PLAYER_R+4, 0);
+      ctx.lineTo(-PLAYER_R*0.7, -PLAYER_R*0.75);
+      ctx.lineTo(-PLAYER_R*0.35, 0);
+      ctx.lineTo(-PLAYER_R*0.7, PLAYER_R*0.75);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function updateBullets(dt){
+  for(let i = bullets.length - 1; i >= 0; i--){
+    const b = bullets[i];
+
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
+
+    let dead = false;
+
+    if(b.range){
+      b.traveled = (b.traveled || 0) + Math.hypot(b.vx*dt, b.vy*dt);
+      if(b.traveled >= b.range){
+        dead = true;
+      }
+    }
+
+    if(!dead && (b.x < 0 || b.x > W || b.y < 0 || b.y > H)){
+      if(b.bounces > 0){
+        if(b.x < 0 || b.x > W){
+          b.vx = -b.vx;
+          b.x = Math.max(BULLET_R, Math.min(W-BULLET_R, b.x));
+        }
+        if(b.y < 0 || b.y > H){
+          b.vy = -b.vy;
+          b.y = Math.max(BULLET_R, Math.min(H-BULLET_R, b.y));
+        }
+        b.bounces--;
+        playRicochetSound();
+      } else {
+        dead = true;
+      }
+    }
+
+    if(!dead){
+      for(const c of covers){
+        if(circleRectCollide(b.x,b.y,BULLET_R,c)){
+          if(b.bounces > 0){
+            // Figure out roughly which face was hit: if the bullet sits
+            // within the rect's horizontal span, it hit the top/bottom
+            // face (flip vertical velocity); within the vertical span,
+            // the left/right face (flip horizontal); otherwise treat it
+            // as a corner clip and flip both.
+            const withinX = b.x > c.x && b.x < c.x + c.w;
+            const withinY = b.y > c.y && b.y < c.y + c.h;
+            if(withinX && !withinY){
+              b.vy = -b.vy;
+            } else if(withinY && !withinX){
+              b.vx = -b.vx;
+            } else {
+              b.vx = -b.vx;
+              b.vy = -b.vy;
+            }
+            b.bounces--;
+            // Nudge it back out along its new heading so it doesn't
+            // immediately re-collide with the same cover next frame.
+            b.x += b.vx * 0.02;
+            b.y += b.vy * 0.02;
+            playRicochetSound();
+          } else {
+            dead = true;
+          }
+          break;
+        }
+      }
+    }
+
+    if(!dead){
+      // Whichever local id is NOT a decoy's actual owner is "the
+      // opponent" of that decoy, and it's their bullets that can be
+      // fooled by it -- works the same regardless of which player cast
+      // it, or whether we're looking at our own decoy vs. a networked one.
+      for(const d of decoys){
+        const decoyTargetableBy = (d.ownerId === 'p1') ? 'p2' : 'p1';
+        if(b.owner !== decoyTargetableBy) continue;
+        const distToDecoy = Math.hypot(b.x-d.x, b.y-d.y);
+        if(distToDecoy < BULLET_R+PLAYER_R){
+          dead = true;
+          spawnHitFlash(d.x, d.y, '#ffffff');
+          playDecoyPoofSound();
+          break;
+        }
+      }
+    }
+
+    if(!dead){
+
+      // p2 always exists now (even in online mode -- see resetPositions),
+      // so target selection is the same for every mode: a real distance
+      // check against the actual player position, never an automatic hit.
+      const target = b.owner === 'p1' ? p2 : p1;
+
+      if(target && target.alive && !target.dashing){
+
+        const dist = Math.hypot(b.x-target.x, b.y-target.y);
+
+        if(dist < BULLET_R+PLAYER_R){
+
+          dead = true;
+
+          if(mode === "online"){
+            // Online: only the player who actually got hit is allowed to
+            // decide the round result. A bullet owned by 'p2' here means
+            // "the opponent's shot, hitting MY real p1" -- a genuine,
+            // authoritative hit. My own bullets ('p1') vs. my copy of the
+            // opponent just disappear visually with no sound and no
+            // damage; their client decides whether THEY got hit the same
+            // way, on their end, and tells me via the same message type.
+            if(b.owner === 'p2'){
+              applyRealHitToP1(b.damage);
+            }
+          } else if(b.owner === 'p1'){
+            applyLocalHitToP2(b.damage);
+          } else {
+            applyLocalHitToP1(b.damage);
+          }
+        }
+      }
+    }
+
+    if(dead){
+      bullets.splice(i,1);
+    }
+
+  }
+}
+
+  function endRound(winnerId){
+    const winner = winnerId==='p1' ? p1 : p2;
+    if(!winner) return;
+    winner.score++;
+    scoreCarry = { p1: p1.score, p2: p2.score };
+    state = 'roundEnd';
+    msgTimer = 1.7;
+    if(winnerId==='p1'){
+      credits += 15;
+      stats.kills++;
+      if(winner.score >= ROUNDS_TO_WIN){
+        credits += 40;
+        stats.wins++;
+      }
+      updateCreditsDisplay();
+      saveProgress();
+    }
+    if(winner.score >= ROUNDS_TO_WIN){ state = 'matchEnd'; }
+  }
+
+  function startRound(){
+    resetPositions();
+    state = 'countdown';
+    roundTimer = 1.2;
+  }
+
+  function fullReset(){
+    scoreCarry = { p1:0, p2:0 };
+    startRound();
+  }
+
+  function loop(ts){
+    requestAnimationFrame(loop);
+    if(!started) return;
+    const dt = Math.min(0.032, (loop._last? (ts-loop._last)/1000 : 0.016));
+    loop._last = ts;
+
+    if(state==='countdown'){
+      roundTimer -= dt;
+      if(roundTimer<=0) state='playing';
+    } else if(state==='playing'){
+updatePlayer(p1, dt);
+
+if(mode !== "online"){
+    updatePlayer(p2, dt);
+} else if(p2){
+    // Smooth p2 toward the latest network position instead of snapping,
+    // so opponent movement doesn't visibly jitter between updates.
+    const follow = Math.min(1, dt*14);
+    p2.x += (p2.netX - p2.x) * follow;
+    p2.y += (p2.netY - p2.y) * follow;
+}
+
+updateBullets(dt);
+updateDecoys(dt);
+    } else if(state==='roundEnd'){
+      msgTimer -= dt;
+      if(msgTimer<=0) startRound();
+    }
+
+    for(let i=effects.length-1; i>=0; i--){
+      effects[i].life -= dt;
+      if(effects[i].life <= 0) effects.splice(i,1);
+    }
+
+    render();
+    for(const k in keysPressed) keysPressed[k]=false;
+  }
+
+  function drawGrid(){
+    ctx.strokeStyle = 'rgba(255,255,255,0.035)';
+    ctx.lineWidth = 1;
+    for(let x=0;x<=W;x+=30){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+    for(let y=0;y<=H;y+=30){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
+  }
+
+  function drawCovers(){
+    for(const c of covers){
+      ctx.fillStyle = '#2a3140';
+      ctx.fillRect(c.x, c.y, c.w, c.h);
+      ctx.strokeStyle = '#4a5568';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(c.x+0.5, c.y+0.5, c.w-1, c.h-1);
+    }
+  }
+
+  function drawPlayer(p){
+    for(const t of p.trail){
+      ctx.globalAlpha = Math.max(0, t.life/0.25) * 0.35;
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(t.x, t.y, PLAYER_R*0.8, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    if(!p.alive) return;
+    ctx.save();
+    ctx.shadowBlur = p.dashing ? 26 : 14;
+    ctx.shadowColor = p.color;
+    if(p.shieldCharges > 0){
+      ctx.save();
+      ctx.strokeStyle = '#ffce54';
+      ctx.globalAlpha = 0.7;
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = '#ffce54';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, PLAYER_R+6, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    if(p.slowT > 0){
+      ctx.save();
+      const pulse = 0.5 + 0.5*Math.sin(p.slowT*10);
+      ctx.strokeStyle = '#b06bff';
+      ctx.globalAlpha = 0.35 + 0.25*pulse;
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = '#b06bff';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, PLAYER_R+11, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.facing);
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.moveTo(PLAYER_R+4, 0);
+    ctx.lineTo(-PLAYER_R*0.7, -PLAYER_R*0.75);
+    ctx.lineTo(-PLAYER_R*0.35, 0);
+    ctx.lineTo(-PLAYER_R*0.7, PLAYER_R*0.75);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // Health bar -- drawn in world space (not rotated) so it stays level
+    // above the player regardless of which way they're facing.
+    const segCount = p.maxHealth || 3;
+    const segGap = 3;
+    const barW = 34;
+    const segW = (barW - segGap*(segCount-1)) / segCount;
+    const barX = p.x - barW/2;
+    const barY = p.y - PLAYER_R - 16;
+    for(let i=0;i<segCount;i++){
+      const filled = i < p.health;
+      ctx.fillStyle = filled ? p.color : 'rgba(255,255,255,0.14)';
+      if(filled){
+        ctx.save();
+        ctx.shadowBlur = 6;
+        ctx.shadowColor = p.color;
+        ctx.fillRect(barX + i*(segW+segGap), barY, segW, 4);
+        ctx.restore();
+      } else {
+        ctx.fillRect(barX + i*(segW+segGap), barY, segW, 4);
+      }
+    }
+  }
+
+  function drawBullets(){
+    for(const b of bullets){
+      ctx.save();
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = b.color;
+      ctx.fillStyle = b.color;
+      ctx.beginPath(); ctx.arc(b.x,b.y,BULLET_R,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function updateHud(){
+    scoreP1El.innerHTML = ''; scoreP2El.innerHTML = '';
+    for(let i=0;i<ROUNDS_TO_WIN;i++){
+      const d1 = document.createElement('div');
+      d1.className = 'pip' + (p1 && p1.score>i ? ' filled p1' : '');
+      scoreP1El.appendChild(d1);
+      const d2 = document.createElement('div');
+      d2.className = 'pip' + (p2 && p2.score>i ? ' filled p2' : '');
+      scoreP2El.appendChild(d2);
+    }
+    ammoP1El.innerHTML=''; ammoP2El.innerHTML='';
+    if(p1) for(let i=0;i<p1.maxAmmo;i++){
+      const a1 = document.createElement('div');
+      a1.className = 'ammodot' + (p1.ammo>i ? ' on p1':'');
+      ammoP1El.appendChild(a1);
+    }
+    if(p2) for(let i=0;i<p2.maxAmmo;i++){
+      const a2 = document.createElement('div');
+      a2.className = 'ammodot' + (p2.ammo>i ? ' on p2':'');
+      ammoP2El.appendChild(a2);
+    }
+    if(p1) dashP1El.style.width = (100*(1 - Math.max(0,p1.dashCd)/p1.dashCooldownMax)) + '%';
+    if(p2) dashP2El.style.width = (100*(1 - Math.max(0,p2.dashCd)/p2.dashCooldownMax)) + '%';
+
+    const abilityLabel = document.getElementById('abilityLabelP1');
+    const abilityTrack = document.getElementById('abilityTrackP1');
+    const abilityFill = document.getElementById('abilityP1');
+    if(p1 && p1.hasAbility){
+      if(abilityLabel){
+        abilityLabel.classList.remove('hidden');
+        const abilityDef = ABILITIES.find(a => a.id === p1.abilityId);
+        abilityLabel.textContent = 'Q / RIGHT-CLICK: ' + (abilityDef ? abilityDef.name : '');
+      }
+      if(abilityTrack) abilityTrack.classList.remove('hidden');
+      if(abilityFill) abilityFill.style.width = (100*(1 - Math.max(0,p1.abilityCd)/p1.abilityCooldownMax)) + '%';
+    } else {
+      if(abilityLabel) abilityLabel.classList.add('hidden');
+      if(abilityTrack) abilityTrack.classList.add('hidden');
+    }
+
+    const abilityLabelP2 = document.getElementById('abilityLabelP2');
+    const abilityTrackP2 = document.getElementById('abilityTrackP2');
+    const abilityFillP2 = document.getElementById('abilityP2');
+    if(p2 && p2.hasAbility){
+      if(abilityLabelP2){
+        abilityLabelP2.classList.remove('hidden');
+        const abilityDef = ABILITIES.find(a => a.id === p2.abilityId);
+        abilityLabelP2.textContent = '".": ' + (abilityDef ? abilityDef.name : '');
+      }
+      if(abilityTrackP2) abilityTrackP2.classList.remove('hidden');
+      if(abilityFillP2) abilityFillP2.style.width = (100*(1 - Math.max(0,p2.abilityCd)/p2.abilityCooldownMax)) + '%';
+    } else {
+      if(abilityLabelP2) abilityLabelP2.classList.add('hidden');
+      if(abilityTrackP2) abilityTrackP2.classList.add('hidden');
+    }
+  }
+
+  function drawEffects(){
+    for(const fx of effects){
+      const t = fx.life / fx.maxLife; // 1 -> 0 as it fades
+      const r = PLAYER_R + (1 - t) * 26;
+      ctx.save();
+      ctx.globalAlpha = t;
+      ctx.strokeStyle = fx.color;
+      ctx.lineWidth = 3;
+      ctx.shadowBlur = 14;
+      ctx.shadowColor = fx.color;
+      ctx.beginPath();
+      ctx.arc(fx.x, fx.y, r, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function render(){
+    ctx.clearRect(0,0,W,H);
+    drawGrid();
+    drawCovers();
+    drawBullets();
+    drawDecoys();
+    if(p1) drawPlayer(p1);
+    if(p2) drawPlayer(p2);
+    drawEffects();
+    updateHud();
+
+    if(state==='countdown'){
+      centerMsg.innerHTML = `<div class="big">${Math.max(1,Math.ceil(roundTimer))}</div>`;
+    } else if(state==='roundEnd'){
+      const winner = p1.alive ? 'PLAYER ONE' : (mode==='ai' ? 'COMPUTER' : 'PLAYER TWO');
+      const color = p1.alive ? 'var(--p1)' : 'var(--p2)';
+      const creditNote = p1.alive ? '<div class="small" style="color:#ffce54;">+15 CREDITS</div>' : '';
+      centerMsg.innerHTML = `<div class="big" style="color:${color}">${winner}</div><div class="small">ROUND WIN</div>${creditNote}`;
+    } else if(state==='matchEnd'){
+      const p1won = p1.score>=ROUNDS_TO_WIN;
+      const winner = p1won ? 'PLAYER ONE' : (mode==='ai' ? 'COMPUTER' : 'PLAYER TWO');
+      const color = p1won ? 'var(--p1)' : 'var(--p2)';
+      const creditNote = p1won ? '<div class="small" style="color:#ffce54;">+40 BONUS CREDITS</div>' : '';
+      centerMsg.innerHTML = `<div class="big" style="color:${color}">${winner} WINS</div><div class="small">PRESS R TO REMATCH</div>${creditNote}`;
+    } else {
+      centerMsg.innerHTML = '';
+    }
+  }
+
+  const p1LegendCol = document.querySelector('.legend .col.p1');
+
+  function beginGame(){
+    p2Label.textContent = mode==='ai' ? `COMPUTER (${difficulty.toUpperCase()})` : (mode==='online' ? 'OPPONENT (ONLINE)' : 'PLAYER TWO');
+    p2Legend.style.display = mode==='local' ? '' : 'none';
+    canvas.style.cursor = (aimMode==='mouse') ? 'crosshair' : 'default';
+    if(aimMode==='mouse'){
+      p1LegendCol.innerHTML = '<b>PLAYER ONE</b>'
+        + '<div class="row"><span class="key">W A S D</span>move</div>'
+        + '<div class="row"><span class="key">MOUSE</span>aim</div>'
+        + '<div class="row"><span class="key">CLICK / SPACE</span>shoot</div>'
+        + '<div class="row"><span class="key">SHIFT</span>dash</div>';
+    } else {
+      p1LegendCol.innerHTML = '<b>PLAYER ONE</b>'
+        + '<div class="row"><span class="key">W A S D</span>move</div>'
+        + '<div class="row"><span class="key">SPACE</span>shoot</div>'
+        + '<div class="row"><span class="key">SHIFT</span>dash</div>';
+    }
+    menuMain.classList.add('hidden');
+    menuDiff.classList.add('hidden');
+    menuAim.classList.add('hidden');
+    menuShop.classList.add('hidden');
+    exitBtn.classList.remove('hidden');
+    started = true;
+    startMusic();
+    if(mode === 'online' && socket && socket.readyState === WebSocket.OPEN){
+      socket.send(JSON.stringify({ type: 'skin', color: skinColor(p1SkinId) }));
+    }
+    fullReset();
+  }
+
+  function resetAimMenuToNormal(){
+    document.getElementById('menuAimTitle').textContent = 'SELECT AIM STYLE';
+    document.getElementById('onlineStatusWrap').classList.add('hidden');
+    document.getElementById('aimButtonsGroup').classList.remove('hidden');
+  }
+
+  btnLocal.addEventListener('click', ()=>{
+    mode='local';
+    closeOnlineConnection();
+    resetAimMenuToNormal();
+    menuMain.classList.add('hidden');
+    menuAim.classList.remove('hidden');
+});
+
+btnOnline.addEventListener('click', ()=>{
+    mode='online';
+    document.getElementById('menuAimTitle').textContent = 'ONLINE MATCH';
+    document.getElementById('onlineStatusWrap').classList.remove('hidden');
+    document.getElementById('aimButtonsGroup').classList.add('hidden');
+    menuMain.classList.add('hidden');
+    menuAim.classList.remove('hidden');
+    connectOnline();
+});
+  btnAI.addEventListener('click', ()=>{
+    closeOnlineConnection();
+    menuMain.classList.add('hidden');
+    menuDiff.classList.remove('hidden');
+  });
+  btnShop.addEventListener('click', ()=>{
+    menuMain.classList.add('hidden');
+    shopTab = 'skins';
+    tabSkins.classList.add('selected');
+    tabPowers.classList.remove('selected');
+    tabAbilities.classList.remove('selected');
+    updateCreditsDisplay();
+    renderShop();
+    menuShop.classList.remove('hidden');
+  });
+  btnBackShop.addEventListener('click', ()=>{
+    menuShop.classList.add('hidden');
+    menuMain.classList.remove('hidden');
+  });
+  tabSkins.addEventListener('click', ()=>{
+    shopTab = 'skins';
+    tabSkins.classList.add('selected');
+    tabPowers.classList.remove('selected');
+    tabAbilities.classList.remove('selected');
+    renderShop();
+  });
+  tabPowers.addEventListener('click', ()=>{
+    shopTab = 'powers';
+    tabPowers.classList.add('selected');
+    tabSkins.classList.remove('selected');
+    tabAbilities.classList.remove('selected');
+    renderShop();
+  });
+  tabAbilities.addEventListener('click', ()=>{
+    shopTab = 'abilities';
+    tabAbilities.classList.add('selected');
+    tabSkins.classList.remove('selected');
+    tabPowers.classList.remove('selected');
+    renderShop();
+  });
+  btnBackDiff.addEventListener('click', ()=>{
+    menuDiff.classList.add('hidden');
+    menuMain.classList.remove('hidden');
+  });
+  btnBackAim.addEventListener('click', ()=>{
+    if(mode === 'online') closeOnlineConnection();
+    menuAim.classList.add('hidden');
+    if(mode === 'ai'){
+      menuDiff.classList.remove('hidden');
+    } else {
+      menuMain.classList.remove('hidden');
+    }
+  });
+  diffBtns.forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      difficulty = btn.dataset.diff;
+      mode = 'ai';
+      resetAimMenuToNormal();
+      menuDiff.classList.add('hidden');
+      menuAim.classList.remove('hidden');
+    });
+  });
+  btnAimMove.addEventListener('click', ()=>{ aimMode='movement'; beginGame(); });
+  btnAimMouse.addEventListener('click', ()=>{ aimMode='mouse'; beginGame(); });
+
+  function exitToMenu(){
+    started = false;
+    bullets = [];
+    state = 'menu';
+    centerMsg.innerHTML = '';
+    closeOnlineConnection();
+    stopMusic();
+    exitBtn.classList.add('hidden');
+    menuDiff.classList.add('hidden');
+    menuAim.classList.add('hidden');
+    menuShop.classList.add('hidden');
+    menuLeaderboard.classList.add('hidden');
+    updateCreditsDisplay();
+    menuMain.classList.remove('hidden');
+  }
+  exitBtn.addEventListener('click', exitToMenu);
+  const muteBtn = document.getElementById('muteBtn');
+  if(muteBtn) muteBtn.addEventListener('click', toggleMute);
+  window.addEventListener('keydown', (e)=>{
+    if(e.key.toLowerCase()==='escape' && started) exitToMenu();
+  });
+
+  const menuLeaderboard = document.getElementById('menuLeaderboard');
+  const btnLeaderboard = document.getElementById('btnLeaderboard');
+  const btnBackLeaderboard = document.getElementById('btnBackLeaderboard');
+  const lbTabs = document.querySelectorAll('#menuLeaderboard .shop-tab');
+  const signOutBtn = document.getElementById('signOutBtn');
+
+  btnLeaderboard.addEventListener('click', ()=>{
+    menuMain.classList.add('hidden');
+    menuLeaderboard.classList.remove('hidden');
+    renderLeaderboard();
+  });
+  btnBackLeaderboard.addEventListener('click', ()=>{
+    menuLeaderboard.classList.add('hidden');
+    menuMain.classList.remove('hidden');
+  });
+  lbTabs.forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      leaderboardSort = tab.dataset.sort;
+      lbTabs.forEach(t=>t.classList.remove('selected'));
+      tab.classList.add('selected');
+      renderLeaderboard();
+    });
+  });
+  signOutBtn.addEventListener('click', signOut);
+
+  const menuSettings = document.getElementById('menuSettings');
+  const btnSettings = document.getElementById('btnSettings');
+  const btnBackSettings = document.getElementById('btnBackSettings');
+  const toggleAutoAimP1 = document.getElementById('toggleAutoAimP1');
+  const toggleAutoAimP2 = document.getElementById('toggleAutoAimP2');
+
+  function updateSettingsUI(){
+    toggleAutoAimP1.textContent = autoAimP1 ? 'ON' : 'OFF';
+    toggleAutoAimP1.classList.toggle('on', autoAimP1);
+    toggleAutoAimP2.textContent = autoAimP2 ? 'ON' : 'OFF';
+    toggleAutoAimP2.classList.toggle('on', autoAimP2);
+  }
+
+  btnSettings.addEventListener('click', ()=>{
+    menuMain.classList.add('hidden');
+    updateSettingsUI();
+    menuSettings.classList.remove('hidden');
+  });
+  btnBackSettings.addEventListener('click', ()=>{
+    menuSettings.classList.add('hidden');
+    menuMain.classList.remove('hidden');
+  });
+  toggleAutoAimP1.addEventListener('click', ()=>{
+    autoAimP1 = !autoAimP1;
+    updateSettingsUI();
+    saveProgress();
+  });
+  toggleAutoAimP2.addEventListener('click', ()=>{
+    autoAimP2 = !autoAimP2;
+    updateSettingsUI();
+    saveProgress();
+  });
+
+  const menuAdmin = document.getElementById('menuAdmin');
+  const btnAdmin = document.getElementById('btnAdmin');
+  const btnBackAdmin = document.getElementById('btnBackAdmin');
+  const adminAbilitySelect = document.getElementById('adminAbilitySelect');
+  const btnAdminSave = document.getElementById('btnAdminSave');
+  const btnAdminReset = document.getElementById('btnAdminReset');
+  const btnAdminResetAll = document.getElementById('btnAdminResetAll');
+
+  btnAdmin.addEventListener('click', async ()=>{
+    // The button itself is only ever visible if the server already told
+    // us isAdmin=true at sign-in -- but opening the panel doesn't grant
+    // any access by itself, every save/reset call below is independently
+    // checked server-side again.
+    menuMain.classList.add('hidden');
+    populateAdminAbilitySelect();
+    renderAdminFields();
+    setAdminStatus('');
+    renderAdminLog();
+    menuAdmin.classList.remove('hidden');
+  });
+  btnBackAdmin.addEventListener('click', ()=>{
+    menuAdmin.classList.add('hidden');
+    menuMain.classList.remove('hidden');
+  });
+  adminAbilitySelect.addEventListener('change', ()=>{
+    adminSelectedAbility = adminAbilitySelect.value;
+    setAdminStatus('');
+    renderAdminFields();
+  });
+  btnAdminSave.addEventListener('click', adminSaveAbility);
+  btnAdminReset.addEventListener('click', adminResetAbility);
+  btnAdminResetAll.addEventListener('click', ()=>{
+    if(confirm('Reset ALL abilities to their default values? This cannot be undone.')){
+      adminResetAll();
+    }
+  });
+
+  fetchAbilityConfig();
+  tryInitGoogle();
+  updateCreditsDisplay();
+  requestAnimationFrame(loop);
+})();
+</script>
+
+</body>
+</html>

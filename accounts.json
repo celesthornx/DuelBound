@@ -1,0 +1,68 @@
+{
+  "104267390255927500158": {
+    "name": "Mango Gravity",
+    "email": "ultragodbit@gmail.com",
+    "credits": 5225,
+    "kills": 307,
+    "wins": 78,
+    "ownedSkins": [
+      "cyan",
+      "red",
+      "violet",
+      "gold",
+      "green",
+      "white",
+      "pink",
+      "orange"
+    ],
+    "ownedPowers": [
+      "kevlar",
+      "quickdash",
+      "extramag",
+      "rapidreload"
+    ],
+    "equippedPowers": [
+      "kevlar",
+      "rapidreload"
+    ],
+    "equippedPowersP2": [
+      "kevlar",
+      "quickdash"
+    ],
+    "ownedAbilities": [
+      "triburst",
+      "shockwave",
+      "quickreload",
+      "timewarp",
+      "decoy",
+      "voidblink",
+      "ricochet"
+    ],
+    "equippedAbilities": [
+      "voidblink"
+    ],
+    "equippedAbilitiesP2": [
+      "timewarp"
+    ],
+    "p1SkinId": "green",
+    "p2SkinId": "orange",
+    "autoAimP1": true,
+    "autoAimP2": true
+  },
+  "117084432305277908119": {
+    "name": "Horizon",
+    "credits": 185,
+    "kills": 3,
+    "wins": 1,
+    "ownedSkins": [
+      "cyan",
+      "red"
+    ],
+    "ownedPowers": [],
+    "equippedPowers": [],
+    "ownedAbilities": [],
+    "equippedAbilities": [],
+    "p1SkinId": "cyan",
+    "p2SkinId": "red"
+  }
+}
