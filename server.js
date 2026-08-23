@@ -687,6 +687,21 @@ wss.on("connection", socket => {
             });
         }
 
+        // ---- FOOTBALL MODE ----
+        // Every football-related message (footballKick, footballBall,
+        // footballGoal, footballRespawn, and any future footballXxx type)
+        // is relayed to the opponent completely untouched. This is one
+        // generic branch instead of one per message type -- exactly the
+        // same trust model as bullets/shockwave/decoy above: the server
+        // doesn't validate football physics or scoring, it just passes
+        // the message along, and the receiving client decides what to do
+        // with it. This also means new football message types can be
+        // added on the client later without ever touching server.js again.
+        else if (typeof data.type === "string" && data.type.indexOf("football") === 0) {
+
+            send(opponent, data);
+        }
+
         else if (data.type === "rematch") {
 
             send(opponent, { type: "rematch" });
