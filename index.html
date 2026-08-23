@@ -487,6 +487,21 @@
     transition: all .15s ease;
   }
   .mute-btn:hover{ border-color: var(--p1); background: rgba(63,208,255,0.08); }
+
+  /* ---- Football Mode scoreboard ---- */
+  .football-score{
+    position:absolute; top:6px; left:50%; transform: translateX(-50%);
+    font-family:'Share Tech Mono', monospace;
+    font-size: 15px; letter-spacing: 3px;
+    color: var(--ink);
+    background: rgba(10,13,20,0.65);
+    border: 1px solid var(--grid);
+    padding: 6px 16px;
+    pointer-events:none;
+    z-index: 2;
+  }
+  .football-score .fb-l{ color: var(--p1); }
+  .football-score .fb-r{ color: var(--p2); }
 </style>
 </head>
 <body>
@@ -522,6 +537,12 @@
       </div>
     </div>
   </div>
+
+  <!-- FOOTBALL MODE SCOREBOARD (hidden unless gameType==='football') -->
+  <div class="football-score hidden" id="footballScoreDisplay">
+    <span class="fb-l">P1</span> <span id="fbScoreLeft">0</span> - <span id="fbScoreRight">0</span> <span class="fb-r">P2</span>
+  </div>
+
   <div class="center-msg" id="centerMsg"></div>
 
   <!-- MAIN MENU -->
@@ -545,6 +566,16 @@
       	<button class="menu-btn settings-entry" id="btnSettings">SETTINGS</button>
       	<button class="menu-btn admin-entry hidden" id="btnAdmin">ADMIN</button>
     </div>
+  </div>
+
+  <!-- GAME TYPE MENU (Classic vs Football) -->
+  <div class="menu-overlay hidden" id="menuGameType">
+    <div class="menu-title">SELECT GAME TYPE</div>
+    <div class="menu-group">
+      <button class="menu-btn" id="btnModeClassic">CLASSIC<br><span style="font-size:9px;color:var(--ink-dim);letter-spacing:1.5px;">FIRST TO 3 ROUNDS</span></button>
+      <button class="menu-btn accent-2" id="btnModeFootball">&#9917; FOOTBALL<br><span style="font-size:9px;color:var(--ink-dim);letter-spacing:1.5px;">FIRST TO 3 GOALS</span></button>
+    </div>
+    <button class="menu-back" id="btnBackGameType">&larr; back</button>
   </div>
 
   <!-- SETTINGS -->
@@ -1178,7 +1209,15 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
           }
         }
         if(data.eliminated && mode==='online' && state==='playing'){
-          endRound('p1');
+          if(gameType === 'football'){
+            // Our local view of the opponent just needs to reflect
+            // "not alive" so rendering/collision stop until THEIR own
+            // client finishes its respawn countdown and tells us via
+            // a 'footballRespawn' message (see below).
+            if(p2) p2.alive = false;
+          } else {
+            endRound('p1');
+          }
         }
         return;
       }
@@ -1247,9 +1286,84 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         return;
       }
 
+      // ---- FOOTBALL MODE MESSAGES ----
+      // See the "FOOTBALL MODE" section further down for kickBall(),
+      // handleBallPickup(), updateFootballBall(), etc. -- these handlers
+      // just translate the opponent's message into our own local view of
+      // the ball. IMPORTANT: the sender's "p1" is always THEIR OWN local
+      // player, which from our side is our local "p2" (the opponent) --
+      // exactly the same id-flip already used above for bullets/damage.
+
+      // The random wall layout for this match/rematch -- only sent by
+      // server-player-1's client (see initFootballMode()), applied as-is
+      // here so both clients collide against the exact same walls.
+      if(data.type === "footballMap"){
+        if(gameType !== 'football') return;
+        if(Array.isArray(data.covers)) covers = data.covers;
+        return;
+      }
+
+      if(data.type === "footballKick"){
+        if(gameType !== 'football') return;
+        ball.owner = null;
+        ball.x = data.x; ball.y = data.y;
+        ball.vx = data.vx; ball.vy = data.vy;
+        ball.netX = data.x; ball.netY = data.y;
+        footballBallAuthority = false; // the opponent's client now owns this flight's physics -- we just watch it
+        playShootSound();
+        return;
+      }
+
+      if(data.type === "footballBall"){
+        if(gameType !== 'football') return;
+        if(data.action === 'pickup'){
+          ball.owner = 'p2'; // their local p1 = our local p2
+          ball.vx = 0; ball.vy = 0;
+          footballBallAuthority = false;
+        } else if(data.action === 'drop' || data.action === 'sync'){
+          ball.owner = null;
+          ball.netX = data.x; ball.netY = data.y;
+          ball.vx = data.vx; ball.vy = data.vy;
+          footballBallAuthority = false;
+        }
+        return;
+      }
+
+      if(data.type === "footballGoal"){
+        if(gameType !== 'football') return;
+        // Translate their scorer id into our local terms (see note above).
+        const localScorer = (data.scorer === 'p1') ? 'p2' : 'p1';
+        if(localScorer === 'p1') footballScore1++; else footballScore2++;
+        playShockwaveSound();
+        state = 'footballGoal';
+        footballMsgTimer = 1.8;
+        footballBallAuthority = false;
+        if(footballScore1 >= FOOTBALL_WIN_SCORE || footballScore2 >= FOOTBALL_WIN_SCORE){
+          footballWinnerId = footballScore1 > footballScore2 ? 'p1' : 'p2';
+          footballState = 'matchEnd';
+        }
+        return;
+      }
+
+      if(data.type === "footballRespawn"){
+        if(gameType !== 'football') return;
+        if(p2){
+          p2.alive = true;
+          p2.health = p2.maxHealth;
+          p2.shieldCharges = p2.maxShieldCharges;
+          p2.x = data.x; p2.y = data.y; p2.facing = data.facing;
+          p2.netX = data.x; p2.netY = data.y;
+        }
+        return;
+      }
+
       if(data.type === "rematch"){
         if(mode==='online' && state==='matchEnd'){
-          fullReset();
+          if(gameType === 'football'){
+            initFootballMode();
+          } else {
+            fullReset();
+          }
         }
         return;
       }
@@ -1442,6 +1556,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   const menuDiff = document.getElementById('menuDiff');
   const menuAim = document.getElementById('menuAim');
   const menuShop = document.getElementById('menuShop');
+  const menuGameType = document.getElementById('menuGameType');
   const btnLocal = document.getElementById('btnLocal');
   const btnOnline = document.getElementById('btnOnline');
   const btnAI = document.getElementById('btnAI');
@@ -1471,13 +1586,25 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   const PLAYER_R = 15;
   const BULLET_R = 4;
 
-  const covers = [
+  const CLASSIC_COVERS = [
     { x: W/2 - 18, y: H/2 - 70, w: 36, h: 140 },
     { x: 210, y: 120, w: 100, h: 22 },
     { x: W-310, y: H-142, w: 100, h: 22 },
     { x: 150, y: H-180, w: 22, h: 110 },
     { x: W-172, y: 70, w: 22, h: 110 },
   ];
+  // Used only as a brief placeholder in online Football before the map
+  // synced from the other player arrives (see generateRandomFootballCovers
+  // and initFootballMode further down) -- never shown for more than a
+  // frame or two in practice.
+  const FOOTBALL_COVERS_FALLBACK = CLASSIC_COVERS.filter((c, i) => i !== 0);
+
+  // `covers` is what every collision/LOS/rendering function below
+  // actually reads -- it's swapped whenever a match starts (see
+  // beginGame() and initFootballMode()), so Classic Mode always gets the
+  // fixed 5-obstacle layout above, and Football gets a freshly generated
+  // random layout instead (see generateRandomFootballCovers()).
+  let covers = CLASSIC_COVERS;
 
   const DIFF = {
     easy:   { tol: 0.38, shootCdMin: 1.4, shootCdMax: 2.1, dodgeChance: 0.28, aimBurst: 0.10, dashSkill: 0.25, reactionMul: 1.6 },
@@ -1488,6 +1615,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   let mode = 'local'; // 'local' | 'ai' | 'online'
   let difficulty = 'normal';
   let aimMode = 'movement'; // 'movement' | 'mouse' -- only ever applies to p1, only offered vs AI
+  let gameType = 'classic'; // 'classic' | 'football' -- picked on the new GAME TYPE menu
+  let pendingMode = null;   // which of local/online/ai the player picked, remembered while they choose gameType
 
   // Player Settings: auto-aim keeps a player's facing locked onto the
   // opponent automatically -- free accessibility toggle (not a shop
@@ -1831,6 +1960,581 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
 
   function skinColor(id){ const s = SKINS.find(s=>s.id===id); return s ? s.color : '#3fd0ff'; }
 
+  // ============================================================
+  // FOOTBALL SETTINGS
+  // ============================================================
+  const FOOTBALL_WIN_SCORE = 3;
+  const FOOTBALL_RESPAWN_TIME = 5;
+  const BALL_RADIUS = 12;
+  const BALL_KICK_SPEED = 980;   // was 650 -- noticeably punchier, can score from well past midfield
+  const BALL_BOUNCE = 0.82;
+  const BALL_FRICTION = 0.988;   // slightly less drag so the faster kick still carries a realistic distance
+  const BALL_PICKUP_RADIUS = 25;
+  const GOAL_WIDTH = 70;
+  const GOAL_HEIGHT = 200;
+  const BOT_FOOTBALL_SPEED = 235;
+  const BOT_KICK_DISTANCE = 34;  // how close to the goal the bot will shoot from once it's dribbled in range
+  const BOT_DEFEND_DISTANCE = 230;
+  const BOT_AGGRESSION = 0.5;
+
+  let footballScore1 = 0;
+  let footballScore2 = 0;
+  let footballState = 'playing';   // 'playing' | 'matchEnd' -- whether the football MATCH is still going
+  let footballMsgTimer = 0;
+  let footballWinnerId = null;
+  // Whether THIS client currently simulates the loose ball's physics and
+  // goal detection, and broadcasts it to the opponent -- see the big
+  // comment in updateFootballBall() for the full model. Always true when
+  // not in online mode (there's only one simulation to run).
+  let footballBallAuthority = true;
+
+  let ball = { x: 450, y: 270, vx: 0, vy: 0, owner: null, netX: 450, netY: 270, trail: [] };
+
+  function footballGoalRects(){
+    const goalY = H/2 - GOAL_HEIGHT/2;
+    return {
+      left:  { x: 0, y: goalY, w: GOAL_WIDTH, h: GOAL_HEIGHT },
+      right: { x: W - GOAL_WIDTH, y: goalY, w: GOAL_WIDTH, h: GOAL_HEIGHT }
+    };
+  }
+
+  // Builds a random-but-sane set of arena obstacles for a Football match.
+  // Same rectangle shape as Classic Mode's covers (just {x,y,w,h}), but
+  // placed procedurally -- steering clear of both goal mouths, both
+  // player spawn points, and the center kickoff spot, and kept spaced
+  // apart from each other, so the walls are always somewhere interesting
+  // to play around rather than sitting on top of the one place a player
+  // or the ball actually needs to be.
+  function generateRandomFootballCovers(){
+    const generated = [];
+    const count = 3 + Math.floor(Math.random()*2); // 3-4 walls per match
+    const marginX = GOAL_WIDTH + 70;  // keep clear of both goal mouths
+    const marginY = 50;               // keep clear of the top/bottom walls
+    const noGoZones = [
+      { x: 130,   y: H/2, r: 75 }, // Player 1 spawn
+      { x: W-130, y: H/2, r: 75 }, // Player 2 spawn
+      { x: W/2,   y: H/2, r: 95 }, // center circle / kickoff spot
+    ];
+
+    let attempts = 0;
+    while(generated.length < count && attempts < 300){
+      attempts++;
+      const vertical = Math.random() < 0.5;
+      const thickness = 18 + Math.random()*10; // 18-28
+      const length = 80 + Math.random()*50;    // 80-130
+      const w = vertical ? thickness : length;
+      const h = vertical ? length : thickness;
+
+      const x = marginX + Math.random()*Math.max(0, W - marginX*2 - w);
+      const y = marginY + Math.random()*Math.max(0, H - marginY*2 - h);
+      const rect = { x, y, w, h };
+
+      let blocked = false;
+      for(const zone of noGoZones){
+        const nx = Math.max(rect.x, Math.min(zone.x, rect.x+rect.w));
+        const ny = Math.max(rect.y, Math.min(zone.y, rect.y+rect.h));
+        if(Math.hypot(zone.x-nx, zone.y-ny) < zone.r){ blocked = true; break; }
+      }
+      if(!blocked){
+        const pad = 55; // keep walls from crowding each other into a maze
+        for(const c of generated){
+          if(rect.x < c.x+c.w+pad && rect.x+rect.w+pad > c.x &&
+             rect.y < c.y+c.h+pad && rect.y+rect.h+pad > c.y){
+            blocked = true; break;
+          }
+        }
+      }
+      if(!blocked) generated.push(rect);
+    }
+    return generated;
+  }
+
+  function initFootballMode(){
+    footballScore1 = 0;
+    footballScore2 = 0;
+    footballState = 'playing';
+    footballWinnerId = null;
+
+    // A fresh random wall layout every match (and every rematch). Online,
+    // only server-player-1's client actually rolls the layout and sends
+    // it to the opponent -- if both clients rolled independently they'd
+    // each see the walls in different places and collisions would go out
+    // of sync. Player 2's client shows a safe placeholder for the brief
+    // moment before the real map message arrives.
+    if(mode === 'online'){
+      if(myPlayerID === 1){
+        covers = generateRandomFootballCovers();
+        if(socket && socket.readyState === WebSocket.OPEN){
+          socket.send(JSON.stringify({ type:'footballMap', covers: covers }));
+        }
+      } else {
+        covers = FOOTBALL_COVERS_FALLBACK;
+      }
+    } else {
+      covers = generateRandomFootballCovers();
+    }
+
+    resetFootballPositions();
+    state = 'countdown';
+    roundTimer = 1.2;
+  }
+
+  // Resets BOTH players to their normal spawn points and the ball to
+  // center -- reuses the exact same resetPositions() Classic Mode uses
+  // (same 130 / W-130 spawn coordinates, same online-flip handling, same
+  // loadout building from the shop), so Football spawns are guaranteed
+  // consistent with the rest of the game instead of being duplicated here.
+  function resetFootballPositions(){
+    resetPositions();
+    bullets = [];
+    decoys = [];
+    ball.x = W/2; ball.y = H/2; ball.vx = 0; ball.vy = 0; ball.owner = null;
+    ball.netX = ball.x; ball.netY = ball.y; ball.trail = [];
+    // Deterministic default so exactly one client is authoritative for a
+    // stationary kickoff ball -- server player 1's client starts true.
+    footballBallAuthority = !(mode === 'online' && myPlayerID === 2);
+  }
+
+  // Re-spawns a single player only (the other player keeps playing) --
+  // used for the 5-second death respawn, as opposed to
+  // resetFootballPositions() which resets everyone after a goal/kickoff.
+  function respawnFootballPlayer(p){
+    const onlineFlipped = (mode === 'online' && myPlayerID === 2);
+    if(p.id === 'p1'){
+      p.x = onlineFlipped ? W-130 : 130;
+      p.facing = onlineFlipped ? Math.PI : 0;
+    } else {
+      p.x = onlineFlipped ? 130 : W-130;
+      p.facing = onlineFlipped ? 0 : Math.PI;
+    }
+    p.y = H/2;
+    p.health = p.maxHealth;
+    p.shieldCharges = p.maxShieldCharges;
+    p.ammo = p.maxAmmo;
+    p.reloadT = 0;
+    p.alive = true;
+    p.respawnT = 0;
+  }
+
+  function dropBall(atX, atY, vx, vy){
+    ball.owner = null;
+    ball.x = atX; ball.y = atY;
+    ball.vx = vx || 0; ball.vy = vy || 0;
+  }
+
+  // Called locally whenever OUR OWN player dies in Football Mode (health
+  // hit 0, via applyLocalHitToP1/P2 or applyRealHitToP1 -- see those
+  // functions further down). Starts the respawn countdown and, if they
+  // were holding the ball, drops it on the spot instead of letting it
+  // vanish.
+  function handleFootballDeath(p){
+    p.alive = false;
+    p.respawnT = FOOTBALL_RESPAWN_TIME;
+    if(ball.owner === p.id){
+      dropBall(p.x, p.y, Math.cos(p.facing)*70, Math.sin(p.facing)*70);
+      footballBallAuthority = true;
+      if(mode === 'online' && socket && socket.readyState === WebSocket.OPEN){
+        socket.send(JSON.stringify({ type:'footballBall', action:'drop', x:ball.x, y:ball.y, vx:ball.vx, vy:ball.vy }));
+      }
+    }
+  }
+
+  // Releases the ball with velocity in the direction the kicker is
+  // facing -- this is what the shoot button (SPACE/ENTER) turns into
+  // whenever that player currently has possession (see updatePlayer()).
+  function kickBall(p){
+    if(ball.owner !== p.id) return;
+    playShootSound();
+    ball.owner = null;
+    ball.x = p.x + Math.cos(p.facing)*(PLAYER_R+BALL_RADIUS+2);
+    ball.y = p.y + Math.sin(p.facing)*(PLAYER_R+BALL_RADIUS+2);
+    ball.vx = Math.cos(p.facing)*BALL_KICK_SPEED;
+    ball.vy = Math.sin(p.facing)*BALL_KICK_SPEED;
+    footballBallAuthority = true; // the kicker's client owns this flight's physics until it's next picked up
+    if(mode === 'online' && p.id === 'p1' && socket && socket.readyState === WebSocket.OPEN){
+      socket.send(JSON.stringify({ type:'footballKick', x:ball.x, y:ball.y, vx:ball.vx, vy:ball.vy }));
+    }
+  }
+
+  // A loose ball touching a player is either picked up (if it's moving
+  // slowly enough to control) or knocked away (if it's moving fast) --
+  // an automatic catch on a speeding shot would feel wrong in an arcade
+  // football game.
+  function handleBallPickup(p){
+    if(!p || !p.alive || ball.owner) return;
+    const dist = Math.hypot(ball.x-p.x, ball.y-p.y);
+    if(dist >= BALL_PICKUP_RADIUS + PLAYER_R) return;
+
+    const ballSpeed = Math.hypot(ball.vx, ball.vy);
+    if(ballSpeed > 260){
+      const nx = (ball.x-p.x)/(dist||1), ny = (ball.y-p.y)/(dist||1);
+      ball.vx = nx*ballSpeed*0.6;
+      ball.vy = ny*ballSpeed*0.6;
+      ball.x = p.x + nx*(BALL_PICKUP_RADIUS+PLAYER_R);
+      ball.y = p.y + ny*(BALL_PICKUP_RADIUS+PLAYER_R);
+      playRicochetSound();
+      return;
+    }
+
+    ball.owner = p.id;
+    ball.vx = 0; ball.vy = 0;
+    playDecoySpawnSound(); // reuse the shimmering "duplicate" chime as a pickup cue
+    if(mode === 'online' && p.id === 'p1' && socket && socket.readyState === WebSocket.OPEN){
+      socket.send(JSON.stringify({ type:'footballBall', action:'pickup' }));
+    }
+  }
+
+  function checkFootballGoal(){
+    const goals = footballGoalRects();
+    if(ball.x <= goals.left.x+goals.left.w && ball.y > goals.left.y && ball.y < goals.left.y+goals.left.h){
+      scoreFootballGoal('p2'); // ball entered p1's own goal -> p2 scores
+      return true;
+    }
+    if(ball.x >= goals.right.x && ball.y > goals.right.y && ball.y < goals.right.y+goals.right.h){
+      scoreFootballGoal('p1'); // ball entered p2's own goal -> p1 scores
+      return true;
+    }
+    return false;
+  }
+
+  function scoreFootballGoal(scorerId){
+    if(footballState !== 'playing') return;
+    if(scorerId === 'p1') footballScore1++; else footballScore2++;
+    playShockwaveSound(); // reuse the boom SFX as a goal horn
+    state = 'footballGoal';
+    footballMsgTimer = 1.8;
+
+    if(scorerId === 'p1'){
+      credits += 15;
+      updateCreditsDisplay();
+      saveProgress();
+    }
+
+    if(mode === 'online' && footballBallAuthority && socket && socket.readyState === WebSocket.OPEN){
+      socket.send(JSON.stringify({ type:'footballGoal', scorer: scorerId, score1: footballScore1, score2: footballScore2 }));
+    }
+
+    if(footballScore1 >= FOOTBALL_WIN_SCORE || footballScore2 >= FOOTBALL_WIN_SCORE){
+      footballWinnerId = footballScore1 > footballScore2 ? 'p1' : 'p2';
+      footballState = 'matchEnd';
+      if(footballWinnerId === 'p1'){
+        credits += 40;
+        stats.wins++;
+        updateCreditsDisplay();
+        saveProgress();
+      }
+    }
+  }
+
+  // Ball physics. Online netcode model: whichever client most recently
+  // kicked the ball (or caused it to become loose, e.g. by dying while
+  // holding it) is "authoritative" for it -- that client runs the actual
+  // friction/bounce/goal-detection simulation and streams the result to
+  // the opponent, who just smooths toward the received position (exactly
+  // like p2's regular movement sync). This avoids both clients running
+  // independent physics on the same ball and slowly drifting apart.
+  function updateFootballBall(dt){
+    if(ball.owner){
+      const holder = ball.owner === 'p1' ? p1 : p2;
+      if(holder){
+        ball.x = holder.x + Math.cos(holder.facing)*(PLAYER_R+10);
+        ball.y = holder.y + Math.sin(holder.facing)*(PLAYER_R+10);
+      }
+      ball.trail = [];
+      return;
+    }
+
+    if(mode === 'online' && !footballBallAuthority){
+      const follow = Math.min(1, dt*14);
+      ball.x += (ball.netX-ball.x)*follow;
+      ball.y += (ball.netY-ball.y)*follow;
+      return;
+    }
+
+    ball.x += ball.vx*dt;
+    ball.y += ball.vy*dt;
+    ball.vx *= BALL_FRICTION;
+    ball.vy *= BALL_FRICTION;
+    if(Math.hypot(ball.vx,ball.vy) < 4){ ball.vx = 0; ball.vy = 0; }
+
+    const goals = footballGoalRects();
+    const inGoalMouth = (y) => y > goals.left.y && y < goals.left.y+goals.left.h;
+
+    if(ball.y < BALL_RADIUS){ ball.y = BALL_RADIUS; ball.vy = -ball.vy*BALL_BOUNCE; playRicochetSound(); }
+    if(ball.y > H-BALL_RADIUS){ ball.y = H-BALL_RADIUS; ball.vy = -ball.vy*BALL_BOUNCE; playRicochetSound(); }
+
+    // Side walls bounce the ball back EXCEPT through the goal mouths,
+    // where it's allowed through so it can actually score.
+    if(ball.x < BALL_RADIUS && !inGoalMouth(ball.y)){ ball.x = BALL_RADIUS; ball.vx = -ball.vx*BALL_BOUNCE; playRicochetSound(); }
+    if(ball.x > W-BALL_RADIUS && !inGoalMouth(ball.y)){ ball.x = W-BALL_RADIUS; ball.vx = -ball.vx*BALL_BOUNCE; playRicochetSound(); }
+
+    for(const c of covers){
+      if(circleRectCollide(ball.x, ball.y, BALL_RADIUS, c)){
+        const withinX = ball.x > c.x && ball.x < c.x+c.w;
+        const withinY = ball.y > c.y && ball.y < c.y+c.h;
+        if(withinX && !withinY) ball.vy = -ball.vy*BALL_BOUNCE;
+        else if(withinY && !withinX) ball.vx = -ball.vx*BALL_BOUNCE;
+        else { ball.vx = -ball.vx*BALL_BOUNCE; ball.vy = -ball.vy*BALL_BOUNCE; }
+        playRicochetSound();
+      }
+    }
+
+    ball.trail.push({x:ball.x, y:ball.y, life:0.2});
+    ball.trail.forEach(t=>t.life-=dt);
+    ball.trail = ball.trail.filter(t=>t.life>0);
+
+    if(checkFootballGoal()) return;
+
+    if(mode === 'online' && footballBallAuthority && socket && socket.readyState === WebSocket.OPEN){
+      socket.send(JSON.stringify({ type:'footballBall', action:'sync', x:ball.x, y:ball.y, vx:ball.vx, vy:ball.vy }));
+    }
+  }
+
+  // Basic-but-competent Football bot for VS COMPUTER. Movement here is
+  // the ONLY thing driving the bot's position in football mode (see the
+  // gameType==='football' branch inside updatePlayer, which zeroes out
+  // the normal combat AI's movement and leaves only its shoot decision).
+  //
+  // Two bugs fixed here from the first pass:
+  //  1. The bot used to stand COMPLETELY STILL while it had the ball --
+  //     it only ever checked its (frozen) distance to the goal, so unless
+  //     the random aggression roll fired it would just sit there forever.
+  //     It now actually walks the ball toward the goal every frame.
+  //  2. While defending, the bot moved toward a defensive spot but faced
+  //     the human player instead of its direction of travel -- since the
+  //     player triangle is drawn pointing the way it's "facing", this
+  //     made it visually slide sideways/backwards instead of walking.
+  //     Facing now always matches the direction of movement; it only
+  //     turns to look at the opponent once it's actually stopped moving.
+  function updateFootballBot(bot, dt){
+    const opp = p1;
+    if(!opp) return;
+
+    if(ball.owner === bot.id){
+      // Dribble toward the LEFT goal (bot spawns on the right side).
+      const goalX = 46, goalY = H/2;
+      const moveAng = Math.atan2(goalY-bot.y, goalX-bot.x);
+      bot.x += Math.cos(moveAng) * BOT_FOOTBALL_SPEED * dt;
+      bot.y += Math.sin(moveAng) * BOT_FOOTBALL_SPEED * dt;
+      bot.facing = moveAng;
+      resolvePlayerCover(bot);
+      const distToGoal = Math.hypot(goalX-bot.x, goalY-bot.y);
+      if(distToGoal < BOT_KICK_DISTANCE*8 || Math.random() < BOT_AGGRESSION*dt){
+        kickBall(bot);
+      }
+    } else if(ball.owner === null){
+      // Always chase a loose ball regardless of distance -- gating this
+      // by distance used to make the bot flicker between "chase" and
+      // "go home" right around the threshold, which looked like broken,
+      // jittery walking. Simpler and more reliable to just always go.
+      const moveAng = Math.atan2(ball.y-bot.y, ball.x-bot.x);
+      bot.x += Math.cos(moveAng) * BOT_FOOTBALL_SPEED * dt;
+      bot.y += Math.sin(moveAng) * BOT_FOOTBALL_SPEED * dt;
+      bot.facing = moveAng;
+      resolvePlayerCover(bot);
+    } else if(ball.owner === 'p1'){
+      // Defend: "jockey" roughly BOT_DEFEND_DISTANCE away from the ball
+      // carrier, positioned on the line between them and our own goal,
+      // rather than just sitting at the exact midpoint every time.
+      const goalX = W-40, goalY = H/2;
+      const toGoalX = goalX-opp.x, toGoalY = goalY-opp.y;
+      const toGoalLen = Math.hypot(toGoalX,toGoalY) || 1;
+      const standOff = Math.min(BOT_DEFEND_DISTANCE, toGoalLen*0.6);
+      const defendX = opp.x + (toGoalX/toGoalLen)*standOff;
+      const defendY = opp.y + (toGoalY/toGoalLen)*standOff;
+      const dx = defendX-bot.x, dy = defendY-bot.y;
+      const dist = Math.hypot(dx,dy);
+      if(dist > 12){
+        const moveAng = Math.atan2(dy,dx);
+        bot.x += Math.cos(moveAng) * BOT_FOOTBALL_SPEED * dt;
+        bot.y += Math.sin(moveAng) * BOT_FOOTBALL_SPEED * dt;
+        bot.facing = moveAng;
+        resolvePlayerCover(bot);
+      } else {
+        // Already in position -- just turn to watch the ball carrier
+        // instead of jittering in place trying to close the last few
+        // pixels of distance every frame.
+        bot.facing = Math.atan2(opp.y-bot.y, opp.x-bot.x);
+      }
+    }
+
+    bot.x = Math.max(PLAYER_R, Math.min(W-PLAYER_R, bot.x));
+    bot.y = Math.max(PLAYER_R, Math.min(H-PLAYER_R, bot.y));
+  }
+
+  // Per-frame Football Mode update, called from loop() instead of the
+  // Classic movement block whenever gameType==='football'. Reuses
+  // updatePlayer/updateBullets/resolvePlayerCover exactly as Classic does.
+  function updateFootball(dt){
+    // Respawn countdowns for defeated players. A dead player already has
+    // all input ignored inside updatePlayer() (it returns immediately for
+    // !p.alive), so this block only owns the timer + revive + telling the
+    // opponent about it (online only, and only for OUR OWN player -- the
+    // opponent's respawn is their own client's responsibility, signalled
+    // to us via the 'footballRespawn' message).
+    [p1, p2].forEach(p=>{
+      if(!p) return;
+      if(mode === 'online' && p.id === 'p2') return;
+      if(!p.alive && p.respawnT > 0){
+        p.respawnT -= dt;
+        if(p.respawnT <= 0){
+          respawnFootballPlayer(p);
+          if(mode === 'online' && p.id === 'p1' && socket && socket.readyState === WebSocket.OPEN){
+            socket.send(JSON.stringify({ type:'footballRespawn', x:p.x, y:p.y, facing:p.facing }));
+          }
+        }
+      }
+    });
+
+    updatePlayer(p1, dt);
+    if(mode !== 'online'){
+      updatePlayer(p2, dt);
+      if(p2 && p2.isAI && p2.alive) updateFootballBot(p2, dt);
+    } else if(p2){
+      const follow = Math.min(1, dt*14);
+      p2.x += (p2.netX - p2.x) * follow;
+      p2.y += (p2.netY - p2.y) * follow;
+    }
+
+    updateBullets(dt);
+
+    if(p1 && p1.alive) handleBallPickup(p1);
+    if(mode !== 'online' && p2 && p2.alive) handleBallPickup(p2);
+
+    updateFootballBall(dt);
+  }
+
+  function drawFootballField(){
+    ctx.save();
+    ctx.strokeStyle = 'rgba(63,208,255,0.25)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6,8]);
+    ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
+    ctx.beginPath(); ctx.arc(W/2,H/2,60,0,Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(W/2,H/2,3,0,Math.PI*2);
+    ctx.fillStyle = 'rgba(63,208,255,0.4)'; ctx.fill();
+    ctx.restore();
+
+    const goals = footballGoalRects();
+    [['left', goals.left, '#3fd0ff'], ['right', goals.right, '#ff5f6d']].forEach(([side,g,color])=>{
+      ctx.save();
+      ctx.globalAlpha = 0.14;
+      ctx.fillStyle = color;
+      ctx.fillRect(g.x, g.y, g.w, g.h);
+
+      // Faint net hatching inside the goal box for a bit of texture
+      // instead of a flat tint.
+      ctx.globalAlpha = 0.22;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      const step = 14;
+      for(let gx = g.x + step; gx < g.x + g.w; gx += step){
+        ctx.beginPath(); ctx.moveTo(gx, g.y); ctx.lineTo(gx, g.y+g.h); ctx.stroke();
+      }
+      for(let gy = g.y + step; gy < g.y + g.h; gy += step){
+        ctx.beginPath(); ctx.moveTo(g.x, gy); ctx.lineTo(g.x+g.w, gy); ctx.stroke();
+      }
+
+      ctx.globalAlpha = 0.9;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.shadowBlur = 16;
+      ctx.shadowColor = color;
+      ctx.strokeRect(g.x + (side==='left'?1.5:-1.5), g.y, g.w-3, g.h);
+      ctx.restore();
+    });
+  }
+
+  function drawFootballBall(){
+    // Glowing trail -- a soft radial puff at each recent position instead
+    // of a flat dot, so it actually reads as an "energy" streak rather
+    // than a row of solid circles.
+    for(const t of ball.trail){
+      const a = Math.max(0, t.life/0.2);
+      ctx.save();
+      ctx.globalAlpha = a*0.35;
+      const trailGrad = ctx.createRadialGradient(t.x,t.y,0, t.x,t.y,BALL_RADIUS*0.9);
+      trailGrad.addColorStop(0, '#fff4c4');
+      trailGrad.addColorStop(1, 'rgba(255,206,84,0)');
+      ctx.fillStyle = trailGrad;
+      ctx.beginPath(); ctx.arc(t.x,t.y,BALL_RADIUS*0.9,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = '#ffce54';
+
+    // Warm gold sphere with an off-center highlight, instead of a flat
+    // fill, so it reads as a glowing orb rather than a plain disc.
+    const bodyGrad = ctx.createRadialGradient(
+      ball.x - BALL_RADIUS*0.35, ball.y - BALL_RADIUS*0.4, BALL_RADIUS*0.1,
+      ball.x, ball.y, BALL_RADIUS*1.05
+    );
+    bodyGrad.addColorStop(0,    '#fffbe6');
+    bodyGrad.addColorStop(0.4,  '#ffe28a');
+    bodyGrad.addColorStop(0.78, '#ffce54');
+    bodyGrad.addColorStop(1,    '#d98a1f');
+    ctx.fillStyle = bodyGrad;
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI*2); ctx.fill();
+
+    // Three tilted "seam" ellipses that rotate with the ball's own
+    // travel/possession so it visibly spins as it moves, like an
+    // energy-charged sports ball rather than a static coin.
+    const spin = (ball.x*0.05 + ball.y*0.05) + performance.now()*0.0045;
+    ctx.strokeStyle = 'rgba(150,86,0,0.4)';
+    ctx.lineWidth = 1.2;
+    for(let i=0;i<3;i++){
+      const a = spin + i*(Math.PI/3);
+      ctx.beginPath();
+      ctx.ellipse(ball.x, ball.y, BALL_RADIUS*0.88, BALL_RADIUS*0.3, a, 0, Math.PI*2);
+      ctx.stroke();
+    }
+
+    // Crisp bright rim so it stays readable against any background.
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI*2); ctx.stroke();
+
+    // Small hard specular dot for a glossy, energetic look.
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.beginPath(); ctx.arc(ball.x-BALL_RADIUS*0.32, ball.y-BALL_RADIUS*0.34, BALL_RADIUS*0.26, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+
+    if(ball.owner){
+      const holder = ball.owner === 'p1' ? p1 : p2;
+      if(holder){
+        ctx.save();
+        ctx.globalAlpha = 0.8;
+        ctx.strokeStyle = '#ffce54';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([3,4]);
+        ctx.beginPath();
+        ctx.arc(holder.x, holder.y, PLAYER_R+9, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+
+  function drawFootballRespawnCountdown(){
+    ctx.save();
+    ctx.textAlign = 'center';
+    [p1,p2].forEach(p=>{
+      if(p && !p.alive && p.respawnT > 0){
+        ctx.fillStyle = p.color;
+        ctx.shadowBlur = 8; ctx.shadowColor = p.color;
+        ctx.font = "bold 12px 'Share Tech Mono', monospace";
+        ctx.fillText('RESPAWNING...', p.x, p.y-32);
+        ctx.font = "bold 22px 'Share Tech Mono', monospace";
+        ctx.fillText(String(Math.ceil(p.respawnT)), p.x, p.y-8);
+      }
+    });
+    ctx.restore();
+  }
+
   function updateCreditsDisplay(){
     creditsAmountMain.textContent = credits;
     creditsAmountShop.textContent = credits;
@@ -2014,6 +2718,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   function makePlayer(id, x, y, color, keys, facing, isAI, opts){
     opts = opts || {};
     const maxAmmo = opts.maxAmmo || MAX_AMMO;
+    const maxShieldCharges = opts.shieldCharges || 0;
     return {
       id, x, y, color, keys, facing, isAI,
       netX: x, netY: y, // interpolation targets for network-driven players (online opponent)
@@ -2021,7 +2726,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       reloadTime: opts.reloadTime || RELOAD_TIME,
       dashCooldownMax: opts.dashCooldownMax || DASH_COOLDOWN,
       dashDuration: opts.dashDuration || DASH_DURATION,
-      shieldCharges: opts.shieldCharges || 0,
+      shieldCharges: maxShieldCharges,
+      maxShieldCharges: maxShieldCharges,
       hasAbility: opts.hasAbility || false,
       abilityId: opts.abilityId || null,
       abilityCooldownMax: opts.abilityCooldownMax || 4.0,
@@ -2033,6 +2739,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       shootCd: 0,
       dashCd: 0, dashT: 0,
       alive: true, health: 3, maxHealth: 3, score: 0, trail: [],
+      respawnT: 0, // Football Mode death-respawn countdown, seconds remaining
       ai: { shootCd: Math.random()*0.6, strafeDir: Math.random()<0.5?1:-1, strafeTimer: 1+Math.random(), dodgeCd:0, reactDelay:0 }
     };
   }
@@ -2066,7 +2773,11 @@ let scoreCarry = null;
       if(mode==='online' && socket && socket.readyState===WebSocket.OPEN){
         socket.send(JSON.stringify({type:'rematch'}));
       }
-      fullReset();
+      if(gameType === 'football'){
+        initFootballMode();
+      } else {
+        fullReset();
+      }
     }
   });
   window.addEventListener('keyup', (e)=>{ keysDown[e.key.toLowerCase()] = false; });
@@ -2305,7 +3016,18 @@ else{
 
     if(p.isAI){
       const inp = aiThink(p, dt);
-      mx = inp.mx; my = inp.my; wantShoot = inp.shoot; wantDash = inp.dash;
+      if(gameType === 'football'){
+        // Football's own bot logic (updateFootballBot, called right
+        // after this function returns) fully owns positioning -- the
+        // general combat AI here only still decides whether to take a
+        // shot (which becomes a kick automatically below if it's
+        // currently holding the ball).
+        mx = 0; my = 0;
+        wantShoot = inp.shoot;
+        wantDash = false;
+      } else {
+        mx = inp.mx; my = inp.my; wantShoot = inp.shoot; wantDash = inp.dash;
+      }
     } else {
       const k = p.keys;
       if(keysDown[k.up]) my -= 1;
@@ -2404,6 +3126,18 @@ if(mode === "online" && p.id === "p1" && socket && socket.readyState === WebSock
       if(p.reloadT >= p.reloadTime){ p.reloadT = 0; p.ammo++; }
     }
 
+    // ---- FOOTBALL MODE: shooting-button interception ----
+    // A player currently holding the football cannot fire normal
+    // bullets -- the same button instead kicks the ball. This runs
+    // BEFORE the normal bullet-firing block below, and always clears
+    // wantShoot so that block never triggers while the ball is held.
+    if(gameType === 'football' && ball.owner === p.id){
+      if(wantShoot){
+        kickBall(p);
+      }
+      wantShoot = false;
+    }
+
     if(wantShoot && p.ammo>0){
     	p.ammo--;
     	p.reloadT = 0;
@@ -2432,7 +3166,12 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
 }
     }
 
-    if(wantAbility && p.abilityCd<=0){
+    // Triburst fires bullets, so it's blocked while holding the ball for
+    // the same reason normal shooting is -- every other ability (dash
+    // abilities, Time Warp, Decoy, Void Blink) doesn't fire bullets and
+    // stays available, the ball just follows its holder through them.
+    const footballBlocksTriburst = (gameType === 'football' && ball.owner === p.id && p.abilityId === 'triburst');
+    if(wantAbility && p.abilityCd<=0 && !footballBlocksTriburst){
       p.abilityCd = p.abilityCooldownMax;
 
       if(p.abilityId === 'triburst'){
@@ -2524,7 +3263,11 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
       }));
     }
     if(eliminated){
-      endRound('p2');
+      if(gameType === 'football'){
+        handleFootballDeath(p1);
+      } else {
+        endRound('p2');
+      }
     }
   }
 
@@ -2544,7 +3287,11 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
       spawnHitFlash(p2.x, p2.y, '#ffffff');
       if(p2.health <= 0){
         p2.alive = false;
-        endRound('p1');
+        if(gameType === 'football'){
+          handleFootballDeath(p2);
+        } else {
+          endRound('p1');
+        }
       }
     }
   }
@@ -2561,7 +3308,11 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
       spawnHitFlash(p1.x, p1.y, '#ffffff');
       if(p1.health <= 0){
         p1.alive = false;
-        endRound('p2');
+        if(gameType === 'football'){
+          handleFootballDeath(p1);
+        } else {
+          endRound('p2');
+        }
       }
     }
   }
@@ -2887,6 +3638,9 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
       roundTimer -= dt;
       if(roundTimer<=0) state='playing';
     } else if(state==='playing'){
+if(gameType === 'football'){
+    updateFootball(dt);
+} else {
 updatePlayer(p1, dt);
 
 if(mode !== "online"){
@@ -2901,9 +3655,21 @@ if(mode !== "online"){
 
 updateBullets(dt);
 updateDecoys(dt);
+}
     } else if(state==='roundEnd'){
       msgTimer -= dt;
       if(msgTimer<=0) startRound();
+    } else if(state==='footballGoal'){
+      footballMsgTimer -= dt;
+      if(footballMsgTimer<=0){
+        if(footballState === 'matchEnd'){
+          state = 'matchEnd';
+        } else {
+          resetFootballPositions();
+          state = 'countdown';
+          roundTimer = 1.2;
+        }
+      }
     }
 
     for(let i=effects.length-1; i>=0; i--){
@@ -3017,14 +3783,27 @@ updateDecoys(dt);
   }
 
   function updateHud(){
-    scoreP1El.innerHTML = ''; scoreP2El.innerHTML = '';
-    for(let i=0;i<ROUNDS_TO_WIN;i++){
-      const d1 = document.createElement('div');
-      d1.className = 'pip' + (p1 && p1.score>i ? ' filled p1' : '');
-      scoreP1El.appendChild(d1);
-      const d2 = document.createElement('div');
-      d2.className = 'pip' + (p2 && p2.score>i ? ' filled p2' : '');
-      scoreP2El.appendChild(d2);
+    if(gameType === 'football'){
+      const fbDisplay = document.getElementById('footballScoreDisplay');
+      if(fbDisplay){
+        fbDisplay.classList.remove('hidden');
+        document.getElementById('fbScoreLeft').textContent = footballScore1;
+        document.getElementById('fbScoreRight').textContent = footballScore2;
+      }
+      scoreP1El.innerHTML = '';
+      scoreP2El.innerHTML = '';
+    } else {
+      const fbDisplay = document.getElementById('footballScoreDisplay');
+      if(fbDisplay) fbDisplay.classList.add('hidden');
+      scoreP1El.innerHTML = ''; scoreP2El.innerHTML = '';
+      for(let i=0;i<ROUNDS_TO_WIN;i++){
+        const d1 = document.createElement('div');
+        d1.className = 'pip' + (p1 && p1.score>i ? ' filled p1' : '');
+        scoreP1El.appendChild(d1);
+        const d2 = document.createElement('div');
+        d2.className = 'pip' + (p2 && p2.score>i ? ' filled p2' : '');
+        scoreP2El.appendChild(d2);
+      }
     }
     ammoP1El.innerHTML=''; ammoP2El.innerHTML='';
     if(p1) for(let i=0;i<p1.maxAmmo;i++){
@@ -3093,61 +3872,89 @@ updateDecoys(dt);
   function render(){
     ctx.clearRect(0,0,W,H);
     drawGrid();
+    if(gameType === 'football') drawFootballField();
     drawCovers();
     drawBullets();
-    drawDecoys();
+    if(gameType === 'football'){
+      drawFootballBall();
+    } else {
+      drawDecoys();
+    }
     if(p1) drawPlayer(p1);
     if(p2) drawPlayer(p2);
     drawEffects();
+    if(gameType === 'football') drawFootballRespawnCountdown();
     updateHud();
 
-    if(state==='countdown'){
-      centerMsg.innerHTML = `<div class="big">${Math.max(1,Math.ceil(roundTimer))}</div>`;
-    } else if(state==='roundEnd'){
-      const winner = p1.alive ? 'PLAYER ONE' : (mode==='ai' ? 'COMPUTER' : 'PLAYER TWO');
-      const color = p1.alive ? 'var(--p1)' : 'var(--p2)';
-      const creditNote = p1.alive ? '<div class="small" style="color:#ffce54;">+15 CREDITS</div>' : '';
-      centerMsg.innerHTML = `<div class="big" style="color:${color}">${winner}</div><div class="small">ROUND WIN</div>${creditNote}`;
-    } else if(state==='matchEnd'){
-      const p1won = p1.score>=ROUNDS_TO_WIN;
-      const winner = p1won ? 'PLAYER ONE' : (mode==='ai' ? 'COMPUTER' : 'PLAYER TWO');
-      const color = p1won ? 'var(--p1)' : 'var(--p2)';
-      const creditNote = p1won ? '<div class="small" style="color:#ffce54;">+40 BONUS CREDITS</div>' : '';
-      centerMsg.innerHTML = `<div class="big" style="color:${color}">${winner} WINS</div><div class="small">PRESS R TO REMATCH</div>${creditNote}`;
+    if(gameType === 'football'){
+      if(state==='countdown'){
+        centerMsg.innerHTML = `<div class="big">${Math.max(1,Math.ceil(roundTimer))}</div>`;
+      } else if(state==='footballGoal'){
+        centerMsg.innerHTML = `<div class="big" style="color:#ffce54;">GOAL!</div><div class="small">${footballScore1} - ${footballScore2}</div>`;
+      } else if(state==='matchEnd'){
+        const p1won = footballWinnerId === 'p1';
+        const winner = p1won ? 'PLAYER ONE' : (mode==='ai' ? 'COMPUTER' : 'PLAYER TWO');
+        const color = p1won ? 'var(--p1)' : 'var(--p2)';
+        const creditNote = p1won ? '<div class="small" style="color:#ffce54;">+40 BONUS CREDITS</div>' : '';
+        centerMsg.innerHTML = `<div class="big" style="color:${color}">${winner} WINS</div><div class="small">${footballScore1} - ${footballScore2}</div><div class="small">PRESS R TO REMATCH</div>${creditNote}`;
+      } else {
+        centerMsg.innerHTML = '';
+      }
     } else {
-      centerMsg.innerHTML = '';
+      if(state==='countdown'){
+        centerMsg.innerHTML = `<div class="big">${Math.max(1,Math.ceil(roundTimer))}</div>`;
+      } else if(state==='roundEnd'){
+        const winner = p1.alive ? 'PLAYER ONE' : (mode==='ai' ? 'COMPUTER' : 'PLAYER TWO');
+        const color = p1.alive ? 'var(--p1)' : 'var(--p2)';
+        const creditNote = p1.alive ? '<div class="small" style="color:#ffce54;">+15 CREDITS</div>' : '';
+        centerMsg.innerHTML = `<div class="big" style="color:${color}">${winner}</div><div class="small">ROUND WIN</div>${creditNote}`;
+      } else if(state==='matchEnd'){
+        const p1won = p1.score>=ROUNDS_TO_WIN;
+        const winner = p1won ? 'PLAYER ONE' : (mode==='ai' ? 'COMPUTER' : 'PLAYER TWO');
+        const color = p1won ? 'var(--p1)' : 'var(--p2)';
+        const creditNote = p1won ? '<div class="small" style="color:#ffce54;">+40 BONUS CREDITS</div>' : '';
+        centerMsg.innerHTML = `<div class="big" style="color:${color}">${winner} WINS</div><div class="small">PRESS R TO REMATCH</div>${creditNote}`;
+      } else {
+        centerMsg.innerHTML = '';
+      }
     }
   }
 
   const p1LegendCol = document.querySelector('.legend .col.p1');
 
   function beginGame(){
-    p2Label.textContent = mode==='ai' ? `COMPUTER (${difficulty.toUpperCase()})` : (mode==='online' ? 'OPPONENT (ONLINE)' : 'PLAYER TWO');
+    p2Label.textContent = (mode==='ai' ? `COMPUTER (${difficulty.toUpperCase()})` : (mode==='online' ? 'OPPONENT (ONLINE)' : 'PLAYER TWO')) + (gameType==='football' ? ' \u26bd' : '');
     p2Legend.style.display = mode==='local' ? '' : 'none';
     canvas.style.cursor = (aimMode==='mouse') ? 'crosshair' : 'default';
+    covers = (gameType === 'football') ? covers : CLASSIC_COVERS; // football's random map is generated inside initFootballMode()
     if(aimMode==='mouse'){
       p1LegendCol.innerHTML = '<b>PLAYER ONE</b>'
         + '<div class="row"><span class="key">W A S D</span>move</div>'
         + '<div class="row"><span class="key">MOUSE</span>aim</div>'
-        + '<div class="row"><span class="key">CLICK / SPACE</span>shoot</div>'
+        + `<div class="row"><span class="key">CLICK / SPACE</span>${gameType==='football'?'shoot / kick':'shoot'}</div>`
         + '<div class="row"><span class="key">SHIFT</span>dash</div>';
     } else {
       p1LegendCol.innerHTML = '<b>PLAYER ONE</b>'
         + '<div class="row"><span class="key">W A S D</span>move</div>'
-        + '<div class="row"><span class="key">SPACE</span>shoot</div>'
+        + `<div class="row"><span class="key">SPACE</span>${gameType==='football'?'shoot / kick':'shoot'}</div>`
         + '<div class="row"><span class="key">SHIFT</span>dash</div>';
     }
     menuMain.classList.add('hidden');
     menuDiff.classList.add('hidden');
     menuAim.classList.add('hidden');
     menuShop.classList.add('hidden');
+    menuGameType.classList.add('hidden');
     exitBtn.classList.remove('hidden');
     started = true;
     startMusic();
     if(mode === 'online' && socket && socket.readyState === WebSocket.OPEN){
       socket.send(JSON.stringify({ type: 'skin', color: skinColor(p1SkinId) }));
     }
-    fullReset();
+    if(gameType === 'football'){
+      initFootballMode();
+    } else {
+      fullReset();
+    }
   }
 
   function resetAimMenuToNormal(){
@@ -3156,28 +3963,60 @@ updateDecoys(dt);
     document.getElementById('aimButtonsGroup').classList.remove('hidden');
   }
 
+  // ---- Mode buttons now open the GAME TYPE menu first (Classic vs
+  // Football); proceedAfterGameType() below then continues into the
+  // same difficulty/aim-style flow as before. ----
   btnLocal.addEventListener('click', ()=>{
-    mode='local';
-    closeOnlineConnection();
-    resetAimMenuToNormal();
-    menuMain.classList.add('hidden');
-    menuAim.classList.remove('hidden');
-});
-
-btnOnline.addEventListener('click', ()=>{
-    mode='online';
-    document.getElementById('menuAimTitle').textContent = 'ONLINE MATCH';
-    document.getElementById('onlineStatusWrap').classList.remove('hidden');
-    document.getElementById('aimButtonsGroup').classList.add('hidden');
-    menuMain.classList.add('hidden');
-    menuAim.classList.remove('hidden');
-    connectOnline();
-});
-  btnAI.addEventListener('click', ()=>{
+    pendingMode = 'local';
     closeOnlineConnection();
     menuMain.classList.add('hidden');
-    menuDiff.classList.remove('hidden');
+    menuGameType.classList.remove('hidden');
   });
+
+  btnOnline.addEventListener('click', ()=>{
+    pendingMode = 'online';
+    menuMain.classList.add('hidden');
+    menuGameType.classList.remove('hidden');
+  });
+
+  btnAI.addEventListener('click', ()=>{
+    pendingMode = 'ai';
+    closeOnlineConnection();
+    menuMain.classList.add('hidden');
+    menuGameType.classList.remove('hidden');
+  });
+
+  function proceedAfterGameType(){
+    menuGameType.classList.add('hidden');
+    if(pendingMode === 'ai'){
+      menuDiff.classList.remove('hidden');
+    } else if(pendingMode === 'local'){
+      mode = 'local';
+      resetAimMenuToNormal();
+      menuAim.classList.remove('hidden');
+    } else if(pendingMode === 'online'){
+      mode = 'online';
+      document.getElementById('menuAimTitle').textContent = 'ONLINE MATCH';
+      document.getElementById('onlineStatusWrap').classList.remove('hidden');
+      document.getElementById('aimButtonsGroup').classList.add('hidden');
+      menuAim.classList.remove('hidden');
+      connectOnline();
+    }
+  }
+
+  document.getElementById('btnModeClassic').addEventListener('click', ()=>{
+    gameType = 'classic';
+    proceedAfterGameType();
+  });
+  document.getElementById('btnModeFootball').addEventListener('click', ()=>{
+    gameType = 'football';
+    proceedAfterGameType();
+  });
+  document.getElementById('btnBackGameType').addEventListener('click', ()=>{
+    menuGameType.classList.add('hidden');
+    menuMain.classList.remove('hidden');
+  });
+
   btnShop.addEventListener('click', ()=>{
     menuMain.classList.add('hidden');
     shopTab = 'skins';
@@ -3215,15 +4054,15 @@ btnOnline.addEventListener('click', ()=>{
   });
   btnBackDiff.addEventListener('click', ()=>{
     menuDiff.classList.add('hidden');
-    menuMain.classList.remove('hidden');
+    menuGameType.classList.remove('hidden');
   });
   btnBackAim.addEventListener('click', ()=>{
     if(mode === 'online') closeOnlineConnection();
     menuAim.classList.add('hidden');
-    if(mode === 'ai'){
+    if(pendingMode === 'ai'){
       menuDiff.classList.remove('hidden');
     } else {
-      menuMain.classList.remove('hidden');
+      menuGameType.classList.remove('hidden');
     }
   });
   diffBtns.forEach(btn=>{
@@ -3250,6 +4089,9 @@ btnOnline.addEventListener('click', ()=>{
     menuAim.classList.add('hidden');
     menuShop.classList.add('hidden');
     menuLeaderboard.classList.add('hidden');
+    menuGameType.classList.add('hidden');
+    const fbDisplay = document.getElementById('footballScoreDisplay');
+    if(fbDisplay) fbDisplay.classList.add('hidden');
     updateCreditsDisplay();
     menuMain.classList.remove('hidden');
   }
