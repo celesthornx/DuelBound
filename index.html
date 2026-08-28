@@ -2,6 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0d14">
 <title>DUEL ARENA</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
@@ -19,9 +24,15 @@
     --cover-edge: #4a5568;
     --ink: #e8edf5;
     --ink-dim: #6b7688;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
   }
 
   *{ box-sizing: border-box; }
+
+  html{ height:100%; }
 
   body{
     margin:0;
@@ -33,6 +44,82 @@
     align-items:center;
     padding: 18px 10px 30px;
     min-height:100vh;
+    min-height:100dvh;
+  }
+
+  /* ---- MOBILE MODE: fullscreen fitted layout ----
+     Applied only when body.mobile-active is toggled on by JS (touch
+     device detected AND Mobile Mode setting is ON). Desktop/keyboard
+     play is completely untouched -- none of these rules ever match
+     unless that class is present. See fitStage()/applyMobileLayoutClass()
+     near the end of the script. */
+  body.mobile-active{
+    display:block;
+    padding:0;
+    margin:0;
+    width:100vw;
+    height:100vh;
+    height:100dvh;
+    overflow:hidden;
+    min-height:0;
+  }
+  body.mobile-active h1,
+  body.mobile-active .sub,
+  body.mobile-active .legend{
+    display:none !important;
+  }
+  body.mobile-active .stage{
+    position:fixed;
+    top:50%;
+    left:50%;
+    transform-origin:center center;
+    box-shadow:none;
+    border:none;
+  }
+  /* Base game frame gets a little breathing room + bigger tap targets on
+     mobile -- these are still logical/canvas pixels, so they scale down
+     together with the rest of the stage via the JS-computed transform. */
+  body.mobile-active .exit-btn{
+    padding:12px 26px;
+    font-size:13px;
+  }
+  body.mobile-active .mute-btn{
+    width:40px; height:40px; font-size:16px;
+  }
+
+  /* ---- Rotate-device overlay (portrait warning) ---- */
+  .rotate-overlay{
+    position:fixed; inset:0;
+    z-index:9999;
+    background: radial-gradient(ellipse at center, var(--void-2) 0%, var(--void) 70%);
+    display:none;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    padding: 24px;
+    padding-top: calc(24px + var(--safe-top));
+    padding-bottom: calc(24px + var(--safe-bottom));
+  }
+  .rotate-overlay.show{ display:flex; }
+  .rotate-overlay .icon{
+    font-size:52px;
+    margin-bottom:16px;
+    animation: rotate-hint 1.6s ease-in-out infinite;
+  }
+  .rotate-overlay .title{
+    font-family:'Chakra Petch', sans-serif;
+    font-weight:700; letter-spacing:4px; font-size:19px;
+    color: var(--ink); margin-bottom:10px;
+  }
+  .rotate-overlay .desc{
+    font-family:'Share Tech Mono', monospace;
+    font-size:11px; letter-spacing:1.5px; line-height:1.7;
+    color: var(--ink-dim); max-width:260px;
+  }
+  @keyframes rotate-hint{
+    0%,100%{ transform:rotate(0deg); }
+    50%{ transform:rotate(90deg); }
   }
 
   h1{
@@ -503,8 +590,19 @@
   .football-score .fb-l{ color: var(--p1); }
   .football-score .fb-r{ color: var(--p2); }
 
-  /* ---- Mobile touch controls ---- */
-  .mobile-controls{ position:absolute; inset:0; z-index:6; pointer-events:none; }
+  /* ---- Mobile touch controls ----
+     Deliberately a SIBLING of .stage in the DOM (not a descendant) --
+     see index.html body markup -- so it is never affected by the
+     JS-computed scale() transform applied to .stage for screen fitting.
+     That keeps the joystick and action buttons at real, comfortably
+     tappable screen size no matter how small the phone is, while the
+     game view itself scales down to fit. Padded by the safe-area insets
+     so nothing sits under a notch, the home indicator, or the rounded
+     screen corners. */
+  .mobile-controls{
+    position:fixed; inset:0; z-index:60; pointer-events:none;
+    padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+  }
   .joy-zone{ position:absolute; bottom:0; width:50%; height:60%; pointer-events:auto; touch-action:none; }
   .joy-zone.joy-move{ left:0; }
   .joy-zone.joy-aim{ right:0; }
@@ -557,7 +655,7 @@
 <h1>DUEL ARENA</h1>
 <div class="sub">FIRST TO 3 ROUNDS WINS</div>
 
-<div class="stage">
+<div class="stage" id="gameStage">
   <canvas id="game" width="900" height="540"></canvas>
   <div class="hud">
     <div class="side left">
@@ -657,6 +755,10 @@
         <span class="settings-label p2">PLAYER TWO AUTO-AIM</span>
         <button class="toggle-btn" id="toggleAutoAimP2">OFF</button>
       </div>
+      <div class="settings-row hidden" id="mobileModeRow">
+        <span class="settings-label">MOBILE MODE</span>
+        <button class="toggle-btn" id="toggleMobileMode">ON</button>
+      </div>
       <button class="menu-back" id="btnBackSettings">&larr; back</button>
     </div>
   </div>
@@ -744,19 +846,34 @@
   <!-- EXIT BUTTON -->
   <button class="exit-btn hidden" id="exitBtn" title="Exit to menu">EXIT</button>
   <button class="mute-btn" id="muteBtn" title="Mute / unmute sound">&#128266;</button>
+</div>
 
-  <div class="mobile-controls hidden" id="mobileControls">
-    <div class="joy-zone joy-move" id="joyMoveZone">
-      <div class="joy-base" id="joyMoveBase"><div class="joy-knob"></div></div>
-      <div class="joy-hint">MOVE</div>
-    </div>
-    <div class="joy-zone joy-aim" id="joyAimZone">
-      <div class="joy-base" id="joyAimBase"><div class="joy-knob"></div></div>
-      <div class="joy-hint">DRAG &amp; RELEASE TO SHOOT &middot; TAP TO AUTO-AIM</div>
-    </div>
-    <button class="touch-action-btn" id="touchDashBtn">DASH</button>
-    <button class="touch-action-btn hidden" id="touchAbilityBtn">ABILITY</button>
+<!-- MOBILE TOUCH CONTROLS -- kept OUTSIDE #stage (a sibling, not a
+     descendant) on purpose: #stage gets scaled down with a CSS
+     transform to fit the phone screen, and anything inside it scales
+     down along with it. Living outside that means the joystick and
+     action buttons always render at full native/tappable size. Same
+     elements/ids/logic as before -- only their position in the markup
+     (and .mobile-controls' CSS, see <style>) changed for mobile fitting. -->
+<div class="mobile-controls hidden" id="mobileControls">
+  <div class="joy-zone joy-move" id="joyMoveZone">
+    <div class="joy-base" id="joyMoveBase"><div class="joy-knob"></div></div>
+    <div class="joy-hint">MOVE</div>
   </div>
+  <div class="joy-zone joy-aim" id="joyAimZone">
+    <div class="joy-base" id="joyAimBase"><div class="joy-knob"></div></div>
+    <div class="joy-hint">DRAG &amp; RELEASE TO SHOOT &middot; TAP TO AUTO-AIM</div>
+  </div>
+  <button class="touch-action-btn" id="touchDashBtn">DASH</button>
+  <button class="touch-action-btn hidden" id="touchAbilityBtn">ABILITY</button>
+</div>
+
+<!-- PORTRAIT ROTATE OVERLAY -- shown only when Mobile Mode is active
+     AND the device is currently portrait; see checkOrientation() -->
+<div class="rotate-overlay" id="rotateOverlay">
+  <div class="icon">&#128241;</div>
+  <div class="title">ROTATE DEVICE</div>
+  <div class="desc">Turn your phone sideways<br>for the best Duel Arena experience.</div>
 </div>
 
 <div class="legend" id="legend">
@@ -2748,7 +2865,91 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   // barely any drag instead auto-aims: at the nearest opponent normally,
   // or at the goal if you're currently holding the ball in Football Mode.
   const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
-  if(isTouchDevice){ const legendEl = document.getElementById('legend'); if(legendEl) legendEl.style.display = 'none'; }
+
+  // ==========================================================
+  // MOBILE SCREEN FITTING
+  // ==========================================================
+  // The game's internal coordinate system (W=900, H=540, see further up)
+  // never changes here -- this block only ever scales the already-built
+  // #gameStage element visually to fit whatever phone/tablet/desktop
+  // viewport it's running in, via a CSS transform. Nothing about
+  // gameplay, physics, or input handling is touched.
+  //
+  // Mobile Mode defaults ON for touch devices and OFF for desktop, and
+  // can be flipped from Settings -> Mobile Mode (see toggleMobileMode
+  // wiring further down) without reloading the page.
+  let mobileModeEnabled = isTouchDevice;
+  const gameStageEl = document.getElementById('gameStage');
+  const rotateOverlayEl = document.getElementById('rotateOverlay');
+
+  function isMobileLayoutActive(){
+    return isTouchDevice && mobileModeEnabled;
+  }
+
+  function readSafeInset(side){
+    // env(safe-area-inset-*) is only readable in JS by round-tripping it
+    // through a real CSS property (the --safe-* custom properties
+    // declared on :root) -- see <style>. Falls back to 0 anywhere it
+    // isn't supported (desktop browsers, older iOS).
+    try{
+      const v = getComputedStyle(document.documentElement).getPropertyValue('--safe-' + side);
+      const n = parseFloat(v);
+      return isNaN(n) ? 0 : n;
+    } catch(e){ return 0; }
+  }
+
+  // Scales #gameStage to fit the current viewport while preserving the
+  // exact 900x540 aspect ratio (never stretched/squashed), staying fully
+  // inside the iPhone safe area, and centering itself. On desktop (or
+  // whenever Mobile Mode is off) this simply clears any inline styles so
+  // the original flow layout / fixed 900x540 canvas box takes over again,
+  // completely unchanged from before.
+  function fitStage(){
+    if(!gameStageEl) return;
+    if(!isMobileLayoutActive()){
+      gameStageEl.style.transform = '';
+      gameStageEl.style.width = '';
+      gameStageEl.style.height = '';
+      gameStageEl.style.top = '';
+      gameStageEl.style.left = '';
+      return;
+    }
+    const safeTop = readSafeInset('top'), safeBottom = readSafeInset('bottom');
+    const safeLeft = readSafeInset('left'), safeRight = readSafeInset('right');
+    const vv = window.visualViewport;
+    const viewportW = (vv ? vv.width : window.innerWidth) - safeLeft - safeRight;
+    const viewportH = (vv ? vv.height : window.innerHeight) - safeTop - safeBottom;
+    const scale = Math.max(0.05, Math.min(viewportW / W, viewportH / H));
+
+    gameStageEl.style.width = W + 'px';
+    gameStageEl.style.height = H + 'px';
+    gameStageEl.style.left = (safeLeft + viewportW / 2) + 'px';
+    gameStageEl.style.top = (safeTop + viewportH / 2) + 'px';
+    gameStageEl.style.transform = 'translate(-50%, -50%) scale(' + scale + ')';
+  }
+
+  // Shows the "ROTATE DEVICE" overlay whenever Mobile Mode is active and
+  // the device is currently taller than it is wide -- never forces an
+  // actual rotation, purely a friendly prompt, and hides itself the
+  // instant the phone is turned sideways.
+  function checkOrientation(){
+    if(!rotateOverlayEl) return;
+    const portrait = window.innerHeight > window.innerWidth;
+    rotateOverlayEl.classList.toggle('show', isMobileLayoutActive() && portrait);
+  }
+
+  function applyMobileLayoutClass(){
+    document.body.classList.toggle('mobile-active', isMobileLayoutActive());
+    fitStage();
+    checkOrientation();
+  }
+
+  window.addEventListener('resize', applyMobileLayoutClass);
+  window.addEventListener('orientationchange', ()=>{ setTimeout(applyMobileLayoutClass, 60); });
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize', applyMobileLayoutClass);
+    window.visualViewport.addEventListener('scroll', applyMobileLayoutClass);
+  }
 
   let touchMoveX = 0, touchMoveY = 0;
   let touchAiming = false, touchAimAngle = 0;
@@ -4306,7 +4507,8 @@ updateDecoys(dt);
     menuShop.classList.add('hidden');
     menuGameType.classList.add('hidden');
     exitBtn.classList.remove('hidden');
-    if(isTouchDevice) mobileControlsEl.classList.remove('hidden');
+    if(isMobileLayoutActive()) mobileControlsEl.classList.remove('hidden');
+    applyMobileLayoutClass();
     started = true;
     startMusic();
     if(mode === 'online' && socket && socket.readyState === WebSocket.OPEN){
@@ -4519,6 +4721,7 @@ updateDecoys(dt);
     }
     updateCreditsDisplay();
     menuMain.classList.remove('hidden');
+    applyMobileLayoutClass();
   }
   exitBtn.addEventListener('click', exitToMenu);
   const muteBtn = document.getElementById('muteBtn');
@@ -4557,12 +4760,23 @@ updateDecoys(dt);
   const btnBackSettings = document.getElementById('btnBackSettings');
   const toggleAutoAimP1 = document.getElementById('toggleAutoAimP1');
   const toggleAutoAimP2 = document.getElementById('toggleAutoAimP2');
+  const mobileModeRow = document.getElementById('mobileModeRow');
+  const toggleMobileMode = document.getElementById('toggleMobileMode');
+
+  // Only shown on actual touch devices -- on a keyboard/mouse desktop
+  // there's nothing for this switch to do, so it stays out of the way
+  // exactly like the hidden ADMIN button pattern used elsewhere here.
+  if(mobileModeRow) mobileModeRow.classList.toggle('hidden', !isTouchDevice);
 
   function updateSettingsUI(){
     toggleAutoAimP1.textContent = autoAimP1 ? 'ON' : 'OFF';
     toggleAutoAimP1.classList.toggle('on', autoAimP1);
     toggleAutoAimP2.textContent = autoAimP2 ? 'ON' : 'OFF';
     toggleAutoAimP2.classList.toggle('on', autoAimP2);
+    if(toggleMobileMode){
+      toggleMobileMode.textContent = mobileModeEnabled ? 'ON' : 'OFF';
+      toggleMobileMode.classList.toggle('on', mobileModeEnabled);
+    }
   }
 
   btnSettings.addEventListener('click', ()=>{
@@ -4584,6 +4798,16 @@ updateDecoys(dt);
     updateSettingsUI();
     saveProgress();
   });
+  if(toggleMobileMode){
+    toggleMobileMode.addEventListener('click', ()=>{
+      mobileModeEnabled = !mobileModeEnabled;
+      updateSettingsUI();
+      applyMobileLayoutClass();
+      if(started){
+        mobileControlsEl.classList.toggle('hidden', !isMobileLayoutActive());
+      }
+    });
+  }
 
   const menuAdmin = document.getElementById('menuAdmin');
   const btnAdmin = document.getElementById('btnAdmin');
@@ -4624,6 +4848,7 @@ updateDecoys(dt);
 
   fetchAbilityConfig();
   tryInitGoogle();
+  applyMobileLayoutClass();
   updateCreditsDisplay();
   requestAnimationFrame(loop);
 })();
