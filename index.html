@@ -86,6 +86,17 @@
   body.mobile-active .mute-btn{
     width:40px; height:40px; font-size:16px;
   }
+  body.mobile-active .fullscreen-btn{
+    right:60px;
+  }
+  /* Mouse Aim has no crosshair to track on a touchscreen (mouseX/mouseY
+     just sit wherever they were last, or at their unset default), which
+     made it aim at a fixed/stale point instead of anywhere useful.
+     Movement Aim (and the aim joystick's own drag-to-aim) already cover
+     mobile aiming properly, so the option is simply removed there. */
+  body.mobile-active #btnAimMouse{
+    display:none !important;
+  }
 
   /* ---- Rotate-device overlay (portrait warning) ---- */
   .rotate-overlay{
@@ -572,8 +583,13 @@
     cursor:pointer;
     z-index: 5;
     transition: all .15s ease;
+    display:flex; align-items:center; justify-content:center;
   }
   .mute-btn:hover{ border-color: var(--p1); background: rgba(63,208,255,0.08); }
+
+  .fullscreen-btn{ right: 50px; }
+  .fullscreen-btn:hover{ border-color: var(--p1); background: rgba(63,208,255,0.08); }
+  .fullscreen-btn svg{ display:block; }
 
   /* ---- Football Mode scoreboard ---- */
   .football-score{
@@ -845,6 +861,7 @@
 
   <!-- EXIT BUTTON -->
   <button class="exit-btn hidden" id="exitBtn" title="Exit to menu">EXIT</button>
+  <button class="mute-btn fullscreen-btn" id="fullscreenBtn" title="Toggle fullscreen"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
   <button class="mute-btn" id="muteBtn" title="Mute / unmute sound">&#128266;</button>
 </div>
 
@@ -4485,6 +4502,14 @@ updateDecoys(dt);
   const p1LegendCol = document.querySelector('.legend .col.p1');
 
   function beginGame(){
+    // Mouse Aim tracks a real cursor position that simply doesn't exist
+    // on a touchscreen, so it's not offered there (see the mobile-active
+    // CSS rule hiding #btnAimMouse) -- this is just a last-resort
+    // safety net in case aimMode was already 'mouse' from a prior
+    // desktop session before Mobile Mode got switched on.
+    if(isMobileLayoutActive() && aimMode === 'mouse'){
+      aimMode = 'movement';
+    }
     p2Label.textContent = (mode==='ai' ? `COMPUTER (${difficulty.toUpperCase()})` : (mode==='online' ? 'OPPONENT (ONLINE)' : 'PLAYER TWO')) + (gameType==='football' ? ' \u26bd' : '');
     p2Legend.style.display = mode==='local' ? '' : 'none';
     canvas.style.cursor = (aimMode==='mouse') ? 'crosshair' : 'default';
@@ -4726,6 +4751,66 @@ updateDecoys(dt);
   exitBtn.addEventListener('click', exitToMenu);
   const muteBtn = document.getElementById('muteBtn');
   if(muteBtn) muteBtn.addEventListener('click', toggleMute);
+
+  // ---- Fullscreen toggle (phone or computer) ----
+  // Standard Fullscreen API with the old vendor-prefixed fallbacks some
+  // browsers still need. iOS Safari (outside of an "Add to Home Screen"
+  // launch) doesn't expose this API at all for anything but a <video>
+  // element -- there the button hides itself via the feature check below
+  // rather than sitting there doing nothing when tapped.
+  const fullscreenBtn = document.getElementById('fullscreenBtn');
+  const FS_ENTER_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>'; // maximize (corners point outward)
+  const FS_EXIT_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>'; // minimize (corners point inward)
+
+  function fullscreenSupported(){
+    const el = document.documentElement;
+    return !!(el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen);
+  }
+  function isFullscreenNow(){
+    return !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+  }
+  function requestFullscreenOn(el){
+    const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+    if(!fn) return Promise.reject(new Error('unsupported'));
+    const result = fn.call(el);
+    return result && result.catch ? result : Promise.resolve();
+  }
+  function exitFullscreenNow(){
+    const fn = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+    if(!fn) return Promise.reject(new Error('unsupported'));
+    const result = fn.call(document);
+    return result && result.catch ? result : Promise.resolve();
+  }
+  function updateFullscreenBtnIcon(){
+    if(!fullscreenBtn) return;
+    fullscreenBtn.innerHTML = isFullscreenNow() ? FS_EXIT_ICON : FS_ENTER_ICON;
+    fullscreenBtn.title = isFullscreenNow() ? 'Exit fullscreen' : 'Enter fullscreen';
+  }
+  if(fullscreenBtn){
+    if(!fullscreenSupported()){
+      fullscreenBtn.classList.add('hidden');
+    } else {
+      fullscreenBtn.addEventListener('click', ()=>{
+        if(isFullscreenNow()){
+          exitFullscreenNow().catch(()=>{});
+        } else {
+          // Fullscreen the whole page (not just the canvas) so the HUD,
+          // touch controls, and menus all come along with it.
+          requestFullscreenOn(document.documentElement).catch(()=>{});
+        }
+      });
+      ['fullscreenchange','webkitfullscreenchange','mozfullscreenchange','MSFullscreenChange'].forEach(evt=>{
+        document.addEventListener(evt, ()=>{
+          updateFullscreenBtnIcon();
+          // The viewport's usable size changes the instant fullscreen
+          // engages/disengages, so the fitted stage needs to recompute.
+          applyMobileLayoutClass();
+        });
+      });
+      updateFullscreenBtnIcon();
+    }
+  }
+
   window.addEventListener('keydown', (e)=>{
     if(e.key.toLowerCase()==='escape' && started) exitToMenu();
   });
