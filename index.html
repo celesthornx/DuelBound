@@ -2,6 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0d14">
 <title>DUEL ARENA</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
@@ -502,18 +507,209 @@
   }
   .football-score .fb-l{ color: var(--p1); }
   .football-score .fb-r{ color: var(--p2); }
+
+  /* =====================================================================
+     MOBILE / TOUCH SUPPORT
+     Everything below is purely additive -- it never changes desktop
+     layout unless the <body> has the "mobile-mode" class, which JS only
+     adds when Mobile Mode is actually ON.
+     ===================================================================== */
+  :root{
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-r: env(safe-area-inset-right, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-l: env(safe-area-inset-left, 0px);
+  }
+
+  body.mobile-mode{
+    padding: calc(6px + var(--safe-t)) calc(6px + var(--safe-r)) calc(6px + var(--safe-b)) calc(6px + var(--safe-l));
+    overflow: hidden;
+    touch-action: none; /* stop the page itself from panning/zooming during play */
+  }
+  body.mobile-mode h1{ font-size: 18px; letter-spacing:3px; margin: 2px 0 0; }
+  body.mobile-mode .sub{ font-size:8px; margin-bottom:6px; }
+  /* Keyboard-hint legend is meaningless with touch controls on screen. */
+  body.mobile-mode .legend{ display:none; }
+
+  body.mobile-mode .stage{
+    width: min(96vw, calc((100vh - 80px) * (900/540)));
+    max-width: 96vw;
+  }
+  /* The canvas keeps rendering at its native 900x540 logical resolution --
+     this only scales its DISPLAYED size to fit the now-responsive .stage.
+     The existing mousemove handler already converts screen coordinates
+     back into 900x540 space via canvas.getBoundingClientRect(), so this
+     is safe and needed no other changes. Scoped to mobile-mode only so
+     desktop's native 900x540 rendering is completely untouched. */
+  body.mobile-mode canvas{
+    width: 100%;
+    height: auto;
+  }
+
+  /* ---- Rotate-device overlay (portrait warning) ---- */
+  #rotateOverlay{
+    position:fixed; inset:0;
+    background: radial-gradient(ellipse at center, var(--void-2) 0%, var(--void) 75%);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; z-index: 99999;
+    text-align:center; padding: 24px;
+  }
+  #rotateOverlay .rotate-icon{
+    font-size: 54px; color: var(--p1);
+    animation: rotate-spin 1.8s ease-in-out infinite;
+    text-shadow: 0 0 18px rgba(63,208,255,0.7);
+  }
+  @keyframes rotate-spin{
+    0%,100%{ transform: rotate(0deg); }
+    50%{ transform: rotate(-90deg); }
+  }
+  #rotateOverlay .rotate-title{
+    font-family:'Chakra Petch', sans-serif; font-weight:700;
+    font-size: 20px; letter-spacing:4px; color: var(--ink);
+  }
+  #rotateOverlay .rotate-sub{
+    font-family:'Share Tech Mono', monospace; font-size:11px;
+    letter-spacing:1.5px; color: var(--ink-dim); line-height:1.6;
+    max-width: 320px;
+  }
+
+  /* ---- Touch controls overlay ---- */
+  #mobileControls{
+    position:absolute; inset:0;
+    z-index: 6;
+    pointer-events:none; /* the layer itself is click-through; individual controls opt back in */
+  }
+  .mobile-joystick{
+    position:absolute;
+    bottom: calc(14px + var(--safe-b));
+    width: 108px; height:108px;
+    border-radius:50%;
+    pointer-events:auto;
+    touch-action:none;
+  }
+  .mobile-joystick.left{ left: calc(14px + var(--safe-l)); }
+  .mobile-joystick.right{ right: calc(14px + var(--safe-r)); }
+  .joystick-base{
+    position:absolute; inset:0;
+    border-radius:50%;
+    background: rgba(63,208,255,0.07);
+    border: 1.5px solid rgba(63,208,255,0.35);
+    box-shadow: 0 0 18px rgba(63,208,255,0.15), inset 0 0 18px rgba(63,208,255,0.1);
+  }
+  .mobile-joystick.right .joystick-base{
+    background: rgba(255,95,109,0.07);
+    border-color: rgba(255,95,109,0.35);
+    box-shadow: 0 0 18px rgba(255,95,109,0.15), inset 0 0 18px rgba(255,95,109,0.1);
+  }
+  .joystick-knob{
+    position:absolute; left:50%; top:50%;
+    width: 46px; height:46px; margin:-23px 0 0 -23px;
+    border-radius:50%;
+    background: rgba(63,208,255,0.55);
+    border: 1.5px solid var(--p1);
+    box-shadow: 0 0 14px rgba(63,208,255,0.6);
+    transition: background .1s ease;
+    will-change: transform;
+  }
+  .mobile-joystick.right .joystick-knob{
+    background: rgba(255,95,109,0.55);
+    border-color: var(--p2);
+    box-shadow: 0 0 14px rgba(255,95,109,0.6);
+  }
+  .mobile-joystick.active .joystick-knob{ background: rgba(255,255,255,0.75); }
+
+  #mobileActionButtons{
+    position:absolute;
+    right: calc(24px + var(--safe-r));
+    bottom: calc(128px + var(--safe-b));
+    display:flex; flex-direction:column; align-items:center;
+    gap: 12px;
+    pointer-events:none;
+  }
+  .mobile-action-btn{
+    position:relative;
+    pointer-events:auto;
+    width: 64px; height:64px;
+    border-radius:50%;
+    background: rgba(20,24,34,0.55);
+    border: 1.5px solid var(--ink-dim);
+    color: var(--ink);
+    font-family:'Chakra Petch', sans-serif;
+    font-weight:700; font-size:20px;
+    display:flex; align-items:center; justify-content:center;
+    -webkit-tap-highlight-color: transparent;
+    touch-action:none;
+    overflow:hidden;
+    transition: transform .08s ease, border-color .08s ease, background .08s ease;
+  }
+  .mobile-action-btn.active{
+    transform: scale(0.9);
+    background: rgba(63,208,255,0.25);
+    border-color: var(--p1);
+  }
+  .mobile-action-btn.mobile-shoot{
+    width:74px; height:74px;
+    border-color: var(--p2);
+    color: var(--p2);
+    box-shadow: 0 0 14px rgba(255,95,109,0.25);
+  }
+  .mobile-action-btn.mobile-shoot.active{ background: rgba(255,95,109,0.28); border-color: var(--p2); }
+  .mobile-action-btn.mobile-dash{ border-color: #5dffa0; color:#5dffa0; }
+  .mobile-action-btn.mobile-dash.active{ background: rgba(93,255,160,0.25); }
+  .mobile-action-btn.mobile-ability{ border-color: #ffce54; color:#ffce54; }
+  .mobile-action-btn.mobile-ability.active{ background: rgba(255,206,84,0.25); }
+  .mobile-action-btn.hidden{ display:none; }
+  .mobile-action-btn.on-cooldown{ opacity: 0.45; }
+  .mobile-cd-fill{
+    position:absolute; left:0; right:0; bottom:0;
+    height:0%;
+    background: rgba(255,255,255,0.22);
+    pointer-events:none;
+  }
+
+  /* Mobile Mode row in Settings re-uses the existing .settings-row / .toggle-btn look. */
 </style>
 </head>
 <body>
+
+<div id="rotateOverlay" class="hidden">
+  <div class="rotate-icon">&#8635;</div>
+  <div class="rotate-title">ROTATE DEVICE</div>
+  <div class="rotate-sub">For the best Duel Arena experience,<br>please rotate your device sideways.</div>
+</div>
 
 <h1>DUEL ARENA</h1>
 <div class="sub">FIRST TO 3 ROUNDS WINS</div>
 
 <div class="stage">
   <canvas id="game" width="900" height="540"></canvas>
+  <div id="mobileControls" class="hidden">
+    <div class="mobile-joystick left" id="mobileMoveStick">
+      <div class="joystick-base"></div>
+      <div class="joystick-knob"></div>
+    </div>
+    <div class="mobile-joystick right" id="mobileAimStick">
+      <div class="joystick-base"></div>
+      <div class="joystick-knob"></div>
+    </div>
+    <div id="mobileActionButtons">
+      <button type="button" class="mobile-action-btn mobile-ability" id="mobileAbilityBtn">
+        <div class="mobile-cd-fill" id="mobileAbilityCdFill"></div>
+        <span>&#9670;</span>
+      </button>
+      <button type="button" class="mobile-action-btn mobile-dash" id="mobileDashBtn">
+        <div class="mobile-cd-fill" id="mobileDashCdFill"></div>
+        <span>&#9889;</span>
+      </button>
+      <button type="button" class="mobile-action-btn mobile-shoot" id="mobileShootBtn">
+        <span>&#9673;</span>
+      </button>
+    </div>
+  </div>
   <div class="hud">
     <div class="side left">
       <div class="name p1">PLAYER ONE</div>
+
       <div class="score" id="scoreP1"></div>
       <div class="bars">
         <div class="barlabel">AMMO</div>
@@ -608,6 +804,17 @@
       <div class="settings-row">
         <span class="settings-label p2">PLAYER TWO AUTO-AIM</span>
         <button class="toggle-btn" id="toggleAutoAimP2">OFF</button>
+      </div>
+      <div class="settings-note">
+        Mobile Mode shows on-screen touch controls (movement + aim
+        joysticks, shoot/dash/ability buttons) and mobile-friendly sizing.
+        OFF hides all of that and behaves like the normal desktop version.
+        Auto-detected on phones/tablets, but you can override it here --
+        your choice is remembered.
+      </div>
+      <div class="settings-row">
+        <span class="settings-label">MOBILE MODE</span>
+        <button class="toggle-btn" id="toggleMobileMode">OFF</button>
       </div>
       <button class="menu-back" id="btnBackSettings">&larr; back</button>
     </div>
@@ -1624,6 +1831,76 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   let aimMode = 'movement'; // 'movement' | 'mouse' -- only ever applies to p1, only offered vs AI
   let gameType = 'classic'; // 'classic' | 'football' -- picked on the new GAME TYPE menu
   let pendingMode = null;   // which of local/online/ai the player picked, remembered while they choose gameType
+
+  // =====================================================================
+  // MOBILE MODE -- touch controls + mobile-friendly layout.
+  // Purely additive: everything here reuses the existing movement/shoot/
+  // dash/ability systems via keysDown/keysPressed/mouseX/mouseY/mouseIsDown
+  // (the same variables the keyboard/mouse already drive), so no new
+  // physics or combat logic is introduced.
+  // =====================================================================
+  const MOBILE_MODE_STORAGE_KEY = 'duelArenaMobileMode';
+
+  function detectIsMobileDevice(){
+    const hasTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    const coarsePointer = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+    const smallScreen = Math.min(window.innerWidth, window.innerHeight) <= 900;
+    const uaMobile = /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(navigator.userAgent || '');
+    // Require actual touch capability PLUS at least one other signal, so a
+    // touch-capable desktop with a big screen and a fine pointer (most
+    // touchscreen laptops) doesn't get miscategorized as mobile.
+    return hasTouch && (coarsePointer || smallScreen || uaMobile);
+  }
+
+  let mobileMode = false;
+  (function initMobileMode(){
+    let stored = null;
+    try{ stored = localStorage.getItem(MOBILE_MODE_STORAGE_KEY); } catch(e){ /* storage unavailable -- fall back to auto-detect */ }
+    if(stored === 'on') mobileMode = true;
+    else if(stored === 'off') mobileMode = false;
+    else mobileMode = detectIsMobileDevice(); // no explicit user choice saved yet
+  })();
+
+  function applyMobileModeUI(){
+    document.body.classList.toggle('mobile-mode', mobileMode);
+    const toggleBtn = document.getElementById('toggleMobileMode');
+    if(toggleBtn){
+      toggleBtn.textContent = mobileMode ? 'ON' : 'OFF';
+      toggleBtn.classList.toggle('on', mobileMode);
+    }
+    const mc = document.getElementById('mobileControls');
+    if(mc) mc.classList.toggle('hidden', !(mobileMode && started));
+    checkOrientation();
+  }
+
+  function setMobileMode(on){
+    mobileMode = on;
+    try{ localStorage.setItem(MOBILE_MODE_STORAGE_KEY, on ? 'on' : 'off'); } catch(e){ /* ignore -- setting just won't persist across reloads */ }
+    applyMobileModeUI();
+  }
+
+  function checkOrientation(){
+    const overlay = document.getElementById('rotateOverlay');
+    if(!overlay) return;
+    const isPortrait = window.innerHeight > window.innerWidth;
+    overlay.classList.toggle('hidden', !(mobileMode && isPortrait));
+  }
+  window.addEventListener('resize', checkOrientation);
+  window.addEventListener('orientationchange', checkOrientation);
+
+  // Mobile browsers (especially iOS Safari) require a real user gesture
+  // before ANY audio can play -- make sure the very first touch/pointer
+  // interaction on the page primes the existing Web Audio context via the
+  // existing getAudioCtx() helper (defined above), rather than waiting for
+  // whatever the first SFX call happens to be.
+  let audioUnlockedOnce = false;
+  function unlockAudioOnce(){
+    if(audioUnlockedOnce) return;
+    audioUnlockedOnce = true;
+    try{ getAudioCtx(); } catch(e){ /* audio unavailable -- fail silently, same as elsewhere */ }
+  }
+  window.addEventListener('pointerdown', unlockAudioOnce, { once:true, passive:true });
+  window.addEventListener('touchstart', unlockAudioOnce, { once:true, passive:true });
 
   // ---- MATCH SIZE (Classic Mode, Local/VS Computer only) ----
   // 2/3/4 total combatants. Slots beyond the normal p1/p2 pair are always
@@ -2679,6 +2956,160 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   });
   window.addEventListener('mouseup', (e)=>{ if(e.button===0) mouseIsDown = false; });
   canvas.addEventListener('contextmenu', (e)=>{ e.preventDefault(); });
+
+  // ---- Mobile touch controls ----
+  // Left stick drives the SAME keysDown['w'/'a'/'s'/'d'] flags the keyboard
+  // sets, so movement goes through updatePlayer() completely unchanged.
+  // Right stick drives a virtual mouseX/mouseY far out along the aim
+  // direction, reusing the existing aimMode==='mouse' facing logic as-is.
+  // Buttons drive the existing keysPressed[]/mouseIsDown flags the same
+  // way a keyboard press or mouse click already would.
+  function setupJoystick(baseEl, knobEl, wrapEl, onMove, onEnd){
+    const MAX_RADIUS = 46;
+    const DEADZONE = MAX_RADIUS * 0.18;
+    let activePointerId = null;
+
+    function handleMove(clientX, clientY){
+      const rect = baseEl.getBoundingClientRect();
+      const cx = rect.left + rect.width/2;
+      const cy = rect.top + rect.height/2;
+      const dx = clientX - cx, dy = clientY - cy;
+      const dist = Math.hypot(dx, dy);
+      const clampedDist = Math.min(dist, MAX_RADIUS);
+      const angle = Math.atan2(dy, dx);
+      const kx = Math.cos(angle) * clampedDist;
+      const ky = Math.sin(angle) * clampedDist;
+      knobEl.style.transform = `translate(${kx}px, ${ky}px)`;
+      if(dist < DEADZONE){
+        onMove(0, 0);
+      } else {
+        onMove(Math.cos(angle) * (clampedDist/MAX_RADIUS), Math.sin(angle) * (clampedDist/MAX_RADIUS));
+      }
+    }
+
+    function reset(){
+      knobEl.style.transform = 'translate(0px, 0px)';
+      if(wrapEl) wrapEl.classList.remove('active');
+      onEnd();
+    }
+
+    baseEl.addEventListener('pointerdown', (e)=>{
+      if(activePointerId !== null) return;
+      activePointerId = e.pointerId;
+      try{ baseEl.setPointerCapture(e.pointerId); } catch(err){}
+      if(wrapEl) wrapEl.classList.add('active');
+      handleMove(e.clientX, e.clientY);
+      e.preventDefault();
+    }, { passive:false });
+
+    baseEl.addEventListener('pointermove', (e)=>{
+      if(e.pointerId !== activePointerId) return;
+      handleMove(e.clientX, e.clientY);
+      e.preventDefault();
+    }, { passive:false });
+
+    function endHandler(e){
+      if(e.pointerId !== activePointerId) return;
+      activePointerId = null;
+      reset();
+    }
+    baseEl.addEventListener('pointerup', endHandler);
+    baseEl.addEventListener('pointercancel', endHandler);
+    baseEl.addEventListener('pointerleave', (e)=>{ if(e.pointerId === activePointerId) endHandler(e); });
+  }
+
+  function setupTapButton(el, onDown, onUp){
+    if(!el) return;
+    el.addEventListener('pointerdown', (e)=>{
+      el.classList.add('active');
+      onDown();
+      e.preventDefault();
+    }, { passive:false });
+    const release = ()=>{
+      el.classList.remove('active');
+      if(onUp) onUp();
+    };
+    el.addEventListener('pointerup', release);
+    el.addEventListener('pointercancel', release);
+    el.addEventListener('pointerleave', release);
+  }
+
+  const MOBILE_MOVE_DEADZONE = 0.35; // per-axis threshold before a direction key engages
+
+  function applyMobileMoveInput(nx, ny){
+    keysDown['w'] = ny < -MOBILE_MOVE_DEADZONE;
+    keysDown['s'] = ny > MOBILE_MOVE_DEADZONE;
+    keysDown['a'] = nx < -MOBILE_MOVE_DEADZONE;
+    keysDown['d'] = nx > MOBILE_MOVE_DEADZONE;
+  }
+  function clearMobileMoveInput(){
+    keysDown['w'] = false; keysDown['s'] = false; keysDown['a'] = false; keysDown['d'] = false;
+  }
+
+  function applyMobileAimInput(nx, ny){
+    if(nx === 0 && ny === 0) return; // keep last aim direction instead of snapping to 0,0
+    if(!p1) return;
+    const angle = Math.atan2(ny, nx);
+    mouseX = p1.x + Math.cos(angle) * 1000;
+    mouseY = p1.y + Math.sin(angle) * 1000;
+  }
+
+  function initMobileControls(){
+    const moveStick = document.getElementById('mobileMoveStick');
+    const aimStick = document.getElementById('mobileAimStick');
+    if(moveStick){
+      setupJoystick(
+        moveStick, moveStick.querySelector('.joystick-knob'), moveStick,
+        applyMobileMoveInput, clearMobileMoveInput
+      );
+    }
+    if(aimStick){
+      setupJoystick(
+        aimStick, aimStick.querySelector('.joystick-knob'), aimStick,
+        applyMobileAimInput, ()=>{} // releasing the aim stick keeps the last aim direction
+      );
+    }
+    setupTapButton(document.getElementById('mobileShootBtn'),
+      ()=>{ mouseIsDown = true; },
+      ()=>{ mouseIsDown = false; }
+    );
+    setupTapButton(document.getElementById('mobileDashBtn'),
+      ()=>{ keysPressed[P1KEYS.dash] = true; }
+    );
+    setupTapButton(document.getElementById('mobileAbilityBtn'),
+      ()=>{ keysPressed['q'] = true; }
+    );
+  }
+  initMobileControls();
+
+  // Lightweight per-frame visual updates for the mobile action buttons --
+  // reuses the exact same cooldown numbers the desktop HUD bars already
+  // compute, just drawn as a rising fill instead of a bar.
+  function updateMobileHud(){
+    if(!mobileMode) return;
+    const abilityBtn = document.getElementById('mobileAbilityBtn');
+    const abilityFill = document.getElementById('mobileAbilityCdFill');
+    if(abilityBtn){
+      const show = !!(p1 && p1.hasAbility);
+      abilityBtn.classList.toggle('hidden', !show);
+      if(show && abilityFill){
+        const pct = 100 * (1 - Math.max(0, p1.abilityCd) / p1.abilityCooldownMax);
+        abilityFill.style.height = (100 - pct) + '%';
+        abilityBtn.classList.toggle('on-cooldown', p1.abilityCd > 0);
+      }
+    }
+    const dashBtn = document.getElementById('mobileDashBtn');
+    const dashFill = document.getElementById('mobileDashCdFill');
+    if(dashBtn && p1){
+      const pct = 100 * (1 - Math.max(0, p1.dashCd) / p1.dashCooldownMax);
+      if(dashFill) dashFill.style.height = (100 - pct) + '%';
+      dashBtn.classList.toggle('on-cooldown', p1.dashCd > 0);
+    }
+    const shootBtn = document.getElementById('mobileShootBtn');
+    if(shootBtn && p1){
+      shootBtn.classList.toggle('on-cooldown', p1.ammo <= 0);
+    }
+  }
 
   function makePlayer(id, x, y, color, keys, facing, isAI, opts){
     opts = opts || {};
@@ -3979,6 +4410,7 @@ updateDecoys(dt);
       if(abilityLabelP2) abilityLabelP2.classList.add('hidden');
       if(abilityTrackP2) abilityTrackP2.classList.add('hidden');
     }
+    updateMobileHud();
   }
 
   function drawEffects(){
@@ -4054,6 +4486,10 @@ updateDecoys(dt);
   const p1LegendCol = document.querySelector('.legend .col.p1');
 
   function beginGame(){
+    // Touch aiming reuses the existing mouse-aim facing logic (see the
+    // right joystick wiring above), so force it on for Mobile Mode
+    // regardless of which aim-style button was tapped to get here.
+    if(mobileMode) aimMode = 'mouse';
     p2Label.textContent = (mode==='ai' ? `COMPUTER (${difficulty.toUpperCase()})` : (mode==='online' ? 'OPPONENT (ONLINE)' : 'PLAYER TWO')) + (gameType==='football' ? ' \u26bd' : '');
     p2Legend.style.display = mode==='local' ? '' : 'none';
     canvas.style.cursor = (aimMode==='mouse') ? 'crosshair' : 'default';
@@ -4077,6 +4513,9 @@ updateDecoys(dt);
     menuGameType.classList.add('hidden');
     exitBtn.classList.remove('hidden');
     started = true;
+    const mc = document.getElementById('mobileControls');
+    if(mc) mc.classList.toggle('hidden', !mobileMode);
+    checkOrientation();
     startMusic();
     if(mode === 'online' && socket && socket.readyState === WebSocket.OPEN){
       socket.send(JSON.stringify({ type: 'skin', color: skinColor(p1SkinId) }));
@@ -4276,6 +4715,11 @@ updateDecoys(dt);
     menuPlayerCount.classList.add('hidden');
     extraBots = [];
     lastRoundWinnerId = null;
+    clearMobileMoveInput();
+    mouseIsDown = false;
+    const mc = document.getElementById('mobileControls');
+    if(mc) mc.classList.add('hidden');
+    checkOrientation();
     const fbDisplay = document.getElementById('footballScoreDisplay');
     if(fbDisplay) fbDisplay.classList.add('hidden');
     updateCreditsDisplay();
@@ -4318,12 +4762,14 @@ updateDecoys(dt);
   const btnBackSettings = document.getElementById('btnBackSettings');
   const toggleAutoAimP1 = document.getElementById('toggleAutoAimP1');
   const toggleAutoAimP2 = document.getElementById('toggleAutoAimP2');
+  const toggleMobileMode = document.getElementById('toggleMobileMode');
 
   function updateSettingsUI(){
     toggleAutoAimP1.textContent = autoAimP1 ? 'ON' : 'OFF';
     toggleAutoAimP1.classList.toggle('on', autoAimP1);
     toggleAutoAimP2.textContent = autoAimP2 ? 'ON' : 'OFF';
     toggleAutoAimP2.classList.toggle('on', autoAimP2);
+    applyMobileModeUI();
   }
 
   btnSettings.addEventListener('click', ()=>{
@@ -4345,6 +4791,11 @@ updateDecoys(dt);
     updateSettingsUI();
     saveProgress();
   });
+  if(toggleMobileMode){
+    toggleMobileMode.addEventListener('click', ()=>{
+      setMobileMode(!mobileMode);
+    });
+  }
 
   const menuAdmin = document.getElementById('menuAdmin');
   const btnAdmin = document.getElementById('btnAdmin');
@@ -4386,6 +4837,7 @@ updateDecoys(dt);
   fetchAbilityConfig();
   tryInitGoogle();
   updateCreditsDisplay();
+  applyMobileModeUI();
   requestAnimationFrame(loop);
 })();
 </script>
