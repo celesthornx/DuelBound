@@ -578,6 +578,19 @@
     <button class="menu-back" id="btnBackGameType">&larr; back</button>
   </div>
 
+  <!-- PLAYER COUNT MENU (Classic Mode only, Local/VS Computer only --
+       Online stays 2 players and skips straight past this) -->
+  <div class="menu-overlay hidden" id="menuPlayerCount">
+    <div class="menu-title">MATCH SIZE</div>
+    <div class="settings-note" id="playerCountNote"></div>
+    <div class="menu-row">
+      <button class="menu-btn diff" data-count="2">2</button>
+      <button class="menu-btn diff" data-count="3">3</button>
+      <button class="menu-btn diff" data-count="4">4</button>
+    </div>
+    <button class="menu-back" id="btnBackPlayerCount">&larr; back</button>
+  </div>
+
   <!-- SETTINGS -->
   <div class="menu-overlay hidden" id="menuSettings">
     <div class="shop-panel">
@@ -1216,6 +1229,10 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
             // a 'footballRespawn' message (see below).
             if(p2) p2.alive = false;
           } else {
+            credits += 15;
+            stats.kills++;
+            updateCreditsDisplay();
+            saveProgress();
             endRound('p1');
           }
         }
@@ -1293,15 +1310,6 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       // the ball. IMPORTANT: the sender's "p1" is always THEIR OWN local
       // player, which from our side is our local "p2" (the opponent) --
       // exactly the same id-flip already used above for bullets/damage.
-
-      // The random wall layout for this match/rematch -- only sent by
-      // server-player-1's client (see initFootballMode()), applied as-is
-      // here so both clients collide against the exact same walls.
-      if(data.type === "footballMap"){
-        if(gameType !== 'football') return;
-        if(Array.isArray(data.covers)) covers = data.covers;
-        return;
-      }
 
       if(data.type === "footballKick"){
         if(gameType !== 'football') return;
@@ -1566,7 +1574,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   const btnBackShop = document.getElementById('btnBackShop');
   const btnAimMove = document.getElementById('btnAimMove');
   const btnAimMouse = document.getElementById('btnAimMouse');
-  const diffBtns = document.querySelectorAll('.menu-btn.diff');
+  const diffBtns = document.querySelectorAll('#menuDiff .menu-btn.diff');
   const tabSkins = document.getElementById('tabSkins');
   const tabPowers = document.getElementById('tabPowers');
   const tabAbilities = document.getElementById('tabAbilities');
@@ -1593,17 +1601,16 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     { x: 150, y: H-180, w: 22, h: 110 },
     { x: W-172, y: 70, w: 22, h: 110 },
   ];
-  // Used only as a brief placeholder in online Football before the map
-  // synced from the other player arrives (see generateRandomFootballCovers
-  // and initFootballMode further down) -- never shown for more than a
-  // frame or two in practice.
-  const FOOTBALL_COVERS_FALLBACK = CLASSIC_COVERS.filter((c, i) => i !== 0);
+  // Football drops the center wall -- it sat exactly on the kickoff/ball
+  // spawn point, so the ball was constantly clipping and bouncing weirdly
+  // against it right at the center of the field. The four side covers
+  // stay, so Football still has some obstacles to play around.
+  const FOOTBALL_COVERS = CLASSIC_COVERS.filter((c, i) => i !== 0);
 
   // `covers` is what every collision/LOS/rendering function below
-  // actually reads -- it's swapped whenever a match starts (see
-  // beginGame() and initFootballMode()), so Classic Mode always gets the
-  // fixed 5-obstacle layout above, and Football gets a freshly generated
-  // random layout instead (see generateRandomFootballCovers()).
+  // actually reads -- it's swapped between the two sets above whenever a
+  // match starts (see beginGame()), so Classic Mode is completely
+  // unaffected and keeps its original 5 obstacles.
   let covers = CLASSIC_COVERS;
 
   const DIFF = {
@@ -1617,6 +1624,15 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   let aimMode = 'movement'; // 'movement' | 'mouse' -- only ever applies to p1, only offered vs AI
   let gameType = 'classic'; // 'classic' | 'football' -- picked on the new GAME TYPE menu
   let pendingMode = null;   // which of local/online/ai the player picked, remembered while they choose gameType
+
+  // ---- MATCH SIZE (Classic Mode, Local/VS Computer only) ----
+  // 2/3/4 total combatants. Slots beyond the normal p1/p2 pair are always
+  // bots (there's no keyboard bindings for a P3/P4 human, and Online stays
+  // a strict 1v1 since the netcode here only ever synchronizes two real
+  // players) -- see spawnExtraBots()/resetExtraBotsForRound() below.
+  let matchPlayerCount = 2;
+  let extraBots = [];
+  let lastRoundWinnerId = null; // who actually won the most recent round -- used for the win-screen label/color instead of assuming it's always p1 or p2
 
   // Player Settings: auto-aim keeps a player's facing locked onto the
   // opponent automatically -- free accessibility toggle (not a shop
@@ -1998,82 +2014,11 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     };
   }
 
-  // Builds a random-but-sane set of arena obstacles for a Football match.
-  // Same rectangle shape as Classic Mode's covers (just {x,y,w,h}), but
-  // placed procedurally -- steering clear of both goal mouths, both
-  // player spawn points, and the center kickoff spot, and kept spaced
-  // apart from each other, so the walls are always somewhere interesting
-  // to play around rather than sitting on top of the one place a player
-  // or the ball actually needs to be.
-  function generateRandomFootballCovers(){
-    const generated = [];
-    const count = 3 + Math.floor(Math.random()*2); // 3-4 walls per match
-    const marginX = GOAL_WIDTH + 70;  // keep clear of both goal mouths
-    const marginY = 50;               // keep clear of the top/bottom walls
-    const noGoZones = [
-      { x: 130,   y: H/2, r: 75 }, // Player 1 spawn
-      { x: W-130, y: H/2, r: 75 }, // Player 2 spawn
-      { x: W/2,   y: H/2, r: 95 }, // center circle / kickoff spot
-    ];
-
-    let attempts = 0;
-    while(generated.length < count && attempts < 300){
-      attempts++;
-      const vertical = Math.random() < 0.5;
-      const thickness = 18 + Math.random()*10; // 18-28
-      const length = 80 + Math.random()*50;    // 80-130
-      const w = vertical ? thickness : length;
-      const h = vertical ? length : thickness;
-
-      const x = marginX + Math.random()*Math.max(0, W - marginX*2 - w);
-      const y = marginY + Math.random()*Math.max(0, H - marginY*2 - h);
-      const rect = { x, y, w, h };
-
-      let blocked = false;
-      for(const zone of noGoZones){
-        const nx = Math.max(rect.x, Math.min(zone.x, rect.x+rect.w));
-        const ny = Math.max(rect.y, Math.min(zone.y, rect.y+rect.h));
-        if(Math.hypot(zone.x-nx, zone.y-ny) < zone.r){ blocked = true; break; }
-      }
-      if(!blocked){
-        const pad = 55; // keep walls from crowding each other into a maze
-        for(const c of generated){
-          if(rect.x < c.x+c.w+pad && rect.x+rect.w+pad > c.x &&
-             rect.y < c.y+c.h+pad && rect.y+rect.h+pad > c.y){
-            blocked = true; break;
-          }
-        }
-      }
-      if(!blocked) generated.push(rect);
-    }
-    return generated;
-  }
-
   function initFootballMode(){
     footballScore1 = 0;
     footballScore2 = 0;
     footballState = 'playing';
     footballWinnerId = null;
-
-    // A fresh random wall layout every match (and every rematch). Online,
-    // only server-player-1's client actually rolls the layout and sends
-    // it to the opponent -- if both clients rolled independently they'd
-    // each see the walls in different places and collisions would go out
-    // of sync. Player 2's client shows a safe placeholder for the brief
-    // moment before the real map message arrives.
-    if(mode === 'online'){
-      if(myPlayerID === 1){
-        covers = generateRandomFootballCovers();
-        if(socket && socket.readyState === WebSocket.OPEN){
-          socket.send(JSON.stringify({ type:'footballMap', covers: covers }));
-        }
-      } else {
-        covers = FOOTBALL_COVERS_FALLBACK;
-      }
-    } else {
-      covers = generateRandomFootballCovers();
-    }
-
     resetFootballPositions();
     state = 'countdown';
     roundTimer = 1.2;
@@ -2241,6 +2186,10 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         ball.y = holder.y + Math.sin(holder.facing)*(PLAYER_R+10);
       }
       ball.trail = [];
+      // A goal no longer requires a kick -- as long as the ball (carried
+      // or loose) is inside the goal mouth, it counts. This lets a player
+      // simply walk/dribble the ball across the line to score.
+      checkFootballGoal();
       return;
     }
 
@@ -2275,7 +2224,23 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         if(withinX && !withinY) ball.vy = -ball.vy*BALL_BOUNCE;
         else if(withinY && !withinX) ball.vx = -ball.vx*BALL_BOUNCE;
         else { ball.vx = -ball.vx*BALL_BOUNCE; ball.vy = -ball.vy*BALL_BOUNCE; }
+        // Push the ball back out along the collision normal so it can't
+        // stay overlapped with the cover -- without this it kept
+        // re-triggering the same bounce every single frame (flipping
+        // velocity again and again), which is what made the ball look
+        // like it was vibrating/stuck instead of bouncing off cleanly.
+        const nx = Math.max(c.x, Math.min(ball.x, c.x+c.w));
+        const ny = Math.max(c.y, Math.min(ball.y, c.y+c.h));
+        const dx = ball.x-nx, dy = ball.y-ny;
+        const dist = Math.hypot(dx,dy);
+        if(dist > 0.0001){
+          const push = BALL_RADIUS - dist;
+          if(push > 0){ ball.x += (dx/dist)*push; ball.y += (dy/dist)*push; }
+        } else {
+          ball.x += BALL_RADIUS;
+        }
         playRicochetSound();
+        break; // resolve one collision per frame to avoid double-bounce jitter
       }
     }
 
@@ -2870,8 +2835,121 @@ else{
         p2.score = scoreCarry.p2;
     }
 }
+    // FFA extra bots (Classic Mode, 3-4 player matches only). Football
+    // and Online always run with matchPlayerCount forced back to 2, so
+    // this is a no-op for them.
+    if(gameType === 'classic' && matchPlayerCount > 2){
+      if(extraBots.length !== matchPlayerCount - 2){
+        spawnExtraBots();
+      } else {
+        resetExtraBotsForRound();
+      }
+    } else {
+      extraBots = [];
+    }
     bullets = [];
     decoys = [];
+  }
+
+  // Fixed, cover-free spawn spots for the 3rd/4th combatant, plus the
+  // colors/ids that identify them everywhere (bullets, HUD labels, etc).
+  const EXTRA_BOT_SPAWNS = [
+    { x: W/2, y: 60,   facing: Math.PI/2 },
+    { x: W/2, y: H-60, facing: -Math.PI/2 },
+  ];
+  const EXTRA_BOT_COLORS = ['#5dffa0', '#ffce54'];
+  const EXTRA_BOT_IDS = ['b3', 'b4'];
+
+  function spawnExtraBots(){
+    extraBots = [];
+    const extraCount = Math.max(0, matchPlayerCount - 2);
+    for(let i=0; i<extraCount; i++){
+      const spot = EXTRA_BOT_SPAWNS[i];
+      extraBots.push(makePlayer(EXTRA_BOT_IDS[i], spot.x, spot.y, EXTRA_BOT_COLORS[i], null, spot.facing, true, {}));
+    }
+  }
+
+  // Between rounds within the SAME match we keep the same bot objects
+  // (so a bot's own round-win .score carries over exactly like p1/p2's
+  // scoreCarry) -- just put them back at full health/ammo/position
+  // instead of recreating them from scratch.
+  function resetExtraBotsForRound(){
+    extraBots.forEach((bot, i)=>{
+      const spot = EXTRA_BOT_SPAWNS[i];
+      bot.x = spot.x; bot.y = spot.y; bot.facing = spot.facing;
+      bot.health = bot.maxHealth;
+      bot.shieldCharges = bot.maxShieldCharges;
+      bot.ammo = bot.maxAmmo;
+      bot.reloadT = 0;
+      bot.alive = true;
+      bot.dashing = false; bot.dashT = 0; bot.dashCd = 0;
+      bot.slowT = 0;
+      bot.trail = [];
+    });
+  }
+
+  // Every combatant currently in the match (p1, p2, and any extra bots).
+  function getAllCombatants(){
+    const list = [];
+    if(p1) list.push(p1);
+    if(p2) list.push(p2);
+    return list.concat(extraBots);
+  }
+
+  function getCombatantById(id){
+    if(id === 'p1') return p1;
+    if(id === 'p2') return p2;
+    return extraBots.find(b => b.id === id) || null;
+  }
+
+  function combatantLabel(id){
+    if(id === 'p1') return 'PLAYER ONE';
+    if(id === 'p2') return (mode==='ai' ? 'COMPUTER' : 'PLAYER TWO');
+    const idx = extraBots.findIndex(b => b.id === id);
+    return 'BOT ' + (idx >= 0 ? idx+3 : '');
+  }
+
+  // Match-win bonus scales with lobby size: the original 2-player bonus,
+  // plus 10 more credits for every player added beyond 2 (3p:+50, 4p:+60...).
+  function matchWinBonus(){
+    return 40 + Math.max(0, matchPlayerCount - 2) * 10;
+  }
+
+  // FFA round-end check: once only one combatant is still standing, the
+  // round is over (mirrors the old "the other player died" 2-player rule,
+  // generalized to any number of combatants).
+  function checkFFARoundEnd(){
+    const alive = getAllCombatants().filter(c => c.alive);
+    if(alive.length <= 1){
+      endRound((alive[0] || p1).id);
+    }
+  }
+
+  // Generalized hit application used for FFA (3-4 player) Classic Mode --
+  // any combatant can hit any other. 15 credits go to the human player
+  // (p1) the instant THEY land a kill, rather than waiting for the round
+  // to end (a round can easily contain more than one of p1's kills).
+  function applyHitToCombatant(target, shooterId, dmg){
+    dmg = dmg || 1;
+    if(target.shieldCharges > 0){
+      target.shieldCharges--;
+      playShieldSound();
+      spawnHitFlash(target.x, target.y, '#ffce54');
+      return;
+    }
+    target.health -= dmg;
+    playHitSound();
+    spawnHitFlash(target.x, target.y, '#ffffff');
+    if(target.health <= 0){
+      target.alive = false;
+      if(shooterId === 'p1' && target.id !== 'p1'){
+        credits += 15;
+        stats.kills++;
+        updateCreditsDisplay();
+        saveProgress();
+      }
+      checkFFARoundEnd();
+    }
   }
 
   function circleRectCollide(cx, cy, r, rect){
@@ -2914,10 +2992,21 @@ else{
 
   function opponentOf(p){ 
     if(mode === "online") return null;
+    if(gameType === 'classic' && matchPlayerCount > 2){
+      // FFA: target the nearest alive combatant that isn't yourself.
+      let best = null, bestDist = Infinity;
+      for(const c of getAllCombatants()){
+        if(c === p || !c.alive) continue;
+        const dd = Math.hypot(c.x-p.x, c.y-p.y);
+        if(dd < bestDist){ bestDist = dd; best = c; }
+      }
+      return best;
+    }
     return p.id==='p1' ? p2 : p1;
 }
   function aiThink(p, dt){
     const opp = opponentOf(p);
+    if(!opp) return { mx:0, my:0, shoot:false, dash:false };
     const d = DIFF[difficulty];
     const ai = p.ai;
     const dx = opp.x-p.x, dy = opp.y-p.y;
@@ -3223,7 +3312,7 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
   // there), so the network branch stays p1-vs-p2 specifically.
   function triggerTimeWarp(p){
     playTimeWarpSound();
-    const target = (p.id === 'p1') ? p2 : p1;
+    const target = (gameType === 'classic' && matchPlayerCount > 2) ? opponentOf(p) : ((p.id === 'p1') ? p2 : p1);
     if(!target) return;
 
     target.slowT = TIME_WARP_DURATION;
@@ -3290,6 +3379,12 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
         if(gameType === 'football'){
           handleFootballDeath(p2);
         } else {
+          // 15 credits per kill, awarded the instant it happens (endRound
+          // only handles the match-win bonus now, see below).
+          credits += 15;
+          stats.kills++;
+          updateCreditsDisplay();
+          saveProgress();
           endRound('p1');
         }
       }
@@ -3333,6 +3428,16 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
       if(p.id === 'p1' && socket && socket.readyState === WebSocket.OPEN){
         socket.send(JSON.stringify({ type:'shockwave', x:p.x, y:p.y, radius:SHOCKWAVE_RADIUS }));
       }
+    } else if(gameType === 'classic' && matchPlayerCount > 2){
+      // FFA: the blast is an AoE, so check it against every OTHER
+      // combatant still standing instead of one fixed opponent.
+      getAllCombatants().forEach(c=>{
+        if(c === p || !c.alive || c.dashing) return;
+        const dist = Math.hypot(p.x-c.x, p.y-c.y);
+        if(dist <= SHOCKWAVE_RADIUS){
+          applyHitToCombatant(c, p.id, SHOCKWAVE_DAMAGE);
+        }
+      });
     } else {
       const target = (p.id === 'p1') ? p2 : p1;
       if(target && target.alive && !target.dashing){
@@ -3557,34 +3662,50 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
 
     if(!dead){
 
-      // p2 always exists now (even in online mode -- see resetPositions),
-      // so target selection is the same for every mode: a real distance
-      // check against the actual player position, never an automatic hit.
-      const target = b.owner === 'p1' ? p2 : p1;
+      if(gameType === 'classic' && matchPlayerCount > 2){
+        // FFA (3-4 players): a bullet can hit ANY alive combatant besides
+        // its own shooter, not just one fixed opposite player. Online is
+        // never in this branch (matchPlayerCount is forced to 2 there),
+        // so this is always fully local/authoritative.
+        for(const target of getAllCombatants()){
+          if(!target || target.id === b.owner || !target.alive || target.dashing) continue;
+          const dist = Math.hypot(b.x-target.x, b.y-target.y);
+          if(dist < BULLET_R+PLAYER_R){
+            dead = true;
+            applyHitToCombatant(target, b.owner, b.damage);
+            break;
+          }
+        }
+      } else {
+        // p2 always exists now (even in online mode -- see resetPositions),
+        // so target selection is the same for every mode: a real distance
+        // check against the actual player position, never an automatic hit.
+        const target = b.owner === 'p1' ? p2 : p1;
 
-      if(target && target.alive && !target.dashing){
+        if(target && target.alive && !target.dashing){
 
-        const dist = Math.hypot(b.x-target.x, b.y-target.y);
+          const dist = Math.hypot(b.x-target.x, b.y-target.y);
 
-        if(dist < BULLET_R+PLAYER_R){
+          if(dist < BULLET_R+PLAYER_R){
 
-          dead = true;
+            dead = true;
 
-          if(mode === "online"){
-            // Online: only the player who actually got hit is allowed to
-            // decide the round result. A bullet owned by 'p2' here means
-            // "the opponent's shot, hitting MY real p1" -- a genuine,
-            // authoritative hit. My own bullets ('p1') vs. my copy of the
-            // opponent just disappear visually with no sound and no
-            // damage; their client decides whether THEY got hit the same
-            // way, on their end, and tells me via the same message type.
-            if(b.owner === 'p2'){
-              applyRealHitToP1(b.damage);
+            if(mode === "online"){
+              // Online: only the player who actually got hit is allowed to
+              // decide the round result. A bullet owned by 'p2' here means
+              // "the opponent's shot, hitting MY real p1" -- a genuine,
+              // authoritative hit. My own bullets ('p1') vs. my copy of the
+              // opponent just disappear visually with no sound and no
+              // damage; their client decides whether THEY got hit the same
+              // way, on their end, and tells me via the same message type.
+              if(b.owner === 'p2'){
+                applyRealHitToP1(b.damage);
+              }
+            } else if(b.owner === 'p1'){
+              applyLocalHitToP2(b.damage);
+            } else {
+              applyLocalHitToP1(b.damage);
             }
-          } else if(b.owner === 'p1'){
-            applyLocalHitToP2(b.damage);
-          } else {
-            applyLocalHitToP1(b.damage);
           }
         }
       }
@@ -3598,19 +3719,20 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
 }
 
   function endRound(winnerId){
-    const winner = winnerId==='p1' ? p1 : p2;
+    const winner = getCombatantById(winnerId);
     if(!winner) return;
-    winner.score++;
+    winner.score = (winner.score || 0) + 1;
+    lastRoundWinnerId = winnerId;
     scoreCarry = { p1: p1.score, p2: p2.score };
     state = 'roundEnd';
     msgTimer = 1.7;
-    if(winnerId==='p1'){
-      credits += 15;
-      stats.kills++;
-      if(winner.score >= ROUNDS_TO_WIN){
-        credits += 40;
-        stats.wins++;
-      }
+    // Per-kill credits are now awarded the instant a kill happens (see
+    // applyLocalHitToP2/applyHitToCombatant/the online damage handler) --
+    // this only ever hands out the MATCH-win bonus, which scales with
+    // how many players/bots were in the match (see matchWinBonus()).
+    if(winnerId==='p1' && winner.score >= ROUNDS_TO_WIN){
+      credits += matchWinBonus();
+      stats.wins++;
       updateCreditsDisplay();
       saveProgress();
     }
@@ -3625,6 +3747,8 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
 
   function fullReset(){
     scoreCarry = { p1:0, p2:0 };
+    extraBots = []; // force fresh bots (score reset to 0) for the new match
+    lastRoundWinnerId = null;
     startRound();
   }
 
@@ -3651,6 +3775,11 @@ if(mode !== "online"){
     const follow = Math.min(1, dt*14);
     p2.x += (p2.netX - p2.x) * follow;
     p2.y += (p2.netY - p2.y) * follow;
+}
+
+// FFA extra bots (Classic Mode, local/AI only -- never present online).
+if(mode !== "online" && extraBots.length){
+    extraBots.forEach(bot => updatePlayer(bot, dt));
 }
 
 updateBullets(dt);
@@ -3882,6 +4011,7 @@ updateDecoys(dt);
     }
     if(p1) drawPlayer(p1);
     if(p2) drawPlayer(p2);
+    extraBots.forEach(bot => drawPlayer(bot));
     drawEffects();
     if(gameType === 'football') drawFootballRespawnCountdown();
     updateHud();
@@ -3904,15 +4034,16 @@ updateDecoys(dt);
       if(state==='countdown'){
         centerMsg.innerHTML = `<div class="big">${Math.max(1,Math.ceil(roundTimer))}</div>`;
       } else if(state==='roundEnd'){
-        const winner = p1.alive ? 'PLAYER ONE' : (mode==='ai' ? 'COMPUTER' : 'PLAYER TWO');
-        const color = p1.alive ? 'var(--p1)' : 'var(--p2)';
-        const creditNote = p1.alive ? '<div class="small" style="color:#ffce54;">+15 CREDITS</div>' : '';
+        const winnerId = lastRoundWinnerId || (p1.alive ? 'p1' : 'p2');
+        const winner = combatantLabel(winnerId);
+        const color = winnerId==='p1' ? 'var(--p1)' : (winnerId==='p2' ? 'var(--p2)' : '#5dffa0');
+        const creditNote = winnerId==='p1' ? '<div class="small" style="color:#ffce54;">+15 CREDITS</div>' : '';
         centerMsg.innerHTML = `<div class="big" style="color:${color}">${winner}</div><div class="small">ROUND WIN</div>${creditNote}`;
       } else if(state==='matchEnd'){
-        const p1won = p1.score>=ROUNDS_TO_WIN;
-        const winner = p1won ? 'PLAYER ONE' : (mode==='ai' ? 'COMPUTER' : 'PLAYER TWO');
-        const color = p1won ? 'var(--p1)' : 'var(--p2)';
-        const creditNote = p1won ? '<div class="small" style="color:#ffce54;">+40 BONUS CREDITS</div>' : '';
+        const p1won = lastRoundWinnerId === 'p1';
+        const winner = combatantLabel(lastRoundWinnerId || (p1.score>=ROUNDS_TO_WIN ? 'p1' : 'p2'));
+        const color = p1won ? 'var(--p1)' : (lastRoundWinnerId==='p2' ? 'var(--p2)' : '#5dffa0');
+        const creditNote = p1won ? `<div class="small" style="color:#ffce54;">+${matchWinBonus()} BONUS CREDITS</div>` : '';
         centerMsg.innerHTML = `<div class="big" style="color:${color}">${winner} WINS</div><div class="small">PRESS R TO REMATCH</div>${creditNote}`;
       } else {
         centerMsg.innerHTML = '';
@@ -3926,7 +4057,7 @@ updateDecoys(dt);
     p2Label.textContent = (mode==='ai' ? `COMPUTER (${difficulty.toUpperCase()})` : (mode==='online' ? 'OPPONENT (ONLINE)' : 'PLAYER TWO')) + (gameType==='football' ? ' \u26bd' : '');
     p2Legend.style.display = mode==='local' ? '' : 'none';
     canvas.style.cursor = (aimMode==='mouse') ? 'crosshair' : 'default';
-    covers = (gameType === 'football') ? covers : CLASSIC_COVERS; // football's random map is generated inside initFootballMode()
+    covers = (gameType === 'football') ? FOOTBALL_COVERS : CLASSIC_COVERS;
     if(aimMode==='mouse'){
       p1LegendCol.innerHTML = '<b>PLAYER ONE</b>'
         + '<div class="row"><span class="key">W A S D</span>move</div>'
@@ -3988,6 +4119,7 @@ updateDecoys(dt);
 
   function proceedAfterGameType(){
     menuGameType.classList.add('hidden');
+    menuPlayerCount.classList.add('hidden');
     if(pendingMode === 'ai'){
       menuDiff.classList.remove('hidden');
     } else if(pendingMode === 'local'){
@@ -4004,17 +4136,60 @@ updateDecoys(dt);
     }
   }
 
+  // Classic Mode (Local/VS Computer only) gets one extra step here to
+  // pick the match size before continuing into the normal difficulty/aim
+  // flow. Football and Online always stay a strict 1v1, so they skip
+  // straight through with matchPlayerCount forced back to 2.
+  const menuPlayerCount = document.getElementById('menuPlayerCount');
+
+  function renderPlayerCountNote(){
+    const note = document.getElementById('playerCountNote');
+    if(!note) return;
+    note.textContent = (pendingMode === 'local')
+      ? 'PLAYER ONE + PLAYER TWO SHARE THIS KEYBOARD \u2014 ANY EXTRA SLOTS ARE FILLED BY BOTS.'
+      : 'CHOOSE HOW MANY OPPONENTS TO FACE \u2014 EXTRA SLOTS ARE ALL BOTS.';
+  }
+
+  function afterGameTypeChosen(){
+    menuGameType.classList.add('hidden');
+    if(gameType === 'classic' && pendingMode !== 'online'){
+      renderPlayerCountNote();
+      document.querySelectorAll('#menuPlayerCount .menu-btn.diff').forEach(b=>{
+        b.classList.toggle('selected', Number(b.dataset.count) === matchPlayerCount);
+      });
+      menuPlayerCount.classList.remove('hidden');
+    } else {
+      matchPlayerCount = 2;
+      proceedAfterGameType();
+    }
+  }
+
   document.getElementById('btnModeClassic').addEventListener('click', ()=>{
     gameType = 'classic';
-    proceedAfterGameType();
+    afterGameTypeChosen();
   });
   document.getElementById('btnModeFootball').addEventListener('click', ()=>{
     gameType = 'football';
-    proceedAfterGameType();
+    matchPlayerCount = 2; // Football stays 1v1 for now -- goals/teams don't generalize to more players yet
+    afterGameTypeChosen();
   });
   document.getElementById('btnBackGameType').addEventListener('click', ()=>{
     menuGameType.classList.add('hidden');
     menuMain.classList.remove('hidden');
+  });
+
+  document.querySelectorAll('#menuPlayerCount .menu-btn.diff').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      matchPlayerCount = Number(btn.dataset.count);
+      document.querySelectorAll('#menuPlayerCount .menu-btn.diff').forEach(b=>b.classList.remove('selected'));
+      btn.classList.add('selected');
+      menuPlayerCount.classList.add('hidden');
+      proceedAfterGameType();
+    });
+  });
+  document.getElementById('btnBackPlayerCount').addEventListener('click', ()=>{
+    menuPlayerCount.classList.add('hidden');
+    menuGameType.classList.remove('hidden');
   });
 
   btnShop.addEventListener('click', ()=>{
@@ -4054,13 +4229,21 @@ updateDecoys(dt);
   });
   btnBackDiff.addEventListener('click', ()=>{
     menuDiff.classList.add('hidden');
-    menuGameType.classList.remove('hidden');
+    if(gameType === 'classic' && pendingMode !== 'online'){
+      renderPlayerCountNote();
+      menuPlayerCount.classList.remove('hidden');
+    } else {
+      menuGameType.classList.remove('hidden');
+    }
   });
   btnBackAim.addEventListener('click', ()=>{
     if(mode === 'online') closeOnlineConnection();
     menuAim.classList.add('hidden');
     if(pendingMode === 'ai'){
       menuDiff.classList.remove('hidden');
+    } else if(gameType === 'classic' && pendingMode !== 'online'){
+      renderPlayerCountNote();
+      menuPlayerCount.classList.remove('hidden');
     } else {
       menuGameType.classList.remove('hidden');
     }
@@ -4090,6 +4273,9 @@ updateDecoys(dt);
     menuShop.classList.add('hidden');
     menuLeaderboard.classList.add('hidden');
     menuGameType.classList.add('hidden');
+    menuPlayerCount.classList.add('hidden');
+    extraBots = [];
+    lastRoundWinnerId = null;
     const fbDisplay = document.getElementById('footballScoreDisplay');
     if(fbDisplay) fbDisplay.classList.add('hidden');
     updateCreditsDisplay();
