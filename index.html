@@ -2,11 +2,6 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#0a0d14">
 <title>DUEL ARENA</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
@@ -24,15 +19,9 @@
     --cover-edge: #4a5568;
     --ink: #e8edf5;
     --ink-dim: #6b7688;
-    --safe-top: env(safe-area-inset-top, 0px);
-    --safe-bottom: env(safe-area-inset-bottom, 0px);
-    --safe-left: env(safe-area-inset-left, 0px);
-    --safe-right: env(safe-area-inset-right, 0px);
   }
 
   *{ box-sizing: border-box; }
-
-  html{ height:100%; }
 
   body{
     margin:0;
@@ -44,93 +33,6 @@
     align-items:center;
     padding: 18px 10px 30px;
     min-height:100vh;
-    min-height:100dvh;
-  }
-
-  /* ---- MOBILE MODE: fullscreen fitted layout ----
-     Applied only when body.mobile-active is toggled on by JS (touch
-     device detected AND Mobile Mode setting is ON). Desktop/keyboard
-     play is completely untouched -- none of these rules ever match
-     unless that class is present. See fitStage()/applyMobileLayoutClass()
-     near the end of the script. */
-  body.mobile-active{
-    display:block;
-    padding:0;
-    margin:0;
-    width:100vw;
-    height:100vh;
-    height:100dvh;
-    overflow:hidden;
-    min-height:0;
-  }
-  body.mobile-active h1,
-  body.mobile-active .sub,
-  body.mobile-active .legend{
-    display:none !important;
-  }
-  body.mobile-active .stage{
-    position:fixed;
-    top:50%;
-    left:50%;
-    transform-origin:center center;
-    box-shadow:none;
-    border:none;
-  }
-  /* Base game frame gets a little breathing room + bigger tap targets on
-     mobile -- these are still logical/canvas pixels, so they scale down
-     together with the rest of the stage via the JS-computed transform. */
-  body.mobile-active .exit-btn{
-    padding:12px 26px;
-    font-size:13px;
-  }
-  body.mobile-active .mute-btn{
-    width:40px; height:40px; font-size:16px;
-  }
-  body.mobile-active .fullscreen-btn{
-    right:60px;
-  }
-  /* Mouse Aim has no crosshair to track on a touchscreen (mouseX/mouseY
-     just sit wherever they were last, or at their unset default), which
-     made it aim at a fixed/stale point instead of anywhere useful.
-     Movement Aim (and the aim joystick's own drag-to-aim) already cover
-     mobile aiming properly, so the option is simply removed there. */
-  body.mobile-active #btnAimMouse{
-    display:none !important;
-  }
-
-  /* ---- Rotate-device overlay (portrait warning) ---- */
-  .rotate-overlay{
-    position:fixed; inset:0;
-    z-index:9999;
-    background: radial-gradient(ellipse at center, var(--void-2) 0%, var(--void) 70%);
-    display:none;
-    flex-direction:column;
-    align-items:center;
-    justify-content:center;
-    text-align:center;
-    padding: 24px;
-    padding-top: calc(24px + var(--safe-top));
-    padding-bottom: calc(24px + var(--safe-bottom));
-  }
-  .rotate-overlay.show{ display:flex; }
-  .rotate-overlay .icon{
-    font-size:52px;
-    margin-bottom:16px;
-    animation: rotate-hint 1.6s ease-in-out infinite;
-  }
-  .rotate-overlay .title{
-    font-family:'Chakra Petch', sans-serif;
-    font-weight:700; letter-spacing:4px; font-size:19px;
-    color: var(--ink); margin-bottom:10px;
-  }
-  .rotate-overlay .desc{
-    font-family:'Share Tech Mono', monospace;
-    font-size:11px; letter-spacing:1.5px; line-height:1.7;
-    color: var(--ink-dim); max-width:260px;
-  }
-  @keyframes rotate-hint{
-    0%,100%{ transform:rotate(0deg); }
-    50%{ transform:rotate(90deg); }
   }
 
   h1{
@@ -583,13 +485,8 @@
     cursor:pointer;
     z-index: 5;
     transition: all .15s ease;
-    display:flex; align-items:center; justify-content:center;
   }
   .mute-btn:hover{ border-color: var(--p1); background: rgba(63,208,255,0.08); }
-
-  .fullscreen-btn{ right: 50px; }
-  .fullscreen-btn:hover{ border-color: var(--p1); background: rgba(63,208,255,0.08); }
-  .fullscreen-btn svg{ display:block; }
 
   /* ---- Football Mode scoreboard ---- */
   .football-score{
@@ -606,19 +503,26 @@
   .football-score .fb-l{ color: var(--p1); }
   .football-score .fb-r{ color: var(--p2); }
 
-  /* ---- Mobile touch controls ----
-     Deliberately a SIBLING of .stage in the DOM (not a descendant) --
-     see index.html body markup -- so it is never affected by the
-     JS-computed scale() transform applied to .stage for screen fitting.
-     That keeps the joystick and action buttons at real, comfortably
-     tappable screen size no matter how small the phone is, while the
-     game view itself scales down to fit. Padded by the safe-area insets
-     so nothing sits under a notch, the home indicator, or the rounded
-     screen corners. */
-  .mobile-controls{
-    position:fixed; inset:0; z-index:60; pointer-events:none;
-    padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+  /* ---- Online multiplayer ping badge -- only ever shown while
+     mode==='online' and a match is running (see beginGame/exitToMenu).
+     Never appears in Local 2 Player or VS Computer. ---- */
+  .ping-badge{
+    position:absolute; top:42px; left:50%; transform: translateX(-50%);
+    font-family:'Share Tech Mono', monospace;
+    font-size: 10px; letter-spacing: 2px;
+    color: #5dffa0;
+    background: rgba(10,13,20,0.7);
+    border: 1px solid rgba(93,255,160,0.35);
+    padding: 4px 10px;
+    border-radius: 3px;
+    pointer-events:none;
+    z-index: 4;
   }
+  .ping-badge.fair{ color:#ffce54; border-color: rgba(255,206,84,0.35); }
+  .ping-badge.high{ color: var(--p2); border-color: rgba(255,95,109,0.35); }
+
+  /* ---- Mobile touch controls ---- */
+  .mobile-controls{ position:absolute; inset:0; z-index:6; pointer-events:none; }
   .joy-zone{ position:absolute; bottom:0; width:50%; height:60%; pointer-events:auto; touch-action:none; }
   .joy-zone.joy-move{ left:0; }
   .joy-zone.joy-aim{ right:0; }
@@ -671,7 +575,7 @@
 <h1>DUEL ARENA</h1>
 <div class="sub">FIRST TO 3 ROUNDS WINS</div>
 
-<div class="stage" id="gameStage">
+<div class="stage">
   <canvas id="game" width="900" height="540"></canvas>
   <div class="hud">
     <div class="side left">
@@ -704,6 +608,9 @@
   <div class="football-score hidden" id="footballScoreDisplay">
     <span class="fb-l">P1</span> <span id="fbScoreLeft">0</span> - <span id="fbScoreRight">0</span> <span class="fb-r">P2</span>
   </div>
+
+  <!-- ONLINE MULTIPLAYER PING BADGE (hidden outside mode==='online') -->
+  <div class="ping-badge hidden" id="pingBadge">PING: -- ms</div>
 
   <div class="center-msg" id="centerMsg"></div>
 
@@ -770,10 +677,6 @@
       <div class="settings-row">
         <span class="settings-label p2">PLAYER TWO AUTO-AIM</span>
         <button class="toggle-btn" id="toggleAutoAimP2">OFF</button>
-      </div>
-      <div class="settings-row hidden" id="mobileModeRow">
-        <span class="settings-label">MOBILE MODE</span>
-        <button class="toggle-btn" id="toggleMobileMode">ON</button>
       </div>
       <button class="menu-back" id="btnBackSettings">&larr; back</button>
     </div>
@@ -861,36 +764,20 @@
 
   <!-- EXIT BUTTON -->
   <button class="exit-btn hidden" id="exitBtn" title="Exit to menu">EXIT</button>
-  <button class="mute-btn fullscreen-btn" id="fullscreenBtn" title="Toggle fullscreen"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
   <button class="mute-btn" id="muteBtn" title="Mute / unmute sound">&#128266;</button>
-</div>
 
-<!-- MOBILE TOUCH CONTROLS -- kept OUTSIDE #stage (a sibling, not a
-     descendant) on purpose: #stage gets scaled down with a CSS
-     transform to fit the phone screen, and anything inside it scales
-     down along with it. Living outside that means the joystick and
-     action buttons always render at full native/tappable size. Same
-     elements/ids/logic as before -- only their position in the markup
-     (and .mobile-controls' CSS, see <style>) changed for mobile fitting. -->
-<div class="mobile-controls hidden" id="mobileControls">
-  <div class="joy-zone joy-move" id="joyMoveZone">
-    <div class="joy-base" id="joyMoveBase"><div class="joy-knob"></div></div>
-    <div class="joy-hint">MOVE</div>
+  <div class="mobile-controls hidden" id="mobileControls">
+    <div class="joy-zone joy-move" id="joyMoveZone">
+      <div class="joy-base" id="joyMoveBase"><div class="joy-knob"></div></div>
+      <div class="joy-hint">MOVE</div>
+    </div>
+    <div class="joy-zone joy-aim" id="joyAimZone">
+      <div class="joy-base" id="joyAimBase"><div class="joy-knob"></div></div>
+      <div class="joy-hint">DRAG &amp; RELEASE TO SHOOT &middot; TAP TO AUTO-AIM</div>
+    </div>
+    <button class="touch-action-btn" id="touchDashBtn">DASH</button>
+    <button class="touch-action-btn hidden" id="touchAbilityBtn">ABILITY</button>
   </div>
-  <div class="joy-zone joy-aim" id="joyAimZone">
-    <div class="joy-base" id="joyAimBase"><div class="joy-knob"></div></div>
-    <div class="joy-hint">DRAG &amp; RELEASE TO SHOOT &middot; TAP TO AUTO-AIM</div>
-  </div>
-  <button class="touch-action-btn" id="touchDashBtn">DASH</button>
-  <button class="touch-action-btn hidden" id="touchAbilityBtn">ABILITY</button>
-</div>
-
-<!-- PORTRAIT ROTATE OVERLAY -- shown only when Mobile Mode is active
-     AND the device is currently portrait; see checkOrientation() -->
-<div class="rotate-overlay" id="rotateOverlay">
-  <div class="icon">&#128241;</div>
-  <div class="title">ROTATE DEVICE</div>
-  <div class="desc">Turn your phone sideways<br>for the best Duel Arena experience.</div>
 </div>
 
 <div class="legend" id="legend">
@@ -1280,6 +1167,179 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   let onlineOpponentReady = false;
   let onlineOpponentColor = null;
 
+  // ====================================================================
+  // NETWORKING OPTIMIZATION -- decoupled send rate, snapshot-buffer
+  // interpolation, and ping. Rendering (requestAnimationFrame, see
+  // loop()) stays at whatever the browser can do; none of this changes
+  // gameplay speed, damage, or ability behavior -- it only changes how
+  // often/how position data crosses the wire and how the opponent's
+  // last-known position is displayed between updates.
+  // ====================================================================
+
+  // ---- 20-30Hz network send loop (separate from the render loop) ----
+  // p1's own position is still updated every rendered frame inside
+  // updatePlayer() for full local responsiveness (client-side
+  // prediction is inherent here: each client is the sole authority over
+  // its own player, so local movement never waits on the network). Only
+  // the WIRE SEND is decoupled to a fixed-rate timer.
+  const NETWORK_SEND_HZ = 25;
+  const NETWORK_SEND_INTERVAL_MS = Math.round(1000 / NETWORK_SEND_HZ); // 40ms
+  let networkSendTimer = null;
+  let inputSeq = 0;
+  let lastSentNetState = null;
+  let lastSentNetAt = 0;
+
+  function angleDelta(a, b){
+    return Math.atan2(Math.sin(b - a), Math.cos(b - a));
+  }
+
+  // Sends p1's current state at a fixed cadence instead of every render
+  // frame. Skips redundant sends while idle (nothing moved/rotated) but
+  // still heartbeats periodically so the opponent's interpolation buffer
+  // never goes stale and the connection is exercised for ping/timeout
+  // purposes.
+  function sendNetworkPosition(){
+    if(!(mode === 'online' && p1 && socket && socket.readyState === WebSocket.OPEN && myPlayerID !== null)) return;
+    const now = performance.now();
+    const prev = lastSentNetState;
+    const moved = !prev
+      || Math.abs(p1.x - prev.x) > 0.4
+      || Math.abs(p1.y - prev.y) > 0.4
+      || Math.abs(angleDelta(prev.facing, p1.facing)) > 0.01;
+    const IDLE_HEARTBEAT_MS = 350; // keep the opponent's buffer fed even if we're standing still
+    if(!moved && (now - lastSentNetAt) < IDLE_HEARTBEAT_MS) return;
+
+    inputSeq++;
+    lastSentNetState = { x: p1.x, y: p1.y, facing: p1.facing };
+    lastSentNetAt = now;
+
+    socket.send(JSON.stringify({
+      type: "position",
+      id: myPlayerID,
+      x: p1.x,
+      y: p1.y,
+      facing: p1.facing,
+      seq: inputSeq
+    }));
+  }
+
+  function startNetworkSendLoop(){
+    stopNetworkSendLoop();
+    networkSendTimer = setInterval(sendNetworkPosition, NETWORK_SEND_INTERVAL_MS);
+  }
+  function stopNetworkSendLoop(){
+    if(networkSendTimer){ clearInterval(networkSendTimer); networkSendTimer = null; }
+    lastSentNetState = null;
+    lastSentNetAt = 0;
+  }
+
+  // ---- Remote entity snapshot-buffer interpolation ----
+  // Every received network position is timestamped and kept in a short
+  // buffer instead of being applied directly. Rendering samples the
+  // buffer ~100ms in the past, interpolating between the two bracketing
+  // snapshots -- the standard fix for "jitter / teleport / choppiness"
+  // when updates arrive at a fixed, lower-than-render rate (25Hz here vs
+  // ~60fps rendering). Facing is interpolated along the shortest angular
+  // path so it never spins the long way around.
+  const INTERP_DELAY_MS = 100;
+  const SNAPSHOT_BUFFER_MAX_AGE_MS = 1000;
+  const SNAPSHOT_BUFFER_MAX_LEN = 30;
+
+  function pushSnapshot(buffer, x, y, facing){
+    buffer.push({ t: performance.now(), x, y, facing });
+    const cutoff = performance.now() - SNAPSHOT_BUFFER_MAX_AGE_MS;
+    while(buffer.length && buffer[0].t < cutoff) buffer.shift();
+    if(buffer.length > SNAPSHOT_BUFFER_MAX_LEN) buffer.shift();
+  }
+
+  function lerpAngle(a, b, t){
+    return a + angleDelta(a, b) * t;
+  }
+
+  function sampleSnapshotBuffer(buffer, delayMs){
+    if(!buffer.length) return null;
+    const renderTime = performance.now() - delayMs;
+    if(buffer.length === 1 || renderTime <= buffer[0].t) return buffer[0];
+    for(let i = 0; i < buffer.length - 1; i++){
+      if(renderTime >= buffer[i].t && renderTime <= buffer[i+1].t){
+        const span = (buffer[i+1].t - buffer[i].t) || 1;
+        const t = (renderTime - buffer[i].t) / span;
+        return {
+          x: buffer[i].x + (buffer[i+1].x - buffer[i].x) * t,
+          y: buffer[i].y + (buffer[i+1].y - buffer[i].y) * t,
+          facing: lerpAngle(buffer[i].facing, buffer[i+1].facing, t)
+        };
+      }
+    }
+    // Render time is newer than our newest snapshot (e.g. a dropped
+    // packet or brief hitch) -- hold the last known good sample rather
+    // than freezing or guessing forward.
+    return buffer[buffer.length - 1];
+  }
+
+  // p2's interpolation buffer + last received input seq (used only to
+  // drop stale/duplicate packets defensively -- WebSocket already
+  // guarantees ordered delivery, so this is a cheap safety net, not the
+  // primary mechanism).
+  let p2SnapshotBuffer = [];
+  let lastRemoteSeq = -1;
+
+  function updateRemotePlayerInterpolation(p, buffer){
+    if(!p) return;
+    const sample = sampleSnapshotBuffer(buffer, INTERP_DELAY_MS);
+    if(sample){
+      p.x = sample.x;
+      p.y = sample.y;
+      p.facing = sample.facing;
+    }
+  }
+
+  // ---- Ping / connection quality ----
+  // Lightweight ping/pong on its own low-frequency timer (independent of
+  // the 25Hz position stream) -- never spammed, only shown while
+  // mode==='online'.
+  const PING_INTERVAL_MS = 2000;
+  let pingTimer = null;
+  let lastPingSentAt = 0;
+  let currentPingMs = null;
+
+  function sendPing(){
+    if(!(socket && socket.readyState === WebSocket.OPEN)) return;
+    lastPingSentAt = performance.now();
+    socket.send(JSON.stringify({ type: 'ping', t: Date.now() }));
+  }
+  function startPingLoop(){
+    stopPingLoop();
+    sendPing();
+    pingTimer = setInterval(sendPing, PING_INTERVAL_MS);
+  }
+  function stopPingLoop(){
+    if(pingTimer){ clearInterval(pingTimer); pingTimer = null; }
+    currentPingMs = null;
+    updatePingBadge();
+  }
+  function updatePingBadge(){
+    const badge = document.getElementById('pingBadge');
+    if(!badge) return;
+    if(mode !== 'online'){
+      badge.classList.add('hidden');
+      return;
+    }
+    badge.classList.remove('hidden');
+    if(currentPingMs === null){
+      badge.classList.remove('fair', 'high');
+      badge.textContent = 'PING: -- ms';
+      return;
+    }
+    const ms = Math.round(currentPingMs);
+    let quality = 'GOOD', cls = '';
+    if(ms >= 120){ quality = 'HIGH'; cls = 'high'; }
+    else if(ms >= 60){ quality = 'FAIR'; cls = 'fair'; }
+    badge.classList.remove('fair', 'high');
+    if(cls) badge.classList.add(cls);
+    badge.textContent = 'PING: ' + ms + ' ms \u00b7 ' + quality;
+  }
+
   function setOnlineStatus(text){
     const el = document.getElementById('onlineStatusMsg');
     if(el) el.textContent = text;
@@ -1299,6 +1359,18 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     myPlayerID = null;
     onlineOpponentReady = false;
     onlineOpponentColor = null;
+    // Always tear down both timers here -- this is the single choke
+    // point every "leave online play" path (exitToMenu, reconnect,
+    // opponent left, etc.) already routes through, so it's also the
+    // single place that guarantees we never end up with two overlapping
+    // send/ping loops running after a reconnect.
+    stopNetworkSendLoop();
+    stopPingLoop();
+    p2SnapshotBuffer = [];
+    lastRemoteSeq = -1;
+    inputSeq = 0;
+    const badge = document.getElementById('pingBadge');
+    if(badge) badge.classList.add('hidden');
   }
 
   function connectOnline(){
@@ -1310,6 +1382,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
 
     socket.onopen = function(){
       console.log("Connected to server!");
+      startPingLoop();
+      startNetworkSendLoop();
     };
 
     socket.onerror = function(){
@@ -1334,6 +1408,20 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
 
       if(data.type === "serverFull"){
         setOnlineStatus('SERVER FULL \u2014 ONLY 2 PLAYERS ALLOWED');
+        return;
+      }
+
+      // Reply to our own ping (see sendPing/startPingLoop). The server
+      // also echoes back "ack": the last position seq NUMBER it has
+      // received from us -- exposed here for diagnostics/future use.
+      // Nothing in this client ever rewinds or snaps the local player
+      // based on it: p1 is fully client-authoritative (see the big
+      // architecture comments throughout this file), so there is no
+      // server-simulated position to reconcile against, which is also
+      // exactly why the local player can never "teleport backward".
+      if(data.type === "pong"){
+        currentPingMs = performance.now() - lastPingSentAt;
+        updatePingBadge();
         return;
       }
 
@@ -1364,14 +1452,25 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         return;
       }
 
-      // Opponent's position update -- stored as a smoothing target rather
-      // than snapped directly onto p2, so their movement reads smoothly
-      // between network updates instead of jittering/teleporting.
+      // Opponent's position update -- pushed into a timestamped snapshot
+      // buffer instead of being applied directly. Rendering later samples
+      // this buffer ~100ms in the past and interpolates between the two
+      // bracketing snapshots (see updateRemotePlayerInterpolation), which
+      // is what actually eliminates jitter/teleporting/choppiness between
+      // the ~25/sec updates this arrives at. netX/netY are still kept in
+      // sync too, purely as a fallback for any other code path that
+      // might reference them (e.g. the very first update before the
+      // buffer has two points to interpolate between).
       if(data.type === "position"){
+        if(typeof data.seq === "number"){
+          if(data.seq <= lastRemoteSeq) return; // stale/duplicate -- ignore
+          lastRemoteSeq = data.seq;
+        }
         if(p2){
           p2.netX = data.x;
           p2.netY = data.y;
           p2.facing = data.facing;
+          pushSnapshot(p2SnapshotBuffer, data.x, data.y, data.facing);
         }
         return;
       }
@@ -1470,6 +1569,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         if(mode !== 'online') return;
         const theirs = decoys.find(d => !d.isMine);
         if(!theirs){
+          const buf = [];
+          pushSnapshot(buf, data.x, data.y, data.facing);
           decoys.push({
             x: data.x, y: data.y, facing: data.facing,
             life: data.life,
@@ -1477,6 +1578,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
             ownerId: 'p2',
             isMine: false,
             netX: data.x, netY: data.y,
+            buffer: buf,
             trail: []
           });
         } else {
@@ -1484,6 +1586,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
           theirs.netY = data.y;
           theirs.facing = data.facing;
           theirs.life = data.life;
+          if(theirs.buffer) pushSnapshot(theirs.buffer, data.x, data.y, data.facing);
         }
         return;
       }
@@ -1556,6 +1659,12 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
           p2.shieldCharges = p2.maxShieldCharges;
           p2.x = data.x; p2.y = data.y; p2.facing = data.facing;
           p2.netX = data.x; p2.netY = data.y;
+          // A respawn is a hard teleport, not gradual movement -- clear
+          // the interpolation buffer so the opponent snaps to their new
+          // spawn point instead of visibly sliding across the field from
+          // where they died.
+          p2SnapshotBuffer = [];
+          pushSnapshot(p2SnapshotBuffer, data.x, data.y, data.facing);
         }
         return;
       }
@@ -2551,9 +2660,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       updatePlayer(p2, dt);
       if(p2 && p2.isAI && p2.alive) updateFootballBot(p2, dt);
     } else if(p2){
-      const follow = Math.min(1, dt*14);
-      p2.x += (p2.netX - p2.x) * follow;
-      p2.y += (p2.netY - p2.y) * follow;
+      updateRemotePlayerInterpolation(p2, p2SnapshotBuffer);
     }
 
     updateBullets(dt);
@@ -2882,91 +2989,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   // barely any drag instead auto-aims: at the nearest opponent normally,
   // or at the goal if you're currently holding the ball in Football Mode.
   const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
-
-  // ==========================================================
-  // MOBILE SCREEN FITTING
-  // ==========================================================
-  // The game's internal coordinate system (W=900, H=540, see further up)
-  // never changes here -- this block only ever scales the already-built
-  // #gameStage element visually to fit whatever phone/tablet/desktop
-  // viewport it's running in, via a CSS transform. Nothing about
-  // gameplay, physics, or input handling is touched.
-  //
-  // Mobile Mode defaults ON for touch devices and OFF for desktop, and
-  // can be flipped from Settings -> Mobile Mode (see toggleMobileMode
-  // wiring further down) without reloading the page.
-  let mobileModeEnabled = isTouchDevice;
-  const gameStageEl = document.getElementById('gameStage');
-  const rotateOverlayEl = document.getElementById('rotateOverlay');
-
-  function isMobileLayoutActive(){
-    return isTouchDevice && mobileModeEnabled;
-  }
-
-  function readSafeInset(side){
-    // env(safe-area-inset-*) is only readable in JS by round-tripping it
-    // through a real CSS property (the --safe-* custom properties
-    // declared on :root) -- see <style>. Falls back to 0 anywhere it
-    // isn't supported (desktop browsers, older iOS).
-    try{
-      const v = getComputedStyle(document.documentElement).getPropertyValue('--safe-' + side);
-      const n = parseFloat(v);
-      return isNaN(n) ? 0 : n;
-    } catch(e){ return 0; }
-  }
-
-  // Scales #gameStage to fit the current viewport while preserving the
-  // exact 900x540 aspect ratio (never stretched/squashed), staying fully
-  // inside the iPhone safe area, and centering itself. On desktop (or
-  // whenever Mobile Mode is off) this simply clears any inline styles so
-  // the original flow layout / fixed 900x540 canvas box takes over again,
-  // completely unchanged from before.
-  function fitStage(){
-    if(!gameStageEl) return;
-    if(!isMobileLayoutActive()){
-      gameStageEl.style.transform = '';
-      gameStageEl.style.width = '';
-      gameStageEl.style.height = '';
-      gameStageEl.style.top = '';
-      gameStageEl.style.left = '';
-      return;
-    }
-    const safeTop = readSafeInset('top'), safeBottom = readSafeInset('bottom');
-    const safeLeft = readSafeInset('left'), safeRight = readSafeInset('right');
-    const vv = window.visualViewport;
-    const viewportW = (vv ? vv.width : window.innerWidth) - safeLeft - safeRight;
-    const viewportH = (vv ? vv.height : window.innerHeight) - safeTop - safeBottom;
-    const scale = Math.max(0.05, Math.min(viewportW / W, viewportH / H));
-
-    gameStageEl.style.width = W + 'px';
-    gameStageEl.style.height = H + 'px';
-    gameStageEl.style.left = (safeLeft + viewportW / 2) + 'px';
-    gameStageEl.style.top = (safeTop + viewportH / 2) + 'px';
-    gameStageEl.style.transform = 'translate(-50%, -50%) scale(' + scale + ')';
-  }
-
-  // Shows the "ROTATE DEVICE" overlay whenever Mobile Mode is active and
-  // the device is currently taller than it is wide -- never forces an
-  // actual rotation, purely a friendly prompt, and hides itself the
-  // instant the phone is turned sideways.
-  function checkOrientation(){
-    if(!rotateOverlayEl) return;
-    const portrait = window.innerHeight > window.innerWidth;
-    rotateOverlayEl.classList.toggle('show', isMobileLayoutActive() && portrait);
-  }
-
-  function applyMobileLayoutClass(){
-    document.body.classList.toggle('mobile-active', isMobileLayoutActive());
-    fitStage();
-    checkOrientation();
-  }
-
-  window.addEventListener('resize', applyMobileLayoutClass);
-  window.addEventListener('orientationchange', ()=>{ setTimeout(applyMobileLayoutClass, 60); });
-  if(window.visualViewport){
-    window.visualViewport.addEventListener('resize', applyMobileLayoutClass);
-    window.visualViewport.addEventListener('scroll', applyMobileLayoutClass);
-  }
+  if(isTouchDevice){ const legendEl = document.getElementById('legend'); if(legendEl) legendEl.style.display = 'none'; }
 
   let touchMoveX = 0, touchMoveY = 0;
   let touchAiming = false, touchAimAngle = 0;
@@ -3242,6 +3265,11 @@ else{
     } else {
         p2 = makePlayer('p2', W-130, H/2, oppColor, P2KEYS, Math.PI, false);
     }
+    // Fresh round/match -- any snapshots from before this reset would
+    // reference the opponent's pre-reset position, so drop them and seed
+    // the buffer with the known spawn point.
+    p2SnapshotBuffer = [];
+    pushSnapshot(p2SnapshotBuffer, p2.x, p2.y, p2.facing);
 }
 else{
     // Local 2P or vs AI: p2 is fully local ground truth, so it gets the
@@ -3639,17 +3667,13 @@ else{
       p.x += mx*speed*dt;
       p.y += my*speed*dt;
     }
-if(mode === "online" && p.id === "p1" && socket && socket.readyState === WebSocket.OPEN && myPlayerID !== null){
-
-   socket.send(JSON.stringify({
-    type:"position",
-    id: myPlayerID,
-    x:p.x,
-    y:p.y,
-    facing:p.facing
-}));
-
-}
+    // NOTE: position used to be sent to the server right here, every
+    // single rendered frame (up to 60+/sec). That's now handled by the
+    // decoupled sendNetworkPosition() loop (see NETWORKING OPTIMIZATION
+    // block near the WebSocket setup), which reads p1.x/y/facing off this
+    // same object on its own fixed ~25Hz timer. Local movement above is
+    // completely unaffected -- it still runs every rendered frame, this
+    // only decoupled the WIRE SEND from rendering.
     if(p.dashCd>0) p.dashCd -= dt;
 
     resolvePlayerCover(p);
@@ -3985,11 +4009,17 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
           }));
         }
       } else {
-        // Received over the network -- smooth toward the latest update,
-        // same pattern used for the opponent's real position.
-        const follow = Math.min(1, dt*14);
-        d.x += ((d.netX!==undefined ? d.netX : d.x) - d.x) * follow;
-        d.y += ((d.netY!==undefined ? d.netY : d.y) - d.y) * follow;
+        // Received over the network -- interpolated from its own
+        // snapshot buffer, same technique used for the opponent's real
+        // position (see updateRemotePlayerInterpolation).
+        const sample = d.buffer ? sampleSnapshotBuffer(d.buffer, INTERP_DELAY_MS) : null;
+        if(sample){
+          d.x = sample.x; d.y = sample.y; d.facing = sample.facing;
+        } else {
+          const follow = Math.min(1, dt*14);
+          d.x += ((d.netX!==undefined ? d.netX : d.x) - d.x) * follow;
+          d.y += ((d.netY!==undefined ? d.netY : d.y) - d.y) * follow;
+        }
         d.trail.push({x:d.x, y:d.y, life:0.25});
       }
     }
@@ -4217,11 +4247,11 @@ updatePlayer(p1, dt);
 if(mode !== "online"){
     updatePlayer(p2, dt);
 } else if(p2){
-    // Smooth p2 toward the latest network position instead of snapping,
-    // so opponent movement doesn't visibly jitter between updates.
-    const follow = Math.min(1, dt*14);
-    p2.x += (p2.netX - p2.x) * follow;
-    p2.y += (p2.netY - p2.y) * follow;
+    // Interpolated from the received-snapshot buffer (~100ms behind
+    // real time, see updateRemotePlayerInterpolation) instead of a
+    // simple exponential smoothing -- eliminates jitter/teleporting
+    // between the ~25/sec network updates without snapping.
+    updateRemotePlayerInterpolation(p2, p2SnapshotBuffer);
 }
 
 // FFA extra bots (Classic Mode, local/AI only -- never present online).
@@ -4502,14 +4532,6 @@ updateDecoys(dt);
   const p1LegendCol = document.querySelector('.legend .col.p1');
 
   function beginGame(){
-    // Mouse Aim tracks a real cursor position that simply doesn't exist
-    // on a touchscreen, so it's not offered there (see the mobile-active
-    // CSS rule hiding #btnAimMouse) -- this is just a last-resort
-    // safety net in case aimMode was already 'mouse' from a prior
-    // desktop session before Mobile Mode got switched on.
-    if(isMobileLayoutActive() && aimMode === 'mouse'){
-      aimMode = 'movement';
-    }
     p2Label.textContent = (mode==='ai' ? `COMPUTER (${difficulty.toUpperCase()})` : (mode==='online' ? 'OPPONENT (ONLINE)' : 'PLAYER TWO')) + (gameType==='football' ? ' \u26bd' : '');
     p2Legend.style.display = mode==='local' ? '' : 'none';
     canvas.style.cursor = (aimMode==='mouse') ? 'crosshair' : 'default';
@@ -4532,8 +4554,7 @@ updateDecoys(dt);
     menuShop.classList.add('hidden');
     menuGameType.classList.add('hidden');
     exitBtn.classList.remove('hidden');
-    if(isMobileLayoutActive()) mobileControlsEl.classList.remove('hidden');
-    applyMobileLayoutClass();
+    if(isTouchDevice) mobileControlsEl.classList.remove('hidden');
     started = true;
     startMusic();
     if(mode === 'online' && socket && socket.readyState === WebSocket.OPEN){
@@ -4746,71 +4767,10 @@ updateDecoys(dt);
     }
     updateCreditsDisplay();
     menuMain.classList.remove('hidden');
-    applyMobileLayoutClass();
   }
   exitBtn.addEventListener('click', exitToMenu);
   const muteBtn = document.getElementById('muteBtn');
   if(muteBtn) muteBtn.addEventListener('click', toggleMute);
-
-  // ---- Fullscreen toggle (phone or computer) ----
-  // Standard Fullscreen API with the old vendor-prefixed fallbacks some
-  // browsers still need. iOS Safari (outside of an "Add to Home Screen"
-  // launch) doesn't expose this API at all for anything but a <video>
-  // element -- there the button hides itself via the feature check below
-  // rather than sitting there doing nothing when tapped.
-  const fullscreenBtn = document.getElementById('fullscreenBtn');
-  const FS_ENTER_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>'; // maximize (corners point outward)
-  const FS_EXIT_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>'; // minimize (corners point inward)
-
-  function fullscreenSupported(){
-    const el = document.documentElement;
-    return !!(el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen);
-  }
-  function isFullscreenNow(){
-    return !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
-  }
-  function requestFullscreenOn(el){
-    const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
-    if(!fn) return Promise.reject(new Error('unsupported'));
-    const result = fn.call(el);
-    return result && result.catch ? result : Promise.resolve();
-  }
-  function exitFullscreenNow(){
-    const fn = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
-    if(!fn) return Promise.reject(new Error('unsupported'));
-    const result = fn.call(document);
-    return result && result.catch ? result : Promise.resolve();
-  }
-  function updateFullscreenBtnIcon(){
-    if(!fullscreenBtn) return;
-    fullscreenBtn.innerHTML = isFullscreenNow() ? FS_EXIT_ICON : FS_ENTER_ICON;
-    fullscreenBtn.title = isFullscreenNow() ? 'Exit fullscreen' : 'Enter fullscreen';
-  }
-  if(fullscreenBtn){
-    if(!fullscreenSupported()){
-      fullscreenBtn.classList.add('hidden');
-    } else {
-      fullscreenBtn.addEventListener('click', ()=>{
-        if(isFullscreenNow()){
-          exitFullscreenNow().catch(()=>{});
-        } else {
-          // Fullscreen the whole page (not just the canvas) so the HUD,
-          // touch controls, and menus all come along with it.
-          requestFullscreenOn(document.documentElement).catch(()=>{});
-        }
-      });
-      ['fullscreenchange','webkitfullscreenchange','mozfullscreenchange','MSFullscreenChange'].forEach(evt=>{
-        document.addEventListener(evt, ()=>{
-          updateFullscreenBtnIcon();
-          // The viewport's usable size changes the instant fullscreen
-          // engages/disengages, so the fitted stage needs to recompute.
-          applyMobileLayoutClass();
-        });
-      });
-      updateFullscreenBtnIcon();
-    }
-  }
-
   window.addEventListener('keydown', (e)=>{
     if(e.key.toLowerCase()==='escape' && started) exitToMenu();
   });
@@ -4845,23 +4805,12 @@ updateDecoys(dt);
   const btnBackSettings = document.getElementById('btnBackSettings');
   const toggleAutoAimP1 = document.getElementById('toggleAutoAimP1');
   const toggleAutoAimP2 = document.getElementById('toggleAutoAimP2');
-  const mobileModeRow = document.getElementById('mobileModeRow');
-  const toggleMobileMode = document.getElementById('toggleMobileMode');
-
-  // Only shown on actual touch devices -- on a keyboard/mouse desktop
-  // there's nothing for this switch to do, so it stays out of the way
-  // exactly like the hidden ADMIN button pattern used elsewhere here.
-  if(mobileModeRow) mobileModeRow.classList.toggle('hidden', !isTouchDevice);
 
   function updateSettingsUI(){
     toggleAutoAimP1.textContent = autoAimP1 ? 'ON' : 'OFF';
     toggleAutoAimP1.classList.toggle('on', autoAimP1);
     toggleAutoAimP2.textContent = autoAimP2 ? 'ON' : 'OFF';
     toggleAutoAimP2.classList.toggle('on', autoAimP2);
-    if(toggleMobileMode){
-      toggleMobileMode.textContent = mobileModeEnabled ? 'ON' : 'OFF';
-      toggleMobileMode.classList.toggle('on', mobileModeEnabled);
-    }
   }
 
   btnSettings.addEventListener('click', ()=>{
@@ -4883,16 +4832,6 @@ updateDecoys(dt);
     updateSettingsUI();
     saveProgress();
   });
-  if(toggleMobileMode){
-    toggleMobileMode.addEventListener('click', ()=>{
-      mobileModeEnabled = !mobileModeEnabled;
-      updateSettingsUI();
-      applyMobileLayoutClass();
-      if(started){
-        mobileControlsEl.classList.toggle('hidden', !isMobileLayoutActive());
-      }
-    });
-  }
 
   const menuAdmin = document.getElementById('menuAdmin');
   const btnAdmin = document.getElementById('btnAdmin');
@@ -4933,7 +4872,6 @@ updateDecoys(dt);
 
   fetchAbilityConfig();
   tryInitGoogle();
-  applyMobileLayoutClass();
   updateCreditsDisplay();
   requestAnimationFrame(loop);
 })();
