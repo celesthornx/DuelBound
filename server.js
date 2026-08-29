@@ -561,7 +561,8 @@ wss.on("connection", socket => {
         socket: socket,
         x: id === 1 ? 130 : 770,
         y: 270,
-        facing: id === 1 ? 0 : Math.PI
+        facing: id === 1 ? 0 : Math.PI,
+        lastSeq: 0
     };
 
     slots[id] = player;
@@ -591,6 +592,21 @@ wss.on("connection", socket => {
             return;
         }
 
+        // Lightweight ping/pong for RTT measurement -- answered straight
+        // back to the sender and does NOT require an opponent to be
+        // connected (unlike everything below), so it works even while
+        // waiting in the lobby. Also echoes back "ack": the last position
+        // input-sequence number this server has seen from this same
+        // connection (see index.html's inputSeq/lastAckSeq). This does
+        // NOT make the server authoritative over gameplay -- there is no
+        // physics simulation here, it's purely a diagnostic/ack channel
+        // that index.html currently only uses for display, never to
+        // reposition or "correct" a player.
+        if (data.type === "ping") {
+            send(player, { type: "pong", t: data.t, ack: player.lastSeq || 0 });
+            return;
+        }
+
         const opponent = slots[otherId(id)];
         if (!opponent) return;
 
@@ -599,13 +615,15 @@ wss.on("connection", socket => {
             player.x = data.x;
             player.y = data.y;
             player.facing = data.facing;
+            if (typeof data.seq === "number") player.lastSeq = data.seq;
 
             send(opponent, {
                 type: "position",
                 id: id,
                 x: data.x,
                 y: data.y,
-                facing: data.facing
+                facing: data.facing,
+                seq: data.seq
             });
         }
 
