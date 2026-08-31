@@ -609,6 +609,11 @@
     <span class="fb-l">P1</span> <span id="fbScoreLeft">0</span> - <span id="fbScoreRight">0</span> <span class="fb-r">P2</span>
   </div>
 
+  <!-- HEIST MODE BASE HP (hidden unless gameType==='heist') -->
+  <div class="football-score hidden" id="heistScoreDisplay">
+    <span class="fb-l">P1 HEIST</span> <span id="heistHpLeft">20/20</span> &middot; <span id="heistHpRight">20/20</span> <span class="fb-r">P2 HEIST</span>
+  </div>
+
   <!-- ONLINE MULTIPLAYER PING BADGE (hidden outside mode==='online') -->
   <div class="ping-badge hidden" id="pingBadge">PING: -- ms</div>
 
@@ -643,6 +648,7 @@
     <div class="menu-group">
       <button class="menu-btn" id="btnModeClassic">CLASSIC<br><span style="font-size:9px;color:var(--ink-dim);letter-spacing:1.5px;">FIRST TO 3 ROUNDS</span></button>
       <button class="menu-btn accent-2" id="btnModeFootball">&#9917; FOOTBALL<br><span style="font-size:9px;color:var(--ink-dim);letter-spacing:1.5px;">FIRST TO 3 GOALS</span></button>
+      <button class="menu-btn" id="btnModeHeist" style="border-color:#ffce54;color:#ffce54;">&#128274; HEIST<br><span style="font-size:9px;color:var(--ink-dim);letter-spacing:1.5px;">DESTROY THE ENEMY BASE</span></button>
     </div>
     <button class="menu-back" id="btnBackGameType">&larr; back</button>
   </div>
@@ -1516,11 +1522,11 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
           }
         }
         if(data.eliminated && mode==='online' && state==='playing'){
-          if(gameType === 'football'){
+          if(gameType === 'football' || gameType === 'heist'){
             // Our local view of the opponent just needs to reflect
             // "not alive" so rendering/collision stop until THEIR own
             // client finishes its respawn countdown and tells us via
-            // a 'footballRespawn' message (see below).
+            // a 'footballRespawn'/'heistRespawn' message (see below).
             if(p2) p2.alive = false;
           } else {
             credits += 15;
@@ -1669,10 +1675,60 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         return;
       }
 
+      // ---- HEIST MODE MESSAGES ----
+      // See the "HEIST SETTINGS" section further down for
+      // registerHeistHit(), respawnHeistPlayer(), updateHeist(), etc.
+      // IMPORTANT: the sender's "p1" is always THEIR OWN local player,
+      // same id-flip already used above for bullets/damage/football.
+
+      if(data.type === "heistRespawn"){
+        if(gameType !== 'heist') return;
+        if(p2){
+          p2.alive = true;
+          p2.health = p2.maxHealth;
+          p2.shieldCharges = p2.maxShieldCharges;
+          p2.x = data.x; p2.y = data.y; p2.facing = data.facing;
+          p2.netX = data.x; p2.netY = data.y;
+          // A respawn is a hard teleport, not gradual movement -- clear
+          // the interpolation buffer so the opponent snaps to their new
+          // spawn point instead of visibly sliding across the map from
+          // where they died.
+          p2SnapshotBuffer = [];
+          pushSnapshot(p2SnapshotBuffer, data.x, data.y, data.facing);
+        }
+        return;
+      }
+
+      // The server's authoritative base HP after a confirmed hit (or a
+      // match/rematch reset) -- see server.js's 'heistHit'/'heistReset'
+      // handlers. This is the ONLY place heistHP/heistDestroyed actually
+      // change in online mode; registerHeistHit() never guesses locally.
+      if(data.type === "heistUpdate"){
+        if(gameType !== 'heist') return;
+        const prevHP = heistHP;
+        heistHP = data.hp;
+        for(const side of [1,2]){
+          if(prevHP[side] !== undefined && data.hp[side] < prevHP[side]){
+            const base = side === 1 ? HEIST_BASE_1 : HEIST_BASE_2;
+            spawnHitFlash(base.x + base.w/2, base.y + base.h/2, side === 1 ? '#3fd0ff' : '#ff5f6d');
+            playHitSound();
+          }
+        }
+        const wasDestroyed = heistDestroyed;
+        heistDestroyed = data.destroyed;
+        if(data.destroyed && !wasDestroyed){
+          heistWinnerSide = data.winner;
+          if(state === 'playing') endHeistMatch();
+        }
+        return;
+      }
+
       if(data.type === "rematch"){
         if(mode==='online' && state==='matchEnd'){
           if(gameType === 'football'){
             initFootballMode();
+          } else if(gameType === 'heist'){
+            initHeistMode();
           } else {
             fullReset();
           }
@@ -1911,8 +1967,26 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   // stay, so Football still has some obstacles to play around.
   const FOOTBALL_COVERS = CLASSIC_COVERS.filter((c, i) => i !== 0);
 
+  // Heist Mode's two bases. They're plain rects with an extra `heistSide`
+  // tag (1 = Player One's own base/left, 2 = Player Two's own base/right)
+  // so bullet collision below can tell which one it hit. Placed well
+  // clear of each side's spawn point (130 / W-130) so nobody can melee
+  // their own base the instant they spawn, and away from the map edge so
+  // they're never obstructed by the arena border.
+  const HEIST_W = 64, HEIST_H = 100;
+  const HEIST_BASE_1 = { x: 22, y: H/2 - HEIST_H/2, w: HEIST_W, h: HEIST_H, heistSide: 1 };
+  const HEIST_BASE_2 = { x: W - 22 - HEIST_W, y: H/2 - HEIST_H/2, w: HEIST_W, h: HEIST_H, heistSide: 2 };
+  const HEIST_BASES = [HEIST_BASE_1, HEIST_BASE_2];
+  // Reuses Classic Mode's normal 5 obstacles (unlike Football, Heist has
+  // no ball spawning on the center wall, so there's no reason to drop
+  // it) plus the two bases -- putting the bases in this same `covers`
+  // array is what makes them solid to players and bullets, and occlude
+  // line-of-sight, for free (see resolvePlayerCover/hasLOS/updateBullets
+  // below), with zero changes to any of those functions.
+  const HEIST_COVERS = CLASSIC_COVERS.concat(HEIST_BASES);
+
   // `covers` is what every collision/LOS/rendering function below
-  // actually reads -- it's swapped between the two sets above whenever a
+  // actually reads -- it's swapped between the sets above whenever a
   // match starts (see beginGame()), so Classic Mode is completely
   // unaffected and keeps its original 5 obstacles.
   let covers = CLASSIC_COVERS;
@@ -1926,7 +2000,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   let mode = 'local'; // 'local' | 'ai' | 'online'
   let difficulty = 'normal';
   let aimMode = 'movement'; // 'movement' | 'mouse' -- only ever applies to p1, only offered vs AI
-  let gameType = 'classic'; // 'classic' | 'football' -- picked on the new GAME TYPE menu
+  let gameType = 'classic'; // 'classic' | 'football' | 'heist' -- picked on the GAME TYPE menu
   let pendingMode = null;   // which of local/online/ai the player picked, remembered while they choose gameType
 
   // ---- MATCH SIZE (Classic Mode, Local/VS Computer only) ----
@@ -2802,6 +2876,226 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     ctx.restore();
   }
 
+  // ============================================================
+  // HEIST SETTINGS
+  // ============================================================
+  const HEIST_MAX_HP = 20;
+  const HEIST_RESPAWN_TIME = 5;
+
+  // Server-confirmed base HP, keyed by heistSide (1 = left/Player One's
+  // own base, 2 = right/Player Two's own base) -- matches the server's
+  // slot numbering exactly (see server.js), NOT the local 'p1'/'p2'
+  // labels, because those flip per-client in online mode (see
+  // resetPositions' onlineFlipped handling) while the physical left/
+  // right bases never move.
+  let heistHP = { 1: HEIST_MAX_HP, 2: HEIST_MAX_HP };
+  let heistDestroyed = false;
+  let heistWinnerSide = null; // 1 or 2, once destroyed
+
+  // Which physical base (1=left, 2=right) is "our own local p1"'s base.
+  // p1 always spawns on the true side matching its actual server slot
+  // (see resetPositions' onlineFlipped branch) -- in Local/VS Computer
+  // there's no flipping at all, so p1 is always side 1 (left) there.
+  function myBaseSide(){
+    return (mode === 'online' && myPlayerID === 2) ? 2 : 1;
+  }
+  function otherHeistSide(side){ return side === 1 ? 2 : 1; }
+
+  function resetHeistState(){
+    heistHP = { 1: HEIST_MAX_HP, 2: HEIST_MAX_HP };
+    heistDestroyed = false;
+    heistWinnerSide = null;
+  }
+
+  // Starts (or restarts, on rematch) a Heist match. Mirrors
+  // initFootballMode()'s shape -- reset mode-specific state, reuse the
+  // normal countdown->playing flow -- but also tells the server to reset
+  // the authoritative base HP (see server.js's 'heistReset' handler),
+  // since unlike Football's score this number doesn't live purely on
+  // the client.
+  function initHeistMode(){
+    resetHeistState();
+    resetPositions();
+    bullets = [];
+    decoys = [];
+    state = 'countdown';
+    roundTimer = 1.2;
+    if(mode === 'online' && socket && socket.readyState === WebSocket.OPEN){
+      socket.send(JSON.stringify({ type: 'heistReset' }));
+    }
+  }
+
+  // Applies a confirmed hit directly to the local HP numbers and handles
+  // destruction. In Local/VS Computer this IS the authority (there's no
+  // server in the loop). In Online mode this only ever runs from inside
+  // the 'heistUpdate' handler below, i.e. after the server has already
+  // decided the new numbers -- never speculatively.
+  function applyHeistDamage(side){
+    if(heistDestroyed || heistHP[side] <= 0) return;
+    heistHP[side] = Math.max(0, heistHP[side] - 1);
+    const base = side === 1 ? HEIST_BASE_1 : HEIST_BASE_2;
+    spawnHitFlash(base.x + base.w/2, base.y + base.h/2, side === 1 ? '#3fd0ff' : '#ff5f6d');
+    playHitSound();
+    if(heistHP[side] === 0){
+      heistDestroyed = true;
+      heistWinnerSide = otherHeistSide(side);
+      endHeistMatch();
+    }
+  }
+
+  // Called when OUR OWN bullet (never the opponent's -- see
+  // updateBullets) lands on the enemy base. Online: reports it to the
+  // server and waits for the authoritative 'heistUpdate' broadcast
+  // rather than guessing locally, so both players are always looking at
+  // the exact same number. Local/VS Computer: there's no server, so this
+  // client just is the authority.
+  function registerHeistHit(side){
+    if(heistDestroyed) return;
+    if(mode === 'online'){
+      if(socket && socket.readyState === WebSocket.OPEN){
+        socket.send(JSON.stringify({ type: 'heistHit', target: side }));
+      }
+    } else {
+      applyHeistDamage(side);
+    }
+  }
+
+  function endHeistMatch(){
+    state = 'matchEnd';
+    msgTimer = 0;
+    const localSide = myBaseSide();
+    if(heistWinnerSide === localSide){
+      credits += 50;
+      stats.wins++;
+      updateCreditsDisplay();
+      saveProgress();
+    }
+  }
+
+  // Called locally whenever OUR OWN player dies in Heist Mode (health hit
+  // 0, via applyLocalHitToP1/P2 or applyRealHitToP1). Unlike Classic,
+  // this never ends the match or resets base HP -- it just benches the
+  // player for HEIST_RESPAWN_TIME seconds. Mirrors handleFootballDeath()
+  // minus the ball-drop handling (Heist has no ball).
+  function handleHeistDeath(p){
+    p.alive = false;
+    p.respawnT = HEIST_RESPAWN_TIME;
+  }
+
+  // Re-spawns a single defeated player at their own team's spawn point --
+  // identical in shape to respawnFootballPlayer(), reused here instead of
+  // shared directly so Football's function stays untouched and
+  // Heist-specific comments/tuning can live independently.
+  function respawnHeistPlayer(p){
+    const onlineFlipped = (mode === 'online' && myPlayerID === 2);
+    if(p.id === 'p1'){
+      p.x = onlineFlipped ? W-130 : 130;
+      p.facing = onlineFlipped ? Math.PI : 0;
+    } else {
+      p.x = onlineFlipped ? 130 : W-130;
+      p.facing = onlineFlipped ? 0 : Math.PI;
+    }
+    p.y = H/2;
+    p.health = p.maxHealth;
+    p.shieldCharges = p.maxShieldCharges;
+    p.ammo = p.maxAmmo;
+    p.reloadT = 0;
+    p.alive = true;
+    p.respawnT = 0;
+  }
+
+  // Per-frame Heist Mode update, called from loop() instead of the
+  // Classic movement block whenever gameType==='heist'. Reuses
+  // updatePlayer/updateBullets/resolvePlayerCover exactly as Classic and
+  // Football both do -- the respawn-tick block below is the only thing
+  // this owns itself, matching updateFootball()'s shape exactly.
+  function updateHeist(dt){
+    [p1, p2].forEach(p=>{
+      if(!p) return;
+      if(mode === 'online' && p.id === 'p2') return; // the opponent's own respawn is their own client's job, signalled to us via 'heistRespawn'
+      if(!p.alive && p.respawnT > 0){
+        p.respawnT -= dt;
+        if(p.respawnT <= 0){
+          respawnHeistPlayer(p);
+          if(mode === 'online' && p.id === 'p1' && socket && socket.readyState === WebSocket.OPEN){
+            socket.send(JSON.stringify({ type:'heistRespawn', x:p.x, y:p.y, facing:p.facing }));
+          }
+        }
+      }
+    });
+
+    updatePlayer(p1, dt);
+    if(mode !== 'online'){
+      updatePlayer(p2, dt);
+    } else if(p2){
+      updateRemotePlayerInterpolation(p2, p2SnapshotBuffer);
+    }
+
+    updateBullets(dt);
+    updateDecoys(dt);
+  }
+
+  // Draws both Heist bases -- a futuristic vault look built from the
+  // game's existing visual language (glow, scanlines, the same
+  // Share Tech Mono HUD font) rather than any external asset.
+  function drawHeistBases(){
+    HEIST_BASES.forEach(base=>{
+      const hp = heistHP[base.heistSide];
+      const destroyed = hp <= 0;
+      const color = base.heistSide === 1 ? '#3fd0ff' : '#ff5f6d';
+      const cx = base.x + base.w/2;
+
+      ctx.save();
+      if(destroyed) ctx.globalAlpha = 0.3;
+      ctx.fillStyle = 'rgba(16,21,31,0.92)';
+      ctx.fillRect(base.x, base.y, base.w, base.h);
+
+      // Diagonal vault-door hatching for texture, same trick Football
+      // uses for its goal nets.
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = destroyed ? 0.1 : 0.3;
+      ctx.lineWidth = 1;
+      for(let i=-3;i<=3;i++){
+        ctx.beginPath();
+        ctx.moveTo(base.x, base.y + base.h/2 + i*15);
+        ctx.lineTo(base.x + base.w, base.y + base.h/2 + i*15 - 12);
+        ctx.stroke();
+      }
+
+      ctx.globalAlpha = destroyed ? 0.25 : 0.95;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.5;
+      ctx.shadowBlur = destroyed ? 0 : 16;
+      ctx.shadowColor = color;
+      ctx.strokeRect(base.x+1.5, base.y+1.5, base.w-3, base.h-3);
+      ctx.restore();
+
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.fillStyle = destroyed ? 'rgba(255,255,255,0.35)' : '#e8edf5';
+      ctx.font = "bold 11px 'Chakra Petch', sans-serif";
+      ctx.fillText('HEIST', cx, base.y - 22);
+      ctx.font = "bold 10px 'Share Tech Mono', monospace";
+      ctx.fillStyle = destroyed ? '#ff5f6d' : color;
+      ctx.fillText(destroyed ? 'DESTROYED' : (hp + ' / ' + HEIST_MAX_HP), cx, base.y - 8);
+      ctx.restore();
+
+      // Health bar, same visual language as a player's health segments.
+      const barW = base.w, barX = base.x, barY = base.y - 34;
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(barX, barY, barW, 5);
+      const pct = Math.max(0, hp / HEIST_MAX_HP);
+      if(pct > 0){
+        ctx.save();
+        ctx.shadowBlur = 6;
+        ctx.shadowColor = color;
+        ctx.fillStyle = color;
+        ctx.fillRect(barX, barY, barW*pct, 5);
+        ctx.restore();
+      }
+    });
+  }
+
   function updateCreditsDisplay(){
     creditsAmountMain.textContent = credits;
     creditsAmountShop.textContent = credits;
@@ -3193,6 +3487,8 @@ let scoreCarry = null;
       }
       if(gameType === 'football'){
         initFootballMode();
+      } else if(gameType === 'heist'){
+        initHeistMode();
       } else {
         fullReset();
       }
@@ -3550,6 +3846,40 @@ else{
       moveX = dirX; moveY = dirY;
     }
 
+    // ---- HEIST MODE: basic objective awareness on top of the normal
+    // combat behavior above. Kept deliberately simple -- this doesn't
+    // replace the chase/strafe/dodge/shoot logic already computed, it
+    // just biases movement (and occasionally the shot) toward the
+    // objective in the two situations that matter most: someone is
+    // camping our base, or the opponent isn't a pressing threat so we
+    // can go make progress on theirs.
+    if(gameType === 'heist'){
+      const aiHomeSide = otherHeistSide(myBaseSide());
+      const enemyBase = aiHomeSide === 1 ? HEIST_BASE_2 : HEIST_BASE_1;
+      const homeBase = aiHomeSide === 1 ? HEIST_BASE_1 : HEIST_BASE_2;
+      const enemyCX = enemyBase.x + enemyBase.w/2, enemyCY = enemyBase.y + enemyBase.h/2;
+      const homeCX = homeBase.x + homeBase.w/2, homeCY = homeBase.y + homeBase.h/2;
+      const oppNearHome = Math.hypot(opp.x-homeCX, opp.y-homeCY) < 220;
+
+      if(oppNearHome && !dodging){
+        // Defend: someone's threatening our base -- close in on them
+        // more directly than the normal preferred-range strafing would.
+        moveX = dirX; moveY = dirY;
+      } else if((!opp.alive || dist > 480) && !dodging){
+        // The opponent isn't an immediate threat (dead/respawning, or
+        // far away) -- make progress on the objective instead of
+        // wandering. Move toward the enemy base and take the shot once
+        // it's actually in range and visible.
+        const dHx = enemyCX-p.x, dHy = enemyCY-p.y;
+        const dHlen = Math.hypot(dHx,dHy) || 1;
+        moveX = dHx/dHlen; moveY = dHy/dHlen;
+        if(p.ammo>0 && ai.shootCd<=0 && Math.hypot(enemyCX-p.x,enemyCY-p.y) < 300 && hasLOS(p.x,p.y,enemyCX,enemyCY)){
+          wantShoot = true;
+          ai.shootCd = d.shootCdMin + Math.random()*(d.shootCdMax-d.shootCdMin);
+        }
+      }
+    }
+
     return { mx: moveX, my: moveY, shoot: wantShoot, dash: wantDash };
   }
 
@@ -3825,6 +4155,8 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
     if(eliminated){
       if(gameType === 'football'){
         handleFootballDeath(p1);
+      } else if(gameType === 'heist'){
+        handleHeistDeath(p1);
       } else {
         endRound('p2');
       }
@@ -3849,6 +4181,8 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
         p2.alive = false;
         if(gameType === 'football'){
           handleFootballDeath(p2);
+        } else if(gameType === 'heist'){
+          handleHeistDeath(p2);
         } else {
           // 15 credits per kill, awarded the instant it happens (endRound
           // only handles the match-win bonus now, see below).
@@ -3876,6 +4210,8 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
         p1.alive = false;
         if(gameType === 'football'){
           handleFootballDeath(p1);
+        } else if(gameType === 'heist'){
+          handleHeistDeath(p1);
         } else {
           endRound('p2');
         }
@@ -4086,6 +4422,33 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
       }
     }
 
+    // ---- HEIST MODE: base collision, checked BEFORE the generic cover
+    // loop below (which would otherwise just silently block the bullet
+    // as an ordinary wall with no hit ever registered, since the bases
+    // are also included in `covers` for movement/line-of-sight -- see
+    // the HEIST_COVERS definition). A bullet dies the instant it touches
+    // EITHER base -- one bullet can never register more than one hit --
+    // but only counts as damage against the ENEMY base; your own base
+    // simply blocks it, same as a wall. Only the shooter's own client
+    // ever calls registerHeistHit, and only for its own bullets landing
+    // on the enemy base -- see registerHeistHit's comment for why that's
+    // enough to keep both online clients in agreement.
+    if(!dead && gameType === 'heist' && !heistDestroyed){
+      for(const base of HEIST_BASES){
+        if(circleRectCollide(b.x, b.y, BULLET_R, base)){
+          dead = true;
+          const isMyOwnBullet = (mode !== 'online') ? true : (b.owner === 'p1');
+          if(isMyOwnBullet){
+            const shooterHomeSide = (b.owner === 'p1') ? myBaseSide() : otherHeistSide(myBaseSide());
+            if(base.heistSide !== shooterHomeSide){
+              registerHeistHit(base.heistSide);
+            }
+          }
+          break;
+        }
+      }
+    }
+
     if(!dead){
       for(const c of covers){
         if(circleRectCollide(b.x,b.y,BULLET_R,c)){
@@ -4241,6 +4604,8 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
     } else if(state==='playing'){
 if(gameType === 'football'){
     updateFootball(dt);
+} else if(gameType === 'heist'){
+    updateHeist(dt);
 } else {
 updatePlayer(p1, dt);
 
@@ -4397,11 +4762,26 @@ updateDecoys(dt);
         document.getElementById('fbScoreLeft').textContent = footballScore1;
         document.getElementById('fbScoreRight').textContent = footballScore2;
       }
+      const heistDisplay = document.getElementById('heistScoreDisplay');
+      if(heistDisplay) heistDisplay.classList.add('hidden');
+      scoreP1El.innerHTML = '';
+      scoreP2El.innerHTML = '';
+    } else if(gameType === 'heist'){
+      const fbDisplay = document.getElementById('footballScoreDisplay');
+      if(fbDisplay) fbDisplay.classList.add('hidden');
+      const heistDisplay = document.getElementById('heistScoreDisplay');
+      if(heistDisplay){
+        heistDisplay.classList.remove('hidden');
+        document.getElementById('heistHpLeft').textContent = heistHP[1] + '/' + HEIST_MAX_HP;
+        document.getElementById('heistHpRight').textContent = heistHP[2] + '/' + HEIST_MAX_HP;
+      }
       scoreP1El.innerHTML = '';
       scoreP2El.innerHTML = '';
     } else {
       const fbDisplay = document.getElementById('footballScoreDisplay');
       if(fbDisplay) fbDisplay.classList.add('hidden');
+      const heistDisplay = document.getElementById('heistScoreDisplay');
+      if(heistDisplay) heistDisplay.classList.add('hidden');
       scoreP1El.innerHTML = ''; scoreP2El.innerHTML = '';
       for(let i=0;i<ROUNDS_TO_WIN;i++){
         const d1 = document.createElement('div');
@@ -4481,6 +4861,7 @@ updateDecoys(dt);
     drawGrid();
     if(gameType === 'football') drawFootballField();
     drawCovers();
+    if(gameType === 'heist') drawHeistBases();
     drawBullets();
     if(gameType === 'football'){
       drawFootballBall();
@@ -4491,7 +4872,7 @@ updateDecoys(dt);
     if(p2) drawPlayer(p2);
     extraBots.forEach(bot => drawPlayer(bot));
     drawEffects();
-    if(gameType === 'football') drawFootballRespawnCountdown();
+    if(gameType === 'football' || gameType === 'heist') drawFootballRespawnCountdown();
     updateHud();
 
     if(gameType === 'football'){
@@ -4505,6 +4886,18 @@ updateDecoys(dt);
         const color = p1won ? 'var(--p1)' : 'var(--p2)';
         const creditNote = p1won ? '<div class="small" style="color:#ffce54;">+40 BONUS CREDITS</div>' : '';
         centerMsg.innerHTML = `<div class="big" style="color:${color}">${winner} WINS</div><div class="small">${footballScore1} - ${footballScore2}</div><div class="small">PRESS R TO REMATCH</div>${creditNote}`;
+      } else {
+        centerMsg.innerHTML = '';
+      }
+    } else if(gameType === 'heist'){
+      if(state==='countdown'){
+        centerMsg.innerHTML = `<div class="big">${Math.max(1,Math.ceil(roundTimer))}</div>`;
+      } else if(state==='matchEnd'){
+        const p1won = heistWinnerSide === myBaseSide();
+        const winnerLabel = heistWinnerSide === myBaseSide() ? combatantLabel('p1') : combatantLabel('p2');
+        const color = p1won ? 'var(--p1)' : 'var(--p2)';
+        const creditNote = p1won ? '<div class="small" style="color:#ffce54;">+50 BONUS CREDITS</div>' : '';
+        centerMsg.innerHTML = `<div class="big" style="color:${color}">HEIST DESTROYED</div><div class="small">${winnerLabel} WINS</div><div class="small">PRESS R TO REMATCH</div>${creditNote}`;
       } else {
         centerMsg.innerHTML = '';
       }
@@ -4532,10 +4925,10 @@ updateDecoys(dt);
   const p1LegendCol = document.querySelector('.legend .col.p1');
 
   function beginGame(){
-    p2Label.textContent = (mode==='ai' ? `COMPUTER (${difficulty.toUpperCase()})` : (mode==='online' ? 'OPPONENT (ONLINE)' : 'PLAYER TWO')) + (gameType==='football' ? ' \u26bd' : '');
+    p2Label.textContent = (mode==='ai' ? `COMPUTER (${difficulty.toUpperCase()})` : (mode==='online' ? 'OPPONENT (ONLINE)' : 'PLAYER TWO')) + (gameType==='football' ? ' \u26bd' : (gameType==='heist' ? ' \u{1F512}' : ''));
     p2Legend.style.display = mode==='local' ? '' : 'none';
     canvas.style.cursor = (aimMode==='mouse') ? 'crosshair' : 'default';
-    covers = (gameType === 'football') ? FOOTBALL_COVERS : CLASSIC_COVERS;
+    covers = (gameType === 'football') ? FOOTBALL_COVERS : (gameType === 'heist') ? HEIST_COVERS : CLASSIC_COVERS;
     if(aimMode==='mouse'){
       p1LegendCol.innerHTML = '<b>PLAYER ONE</b>'
         + '<div class="row"><span class="key">W A S D</span>move</div>'
@@ -4562,6 +4955,8 @@ updateDecoys(dt);
     }
     if(gameType === 'football'){
       initFootballMode();
+    } else if(gameType === 'heist'){
+      initHeistMode();
     } else {
       fullReset();
     }
@@ -4650,6 +5045,11 @@ updateDecoys(dt);
   document.getElementById('btnModeFootball').addEventListener('click', ()=>{
     gameType = 'football';
     matchPlayerCount = 2; // Football stays 1v1 for now -- goals/teams don't generalize to more players yet
+    afterGameTypeChosen();
+  });
+  document.getElementById('btnModeHeist').addEventListener('click', ()=>{
+    gameType = 'heist';
+    matchPlayerCount = 2; // Heist stays 1v1 -- there's exactly one base per side
     afterGameTypeChosen();
   });
   document.getElementById('btnBackGameType').addEventListener('click', ()=>{
@@ -4757,6 +5157,9 @@ updateDecoys(dt);
     lastRoundWinnerId = null;
     const fbDisplay = document.getElementById('footballScoreDisplay');
     if(fbDisplay) fbDisplay.classList.add('hidden');
+    const heistDisplay = document.getElementById('heistScoreDisplay');
+    if(heistDisplay) heistDisplay.classList.add('hidden');
+    resetHeistState();
     if(isTouchDevice){
       mobileControlsEl.classList.add('hidden');
       touchMoveX = 0; touchMoveY = 0; touchAiming = false; touchFireQueued = false;
