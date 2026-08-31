@@ -534,6 +534,24 @@ const wss = new WebSocket.Server({ server: httpServer });
 
 const slots = { 1: null, 2: null };
 
+// =====================================================================
+// HEIST MODE -- server-authoritative base health.
+// Unlike position/damage/shockwave (which are relayed and trusted to
+// the player they describe), Heist HP is decided here on the server:
+// both players' clients need to agree on the exact same number for a
+// static base that has no single "owner" client the way a player's own
+// health does. This server only ever hosts one 2-player match at a time
+// (same as the existing `slots` design), so this is simple top-level
+// state, reset whenever a new Heist match starts or a player leaves.
+// =====================================================================
+let heistHP = { 1: 20, 2: 20 };
+let heistDestroyed = false;
+
+function resetHeistState() {
+    heistHP = { 1: 20, 2: 20 };
+    heistDestroyed = false;
+}
+
 function otherId(id) {
     return id === 1 ? 2 : 1;
 }
@@ -705,17 +723,57 @@ wss.on("connection", socket => {
             });
         }
 
-        // ---- FOOTBALL MODE ----
+        // ---- HEIST MODE: match start / rematch -- both bases reset to
+        // 20/20. This one needs real server logic (unlike the generic
+        // relay below), so it gets its own branch ahead of it.
+        else if (data.type === "heistReset") {
+
+            resetHeistState();
+            const payload = { type: "heistUpdate", hp: heistHP, destroyed: false, winner: null };
+            send(player, payload);
+            send(opponent, payload);
+        }
+
+        // ---- HEIST MODE: a bullet (or triburst pellet) landed on the
+        // enemy base. `target` is which base (1 or 2) got hit. Only the
+        // shooter reports this (see index.html's registerHeistHit), and
+        // the server is the sole place that actually decrements HP and
+        // decides destruction -- so both clients always agree on the
+        // exact same number and the exact moment it hits zero, instead
+        // of trusting either client's own count.
+        else if (data.type === "heistHit") {
+
+            if (!heistDestroyed) {
+                const target = data.target;
+                if ((target === 1 || target === 2) && heistHP[target] > 0) {
+                    heistHP[target] = Math.max(0, heistHP[target] - 1);
+                    let winner = null;
+                    if (heistHP[target] === 0) {
+                        heistDestroyed = true;
+                        winner = otherId(target);
+                    }
+                    const payload = { type: "heistUpdate", hp: heistHP, destroyed: heistDestroyed, winner: winner };
+                    send(player, payload);
+                    send(opponent, payload);
+                }
+            }
+        }
+
+        // ---- FOOTBALL MODE / HEIST MODE (generic relay) ----
         // Every football-related message (footballKick, footballBall,
         // footballGoal, footballRespawn, and any future footballXxx type)
-        // is relayed to the opponent completely untouched. This is one
-        // generic branch instead of one per message type -- exactly the
-        // same trust model as bullets/shockwave/decoy above: the server
-        // doesn't validate football physics or scoring, it just passes
-        // the message along, and the receiving client decides what to do
-        // with it. This also means new football message types can be
-        // added on the client later without ever touching server.js again.
-        else if (typeof data.type === "string" && data.type.indexOf("football") === 0) {
+        // plus heist messages that don't need server-side validation
+        // (heistRespawn, and any future heistXxx type -- heistHit/
+        // heistReset above are handled separately because those DO need
+        // real logic) are relayed to the opponent completely untouched.
+        // This is one generic branch instead of one per message type --
+        // exactly the same trust model as bullets/shockwave/decoy above:
+        // the server doesn't validate the physics/scoring itself, it just
+        // passes the message along, and the receiving client decides what
+        // to do with it. This also means new message types for either
+        // mode can be added on the client later without ever touching
+        // server.js again.
+        else if (typeof data.type === "string" && (data.type.indexOf("football") === 0 || data.type.indexOf("heist") === 0)) {
 
             send(opponent, data);
         }
@@ -732,6 +790,7 @@ wss.on("connection", socket => {
         console.log("Player " + id + " disconnected");
 
         slots[id] = null;
+        resetHeistState(); // leaving a Heist match cleans up its state for the next match
 
         const opponent = slots[otherId(id)];
         send(opponent, { type: "opponentLeft" });
