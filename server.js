@@ -246,17 +246,40 @@ function saveAdminLogToDisk() {
 
 let adminLog = loadAdminLog();
 
+// Shared by every admin action (ability balance changes and credit
+// grants alike) -- the single audit trail, newest first, capped at 100
+// and persisted to the same adminLog.json every time.
+function pushAdminLog(entry) {
+    adminLog.unshift(Object.assign({ time: Date.now() }, entry));
+    if (adminLog.length > 100) adminLog.length = 100;
+    saveAdminLogToDisk();
+}
+
 function logAdminAction(account, abilityId, changes, actionType) {
     if ((!changes || !changes.length) && actionType !== "resetAll") return; // no-op, nothing to log
-    adminLog.unshift({
-        time: Date.now(),
+    pushAdminLog({
         admin: account ? account.name : "unknown",
         abilityId: abilityId,
         type: actionType || "save",
         changes: changes || []
     });
-    if (adminLog.length > 100) adminLog.length = 100;
-    saveAdminLogToDisk();
+}
+
+// =====================================================================
+// ADMIN CREDIT GRANTS
+// =====================================================================
+// Sanity ceiling on a single manual grant -- not a game-balance number,
+// just a guard against a fat-fingered or malicious "give 999999999"
+// request. Well above anything a legitimate grant would ever need.
+const MAX_CREDIT_GRANT = 1000000;
+
+// True only for a whole number in (0, MAX_CREDIT_GRANT] -- rejects
+// negative, zero, decimal, NaN/Infinity, non-numeric, and absurdly
+// large amounts. The browser's own input validation is just UX; this
+// is what actually decides whether a grant is allowed.
+function isValidCreditAmount(raw) {
+    const n = Number(raw);
+    return Number.isInteger(n) && n > 0 && n <= MAX_CREDIT_GRANT;
 }
 
 // =====================================================================
@@ -433,6 +456,91 @@ const httpServer = http.createServer(async (req, res) => {
             return;
         }
         sendJson(res, 200, { log: adminLog });
+        return;
+    }
+
+    // ---- GET /admin/search-players?sessionToken=...&q=... ----
+    // Admin-only player lookup for Credit Management. Matches by display
+    // name (case-insensitive substring) or an exact account id, and
+    // returns only what the admin UI actually needs to pick a target and
+    // show its current balance -- never email or anything else from the
+    // account record. Reads the same `accounts` object /save writes to,
+    // so the balance shown is always the authoritative one, live.
+    if (req.method === "GET" && req.url.startsWith("/admin/search-players")) {
+        const urlObj = new URL(req.url, "http://x");
+        const sessionToken = urlObj.searchParams.get("sessionToken");
+        if (!isAdminSession(sessionToken)) {
+            sendJson(res, 403, { error: "Forbidden -- admin access required" });
+            return;
+        }
+        const q = (urlObj.searchParams.get("q") || "").trim().toLowerCase();
+        const results = Object.keys(accounts)
+            .filter(sub => {
+                if (!q) return true;
+                const a = accounts[sub];
+                return sub === q || (a.name || "").toLowerCase().includes(q);
+            })
+            .slice(0, 20)
+            .map(sub => ({ id: sub, name: accounts[sub].name, credits: accounts[sub].credits }));
+        sendJson(res, 200, { results: results });
+        return;
+    }
+
+    // ---- POST /admin/credits ----
+    // body: { sessionToken, playerId, amount }
+    // Server-authoritative credit grant: verifies admin + target + amount,
+    // then increments the account's own stored balance (never accepts a
+    // client-supplied newBalance) and writes it back atomically. Node's
+    // single-threaded event loop means everything from the initial read
+    // of accounts[playerId].credits to the write of accounts.json below
+    // runs with no `await` in between, so no other request can interleave
+    // and race it -- equivalent to an atomic addCredits(playerId, amount).
+    if (req.method === "POST" && req.url === "/admin/credits") {
+        try {
+            const body = await readJsonBody(req);
+
+            if (!isAdminSession(body.sessionToken)) {
+                sendJson(res, 403, { error: "Forbidden -- admin access required" });
+                return;
+            }
+            const adminAccount = getAccountForSession(body.sessionToken);
+
+            const target = accounts[body.playerId];
+            if (!target) {
+                sendJson(res, 404, { error: "Player not found" });
+                return;
+            }
+
+            if (!isValidCreditAmount(body.amount)) {
+                sendJson(res, 400, { error: "Invalid credit amount" });
+                return;
+            }
+            const amount = Number(body.amount);
+
+            const previousBalance = target.credits || 0;
+            target.credits = previousBalance + amount; // atomic increment, not a client-supplied total
+            saveAccountsToDisk();
+
+            pushAdminLog({
+                admin: adminAccount ? adminAccount.name : "unknown",
+                type: "creditGrant",
+                targetPlayer: target.name,
+                targetId: body.playerId,
+                amount: amount,
+                previousBalance: previousBalance,
+                newBalance: target.credits
+            });
+
+            sendJson(res, 200, {
+                ok: true,
+                playerId: body.playerId,
+                name: target.name,
+                previousBalance: previousBalance,
+                newBalance: target.credits
+            });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
         return;
     }
 
