@@ -226,6 +226,8 @@
     background: rgba(93,255,160,0.1);
     box-shadow: 0 0 10px rgba(93,255,160,0.3);
   }
+  .aim-type-group{ display:flex; gap:8px; }
+  .aim-type-group .toggle-btn{ min-width: 0; padding: 6px 10px; }
   .toggle-btn:hover{ border-color: var(--ink); color: var(--ink); }
   .toggle-btn.on:hover{ border-color: #5dffa0; color: #5dffa0; }
 
@@ -1579,6 +1581,18 @@
     <div class="shop-panel">
       <div class="menu-title">PLAYER SETTINGS</div>
       <div class="settings-note">
+        Aim Type is how Player One aims in every mode. Mouse Aim aims freely
+        with the pointer while moving independently; Keyboard Aim faces the
+        way you move. Touch devices always use the on-screen aim stick.
+      </div>
+      <div class="settings-row">
+        <span class="settings-label p1">AIM TYPE</span>
+        <span class="aim-type-group">
+          <button class="toggle-btn" id="btnAimTypeMouse">MOUSE AIM</button>
+          <button class="toggle-btn" id="btnAimTypeKeyboard">KEYBOARD AIM</button>
+        </span>
+      </div>
+      <div class="settings-note">
         Auto-aim keeps a player's facing locked onto the opponent automatically
         &mdash; handy if aiming with keyboard-only movement feels difficult.
         It needs a clear line of sight to engage, and overrides Mouse Aim
@@ -1635,28 +1649,16 @@
     </div>
   </div>
 
-  <!-- DIFFICULTY MENU -->
-  <div class="menu-overlay hidden" id="menuDiff">
-    <div class="menu-title">SELECT DIFFICULTY</div>
-    <div class="menu-row">
-      <button class="menu-btn diff" data-diff="easy">EASY</button>
-      <button class="menu-btn diff" data-diff="normal">NORMAL</button>
-      <button class="menu-btn diff" data-diff="hard">HARD</button>
-    </div>
-    <button class="menu-back" id="btnBackDiff">&larr; back</button>
-  </div>
-
-  <!-- AIM STYLE MENU -->
-  <div class="menu-overlay hidden" id="menuAim">
-    <div class="menu-title" id="menuAimTitle">SELECT AIM STYLE</div>
-    <div class="hidden" id="onlineStatusWrap">
+  <!-- ONLINE LOBBY -->
+  <div class="menu-overlay hidden" id="menuOnline">
+    <div class="menu-title">ONLINE MATCH</div>
+    <div id="onlineStatusWrap">
       <div class="credits-display" id="onlineStatusMsg" style="color:var(--p1); border-color:rgba(63,208,255,0.35); background:rgba(63,208,255,0.06);">CONNECTING...</div>
     </div>
-    <div class="menu-group" id="aimButtonsGroup">
-      <button class="menu-btn" id="btnAimMove">MOVEMENT AIM<br><span style="font-size:9px;color:var(--ink-dim);letter-spacing:1.5px;">FACE THE WAY YOU MOVE</span></button>
-      <button class="menu-btn accent-2" id="btnAimMouse">MOUSE AIM<br><span style="font-size:9px;color:var(--ink-dim);letter-spacing:1.5px;">AIM FREELY, MOVE INDEPENDENTLY</span></button>
+    <div class="menu-group hidden" id="onlineStartGroup">
+      <button class="menu-btn accent-2" id="btnOnlineStart">START MATCH</button>
     </div>
-    <button class="menu-back" id="btnBackAim">&larr; back</button>
+    <button class="menu-back" id="btnBackOnline">&larr; back</button>
   </div>
 
   <!-- SHOP -->
@@ -2259,9 +2261,9 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     if(el) el.textContent = text;
   }
 
-  function maybeRevealAimButtons(){
+  function maybeRevealOnlineStart(){
     if(mode==='online' && myPlayerID !== null && onlineOpponentReady){
-      document.getElementById('aimButtonsGroup').classList.remove('hidden');
+      document.getElementById('onlineStartGroup').classList.remove('hidden');
     }
   }
 
@@ -2290,7 +2292,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   function connectOnline(){
     closeOnlineConnection();
     setOnlineStatus('CONNECTING...');
-    document.getElementById('aimButtonsGroup').classList.add('hidden');
+    document.getElementById('onlineStartGroup').classList.add('hidden');
 
     socket = new WebSocket(ONLINE_SERVER_URL);
 
@@ -2342,15 +2344,15 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       if(data.type === "welcome"){
         myPlayerID = data.id;
         console.log("You are Player " + myPlayerID);
-        setOnlineStatus(onlineOpponentReady ? 'OPPONENT FOUND \u2014 CHOOSE AIM STYLE' : 'WAITING FOR OPPONENT...');
-        maybeRevealAimButtons();
+        setOnlineStatus(onlineOpponentReady ? 'OPPONENT FOUND \u2014 READY TO START' : 'WAITING FOR OPPONENT...');
+        maybeRevealOnlineStart();
         return;
       }
 
       if(data.type === "opponentJoined"){
         onlineOpponentReady = true;
-        setOnlineStatus('OPPONENT FOUND \u2014 CHOOSE AIM STYLE');
-        maybeRevealAimButtons();
+        setOnlineStatus('OPPONENT FOUND \u2014 READY TO START');
+        maybeRevealOnlineStart();
         return;
       }
 
@@ -2361,7 +2363,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
           setTimeout(exitToMenu, 1400);
         } else {
           setOnlineStatus('OPPONENT DISCONNECTED \u2014 WAITING FOR OPPONENT...');
-          document.getElementById('aimButtonsGroup').classList.add('hidden');
+          document.getElementById('onlineStartGroup').classList.add('hidden');
         }
         return;
       }
@@ -2685,6 +2687,10 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     p2SkinId = account.p2SkinId || 'red';
     autoAimP1 = !!account.autoAimP1;
     autoAimP2 = !!account.autoAimP2;
+    if(account.aimMode === 'mouse' || account.aimMode === 'movement'){
+      aimMode = account.aimMode;
+      saveAimModeLocally();
+    }
     updateCreditsDisplay();
   }
 
@@ -2757,7 +2763,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         p1SkinId: p1SkinId,
         p2SkinId: p2SkinId,
         autoAimP1: autoAimP1,
-        autoAimP2: autoAimP2
+        autoAimP2: autoAimP2,
+        aimMode: aimMode
       })
     }).catch(()=>{ /* server unreachable -- keep playing, just not saved */ });
   }
@@ -2831,20 +2838,16 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   const p2Legend = document.getElementById('p2Legend');
 
   const menuMain = document.getElementById('menuMain');
-  const menuDiff = document.getElementById('menuDiff');
-  const menuAim = document.getElementById('menuAim');
+  const menuOnline = document.getElementById('menuOnline');
   const menuShop = document.getElementById('menuShop');
   const menuGameType = document.getElementById('menuGameType');
   const btnLocal = document.getElementById('btnLocal');
   const btnOnline = document.getElementById('btnOnline');
   const btnAI = document.getElementById('btnAI');
   const btnShop = document.getElementById('btnShop');
-  const btnBackDiff = document.getElementById('btnBackDiff');
-  const btnBackAim = document.getElementById('btnBackAim');
+  const btnBackOnline = document.getElementById('btnBackOnline');
+  const btnOnlineStart = document.getElementById('btnOnlineStart');
   const btnBackShop = document.getElementById('btnBackShop');
-  const btnAimMove = document.getElementById('btnAimMove');
-  const btnAimMouse = document.getElementById('btnAimMouse');
-  const diffBtns = document.querySelectorAll('#menuDiff .menu-btn.diff');
   const tabSkins = document.getElementById('tabSkins');
   const tabPowers = document.getElementById('tabPowers');
   const tabAbilities = document.getElementById('tabAbilities');
@@ -2901,15 +2904,27 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   // unaffected and keeps its original 5 obstacles.
   let covers = CLASSIC_COVERS;
 
-  const DIFF = {
-    easy:   { tol: 0.38, shootCdMin: 1.4, shootCdMax: 2.1, dodgeChance: 0.28, aimBurst: 0.10, dashSkill: 0.25, reactionMul: 1.6 },
-    normal: { tol: 0.22, shootCdMin: 0.9, shootCdMax: 1.3, dodgeChance: 0.55, aimBurst: 0.22, dashSkill: 0.55, reactionMul: 1.0 },
-    hard:   { tol: 0.12, shootCdMin: 0.55, shootCdMax: 0.85, dodgeChance: 0.85, aimBurst: 0.34, dashSkill: 0.85, reactionMul: 0.55 },
-  };
+  // The bot's single, standard skill profile. There's no difficulty
+  // selection any more -- every VS COMPUTER match uses these numbers,
+  // which are exactly the old "normal" values, so bot behaviour is
+  // unchanged from the default difficulty.
+  const AI_PROFILE = { tol: 0.22, shootCdMin: 0.9, shootCdMax: 1.3, dodgeChance: 0.55, aimBurst: 0.22, dashSkill: 0.55, reactionMul: 1.0 };
 
   let mode = 'local'; // 'local' | 'ai' | 'online'
-  let difficulty = 'normal';
-  let aimMode = 'movement'; // 'movement' | 'mouse' -- only ever applies to p1, only offered vs AI
+  // Aim Type is a persistent player preference chosen in SETTINGS (it
+  // used to be asked once per match). Only ever applies to p1.
+  let aimMode = 'movement'; // 'movement' (KEYBOARD AIM) | 'mouse' (MOUSE AIM)
+  // Signed-in players get Aim Type stored on their account (see
+  // applyAccount/saveProgress); this one localStorage key is what makes
+  // the preference survive a reload for signed-out players too.
+  const AIM_MODE_KEY = 'duelarena.aimMode';
+  function saveAimModeLocally(){
+    try{ localStorage.setItem(AIM_MODE_KEY, aimMode); } catch(e){}
+  }
+  try{
+    const storedAimMode = localStorage.getItem(AIM_MODE_KEY);
+    if(storedAimMode === 'mouse' || storedAimMode === 'movement') aimMode = storedAimMode;
+  } catch(e){}
   let gameType = 'classic'; // 'classic' | 'football' | 'heist' -- picked on the GAME TYPE menu
   let pendingMode = null;   // which of local/online/ai the player picked, remembered while they choose gameType
 
@@ -4672,7 +4687,7 @@ else{
   function aiThink(p, dt){
     const opp = opponentOf(p);
     if(!opp) return { mx:0, my:0, shoot:false, dash:false };
-    const d = DIFF[difficulty];
+    const d = AI_PROFILE;
     const ai = p.ai;
     const dx = opp.x-p.x, dy = opp.y-p.y;
     const dist = Math.hypot(dx,dy) || 0.001;
@@ -5836,7 +5851,7 @@ updateDecoys(dt);
   const p1LegendCol = document.querySelector('.legend .col.p1');
 
   function beginGame(){
-    p2Label.textContent = (mode==='ai' ? `COMPUTER (${difficulty.toUpperCase()})` : (mode==='online' ? 'OPPONENT (ONLINE)' : 'PLAYER TWO')) + (gameType==='football' ? ' \u26bd' : (gameType==='heist' ? ' \u{1F512}' : ''));
+    p2Label.textContent = (mode==='ai' ? 'COMPUTER' : (mode==='online' ? 'OPPONENT (ONLINE)' : 'PLAYER TWO')) + (gameType==='football' ? ' \u26bd' : (gameType==='heist' ? ' \u{1F512}' : ''));
     p2Legend.style.display = mode==='local' ? '' : 'none';
     canvas.style.cursor = (aimMode==='mouse') ? 'crosshair' : 'default';
     covers = (gameType === 'football') ? FOOTBALL_COVERS : (gameType === 'heist') ? HEIST_COVERS : CLASSIC_COVERS;
@@ -5853,8 +5868,7 @@ updateDecoys(dt);
         + '<div class="row"><span class="key">SHIFT</span>dash</div>';
     }
     menuMain.classList.add('hidden');
-    menuDiff.classList.add('hidden');
-    menuAim.classList.add('hidden');
+    menuOnline.classList.add('hidden');
     menuShop.classList.add('hidden');
     menuGameType.classList.add('hidden');
     exitBtn.classList.remove('hidden');
@@ -5873,15 +5887,9 @@ updateDecoys(dt);
     }
   }
 
-  function resetAimMenuToNormal(){
-    document.getElementById('menuAimTitle').textContent = 'SELECT AIM STYLE';
-    document.getElementById('onlineStatusWrap').classList.add('hidden');
-    document.getElementById('aimButtonsGroup').classList.remove('hidden');
-  }
-
-  // ---- Mode buttons now open the GAME TYPE menu first (Classic vs
-  // Football); proceedAfterGameType() below then continues into the
-  // same difficulty/aim-style flow as before. ----
+  // ---- Mode buttons open the GAME TYPE menu first (Classic vs
+  // Football); proceedAfterGameType() below then starts the match
+  // straight away (Local / VS Computer) or opens the online lobby. ----
   btnLocal.addEventListener('click', ()=>{
     pendingMode = 'local';
     closeOnlineConnection();
@@ -5906,24 +5914,21 @@ updateDecoys(dt);
     menuGameType.classList.add('hidden');
     menuPlayerCount.classList.add('hidden');
     if(pendingMode === 'ai'){
-      menuDiff.classList.remove('hidden');
+      mode = 'ai';
+      beginGame();
     } else if(pendingMode === 'local'){
       mode = 'local';
-      resetAimMenuToNormal();
-      menuAim.classList.remove('hidden');
+      beginGame();
     } else if(pendingMode === 'online'){
       mode = 'online';
-      document.getElementById('menuAimTitle').textContent = 'ONLINE MATCH';
-      document.getElementById('onlineStatusWrap').classList.remove('hidden');
-      document.getElementById('aimButtonsGroup').classList.add('hidden');
-      menuAim.classList.remove('hidden');
+      document.getElementById('onlineStartGroup').classList.add('hidden');
+      menuOnline.classList.remove('hidden');
       connectOnline();
     }
   }
 
   // Classic Mode (Local/VS Computer only) gets one extra step here to
-  // pick the match size before continuing into the normal difficulty/aim
-  // flow. Football and Online always stay a strict 1v1, so they skip
+  // pick the match size before the match starts. Football and Online always stay a strict 1v1, so they skip
   // straight through with matchPlayerCount forced back to 2.
   const menuPlayerCount = document.getElementById('menuPlayerCount');
 
@@ -6017,38 +6022,12 @@ updateDecoys(dt);
     tabPowers.classList.remove('selected');
     renderShop();
   });
-  btnBackDiff.addEventListener('click', ()=>{
-    menuDiff.classList.add('hidden');
-    if(gameType === 'classic' && pendingMode !== 'online'){
-      renderPlayerCountNote();
-      menuPlayerCount.classList.remove('hidden');
-    } else {
-      menuGameType.classList.remove('hidden');
-    }
+  btnBackOnline.addEventListener('click', ()=>{
+    closeOnlineConnection();
+    menuOnline.classList.add('hidden');
+    menuGameType.classList.remove('hidden');
   });
-  btnBackAim.addEventListener('click', ()=>{
-    if(mode === 'online') closeOnlineConnection();
-    menuAim.classList.add('hidden');
-    if(pendingMode === 'ai'){
-      menuDiff.classList.remove('hidden');
-    } else if(gameType === 'classic' && pendingMode !== 'online'){
-      renderPlayerCountNote();
-      menuPlayerCount.classList.remove('hidden');
-    } else {
-      menuGameType.classList.remove('hidden');
-    }
-  });
-  diffBtns.forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      difficulty = btn.dataset.diff;
-      mode = 'ai';
-      resetAimMenuToNormal();
-      menuDiff.classList.add('hidden');
-      menuAim.classList.remove('hidden');
-    });
-  });
-  btnAimMove.addEventListener('click', ()=>{ aimMode='movement'; beginGame(); });
-  btnAimMouse.addEventListener('click', ()=>{ aimMode='mouse'; beginGame(); });
+  btnOnlineStart.addEventListener('click', ()=>{ beginGame(); });
 
   function exitToMenu(){
     started = false;
@@ -6058,8 +6037,7 @@ updateDecoys(dt);
     closeOnlineConnection();
     stopMusic();
     exitBtn.classList.add('hidden');
-    menuDiff.classList.add('hidden');
-    menuAim.classList.add('hidden');
+    menuOnline.classList.add('hidden');
     menuShop.classList.add('hidden');
     menuLeaderboard.classList.add('hidden');
     menuGameType.classList.add('hidden');
@@ -6119,8 +6097,12 @@ updateDecoys(dt);
   const btnBackSettings = document.getElementById('btnBackSettings');
   const toggleAutoAimP1 = document.getElementById('toggleAutoAimP1');
   const toggleAutoAimP2 = document.getElementById('toggleAutoAimP2');
+  const btnAimTypeMouse = document.getElementById('btnAimTypeMouse');
+  const btnAimTypeKeyboard = document.getElementById('btnAimTypeKeyboard');
 
   function updateSettingsUI(){
+    btnAimTypeMouse.classList.toggle('on', aimMode === 'mouse');
+    btnAimTypeKeyboard.classList.toggle('on', aimMode !== 'mouse');
     toggleAutoAimP1.textContent = autoAimP1 ? 'ON' : 'OFF';
     toggleAutoAimP1.classList.toggle('on', autoAimP1);
     toggleAutoAimP2.textContent = autoAimP2 ? 'ON' : 'OFF';
@@ -6136,6 +6118,14 @@ updateDecoys(dt);
     menuSettings.classList.add('hidden');
     menuMain.classList.remove('hidden');
   });
+  function setAimMode(next){
+    aimMode = next;
+    updateSettingsUI();
+    saveAimModeLocally();
+    saveProgress();
+  }
+  btnAimTypeMouse.addEventListener('click', ()=>setAimMode('mouse'));
+  btnAimTypeKeyboard.addEventListener('click', ()=>setAimMode('movement'));
   toggleAutoAimP1.addEventListener('click', ()=>{
     autoAimP1 = !autoAimP1;
     updateSettingsUI();
@@ -6346,7 +6336,7 @@ updateDecoys(dt);
 
   function lobbyStartSelectedMode(){
     // Hands straight back to the original mode button -- the game type /
-    // match size / difficulty / aim-style flow after this is unchanged.
+    // match size flow after this is unchanged.
     const menu = lobbyEl('menuMain');
     if(!menu || menu.classList.contains('hidden')) return; // already left the lobby
     const btn = lobbyEl(LOBBY_MODES[lobbyModeIndex].btn);
