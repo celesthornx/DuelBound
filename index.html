@@ -1563,19 +1563,6 @@
     <button class="menu-back" id="btnBackGameType">&larr; back</button>
   </div>
 
-  <!-- PLAYER COUNT MENU (Classic Mode only, Local/VS Computer only --
-       Online stays 2 players and skips straight past this) -->
-  <div class="menu-overlay hidden" id="menuPlayerCount">
-    <div class="menu-title">MATCH SIZE</div>
-    <div class="settings-note" id="playerCountNote"></div>
-    <div class="menu-row">
-      <button class="menu-btn diff" data-count="2">2</button>
-      <button class="menu-btn diff" data-count="3">3</button>
-      <button class="menu-btn diff" data-count="4">4</button>
-    </div>
-    <button class="menu-back" id="btnBackPlayerCount">&larr; back</button>
-  </div>
-
   <!-- SETTINGS -->
   <div class="menu-overlay hidden" id="menuSettings">
     <div class="shop-panel">
@@ -1591,6 +1578,20 @@
           <button class="toggle-btn" id="btnAimTypeMouse">MOUSE AIM</button>
           <button class="toggle-btn" id="btnAimTypeKeyboard">KEYBOARD AIM</button>
         </span>
+      </div>
+      <div class="settings-row">
+        <span class="settings-label p1">MATCH SIZE</span>
+        <span class="aim-type-group">
+          <button class="toggle-btn" id="btnMatchSize2" data-count="2">2 PLAYERS</button>
+          <button class="toggle-btn" id="btnMatchSize3" data-count="3">3 PLAYERS</button>
+          <button class="toggle-btn" id="btnMatchSize4" data-count="4">4 PLAYERS</button>
+        </span>
+      </div>
+      <div class="settings-note">
+        Match Size sets how many combatants join a Local or VS Computer
+        Classic Mode match — any slots beyond Player One/Two are filled
+        by bots. Football and Heist always stay 1v1, and Online Multiplayer
+        is always exactly 2 players, regardless of this setting.
       </div>
       <div class="settings-note">
         Auto-aim keeps a player's facing locked onto the opponent automatically
@@ -2691,6 +2692,10 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       aimMode = account.aimMode;
       saveAimModeLocally();
     }
+    if([2,3,4].includes(account.matchSize)){
+      savedMatchPlayerCount = account.matchSize;
+      saveMatchSizeLocally();
+    }
     updateCreditsDisplay();
   }
 
@@ -2764,7 +2769,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         p2SkinId: p2SkinId,
         autoAimP1: autoAimP1,
         autoAimP2: autoAimP2,
-        aimMode: aimMode
+        aimMode: aimMode,
+        matchSize: savedMatchPlayerCount
       })
     }).catch(()=>{ /* server unreachable -- keep playing, just not saved */ });
   }
@@ -2934,6 +2940,19 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   // a strict 1v1 since the netcode here only ever synchronizes two real
   // players) -- see spawnExtraBots()/resetExtraBotsForRound() below.
   let matchPlayerCount = 2;
+  // Match Size is a persistent player preference chosen in SETTINGS (it
+  // used to be asked once per match, like Aim Type). Only ever applies to
+  // Classic Mode Local/VS Computer matches -- Football/Heist/Online force
+  // matchPlayerCount back to 2 regardless of this (see afterGameTypeChosen).
+  let savedMatchPlayerCount = 2;
+  const MATCH_SIZE_KEY = 'duelarena.matchSize';
+  function saveMatchSizeLocally(){
+    try{ localStorage.setItem(MATCH_SIZE_KEY, String(savedMatchPlayerCount)); } catch(e){}
+  }
+  try{
+    const storedMatchSize = Number(localStorage.getItem(MATCH_SIZE_KEY));
+    if([2,3,4].includes(storedMatchSize)) savedMatchPlayerCount = storedMatchSize;
+  } catch(e){}
   let extraBots = [];
   let lastRoundWinnerId = null; // who actually won the most recent round -- used for the win-screen label/color instead of assuming it's always p1 or p2
 
@@ -5912,7 +5931,6 @@ updateDecoys(dt);
 
   function proceedAfterGameType(){
     menuGameType.classList.add('hidden');
-    menuPlayerCount.classList.add('hidden');
     if(pendingMode === 'ai'){
       mode = 'ai';
       beginGame();
@@ -5927,31 +5945,18 @@ updateDecoys(dt);
     }
   }
 
-  // Classic Mode (Local/VS Computer only) gets one extra step here to
-  // pick the match size before the match starts. Football and Online always stay a strict 1v1, so they skip
-  // straight through with matchPlayerCount forced back to 2.
-  const menuPlayerCount = document.getElementById('menuPlayerCount');
-
-  function renderPlayerCountNote(){
-    const note = document.getElementById('playerCountNote');
-    if(!note) return;
-    note.textContent = (pendingMode === 'local')
-      ? 'PLAYER ONE + PLAYER TWO SHARE THIS KEYBOARD \u2014 ANY EXTRA SLOTS ARE FILLED BY BOTS.'
-      : 'CHOOSE HOW MANY OPPONENTS TO FACE \u2014 EXTRA SLOTS ARE ALL BOTS.';
-  }
-
+  // Classic Mode (Local/VS Computer only) uses the persistent MATCH SIZE
+  // preference from Settings (see savedMatchPlayerCount) instead of asking
+  // every match. Football, Heist and Online always stay a strict 1v1, so
+  // they force matchPlayerCount back to 2 here.
   function afterGameTypeChosen(){
     menuGameType.classList.add('hidden');
     if(gameType === 'classic' && pendingMode !== 'online'){
-      renderPlayerCountNote();
-      document.querySelectorAll('#menuPlayerCount .menu-btn.diff').forEach(b=>{
-        b.classList.toggle('selected', Number(b.dataset.count) === matchPlayerCount);
-      });
-      menuPlayerCount.classList.remove('hidden');
+      matchPlayerCount = savedMatchPlayerCount;
     } else {
       matchPlayerCount = 2;
-      proceedAfterGameType();
     }
+    proceedAfterGameType();
   }
 
   document.getElementById('btnModeClassic').addEventListener('click', ()=>{
@@ -5971,20 +5976,6 @@ updateDecoys(dt);
   document.getElementById('btnBackGameType').addEventListener('click', ()=>{
     menuGameType.classList.add('hidden');
     menuMain.classList.remove('hidden');
-  });
-
-  document.querySelectorAll('#menuPlayerCount .menu-btn.diff').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      matchPlayerCount = Number(btn.dataset.count);
-      document.querySelectorAll('#menuPlayerCount .menu-btn.diff').forEach(b=>b.classList.remove('selected'));
-      btn.classList.add('selected');
-      menuPlayerCount.classList.add('hidden');
-      proceedAfterGameType();
-    });
-  });
-  document.getElementById('btnBackPlayerCount').addEventListener('click', ()=>{
-    menuPlayerCount.classList.add('hidden');
-    menuGameType.classList.remove('hidden');
   });
 
   btnShop.addEventListener('click', ()=>{
@@ -6041,7 +6032,6 @@ updateDecoys(dt);
     menuShop.classList.add('hidden');
     menuLeaderboard.classList.add('hidden');
     menuGameType.classList.add('hidden');
-    menuPlayerCount.classList.add('hidden');
     extraBots = [];
     lastRoundWinnerId = null;
     const fbDisplay = document.getElementById('footballScoreDisplay');
@@ -6099,10 +6089,12 @@ updateDecoys(dt);
   const toggleAutoAimP2 = document.getElementById('toggleAutoAimP2');
   const btnAimTypeMouse = document.getElementById('btnAimTypeMouse');
   const btnAimTypeKeyboard = document.getElementById('btnAimTypeKeyboard');
+  const matchSizeBtns = document.querySelectorAll('#menuSettings .aim-type-group [data-count]');
 
   function updateSettingsUI(){
     btnAimTypeMouse.classList.toggle('on', aimMode === 'mouse');
     btnAimTypeKeyboard.classList.toggle('on', aimMode !== 'mouse');
+    matchSizeBtns.forEach(b => b.classList.toggle('on', Number(b.dataset.count) === savedMatchPlayerCount));
     toggleAutoAimP1.textContent = autoAimP1 ? 'ON' : 'OFF';
     toggleAutoAimP1.classList.toggle('on', autoAimP1);
     toggleAutoAimP2.textContent = autoAimP2 ? 'ON' : 'OFF';
@@ -6126,6 +6118,15 @@ updateDecoys(dt);
   }
   btnAimTypeMouse.addEventListener('click', ()=>setAimMode('mouse'));
   btnAimTypeKeyboard.addEventListener('click', ()=>setAimMode('movement'));
+  function setMatchSize(count){
+    savedMatchPlayerCount = count;
+    updateSettingsUI();
+    saveMatchSizeLocally();
+    saveProgress();
+  }
+  matchSizeBtns.forEach(btn=>{
+    btn.addEventListener('click', ()=>setMatchSize(Number(btn.dataset.count)));
+  });
   toggleAutoAimP1.addEventListener('click', ()=>{
     autoAimP1 = !autoAimP1;
     updateSettingsUI();
