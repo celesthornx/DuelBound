@@ -355,6 +355,79 @@
   .admin-log .log-row{ border-bottom: 1px solid var(--grid); padding: 4px 0; }
   .admin-log .log-time{ color: #ff5f6d; margin-right: 8px; }
 
+  /* ---- Credit Management (reuses admin-field/admin-btn-row/etc. above;
+     cyan (Player One) accent to distinguish it from the red Ability
+     Balance section, gold for the confirm step -- same palette the rest
+     of the game already uses for those roles. ---- */
+  .admin-section-label-p1{ color: var(--p1); border-bottom-color: rgba(63,208,255,0.3); }
+  .admin-section-label-gold{ color: #ffce54; border-bottom-color: rgba(255,206,84,0.3); margin-top:0; }
+  .admin-credit-search{ display:flex; gap:8px; width:100%; }
+  .admin-credit-search input{
+    flex:1; min-width:0;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--grid);
+    color: var(--ink);
+    font-family:'Share Tech Mono', monospace;
+    font-size: 12px; letter-spacing: 0.5px;
+    padding: 9px 10px;
+  }
+  .admin-credit-search input:focus{ outline:none; border-color: var(--p1); }
+  .admin-search-btn{ min-width:0; font-size:11px; padding:9px 16px; border-color: var(--p1); color: var(--p1); }
+  .admin-search-btn:hover{ background: rgba(63,208,255,0.1); box-shadow:0 0 16px rgba(63,208,255,0.3); }
+  .admin-search-results{ width:100%; display:flex; flex-direction:column; gap:4px; }
+  .admin-search-results:empty{ display:none; }
+  .admin-search-empty, .admin-search-error{
+    font-family:'Share Tech Mono', monospace; font-size:11px; letter-spacing:1px;
+    color: var(--ink-dim); text-align:center; padding:6px 0;
+  }
+  .admin-search-error{ color: #ff5f6d; }
+  .admin-search-result{
+    display:flex; justify-content:space-between; align-items:center;
+    width:100%; background: rgba(255,255,255,0.03);
+    border:1px solid var(--grid); color: var(--ink);
+    font-family:'Chakra Petch', sans-serif; font-weight:600; font-size:12px; letter-spacing:1px;
+    padding: 8px 12px; cursor:pointer; transition: all .15s ease;
+  }
+  .admin-search-result:hover{ border-color: var(--p1); background: rgba(63,208,255,0.08); }
+  .admin-search-result .admin-search-result-credits{
+    font-family:'Share Tech Mono', monospace; color: #ffce54; font-weight:400; font-size:11px;
+  }
+  .admin-credit-grant{
+    width:100%; display:flex; flex-direction:column; gap:12px;
+    border: 1px solid rgba(63,208,255,0.25);
+    background: rgba(63,208,255,0.04);
+    padding: 12px 14px;
+  }
+  .admin-credit-player{ display:flex; justify-content:space-between; align-items:baseline; }
+  .admin-credit-player-name{ font-family:'Chakra Petch', sans-serif; font-weight:700; font-size:14px; letter-spacing:1px; color: var(--p1); }
+  .admin-credit-player-balance{ font-family:'Share Tech Mono', monospace; font-size:10px; letter-spacing:1px; color: var(--ink-dim); }
+  .admin-credit-player-balance b{ color: #ffce54; font-size:13px; margin-left:4px; }
+  .admin-credit-form{ display:flex; flex-direction:column; gap:10px; }
+  .admin-field-full{ width:100%; }
+  .admin-quick-amounts{ display:flex; gap:8px; }
+  .admin-quick-btn{
+    flex:1;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--grid);
+    color: var(--ink-dim);
+    font-family:'Share Tech Mono', monospace; font-size:10px; letter-spacing:1px;
+    padding: 7px 4px; cursor:pointer; transition: all .15s ease;
+  }
+  .admin-quick-btn:hover{ border-color: var(--p1); color: var(--p1); background: rgba(63,208,255,0.08); }
+  .admin-give-credits-btn{ width:100%; }
+  .admin-credit-confirm{
+    display:flex; flex-direction:column; gap:6px;
+    border: 1px solid rgba(255,206,84,0.3);
+    background: rgba(255,206,84,0.05);
+    padding: 12px 14px;
+  }
+  .admin-confirm-row{
+    display:flex; justify-content:space-between;
+    font-family:'Share Tech Mono', monospace; font-size:11px; letter-spacing:0.5px; color: var(--ink-dim);
+  }
+  .admin-confirm-row b{ color: var(--ink); font-size:12px; }
+  .admin-confirm-amount{ color: #5dffa0 !important; }
+
   .stats-line{
     font-family:'Share Tech Mono', monospace;
     font-size: 10px; letter-spacing: 2px;
@@ -1680,6 +1753,49 @@
         <button class="menu-btn admin-reset-btn" id="btnAdminReset">RESET ABILITY</button>
       </div>
       <button class="menu-btn admin-reset-all-btn" id="btnAdminResetAll">RESET ALL ABILITIES</button>
+
+      <div class="admin-section-label admin-section-label-p1">CREDIT MANAGEMENT</div>
+
+      <div class="admin-credit-search">
+        <input type="text" id="adminPlayerSearch" placeholder="SEARCH USERNAME OR PLAYER ID" autocomplete="off">
+        <button class="menu-btn admin-search-btn" id="btnAdminPlayerSearch">SEARCH</button>
+      </div>
+      <div class="admin-search-results" id="adminSearchResults"></div>
+
+      <div class="admin-credit-grant hidden" id="adminCreditGrant">
+        <div class="admin-credit-player">
+          <span class="admin-credit-player-name" id="adminSelectedPlayerName">&mdash;</span>
+          <span class="admin-credit-player-balance">CURRENT CREDITS <b id="adminSelectedPlayerCredits">0</b></span>
+        </div>
+
+        <div class="admin-credit-form" id="adminCreditForm">
+          <div class="admin-field admin-field-full">
+            <label>CREDITS TO ADD</label>
+            <input type="number" id="adminCreditAmount" min="1" step="1" placeholder="e.g. 500">
+          </div>
+          <div class="admin-quick-amounts">
+            <button type="button" class="admin-quick-btn" data-amount="100">+100</button>
+            <button type="button" class="admin-quick-btn" data-amount="500">+500</button>
+            <button type="button" class="admin-quick-btn" data-amount="1000">+1,000</button>
+            <button type="button" class="admin-quick-btn" data-amount="5000">+5,000</button>
+          </div>
+          <button class="menu-btn admin-save-btn admin-give-credits-btn" id="btnAdminGiveCredits">GIVE CREDITS</button>
+        </div>
+
+        <div class="admin-credit-confirm hidden" id="adminCreditConfirm">
+          <div class="admin-section-label admin-section-label-gold">CONFIRM CREDIT GRANT</div>
+          <div class="admin-confirm-row"><span>Player</span><b id="confirmPlayerName"></b></div>
+          <div class="admin-confirm-row"><span>Current balance</span><b id="confirmCurrentBalance"></b></div>
+          <div class="admin-confirm-row"><span>Amount to add</span><b class="admin-confirm-amount" id="confirmAmount"></b></div>
+          <div class="admin-confirm-row"><span>New balance</span><b id="confirmNewBalance"></b></div>
+          <div class="admin-btn-row">
+            <button class="menu-btn admin-reset-btn" id="btnAdminConfirmCancel">CANCEL</button>
+            <button class="menu-btn admin-save-btn" id="btnAdminConfirmGive">CONFIRM</button>
+          </div>
+        </div>
+
+        <div class="admin-status-msg" id="adminCreditStatusMsg"></div>
+      </div>
 
       <div class="admin-section-label">ADMIN LOG</div>
       <div class="admin-log" id="adminLogBody"></div>
@@ -3340,23 +3456,182 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       }
       body.innerHTML = data.log.map(entry=>{
         const time = formatAdminLogTime(entry.time);
-        const abilityDef = ABILITIES.find(a=>a.id===entry.abilityId);
-        const abilityName = abilityDef ? abilityDef.name : entry.abilityId;
         let desc;
-        if(entry.type === 'resetAll'){
-          desc = 'Reset ALL abilities to default';
-        } else if(!entry.changes.length){
-          desc = abilityName + ' \u2014 no changes';
+        if(entry.type === 'creditGrant'){
+          desc = 'Credit grant \u2014 ' + escapeHtml(entry.targetPlayer) + ': +' + entry.amount.toLocaleString()
+            + ' (' + entry.previousBalance.toLocaleString() + ' \u2192 ' + entry.newBalance.toLocaleString() + ')'
+            + ' by ' + escapeHtml(entry.admin);
         } else {
-          desc = entry.changes.map(c=>{
-            const fieldLabel = (ADMIN_FIELD_DEFS[c.field] && ADMIN_FIELD_DEFS[c.field].label) || c.field;
-            return abilityName + ' ' + fieldLabel + ': ' + c.from + ' \u2192 ' + c.to;
-          }).join('<br>');
+          const abilityDef = ABILITIES.find(a=>a.id===entry.abilityId);
+          const abilityName = abilityDef ? abilityDef.name : entry.abilityId;
+          if(entry.type === 'resetAll'){
+            desc = 'Reset ALL abilities to default';
+          } else if(!entry.changes.length){
+            desc = abilityName + ' \u2014 no changes';
+          } else {
+            desc = entry.changes.map(c=>{
+              const fieldLabel = (ADMIN_FIELD_DEFS[c.field] && ADMIN_FIELD_DEFS[c.field].label) || c.field;
+              return abilityName + ' ' + fieldLabel + ': ' + c.from + ' \u2192 ' + c.to;
+            }).join('<br>');
+          }
         }
         return `<div class="log-row"><span class="log-time">${time}</span>${desc}</div>`;
       }).join('');
     } catch(e){
       body.innerHTML = '<div class="log-row">Could not load log.</div>';
+    }
+  }
+
+  function escapeHtml(str){
+    return String(str).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  }
+
+  // ==========================================================
+  // ADMIN CREDIT MANAGEMENT -- search a player, view their real
+  // balance, then request a server-authoritative credit grant. The
+  // server (see /admin/search-players and /admin/credits in server.js)
+  // independently re-verifies admin access and re-reads/re-validates
+  // everything; this UI only ever displays what it comes back with,
+  // never a locally-computed balance.
+  // ==========================================================
+  let adminCreditSelectedPlayer = null; // { id, name, credits } from the last server response
+
+  function setAdminCreditStatus(text, isError){
+    const el = document.getElementById('adminCreditStatusMsg');
+    if(!el) return;
+    el.textContent = text;
+    el.classList.toggle('error', !!isError);
+  }
+
+  function resetAdminCreditPanel(){
+    adminCreditSelectedPlayer = null;
+    document.getElementById('adminCreditGrant').classList.add('hidden');
+    document.getElementById('adminSearchResults').innerHTML = '';
+    document.getElementById('adminPlayerSearch').value = '';
+    setAdminCreditStatus('');
+  }
+
+  async function adminSearchPlayers(){
+    if(!sessionToken){ setAdminCreditStatus('NOT SIGNED IN', true); return; }
+    const resultsEl = document.getElementById('adminSearchResults');
+    const q = document.getElementById('adminPlayerSearch').value.trim();
+    resultsEl.innerHTML = '<div class="admin-search-empty">SEARCHING...</div>';
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/admin/search-players?sessionToken=' + encodeURIComponent(sessionToken) + '&q=' + encodeURIComponent(q));
+      if(res.status === 403){ resultsEl.innerHTML = '<div class="admin-search-error">UNAUTHORIZED</div>'; return; }
+      if(!res.ok){ resultsEl.innerHTML = '<div class="admin-search-error">SEARCH FAILED</div>'; return; }
+      const data = await res.json();
+      renderAdminSearchResults(data.results || []);
+    } catch(e){
+      resultsEl.innerHTML = '<div class="admin-search-error">COULD NOT REACH SERVER</div>';
+    }
+  }
+
+  function renderAdminSearchResults(results){
+    const el = document.getElementById('adminSearchResults');
+    if(!results.length){
+      el.innerHTML = '<div class="admin-search-empty">PLAYER NOT FOUND</div>';
+      return;
+    }
+    el.innerHTML = results.map(r =>
+      `<button type="button" class="admin-search-result" data-id="${escapeHtml(r.id)}">`
+      + `<span>${escapeHtml(r.name)}</span><span class="admin-search-result-credits">◈ ${Number(r.credits).toLocaleString()}</span>`
+      + `</button>`
+    ).join('');
+    el.querySelectorAll('.admin-search-result').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const match = results.find(r => r.id === btn.dataset.id);
+        if(match) selectAdminCreditPlayer(match);
+      });
+    });
+  }
+
+  function selectAdminCreditPlayer(player){
+    adminCreditSelectedPlayer = player;
+    document.getElementById('adminSelectedPlayerName').textContent = player.name;
+    document.getElementById('adminSelectedPlayerCredits').textContent = Number(player.credits).toLocaleString();
+    document.getElementById('adminCreditForm').classList.remove('hidden');
+    document.getElementById('adminCreditConfirm').classList.add('hidden');
+    document.getElementById('adminCreditAmount').value = '';
+    setAdminCreditStatus('');
+    document.getElementById('adminCreditGrant').classList.remove('hidden');
+  }
+
+  // Whole positive integers only, capped well above anything a real
+  // grant would need -- rejects empty input, negatives, zero, decimals,
+  // and non-numeric characters (the browser's own number-input
+  // validation is just UX, this is what actually gates the request).
+  function readAdminCreditAmount(){
+    const raw = document.getElementById('adminCreditAmount').value.trim();
+    if(!/^[0-9]+$/.test(raw)) return null;
+    const n = Number(raw);
+    if(!Number.isInteger(n) || n <= 0 || n > 1000000) return null;
+    return n;
+  }
+
+  function openAdminCreditConfirm(){
+    if(!adminCreditSelectedPlayer) return;
+    const amount = readAdminCreditAmount();
+    if(amount === null){
+      setAdminCreditStatus('ENTER A VALID CREDIT AMOUNT', true);
+      return;
+    }
+    setAdminCreditStatus('');
+    const current = adminCreditSelectedPlayer.credits;
+    document.getElementById('confirmPlayerName').textContent = adminCreditSelectedPlayer.name;
+    document.getElementById('confirmCurrentBalance').textContent = Number(current).toLocaleString();
+    document.getElementById('confirmAmount').textContent = '+' + amount.toLocaleString();
+    document.getElementById('confirmNewBalance').textContent = Number(current + amount).toLocaleString();
+    document.getElementById('adminCreditForm').classList.add('hidden');
+    document.getElementById('adminCreditConfirm').classList.remove('hidden');
+  }
+
+  function cancelAdminCreditConfirm(){
+    document.getElementById('adminCreditConfirm').classList.add('hidden');
+    document.getElementById('adminCreditForm').classList.remove('hidden');
+  }
+
+  async function confirmAdminGiveCredits(){
+    if(!sessionToken){ setAdminCreditStatus('NOT SIGNED IN', true); return; }
+    if(!adminCreditSelectedPlayer) return;
+    const amount = readAdminCreditAmount();
+    if(amount === null){ setAdminCreditStatus('ENTER A VALID CREDIT AMOUNT', true); return; }
+
+    setAdminCreditStatus('GRANTING...');
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/admin/credits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionToken, playerId: adminCreditSelectedPlayer.id, amount })
+      });
+      if(res.status === 403){
+        setAdminCreditStatus('UNAUTHORIZED — YOU DO NOT HAVE PERMISSION TO PERFORM THIS ACTION', true);
+        return;
+      }
+      if(res.status === 404){
+        setAdminCreditStatus('PLAYER NOT FOUND', true);
+        cancelAdminCreditConfirm();
+        return;
+      }
+      if(res.status === 400){
+        setAdminCreditStatus('ENTER A VALID CREDIT AMOUNT', true);
+        cancelAdminCreditConfirm();
+        return;
+      }
+      if(!res.ok){
+        setAdminCreditStatus('CREDIT GRANT FAILED — NO CREDITS WERE ADDED', true);
+        return;
+      }
+      const data = await res.json();
+      adminCreditSelectedPlayer.credits = data.newBalance;
+      document.getElementById('adminSelectedPlayerCredits').textContent = Number(data.newBalance).toLocaleString();
+      cancelAdminCreditConfirm();
+      document.getElementById('adminCreditAmount').value = '';
+      setAdminCreditStatus('✓ CREDIT GRANT SUCCESSFUL — +' + amount.toLocaleString() + ' credits — '
+        + data.name + ' — new balance: ' + Number(data.newBalance).toLocaleString());
+      renderAdminLog();
+    } catch(e){
+      setAdminCreditStatus('CREDIT GRANT FAILED — NO CREDITS WERE ADDED', true);
     }
   }
 
@@ -6243,6 +6518,7 @@ updateDecoys(dt);
     populateAdminAbilitySelect();
     renderAdminFields();
     setAdminStatus('');
+    resetAdminCreditPanel();
     renderAdminLog();
     menuAdmin.classList.remove('hidden');
   });
@@ -6262,6 +6538,25 @@ updateDecoys(dt);
       adminResetAll();
     }
   });
+
+  const btnAdminPlayerSearch = document.getElementById('btnAdminPlayerSearch');
+  const adminPlayerSearchInput = document.getElementById('adminPlayerSearch');
+  const btnAdminGiveCredits = document.getElementById('btnAdminGiveCredits');
+  const btnAdminConfirmCancel = document.getElementById('btnAdminConfirmCancel');
+  const btnAdminConfirmGive = document.getElementById('btnAdminConfirmGive');
+
+  btnAdminPlayerSearch.addEventListener('click', adminSearchPlayers);
+  adminPlayerSearchInput.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){ e.preventDefault(); adminSearchPlayers(); }
+  });
+  document.querySelectorAll('.admin-quick-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.getElementById('adminCreditAmount').value = btn.dataset.amount;
+    });
+  });
+  btnAdminGiveCredits.addEventListener('click', openAdminCreditConfirm);
+  btnAdminConfirmCancel.addEventListener('click', cancelAdminCreditConfirm);
+  btnAdminConfirmGive.addEventListener('click', confirmAdminGiveCredits);
 
   // ============================================================
   // MAIN MENU LOBBY -- presentation layer only.
