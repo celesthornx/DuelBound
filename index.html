@@ -502,9 +502,8 @@
     position:relative;
   }
   .skin-card:hover, .power-card:hover{ border-color: var(--ink-dim); background: rgba(255,255,255,0.05); }
-  .skin-swatch{
-    width: 30px; height:30px; border-radius:50%; margin: 0 auto 8px;
-    box-shadow: 0 0 10px currentColor;
+  .skin-preview{
+    display:block; width:100%; height:34px; margin: 0 auto 8px;
   }
   .skin-name, .power-name{
     font-size: 10px; letter-spacing: 1px; font-family:'Share Tech Mono', monospace;
@@ -579,6 +578,27 @@
     60%  { box-shadow: 0 0 14px rgba(255,95,196,0.9);  border-color: #ff5fc4; transform: scale(1.04); }
     80%  { box-shadow: 0 0 14px rgba(255,210,63,0.9);  border-color: #ffd23f; transform: scale(1); }
     100% { box-shadow: 0 0 14px rgba(255,255,255,0.9); border-color: #ffffff; transform: scale(1); }
+  }
+
+  /* Skin Collection rarity tiers -- COMMON/RARE get their own colors
+     (green/blue) since the ability system's existing "common"/"rare"
+     tiers are grey/purple; LEGENDARY reuses rarity-legendary as-is
+     (gold pulse already reads as premium); MEME is a new tier, gold/
+     orange, that only skins use. */
+  .rarity-badge.rarity-skin-common{
+    color: #5dffa0; border-color: #5dffa0;
+    background: rgba(93,255,160,0.12);
+    box-shadow: 0 0 8px rgba(93,255,160,0.35);
+  }
+  .rarity-badge.rarity-skin-rare{
+    color: #7ecbff; border-color: #3fd0ff;
+    background: rgba(63,208,255,0.12);
+    box-shadow: 0 0 8px rgba(63,208,255,0.4);
+  }
+  .rarity-badge.rarity-meme{
+    color: #ffce54; border-color: #ff9142;
+    background: rgba(255,145,66,0.14);
+    box-shadow: 0 0 8px rgba(255,145,66,0.45);
   }
 
   .power-slots-note{
@@ -2251,6 +2271,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   let myPlayerID = null;
   let onlineOpponentReady = false;
   let onlineOpponentColor = null;
+  let onlineOpponentSkinId = null; // which SKINS entry the opponent's flat `color` corresponds to, if any -- lets fillShipHull render their real skin's gradient/deco instead of just the flat color
 
   // ====================================================================
   // NETWORKING OPTIMIZATION -- decoupled send rate, snapshot-buffer
@@ -2444,6 +2465,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     myPlayerID = null;
     onlineOpponentReady = false;
     onlineOpponentColor = null;
+    onlineOpponentSkinId = null;
     // Always tear down both timers here -- this is the single choke
     // point every "leave online play" path (exitToMenu, reconnect,
     // opponent left, etc.) already routes through, so it's also the
@@ -2680,8 +2702,14 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       // the default red on your screen.
       if(data.type === "skin"){
         onlineOpponentColor = data.color;
+        // data.skinId is only ever used to look up SKIN_BY_ID for the
+        // gradient/deco flourish -- an unknown or missing id just falls
+        // back to the flat data.color fill (see fillShipHull), so there's
+        // nothing here to validate beyond that lookup already being safe.
+        onlineOpponentSkinId = data.skinId || null;
         if(p2){
           p2.color = data.color;
+          p2.skinId = onlineOpponentSkinId;
         }
         return;
       }
@@ -3162,7 +3190,54 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     { id:'white',  name:'GHOST WHITE',    color:'#f5f5f5', price:100 },
     { id:'pink',   name:'HOT PINK',       color:'#ff5fc4', price:100 },
     { id:'orange', name:'BLAZE ORANGE',   color:'#ff9142', price:60 },
+
+    // ---- Skin Collection: 16 skins across four rarity tiers, each with
+    // its own hull gradient/accent/"deco" flourish (see drawSkinDeco)
+    // instead of just a flat fill -- still the exact same arrow hull
+    // silhouette/hitbox/size every skin already used (see shipHullPath),
+    // so gameplay footprint and readability are untouched. `color`
+    // stays a single flat hex, same as every legacy skin above, so
+    // everything that already keys off skinColor() -- bullets, trail,
+    // decoys, minimap/leaderboard avatars, the online 'skin' network
+    // message's base color -- keeps working with zero changes.
+    { id:'neonrunner',   name:'NEON RUNNER',    price:120, rarity:'common',    rarityClass:'rarity-skin-common',
+      color:'#3fd0ff', grad:['#3a4258','#12151f'], accent:'#3fd0ff', deco:'stripe' },
+    { id:'arcticarrow',  name:'ARCTIC ARROW',   price:120, rarity:'common',    rarityClass:'rarity-skin-common',
+      color:'#bfe8ff', grad:['#eaf6ff','#a9cbe8'], accent:'#7ecbff', deco:'frost' },
+    { id:'crimsonfang',  name:'CRIMSON FANG',   price:120, rarity:'common',    rarityClass:'rarity-skin-common',
+      color:'#ff3b3b', grad:['#3a0a0a','#120303'], accent:'#ff3b3b', deco:'fang' },
+    { id:'toxicskin',    name:'TOXIC',          price:120, rarity:'common',    rarityClass:'rarity-skin-common',
+      color:'#aaff00', grad:['#232f14','#0d1108'], accent:'#aaff00', deco:'toxic' },
+
+    { id:'cybersamurai', name:'CYBER SAMURAI',  price:260, rarity:'rare',      rarityClass:'rarity-skin-rare',
+      color:'#3fd0ff', grad:['#123a5c','#041018'], accent:'#ffce54', deco:'armor' },
+    { id:'galaxy',       name:'GALAXY',         price:260, rarity:'rare',      rarityClass:'rarity-skin-rare',
+      color:'#8b6bff', grad:['#241547','#07030f'], accent:'#bcd4ff', deco:'stars' },
+    { id:'plasmacore',   name:'PLASMA CORE',    price:260, rarity:'rare',      rarityClass:'rarity-skin-rare',
+      color:'#8b6bff', grad:['#22283a','#0a0d14'], accent:'#8b6bff', deco:'core' },
+    { id:'storm',        name:'STORM',          price:260, rarity:'rare',      rarityClass:'rarity-skin-rare',
+      color:'#7ecbff', grad:['#153348','#04121d'], accent:'#c9f2ff', deco:'bolt' },
+
+    { id:'eclipse',      name:'ECLIPSE',        price:520, rarity:'legendary', rarityClass:'rarity-legendary',
+      color:'#ffe89a', grad:['#1a1a1a','#000000'], accent:'#ffe89a', deco:'eclipse' },
+    { id:'celestial',    name:'CELESTIAL',      price:520, rarity:'legendary', rarityClass:'rarity-legendary',
+      color:'#ffe89a', grad:['#fff8e8','#ffce87'], accent:'#ffe89a', deco:'radiant' },
+    { id:'riftwalker',   name:'RIFTWALKER',     price:520, rarity:'legendary', rarityClass:'rarity-legendary',
+      color:'#b06bff', grad:['#26123f','#08040f'], accent:'#b06bff', deco:'rift' },
+    { id:'overlord',     name:'OVERLORD',       price:520, rarity:'legendary', rarityClass:'rarity-legendary',
+      color:'#ff3b3b', grad:['#240808','#080202'], accent:'#ff3b3b', deco:'spikes' },
+
+    { id:'cardboardbox', name:'CARDBOARD BOX',  price:150, rarity:'meme',      rarityClass:'rarity-meme',
+      color:'#c9a876', grad:['#c9a876','#8a6d4a'], accent:'#fff1cf', deco:'box' },
+    { id:'rubberduck',   name:'RUBBER DUCK',    price:150, rarity:'meme',      rarityClass:'rarity-meme',
+      color:'#ffe066', grad:['#ffe066','#ffb300'], accent:'#ff8c1a', deco:'duck' },
+    { id:'toaster',      name:'TOASTER',        price:150, rarity:'meme',      rarityClass:'rarity-meme',
+      color:'#d8d8d8', grad:['#e8e8e8','#8a8a8a'], accent:'#ff5f2a', deco:'toast' },
+    { id:'carrot',       name:'CARROT',         price:150, rarity:'meme',      rarityClass:'rarity-meme',
+      color:'#ff8c1a', grad:['#ff8c1a','#e05a00'], accent:'#3fae3f', deco:'carrot' },
   ];
+  const SKIN_BY_ID = {};
+  SKINS.forEach(s => { SKIN_BY_ID[s.id] = s; });
   const ownedSkins = new Set(['cyan','red']);
   let p1SkinId = 'cyan';
   let p2SkinId = 'red';
@@ -4431,10 +4506,12 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       const card = document.createElement('div');
       card.className = 'skin-card' + (owned?' owned':'') + (equipped?' equipped':'') + (!owned?' locked':'') + (!owned && !affordable ? ' unaffordable':'');
       card.innerHTML = `
-        <div class="skin-swatch" style="background:${skin.color}; color:${skin.color};"></div>
+        ${skin.rarityClass ? `<div class="rarity-badge ${skin.rarityClass}">${skin.rarity.toUpperCase()}</div>` : ''}
+        <canvas class="skin-preview" width="72" height="42"></canvas>
         <div class="skin-name">${skin.name}</div>
         <div class="item-price ${skin.price===0?'free':''}">${skin.price===0 ? 'OWNED' : '\u25c8 '+skin.price}</div>
       `;
+      renderSkinPreviewCanvas(card.querySelector('.skin-preview'), skin);
       card.addEventListener('click', ()=>{
         if(owned){
           onEquip(skin.id);
@@ -4724,6 +4801,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     const maxShieldCharges = opts.shieldCharges || 0;
     return {
       id, x, y, color, keys, facing, isAI,
+      skinId: opts.skinId || null, // drives fillShipHull's gradient/deco -- p.color remains the flat fallback/identity color for bullets, trail, etc.
       netX: x, netY: y, // interpolation targets for network-driven players (online opponent)
       maxAmmo,
       reloadTime: opts.reloadTime || RELOAD_TIME,
@@ -4807,7 +4885,9 @@ let scoreCarry = null;
 
   function resetPositions(){
     const p1Opts = buildLoadoutOpts(equippedPowers, equippedAbilities);
+    p1Opts.skinId = p1SkinId;
     const p2Opts = buildLoadoutOpts(equippedPowersP2, equippedAbilitiesP2);
+    p2Opts.skinId = p2SkinId;
     const onlineFlipped = (mode === "online" && myPlayerID === 2);
 
     if(onlineFlipped){
@@ -4847,10 +4927,11 @@ else{
     // stats are managed entirely on THEIR OWN client/account -- we never
     // apply our local p2Opts to a real network opponent.
     const oppColor = onlineOpponentColor || skinColor('red');
+    const oppOpts = { skinId: onlineOpponentSkinId };
     if(onlineFlipped){
-        p2 = makePlayer('p2', 130, H/2, oppColor, P2KEYS, 0, false);
+        p2 = makePlayer('p2', 130, H/2, oppColor, P2KEYS, 0, false, oppOpts);
     } else {
-        p2 = makePlayer('p2', W-130, H/2, oppColor, P2KEYS, Math.PI, false);
+        p2 = makePlayer('p2', W-130, H/2, oppColor, P2KEYS, Math.PI, false, oppOpts);
     }
     // Fresh round/match -- any snapshots from before this reset would
     // reference the opponent's pre-reset position, so drop them and seed
@@ -5979,6 +6060,190 @@ updateDecoys(dt);
     }
   }
 
+  // ==========================================================
+  // SHIP SKIN RENDERING -- every skin (legacy flat-color ones and the
+  // new Skin Collection) is drawn as the exact same arrow hull path
+  // used since before this system existed (shipHullPath), so hitbox,
+  // silhouette size, and gameplay footprint never change. Skins with a
+  // `deco` recipe (see SKINS above) get a nose-to-tail gradient fill, a
+  // thin accent outline, and one small decorative flourish layered on
+  // top; anything else (all legacy skins, unknown/missing skinId) falls
+  // straight back to the original flat single-color fill. These same
+  // helpers also render the shop card previews (renderSkinPreviewCanvas
+  // below), so the card art is pixel-for-pixel the same drawing code as
+  // the in-game ship, never a separate duplicate rendering path.
+  // ==========================================================
+  function shipHullPath(c){
+    c.beginPath();
+    c.moveTo(PLAYER_R+4, 0);
+    c.lineTo(-PLAYER_R*0.7, -PLAYER_R*0.75);
+    c.lineTo(-PLAYER_R*0.35, 0);
+    c.lineTo(-PLAYER_R*0.7, PLAYER_R*0.75);
+    c.closePath();
+  }
+
+  // Small, cheap flourishes drawn in the same local (nose-at-+x) space
+  // as the hull, sized to stay within/just past the hull bounds so they
+  // never grow into something that could be mistaken for a bullet or
+  // obscure one -- see the "gameplay readability" requirement.
+  function drawSkinDeco(c, deco, accent){
+    c.strokeStyle = accent;
+    c.fillStyle = accent;
+    c.lineWidth = 1.1;
+    switch(deco){
+      case 'stripe': // Neon Runner
+        c.beginPath();
+        c.moveTo(9,-4); c.lineTo(-3,-9);
+        c.moveTo(9,4); c.lineTo(-3,9);
+        c.stroke();
+        break;
+      case 'frost': // Arctic Arrow
+        [[2,-6],[-4,-9],[2,6],[-4,9],[-8,0]].forEach(([x,y])=>{
+          c.beginPath(); c.arc(x,y,1,0,Math.PI*2); c.fill();
+        });
+        break;
+      case 'fang': // Crimson Fang
+        c.beginPath();
+        c.moveTo(-10.5,-11.25); c.lineTo(-6,-6); c.lineTo(-8.5,-4); c.lineTo(-5.25,0);
+        c.moveTo(-10.5,11.25); c.lineTo(-6,6); c.lineTo(-8.5,4); c.lineTo(-5.25,0);
+        c.stroke();
+        break;
+      case 'toxic': // Toxic
+        [[-9,-3],[-11.5,1],[-9,4]].forEach(([x,y])=>{
+          c.beginPath(); c.arc(x,y,1.2,0,Math.PI*2); c.fill();
+        });
+        break;
+      case 'armor': // Cyber Samurai
+        c.beginPath();
+        c.moveTo(11,-5); c.lineTo(11,5);
+        c.moveTo(3,-8); c.lineTo(3,8);
+        c.stroke();
+        break;
+      case 'stars': // Galaxy
+        [[6,-3],[0,-6],[-4,-2],[3,4],[-2,7],[-7,-5],[8,1]].forEach(([x,y])=>{
+          c.beginPath(); c.arc(x,y,0.8,0,Math.PI*2); c.fill();
+        });
+        break;
+      case 'core': { // Plasma Core
+        const g = c.createRadialGradient(1,0,0, 1,0,6);
+        g.addColorStop(0,'#ffffff'); g.addColorStop(0.45,accent); g.addColorStop(1,'rgba(0,0,0,0)');
+        c.fillStyle = g;
+        c.beginPath(); c.arc(1,0,6,0,Math.PI*2); c.fill();
+        break;
+      }
+      case 'bolt': // Storm
+        c.beginPath();
+        c.moveTo(10,-6); c.lineTo(2,-1); c.lineTo(5,1); c.lineTo(-6,8);
+        c.stroke();
+        break;
+      case 'eclipse': // Eclipse
+        c.globalAlpha = 0.85;
+        c.lineWidth = 1.4;
+        c.beginPath(); c.arc(-4,0,8,0.5,5.8); c.stroke();
+        c.globalAlpha = 1;
+        break;
+      case 'radiant': // Celestial
+        c.lineWidth = 0.9;
+        c.beginPath();
+        c.moveTo(19,0); c.lineTo(24,-3);
+        c.moveTo(19,0); c.lineTo(25,0);
+        c.moveTo(19,0); c.lineTo(24,3);
+        c.stroke();
+        break;
+      case 'rift': // Riftwalker -- offset ghost outline of the same hull
+        c.save();
+        c.globalAlpha = 0.5;
+        c.translate(-3,0);
+        shipHullPath(c);
+        c.stroke();
+        c.restore();
+        break;
+      case 'spikes': // Overlord
+        c.lineWidth = 1.3;
+        c.beginPath();
+        c.moveTo(-10.5,-11.25); c.lineTo(-14,-14);
+        c.moveTo(-10.5,11.25); c.lineTo(-14,14);
+        c.stroke();
+        break;
+      case 'box': // Cardboard Box
+        c.lineWidth = 1;
+        c.beginPath();
+        c.moveTo(9,-8); c.lineTo(-6,8);
+        c.stroke();
+        c.strokeStyle = 'rgba(60,40,20,0.5)';
+        c.beginPath();
+        c.moveTo(4,-7); c.lineTo(4,7);
+        c.moveTo(-2,-8); c.lineTo(-2,8);
+        c.stroke();
+        break;
+      case 'duck': // Rubber Duck -- bill + eye
+        c.beginPath();
+        c.moveTo(19,0); c.lineTo(13,-3); c.lineTo(13,3);
+        c.closePath(); c.fill();
+        c.fillStyle = '#1a1a1a';
+        c.beginPath(); c.arc(10,-3,1.1,0,Math.PI*2); c.fill();
+        break;
+      case 'toast': // Toaster -- slot lines
+        c.lineWidth = 1.4;
+        c.beginPath();
+        c.moveTo(7,-6); c.lineTo(-2,-6);
+        c.moveTo(7,6); c.lineTo(-2,6);
+        c.stroke();
+        break;
+      case 'carrot': // Carrot -- leafy tail + speckles
+        c.strokeStyle = '#3fae3f';
+        c.lineWidth = 1.3;
+        c.beginPath();
+        c.moveTo(-5.25,0); c.lineTo(-13,-4);
+        c.moveTo(-5.25,0); c.lineTo(-14.5,0);
+        c.moveTo(-5.25,0); c.lineTo(-13,4);
+        c.stroke();
+        c.fillStyle = accent;
+        [[6,-2],[2,3],[9,1.5]].forEach(([x,y])=>{
+          c.beginPath(); c.arc(x,y,0.8,0,Math.PI*2); c.fill();
+        });
+        break;
+    }
+  }
+
+  // Fills the hull path (already expected to be the active path via
+  // shipHullPath) using skinDef's gradient/accent/deco when present,
+  // otherwise the exact original flat single-color fill.
+  function fillShipHull(c, skinDef, fallbackColor){
+    shipHullPath(c);
+    if(skinDef && skinDef.deco){
+      const grad = c.createLinearGradient(PLAYER_R+4, 0, -PLAYER_R*0.7, 0);
+      grad.addColorStop(0, skinDef.grad ? skinDef.grad[0] : fallbackColor);
+      grad.addColorStop(1, skinDef.grad ? skinDef.grad[1] : fallbackColor);
+      c.fillStyle = grad;
+      c.fill();
+      c.lineWidth = 1.2;
+      c.strokeStyle = skinDef.accent || fallbackColor;
+      c.globalAlpha = 0.85;
+      c.stroke();
+      c.globalAlpha = 1;
+      drawSkinDeco(c, skinDef.deco, skinDef.accent || fallbackColor);
+    } else {
+      c.fillStyle = fallbackColor;
+      c.fill();
+    }
+  }
+
+  // Shop card art -- draws the same skin (or the fallback flat hull for
+  // legacy skins with no `deco`) onto a small standalone canvas.
+  function renderSkinPreviewCanvas(canvas, skinDef){
+    const c = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    c.clearRect(0, 0, w, h);
+    c.save();
+    c.translate(w/2, h/2);
+    c.scale(1.5, 1.5);
+    c.shadowBlur = 6;
+    c.shadowColor = (skinDef && (skinDef.accent || skinDef.color)) || '#3fd0ff';
+    fillShipHull(c, skinDef, (skinDef && skinDef.color) || '#3fd0ff');
+    c.restore();
+  }
+
   function drawPlayer(p){
     for(const t of p.trail){
       ctx.globalAlpha = Math.max(0, t.life/0.25) * 0.35;
@@ -6017,14 +6282,7 @@ updateDecoys(dt);
     }
     ctx.translate(p.x, p.y);
     ctx.rotate(p.facing);
-    ctx.fillStyle = p.color;
-    ctx.beginPath();
-    ctx.moveTo(PLAYER_R+4, 0);
-    ctx.lineTo(-PLAYER_R*0.7, -PLAYER_R*0.75);
-    ctx.lineTo(-PLAYER_R*0.35, 0);
-    ctx.lineTo(-PLAYER_R*0.7, PLAYER_R*0.75);
-    ctx.closePath();
-    ctx.fill();
+    fillShipHull(ctx, p.skinId && SKIN_BY_ID[p.skinId], p.color);
     ctx.restore();
 
     // Health bar -- drawn in world space (not rotated) so it stays level
@@ -6258,7 +6516,7 @@ updateDecoys(dt);
     started = true;
     startMusic();
     if(mode === 'online' && socket && socket.readyState === WebSocket.OPEN){
-      socket.send(JSON.stringify({ type: 'skin', color: skinColor(p1SkinId) }));
+      socket.send(JSON.stringify({ type: 'skin', color: skinColor(p1SkinId), skinId: p1SkinId }));
     }
     if(gameType === 'football'){
       initFootballMode();
