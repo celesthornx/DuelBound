@@ -23,57 +23,104 @@
 
   *{ box-sizing: border-box; }
 
+  html, body{ overflow: hidden; }
   body{
     margin:0;
     background: radial-gradient(ellipse at center, var(--void-2) 0%, var(--void) 70%);
     color: var(--ink);
     font-family: 'Chakra Petch', sans-serif;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    padding: 18px 10px 30px;
     min-height:100vh;
   }
 
-  h1{
-    font-family:'Chakra Petch', sans-serif;
-    font-weight:700;
-    font-size: 28px;
-    letter-spacing: 6px;
-    margin: 6px 0 2px;
-    background: linear-gradient(90deg, var(--p1), var(--ink) 50%, var(--p2));
-    -webkit-background-clip:text;
-    background-clip:text;
-    -webkit-text-fill-color: transparent;
-  }
-  .sub{
-    font-family:'Share Tech Mono', monospace;
-    font-size:11px;
-    letter-spacing:3px;
-    color: var(--ink-dim);
-    margin-bottom: 14px;
-  }
+  /* The gameplay title/subtitle and the below-arena control legend are
+     never actually seen -- every non-gameplay state is a full-viewport
+     .menu-overlay (see below) drawn on top of them, and during gameplay
+     itself the arena should be fullscreen and title-free (see .stage). */
+  h1, .sub, .legend{ display:none; }
 
+  /* ---- Gameplay stage: fullscreen arena. The canvas keeps its
+     original 900x540 internal drawing resolution (all game-world
+     coordinates/collision/physics stay in that space, untouched) --
+     fitCanvasToViewport() below just sets its displayed CSS size,
+     letterboxed to the right aspect ratio, so mousemove's existing
+     getBoundingClientRect-based scaling stays accurate at any size. ---- */
   .stage{
-    position:relative;
-    border: 1px solid var(--grid);
-    box-shadow: 0 0 0 1px rgba(255,255,255,0.02), 0 20px 60px rgba(0,0,0,0.5), inset 0 0 80px rgba(63,208,255,0.03);
+    position:fixed;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background: var(--void);
+    overflow:hidden;
+  }
+  .stage::before{
+    /* Thin futuristic frame -- cyan (Player One) / magenta (Computer)
+       opposing identity, subtle rather than a glowing border. */
+    content:'';
+    position:absolute; inset:0;
+    pointer-events:none;
+    z-index:3;
+    border: 1px solid rgba(122,158,200,0.16);
+    box-shadow:
+      inset 3px 0 0 -2px rgba(63,208,255,0.55),
+      inset -3px 0 0 -2px rgba(255,95,109,0.55),
+      inset 0 0 90px rgba(0,0,0,0.55);
+  }
+  .stage::after{
+    /* Angular corner brackets, echoing the lobby's cyan/magenta corner
+       marks -- purely decorative, each an L made of two thin gradient
+       strips so no extra markup/images are needed. */
+    content:'';
+    position:absolute; inset:0;
+    pointer-events:none;
+    z-index:3;
+    --cs: 26px; --ct: 2px;
+    background:
+      linear-gradient(90deg,  var(--p1), transparent) top    left  / var(--cs) var(--ct) no-repeat,
+      linear-gradient(180deg, var(--p1), transparent) top    left  / var(--ct) var(--cs) no-repeat,
+      linear-gradient(90deg,  var(--p1), transparent) bottom left  / var(--cs) var(--ct) no-repeat,
+      linear-gradient(0deg,   var(--p1), transparent) bottom left  / var(--ct) var(--cs) no-repeat,
+      linear-gradient(270deg, var(--p2), transparent) top    right / var(--cs) var(--ct) no-repeat,
+      linear-gradient(180deg, var(--p2), transparent) top    right / var(--ct) var(--cs) no-repeat,
+      linear-gradient(270deg, var(--p2), transparent) bottom right / var(--cs) var(--ct) no-repeat,
+      linear-gradient(0deg,   var(--p2), transparent) bottom right / var(--ct) var(--cs) no-repeat;
   }
 
   canvas{ display:block; background: var(--void); }
+  canvas#game{
+    /* Actual displayed width/height are set in JS (fitCanvasToViewport)
+       to the exact letterboxed size, in real px -- not object-fit/%,
+       so canvas.getBoundingClientRect() (which the existing mouse-aim
+       math already scales through) always matches the visible arena
+       pixel-for-pixel with no invisible fit-vs-box gap. */
+    position:relative; z-index:1;
+    filter: drop-shadow(0 0 60px rgba(63,208,255,0.05)) drop-shadow(0 0 60px rgba(255,95,109,0.04));
+  }
 
   .hud{
     position:absolute;
     top:0; left:0; right:0;
     display:flex;
     justify-content:space-between;
-    padding: 10px 14px;
+    padding: 22px 30px;
     pointer-events:none;
     font-family:'Share Tech Mono', monospace;
+    z-index:2;
   }
-  .side{ display:flex; flex-direction:column; gap:6px; min-width:150px; }
-  .side.right{ align-items:flex-end; }
-  .name{ font-size:13px; letter-spacing:2px; font-weight:700; }
+  .side{
+    display:flex; flex-direction:column; gap:9px; min-width:170px;
+    padding: 12px 16px 14px;
+    background: linear-gradient(180deg, rgba(10,14,22,0.55), rgba(10,14,22,0.15) 70%, transparent);
+    border-top: 2px solid var(--p1);
+    box-shadow: 0 10px 24px rgba(0,0,0,0.35);
+  }
+  .side.right{
+    align-items:flex-end; border-top-color: var(--p2);
+    /* Clears the always-on-top mute button (top-right corner) so its
+       hitbox never overlaps this panel's new background/border-top. */
+    margin-right: 38px;
+  }
+  .name{ font-size:14px; letter-spacing:3px; font-weight:700; text-shadow: 0 0 12px currentColor; }
   .name.p1{ color: var(--p1); }
   .name.p2{ color: var(--p2); }
   .score{ display:flex; gap:5px; }
@@ -82,18 +129,18 @@
   .pip.filled.p1{ background: var(--p1); border-color: var(--p1); box-shadow:0 0 8px var(--p1); }
   .pip.filled.p2{ background: var(--p2); border-color: var(--p2); box-shadow:0 0 8px var(--p2); }
 
-  .bars{ display:flex; flex-direction:column; gap:3px; width:130px; }
+  .bars{ display:flex; flex-direction:column; gap:4px; width:150px; }
   .side.right .bars{ align-items:flex-end; }
-  .barlabel{ font-size:9px; letter-spacing:1px; color:var(--ink-dim); }
+  .barlabel{ font-size:9px; letter-spacing:2px; color:var(--ink-dim); }
   .barrow{ display:flex; gap:3px; }
   .side.right .barrow{ flex-direction:row-reverse; }
   .ammodot{ width:9px; height:9px; border-radius:50%; border:1px solid var(--ink-dim); }
   .ammodot.on.p1{ background:var(--p1); border-color:var(--p1); box-shadow:0 0 5px var(--p1); }
   .ammodot.on.p2{ background:var(--p2); border-color:var(--p2); box-shadow:0 0 5px var(--p2); }
-  .dashtrack{ width:130px; height:5px; background:var(--grid); border-radius:3px; overflow:hidden; }
+  .dashtrack{ width:150px; height:5px; background:var(--grid); border-radius:3px; overflow:hidden; }
   .dashfill{ height:100%; width:100%; transition:width .08s linear; }
-  .dashfill.p1{ background:var(--p1); }
-  .dashfill.p2{ background:var(--p2); }
+  .dashfill.p1{ background:var(--p1); box-shadow: 0 0 6px var(--p1); }
+  .dashfill.p2{ background:var(--p2); box-shadow: 0 0 6px var(--p2); }
 
   .center-msg{
     position:absolute; inset:0;
@@ -113,7 +160,12 @@
   }
 
   .legend{
-    display:flex; justify-content:center; gap: 46px;
+    /* Kept out of the gameplay screen (see h1,.sub,.legend{display:none}
+       above) -- controls now belong in a future Tutorial/Settings
+       screen, not underneath the arena. display:none here would be
+       overridden by this later, more specific rule, so it's repeated. */
+    display:none;
+    justify-content:center; gap: 46px;
     margin-top: 16px;
     font-family:'Share Tech Mono', monospace;
     font-size: 11px;
@@ -2832,6 +2884,25 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
+
+  // Fullscreen presentation only -- the canvas's drawing-buffer
+  // resolution (W/H above, from its width/height attributes) never
+  // changes, so every game-world coordinate stays exactly as before.
+  // This just picks the largest on-screen size that preserves the
+  // W:H aspect ratio and fits the viewport, and sets it as the real
+  // rendered pixel size (not %/object-fit) so canvas.getBoundingClientRect()
+  // -- which the existing mouse-aim math already scales through --
+  // always matches the visible arena exactly, with no dead letterbox
+  // margin inside the element itself.
+  function fitCanvasToViewport(){
+    const vw = window.innerWidth, vh = window.innerHeight;
+    let w = vw, h = vw * (H/W);
+    if(h > vh){ h = vh; w = vh * (W/H); }
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+  }
+  fitCanvasToViewport();
+  window.addEventListener('resize', fitCanvasToViewport);
 
   const centerMsg = document.getElementById('centerMsg');
   const scoreP1El = document.getElementById('scoreP1');
@@ -5608,8 +5679,25 @@ updateDecoys(dt);
 
   function drawCovers(){
     for(const c of covers){
-      ctx.fillStyle = '#2a3140';
+      ctx.save();
+      ctx.shadowBlur = 14;
+      ctx.shadowColor = 'rgba(0,0,0,0.6)';
+      ctx.shadowOffsetY = 3;
+      const grad = ctx.createLinearGradient(c.x, c.y, c.x, c.y+c.h);
+      grad.addColorStop(0, '#333c4e');
+      grad.addColorStop(1, '#202633');
+      ctx.fillStyle = grad;
       ctx.fillRect(c.x, c.y, c.w, c.h);
+      ctx.restore();
+      // Thin illuminated top/left edge -- cheap "metallic panel" highlight
+      // without any change to the rect's actual collision geometry.
+      ctx.strokeStyle = 'rgba(160,190,220,0.55)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(c.x+0.5, c.y+c.h-0.5);
+      ctx.lineTo(c.x+0.5, c.y+0.5);
+      ctx.lineTo(c.x+c.w-0.5, c.y+0.5);
+      ctx.stroke();
       ctx.strokeStyle = '#4a5568';
       ctx.lineWidth = 1.5;
       ctx.strokeRect(c.x+0.5, c.y+0.5, c.w-1, c.h-1);
