@@ -287,6 +287,20 @@
   .menu-btn.admin-entry:hover{ background: rgba(255,95,109,0.1); box-shadow:0 0 16px rgba(255,95,109,0.3); border-color: #ff5f6d; }
 
   .admin-panel{ width: 460px; }
+  /* Combined selector so this wins over .shop-panel's own max-height
+     regardless of source order -- the admin panel's content (ability
+     balance + credit management + admin log) can run taller than the
+     viewport, so the panel itself scrolls internally instead of letting
+     content overflow off-screen top and bottom. */
+  .shop-panel.admin-panel{
+    max-height: 88vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin; scrollbar-color: rgba(255,95,109,.35) transparent;
+  }
+  .shop-panel.admin-panel::-webkit-scrollbar{ width:6px; }
+  .shop-panel.admin-panel::-webkit-scrollbar-thumb{ background: rgba(255,95,109,.35); border-radius:3px; }
+  .shop-panel.admin-panel::-webkit-scrollbar-thumb:hover{ background: rgba(255,95,109,.55); }
   .admin-section-label{
     font-family:'Share Tech Mono', monospace;
     font-size: 11px; letter-spacing: 3px;
@@ -4907,7 +4921,23 @@ let scoreCarry = null;
   const keysDown = {};
   const keysPressed = {};
 
+  // True while the event's target is a text-editable element (a text
+  // input, textarea, or contenteditable node -- e.g. the admin panel's
+  // player search field or credit amount field). Gameplay's global
+  // keydown listeners check this first and bail out entirely when it's
+  // true, so typing "a"/"s"/space/enter/etc. into a field behaves like
+  // normal text input instead of being read as WASD/shoot/dash and
+  // having its default character-insertion prevented.
+  function isTypingTarget(target){
+    return !!target && (
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target.isContentEditable
+    );
+  }
+
   window.addEventListener('keydown', (e)=>{
+    if(isTypingTarget(e.target)) return;
     const k = e.key.toLowerCase();
     if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright',' ','enter','/','shift','r'].includes(k)){
       e.preventDefault();
