@@ -62,7 +62,8 @@ function defaultAccount(name, email) {
         p1SkinId: "cyan",
         p2SkinId: "red",
         autoAimP1: false,
-        autoAimP2: false
+        autoAimP2: false,
+        aimMode: "movement"
     };
 }
 
@@ -375,7 +376,8 @@ const httpServer = http.createServer(async (req, res) => {
                 p1SkinId: body.p1SkinId || existing.p1SkinId,
                 p2SkinId: body.p2SkinId || existing.p2SkinId,
                 autoAimP1: typeof body.autoAimP1 === "boolean" ? body.autoAimP1 : (existing.autoAimP1 || false),
-                autoAimP2: typeof body.autoAimP2 === "boolean" ? body.autoAimP2 : (existing.autoAimP2 || false)
+                autoAimP2: typeof body.autoAimP2 === "boolean" ? body.autoAimP2 : (existing.autoAimP2 || false),
+                aimMode: (body.aimMode === "mouse" || body.aimMode === "movement") ? body.aimMode : (existing.aimMode || "movement")
             };
             saveAccountsToDisk();
             sendJson(res, 200, { ok: true });
