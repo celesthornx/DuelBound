@@ -568,6 +568,679 @@
   }
   #touchAbilityBtn.pressed{ background:rgba(255,206,84,0.22); box-shadow:0 0 16px rgba(255,206,84,0.5); }
   #touchAbilityBtn.hidden{ display:none; }
+
+  /* ============================================================
+     MAIN MENU LOBBY  --  full-screen AAA-style lobby shell.
+     This is purely a presentation layer: every control in here
+     proxies to the original menu buttons (kept in #legacyControls)
+     so none of the existing game / shop / auth logic changed.
+     ============================================================ */
+
+  :root{
+    --panel:        rgba(14,19,29,0.72);
+    --panel-solid:  rgba(12,16,25,0.92);
+    --panel-edge:   rgba(122,158,200,0.18);
+    --panel-edge-2: rgba(122,158,200,0.30);
+    --gold:         #ffce54;
+    --lobby-pad:    26px;
+  }
+
+  /* ---- Overlays go full-screen so the lobby and every sub-menu
+     (shop / leaderboards / settings / game type ...) share one frame ---- */
+  .menu-overlay{ position: fixed; }
+  .menu-overlay:not(.lobby){
+    background:
+      radial-gradient(85% 70% at 18% 16%, rgba(63,208,255,.11), transparent 62%),
+      radial-gradient(85% 70% at 82% 84%, rgba(255,95,160,.10), transparent 62%),
+      rgba(6,9,15,.97);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+  .menu-overlay:not(.lobby) .menu-title{
+    font-family:'Chakra Petch', sans-serif; font-weight:700;
+    font-size: 17px; letter-spacing: 5px; color: rgba(226,238,252,.92);
+  }
+  .menu-overlay:not(.lobby) .menu-btn{
+    background: linear-gradient(180deg, rgba(20,27,42,.7), rgba(10,14,22,.7));
+    border-color: rgba(122,158,200,.28);
+  }
+
+  #menuMain.lobby{
+    inset: 0;
+    display: grid;
+    grid-template-rows: auto minmax(0,1fr) auto;
+    gap: 0;
+    padding: 0;
+    background: #06080d;
+    overflow: hidden;
+    align-items: stretch;
+    justify-content: stretch;
+    animation: lobbyIn .45s ease both;
+  }
+  @keyframes lobbyIn{ from{ opacity:0; } to{ opacity:1; } }
+
+  /* ---------- Background: arena environment (pure CSS, no assets) ---------- */
+  .lobby-bg{ position:absolute; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
+  .lobby-bg::before{
+    /* deep base wash */
+    content:''; position:absolute; inset:0;
+    background:
+      radial-gradient(120% 90% at 50% 8%, rgba(70,110,190,0.22) 0%, transparent 60%),
+      linear-gradient(180deg, #0a1020 0%, #080b14 45%, #05070c 100%);
+  }
+  .lb-glow{ position:absolute; width:52%; height:78%; top:-6%; filter: blur(70px); opacity:.55; }
+  .lb-glow-l{ left:-8%;  background: radial-gradient(circle at 40% 40%, rgba(63,208,255,0.55), transparent 62%); }
+  .lb-glow-r{ right:-8%; background: radial-gradient(circle at 60% 40%, rgba(255,64,150,0.50), transparent 62%); }
+
+  /* perspective floor */
+  .lb-floor{
+    position:absolute; left:-40%; right:-40%; bottom:-14%; height:56%;
+    background-image:
+      repeating-linear-gradient(90deg, rgba(120,180,255,0.16) 0 1px, transparent 1px 84px),
+      repeating-linear-gradient(0deg,  rgba(120,180,255,0.13) 0 1px, transparent 1px 56px);
+    transform: perspective(560px) rotateX(72deg);
+    transform-origin: 50% 0%;
+    mask-image: linear-gradient(180deg, rgba(0,0,0,.85), transparent 78%);
+    -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,.85), transparent 78%);
+    opacity:.8;
+  }
+  .lb-horizon{
+    position:absolute; left:0; right:0; top:46%; height:2px;
+    background: linear-gradient(90deg, transparent, rgba(63,208,255,.55) 22%, rgba(255,255,255,.5) 50%, rgba(255,95,160,.55) 78%, transparent);
+    filter: blur(1px); opacity:.7;
+  }
+  .lb-horizon::after{
+    content:''; position:absolute; left:12%; right:12%; top:-70px; height:70px;
+    background: radial-gradient(60% 100% at 50% 100%, rgba(150,200,255,.20), transparent 70%);
+  }
+  .lb-vignette{
+    position:absolute; inset:0;
+    background:
+      radial-gradient(110% 80% at 50% 45%, transparent 42%, rgba(3,5,9,.78) 100%),
+      repeating-linear-gradient(0deg, rgba(255,255,255,.014) 0 1px, transparent 1px 3px);
+  }
+
+  /* ---------- Shared panel look ---------- */
+  .lp{
+    position:relative;
+    background: var(--panel);
+    border: 1px solid var(--panel-edge);
+    border-radius: 4px;
+    backdrop-filter: blur(9px);
+    -webkit-backdrop-filter: blur(9px);
+    box-shadow: 0 14px 40px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.045);
+  }
+  /* corner ticks -- cheap "sci-fi frame" detail */
+  .lp::before, .lp::after{
+    content:''; position:absolute; width:12px; height:12px; pointer-events:none;
+    border-color: rgba(63,208,255,.55); border-style:solid; border-width:0;
+  }
+  .lp::before{ top:-1px; left:-1px; border-top-width:2px; border-left-width:2px; }
+  .lp::after{ bottom:-1px; right:-1px; border-bottom-width:2px; border-right-width:2px; border-color: rgba(255,95,160,.5); }
+
+  .lp-head{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    padding: 11px 14px 9px;
+    border-bottom: 1px solid rgba(122,158,200,.14);
+  }
+  .lp-title{
+    font-family:'Chakra Petch', sans-serif; font-weight:700;
+    font-size: 12px; letter-spacing: 2.4px; color: var(--p1);
+  }
+  .lp-title.magenta{ color:#ff6fb0; }
+  .lp-body{ padding: 12px 14px 14px; }
+
+  .micro{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 9px; letter-spacing: 1.8px; color: var(--ink-dim);
+  }
+
+  .soon-tag{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 8px; letter-spacing: 1.6px;
+    color: rgba(200,215,235,.62);
+    border: 1px solid rgba(122,158,200,.3);
+    background: rgba(122,158,200,.09);
+    border-radius: 2px;
+    padding: 2px 6px;
+    white-space: nowrap;
+  }
+
+  /* “COMING SOON” placeholder body -- deliberate, not broken-looking */
+  .soon-block{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:7px; text-align:center;
+    padding: 16px 10px;
+    border: 1px dashed rgba(122,158,200,.22);
+    border-radius: 3px;
+    background:
+      repeating-linear-gradient(135deg, rgba(122,158,200,.05) 0 8px, transparent 8px 16px);
+  }
+  .soon-block .sb-main{
+    font-family:'Chakra Petch', sans-serif; font-weight:700;
+    font-size: 12px; letter-spacing: 3px; color: rgba(216,228,244,.85);
+  }
+  .soon-block .sb-sub{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 9px; letter-spacing: 1.4px; color: var(--ink-dim); max-width: 210px; line-height:1.6;
+  }
+  .soon-block svg{ opacity:.55; }
+
+  /* ---------- TOP BAR ---------- */
+  .lobby-top{
+    position:relative; z-index:3;
+    display:flex; align-items:center; gap:22px;
+    padding: 12px var(--lobby-pad);
+    border-bottom: 1px solid rgba(122,158,200,.13);
+    background: linear-gradient(180deg, rgba(6,9,15,.94), rgba(6,9,15,.55));
+  }
+  .lobby-brand{ display:flex; align-items:center; gap:11px; flex:0 0 auto; }
+  .brand-mark{ width:38px; height:38px; flex:0 0 auto; filter: drop-shadow(0 0 8px rgba(63,208,255,.5)); }
+  .brand-text{ display:flex; flex-direction:column; line-height:.95; }
+  .brand-text b{
+    font-family:'Chakra Petch', sans-serif; font-weight:700;
+    font-size: 21px; letter-spacing: 2.5px;
+    background: linear-gradient(90deg, var(--p1), #b9d9ff 45%, #ff5f9e);
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color: transparent;
+  }
+  .brand-text b + b{ font-size: 21px; }
+
+  .lobby-nav{ display:flex; align-items:center; gap:4px; flex: 1 1 auto; justify-content:center; }
+  .nav-item{
+    position:relative; background:none; border:none; cursor:pointer;
+    font-family:'Chakra Petch', sans-serif; font-weight:600;
+    font-size: 13px; letter-spacing: 2.4px;
+    color: rgba(206,220,238,.62);
+    padding: 10px 16px;
+    transition: color .16s ease;
+  }
+  .nav-item::after{
+    content:''; position:absolute; left:16px; right:16px; bottom:2px; height:2px;
+    background: var(--p1); box-shadow: 0 0 10px var(--p1);
+    transform: scaleX(0); transform-origin:center; transition: transform .2s ease;
+  }
+  .nav-item:hover{ color:#fff; }
+  .nav-item:hover::after{ transform: scaleX(.55); }
+  .nav-item.active{ color:#fff; }
+  .nav-item.active::after{ transform: scaleX(1); }
+  .nav-item.nav-admin{ color:#ff8a94; }
+  .nav-item.nav-admin::after{ background: var(--p2); box-shadow:0 0 10px var(--p2); }
+
+  .lobby-top-right{ display:flex; align-items:center; gap:9px; flex:0 0 auto; }
+  .credit-pill{
+    display:flex; align-items:center; gap:8px;
+    border:1px solid rgba(255,206,84,.45);
+    background: linear-gradient(180deg, rgba(255,206,84,.10), rgba(255,206,84,.03));
+    border-radius: 3px; padding: 5px 5px 5px 12px;
+    box-shadow: 0 0 16px rgba(255,206,84,.10), inset 0 1px 0 rgba(255,255,255,.06);
+  }
+  .cp-gem{ color: var(--gold); font-size: 13px; line-height:1; }
+  .credit-pill .cp-val{
+    font-family:'Chakra Petch', sans-serif; font-weight:700;
+    font-size: 16px; letter-spacing: 1px; color:#ffe7a8; min-width: 26px; text-align:center;
+  }
+  .cp-plus{
+    width:26px; height:26px; border-radius:3px; cursor:pointer;
+    border:1px solid rgba(255,206,84,.5);
+    background: rgba(255,206,84,.14); color: var(--gold);
+    font-size: 15px; font-weight:700; line-height:1;
+    display:flex; align-items:center; justify-content:center;
+    transition: all .15s ease;
+  }
+  .cp-plus:hover{ background: var(--gold); color:#12130c; box-shadow:0 0 14px rgba(255,206,84,.55); }
+
+  .icon-btn{
+    width:38px; height:38px; border-radius:3px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    border:1px solid var(--panel-edge);
+    background: rgba(255,255,255,.03);
+    color: rgba(206,220,238,.75);
+    transition: all .15s ease;
+    position:relative;
+  }
+  .icon-btn:hover{ border-color: rgba(63,208,255,.55); color:#fff; background: rgba(63,208,255,.09); box-shadow:0 0 14px rgba(63,208,255,.2); }
+  .icon-btn svg{ width:18px; height:18px; }
+  .icon-btn.muted{ opacity:.55; }
+  .icon-btn.muted:hover{ opacity:.9; }
+
+  /* ---------- MAIN 3-COLUMN GRID ---------- */
+  .lobby-main{
+    position:relative; z-index:2;
+    display:grid;
+    grid-template-columns: 300px minmax(0,1fr) 300px;
+    gap: 16px;
+    padding: 16px var(--lobby-pad);
+    min-height: 0;
+  }
+  .lobby-col{
+    display:flex; flex-direction:column; gap: 12px;
+    min-height:0; overflow-y:auto; overflow-x:hidden;
+    padding-right: 2px;
+    scrollbar-width: thin; scrollbar-color: rgba(122,158,200,.3) transparent;
+  }
+  .lobby-col::-webkit-scrollbar{ width:5px; }
+  .lobby-col::-webkit-scrollbar-thumb{ background: rgba(122,158,200,.28); border-radius:3px; }
+
+  /* ---------- LEFT: profile card ---------- */
+  .profile-head{ display:flex; align-items:center; gap:12px; padding: 14px 14px 12px; }
+  .avatar{
+    width:64px; height:64px; flex:0 0 auto; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    border: 2px solid var(--p1);
+    background: radial-gradient(circle at 50% 45%, rgba(63,208,255,.22), rgba(8,12,20,.9) 70%);
+    box-shadow: 0 0 18px rgba(63,208,255,.3), inset 0 0 18px rgba(63,208,255,.18);
+  }
+  .avatar svg{ width:34px; height:34px; }
+  .profile-id{ min-width:0; flex:1 1 auto; }
+  .profile-name{
+    font-family:'Chakra Petch', sans-serif; font-weight:700;
+    font-size: 19px; letter-spacing: .6px; color:#fff;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .profile-tag{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 8.5px; letter-spacing: 1.2px; color: var(--ink-dim);
+    line-height:1.5; margin-top:3px;
+  }
+  .profile-auth{ margin-top:8px; display:flex; align-items:center; gap:8px; }
+  .profile-auth .menu-back{ margin-top:0; }
+
+  .rank-strip{
+    display:flex; align-items:center; gap:11px;
+    margin: 0 12px 12px; padding: 10px 12px;
+    border:1px solid rgba(122,158,200,.16); border-radius:3px;
+    background: linear-gradient(90deg, rgba(63,208,255,.07), rgba(255,95,160,.05));
+  }
+  .rank-strip svg{ width:30px; height:30px; flex:0 0 auto; opacity:.85; }
+  .rank-strip .rk{ flex:1 1 auto; min-width:0; }
+  .rank-name{
+    font-family:'Chakra Petch', sans-serif; font-weight:700;
+    font-size: 14px; letter-spacing: 2px; color: rgba(226,236,250,.9);
+  }
+
+  .stat-list{ display:flex; flex-direction:column; margin: 0 12px 12px; }
+  .stat-row{
+    display:flex; align-items:center; gap:10px;
+    padding: 9px 12px;
+    border:1px solid rgba(122,158,200,.13);
+    background: rgba(255,255,255,.018);
+    border-radius:3px;
+  }
+  .stat-row + .stat-row{ margin-top:6px; }
+  .stat-row svg{ width:16px; height:16px; flex:0 0 auto; }
+  .stat-row .k{
+    flex:1 1 auto;
+    font-family:'Chakra Petch', sans-serif; font-weight:600;
+    font-size: 11.5px; letter-spacing: 2px; color: rgba(206,220,238,.78);
+  }
+  .stat-row .v{
+    font-family:'Chakra Petch', sans-serif; font-weight:700;
+    font-size: 17px; letter-spacing: .5px; color:#fff;
+  }
+  .stat-row.gold .v{ color: var(--gold); }
+
+  /* ---------- CENTER ---------- */
+  .lobby-center{
+    position:relative; min-height:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap: 18px;
+    padding: 4px 0;
+  }
+  .arena-banner{
+    display:flex; flex-direction:column; align-items:center; gap:5px;
+    opacity:.9;
+  }
+  .arena-banner .ab-plate{
+    font-family:'Chakra Petch', sans-serif; font-weight:700;
+    font-size: 13px; letter-spacing: 7px; color: rgba(220,235,255,.75);
+    padding: 7px 26px;
+    border:1px solid rgba(122,158,200,.25);
+    background: linear-gradient(180deg, rgba(63,208,255,.10), rgba(255,95,160,.07));
+    box-shadow: 0 0 26px rgba(63,208,255,.14);
+    clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 14px 100%, 0 50%);
+  }
+  .arena-banner .ab-mast{ width:1px; height:22px; background: linear-gradient(180deg, rgba(150,200,255,.5), transparent); }
+
+  /* PLAY -- the dominant action.
+     Structure: .play-btn > .play-shape (decorative, clipped, purely
+     absolute-positioned background layers) + .play-content (the actual
+     text, laid out normally with flex -- never clipped, always on top).
+     Splitting these means the PLAY label can never be swallowed by the
+     hexagon geometry, no matter how the shape is tuned. */
+  .play-btn{
+    position:relative; isolation:isolate; cursor:pointer; border:none; background:none;
+    padding: 0; width: min(560px, 100%);
+    display:block;
+    transition: transform .16s cubic-bezier(.22,.8,.32,1);
+  }
+  .play-btn:hover{ transform: translateY(-3px) scale(1.03); }
+  .play-btn:active,
+  .play-btn.pressed{ transform: translateY(0) scale(.965); transition-duration: .08s; }
+
+  .play-shape{ position:absolute; inset:0; z-index:0; pointer-events:none; }
+
+  /* Outer edge: cyan on the left, magenta on the right -- the glowing
+     border/frame of the shape. */
+  .play-edge{
+    position:absolute; inset:0;
+    clip-path: polygon(48px 0, calc(100% - 48px) 0, 100% 50%, calc(100% - 48px) 100%, 48px 100%, 0 50%);
+    background: linear-gradient(90deg, var(--p1) 0%, #d8ecff 46%, #ff4f9c 100%);
+    filter: drop-shadow(0 0 14px rgba(63,208,255,.42)) drop-shadow(0 0 20px rgba(255,79,156,.34));
+    animation: playPulse 3.2s ease-in-out infinite;
+    transition: filter .2s ease;
+  }
+  .play-btn:hover .play-edge{
+    filter: drop-shadow(0 0 24px rgba(63,208,255,.7)) drop-shadow(0 0 32px rgba(255,79,156,.58));
+  }
+  @keyframes playPulse{
+    0%,100%{ filter: drop-shadow(0 0 12px rgba(63,208,255,.34)) drop-shadow(0 0 16px rgba(255,79,156,.26)); }
+    50%    { filter: drop-shadow(0 0 20px rgba(63,208,255,.55)) drop-shadow(0 0 26px rgba(255,79,156,.46)); }
+  }
+
+  /* Interior fill: dark and translucent so the PLAY text sits on a
+     readable surface, with a faint cyan/magenta wash and clear depth. */
+  .play-fill{
+    position:absolute; inset: 2.5px;
+    clip-path: polygon(46px 0, calc(100% - 46px) 0, 100% 50%, calc(100% - 46px) 100%, 46px 100%, 0 50%);
+    background:
+      radial-gradient(130% 170% at 4% 50%,  rgba(63,208,255,.20), transparent 58%),
+      radial-gradient(130% 170% at 96% 50%, rgba(255,79,156,.18), transparent 58%),
+      linear-gradient(180deg, rgba(19,25,38,.96) 0%, rgba(8,11,18,.97) 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06), inset 0 -14px 30px rgba(0,0,0,.4);
+    transition: background .2s ease;
+  }
+  .play-btn:hover .play-fill{
+    background:
+      radial-gradient(130% 170% at 4% 50%,  rgba(63,208,255,.30), transparent 58%),
+      radial-gradient(130% 170% at 96% 50%, rgba(255,79,156,.27), transparent 58%),
+      linear-gradient(180deg, rgba(24,31,47,.96) 0%, rgba(10,13,21,.97) 100%);
+  }
+
+  /* Hover-only light sweep -- a small "energy" pass across the shape. */
+  .play-sheen{
+    position:absolute; inset: 2.5px;
+    clip-path: polygon(46px 0, calc(100% - 46px) 0, 100% 50%, calc(100% - 46px) 100%, 46px 100%, 0 50%);
+    background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,.20) 47%, transparent 64%);
+    background-size: 240% 100%; background-position: -140% 0;
+    opacity: 0;
+  }
+  .play-btn:hover .play-sheen{ opacity:1; animation: playSheen 1s ease forwards; }
+  @keyframes playSheen{ from{ background-position:-140% 0; } to{ background-position:140% 0; } }
+
+  /* Text layer -- flex-centered, never clipped, always readable. */
+  .play-content{
+    position:relative; z-index:2; pointer-events:none;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    min-height: 118px;
+    padding: 24px 58px;
+  }
+  .play-label{
+    display:block;
+    font-family:'Chakra Petch', sans-serif; font-weight:700;
+    font-size: 54px; line-height:1; letter-spacing: 8px; color:#fff;
+    text-shadow:
+      0 0 4px rgba(255,255,255,.65),
+      0 0 22px rgba(150,205,255,.7),
+      0 0 42px rgba(255,90,170,.4),
+      0 4px 18px rgba(0,0,0,.8);
+    transition: text-shadow .2s ease;
+  }
+  .play-btn:hover .play-label{
+    text-shadow:
+      0 0 6px rgba(255,255,255,.85),
+      0 0 28px rgba(150,205,255,.9),
+      0 0 54px rgba(255,90,170,.55),
+      0 4px 18px rgba(0,0,0,.8);
+  }
+  .play-sub{
+    display:flex; align-items:center; justify-content:center; gap:9px;
+    margin-top: 10px;
+    font-family:'Chakra Petch', sans-serif; font-weight:600;
+    font-size: 14px; letter-spacing: 4px; color: rgba(216,232,250,.9);
+  }
+  .play-sub .chev{ color: var(--p1); font-size: 17px; letter-spacing:0; transition: transform .2s ease, color .2s ease; }
+  .play-btn:hover .play-sub .chev{ transform: translateX(4px); color:#fff; }
+
+  /* mode carousel */
+  .mode-carousel{ display:flex; align-items:center; gap: 12px; width:100%; justify-content:center; }
+  .carousel-arrow{
+    width:38px; height:52px; flex:0 0 auto; cursor:pointer;
+    background: rgba(255,255,255,.03); border:1px solid var(--panel-edge);
+    border-radius:3px; color: rgba(216,232,250,.7);
+    font-size: 24px; line-height:1;
+    display:flex; align-items:center; justify-content:center;
+    transition: all .15s ease;
+  }
+  .carousel-arrow:hover{ color:#fff; border-color: rgba(63,208,255,.55); background: rgba(63,208,255,.1); }
+
+  .mode-cards{ display:flex; align-items:center; gap:12px; }
+  .mode-card{
+    position:relative; cursor:pointer; text-align:center;
+    width: 190px; padding: 0 0 12px;
+    background: linear-gradient(180deg, rgba(16,22,34,.85), rgba(9,12,20,.9));
+    border:1px solid rgba(122,158,200,.2);
+    border-radius:4px; overflow:hidden;
+    transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease, opacity .2s ease;
+    opacity:.72;
+  }
+  .mode-card:hover{ opacity:.95; border-color: rgba(122,158,200,.42); }
+  .mode-card.selected{
+    opacity:1; transform: scale(1.1); z-index:2;
+    border-color: rgba(63,208,255,.75);
+    box-shadow: 0 0 0 1px rgba(255,79,156,.28), 0 0 30px rgba(63,208,255,.32), 0 18px 40px rgba(0,0,0,.55);
+  }
+  .mode-card .mc-art{ display:block; width:100%; height: 92px; }
+  .mode-card .mc-name{
+    font-family:'Chakra Petch', sans-serif; font-weight:700;
+    font-size: 13.5px; letter-spacing: 2px; color:#fff; margin-top: 9px;
+  }
+  .mode-card.selected .mc-name{ font-size: 14.5px; }
+  .mode-card .mc-desc{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 8.5px; letter-spacing: 1.4px; color: var(--ink-dim);
+    margin-top: 4px; padding: 0 8px; line-height:1.5;
+  }
+  .mode-card .mc-players{
+    display:inline-flex; align-items:center; gap:5px; margin-top: 9px;
+    font-family:'Share Tech Mono', monospace; font-size: 10px; letter-spacing:1px;
+    color: rgba(216,232,250,.85);
+  }
+  .mode-card .mc-players svg{ width:12px; height:12px; opacity:.8; }
+  .mode-card .mc-crown{ position:absolute; top:6px; left:50%; transform: translateX(-50%); opacity:0; transition: opacity .2s ease; }
+  .mode-card.selected .mc-crown{ opacity:1; }
+
+  .mode-dots{ display:flex; gap:7px; align-items:center; }
+  .mode-dots i{
+    width:18px; height:3px; border-radius:2px; display:block;
+    background: rgba(122,158,200,.28); cursor:pointer; transition: all .2s ease;
+  }
+  .mode-dots i.on{ background: var(--p1); box-shadow:0 0 8px var(--p1); width:26px; }
+
+  /* ---------- RIGHT column bits ---------- */
+  .ghost-row{
+    display:flex; align-items:center; gap:10px;
+    padding: 8px 0;
+  }
+  .ghost-av{
+    width:30px; height:30px; border-radius:50%; flex:0 0 auto;
+    border:1px solid rgba(122,158,200,.22);
+    background: rgba(122,158,200,.08);
+  }
+  .ghost-lines{ flex:1 1 auto; display:flex; flex-direction:column; gap:5px; }
+  .ghost-lines span{ display:block; height:7px; border-radius:2px; background: rgba(122,158,200,.14); }
+  .ghost-lines span:first-child{ width:58%; }
+  .ghost-lines span:last-child{ width:34%; background: rgba(122,158,200,.09); }
+  .ghost-stack{ opacity:.75; -webkit-mask-image: linear-gradient(180deg,#000 40%,transparent); mask-image: linear-gradient(180deg,#000 40%,transparent); }
+
+  .news-art{
+    position:relative; height: 108px; border-radius:3px; overflow:hidden;
+    border:1px solid rgba(122,158,200,.16);
+    background:
+      radial-gradient(70% 100% at 20% 60%, rgba(63,208,255,.35), transparent 62%),
+      radial-gradient(70% 100% at 80% 60%, rgba(255,64,140,.32), transparent 62%),
+      linear-gradient(180deg, #0d1424, #070a12);
+    display:flex; align-items:flex-end; justify-content:center; padding-bottom: 12px;
+  }
+  .news-art .na-cap{
+    font-family:'Chakra Petch', sans-serif; font-weight:700;
+    font-size: 13px; letter-spacing: 3px; color: rgba(232,242,255,.9);
+    text-shadow: 0 2px 12px rgba(0,0,0,.8);
+  }
+  .news-art svg{ position:absolute; inset:0; width:100%; height:100%; opacity:.75; }
+
+  .premium-strip{
+    display:flex; align-items:center; gap:11px;
+    padding: 11px 13px;
+    border:1px solid rgba(255,206,84,.35); border-radius:4px;
+    background: linear-gradient(90deg, rgba(255,206,84,.14), rgba(255,140,60,.06));
+    cursor:pointer; transition: all .16s ease;
+  }
+  .premium-strip:hover{ border-color: rgba(255,206,84,.7); box-shadow:0 0 18px rgba(255,206,84,.22); }
+  .premium-strip svg{ width:28px; height:28px; flex:0 0 auto; }
+  .premium-strip .ps-t{
+    font-family:'Chakra Petch', sans-serif; font-weight:700;
+    font-size: 12.5px; letter-spacing: 2px; color: var(--gold);
+  }
+
+  /* ---------- BOTTOM BAR ---------- */
+  .lobby-bottom{
+    position:relative; z-index:3;
+    display:flex; align-items:center; gap:14px;
+    padding: 10px var(--lobby-pad);
+    border-top: 1px solid rgba(122,158,200,.13);
+    background: linear-gradient(0deg, rgba(6,9,15,.94), rgba(6,9,15,.5));
+  }
+  .chat-stub{
+    display:flex; align-items:center; gap:10px;
+    padding: 8px 14px; border-radius:3px;
+    border:1px solid rgba(122,158,200,.16);
+    background: rgba(255,255,255,.02);
+    color: var(--ink-dim);
+    font-family:'Share Tech Mono', monospace; font-size: 10px; letter-spacing:1.4px;
+    cursor: default; opacity:.75; min-width: 300px;
+  }
+  .chat-stub svg{ width:15px; height:15px; opacity:.7; }
+  .lobby-bottom .spacer{ flex:1 1 auto; }
+  .ghost-btn{
+    background: rgba(255,255,255,.03); border:1px solid var(--panel-edge);
+    color: rgba(216,232,250,.8); cursor:pointer; border-radius:3px;
+    font-family:'Chakra Petch', sans-serif; font-weight:600;
+    font-size: 11px; letter-spacing: 2px; padding: 9px 18px;
+    transition: all .15s ease;
+  }
+  .ghost-btn:hover{ color:#fff; border-color: rgba(63,208,255,.5); background: rgba(63,208,255,.09); }
+  .version-tag{
+    font-family:'Share Tech Mono', monospace; font-size: 10px;
+    letter-spacing: 1.6px; color: var(--ink-dim);
+  }
+
+  /* ---------- modal + toast (lobby-local, no backend) ---------- */
+  .lobby-modal{
+    position:absolute; inset:0; z-index:20;
+    display:flex; align-items:center; justify-content:center;
+    background: rgba(4,6,11,.82); backdrop-filter: blur(3px);
+    animation: lobbyIn .18s ease both;
+  }
+  .lm-card{ width: 420px; max-width: 90vw; max-height: 80vh; overflow:auto; }
+  .lm-body{ padding: 18px; }
+  .lm-close{ margin-top: 14px; width:100%; }
+  .lm-keys{ display:flex; flex-direction:column; gap:9px; }
+  .lm-keyrow{
+    display:flex; align-items:center; gap:10px;
+    font-family:'Share Tech Mono', monospace; font-size: 11px; color: rgba(216,232,250,.85);
+  }
+  .lm-keyrow b{
+    min-width: 116px; display:inline-block; text-align:center;
+    border:1px solid var(--panel-edge-2); border-radius:3px; padding: 3px 8px;
+    font-weight:400; color:#fff; background: rgba(255,255,255,.04);
+  }
+  .lm-section{
+    font-family:'Chakra Petch', sans-serif; font-weight:700; font-size: 11px;
+    letter-spacing: 2.5px; margin: 14px 0 8px;
+  }
+  .lm-section.p1c{ color: var(--p1); }
+  .lm-section.p2c{ color: var(--p2); }
+  .lm-section:first-child{ margin-top:0; }
+
+  .lobby-toast{
+    position:absolute; left:50%; bottom: 76px; transform: translate(-50%, 14px);
+    z-index: 25; pointer-events:none; opacity:0;
+    padding: 10px 20px; border-radius:3px;
+    border:1px solid rgba(63,208,255,.4);
+    background: rgba(10,16,26,.95);
+    box-shadow: 0 0 24px rgba(63,208,255,.2);
+    font-family:'Share Tech Mono', monospace; font-size: 11px; letter-spacing: 2px; color:#dff0ff;
+    transition: opacity .22s ease, transform .22s ease;
+  }
+  .lobby-toast.show{ opacity:1; transform: translate(-50%, 0); }
+
+  #legacyControls{ display:none !important; }
+
+  /* ---------- Responsive: 1600x900 / 1366x768 and below ---------- */
+  @media (max-width: 1680px){
+    .lobby-main{ grid-template-columns: 280px minmax(0,1fr) 280px; }
+    .mode-card{ width: 176px; }
+  }
+  @media (max-width: 1450px){
+    :root{ --lobby-pad: 18px; }
+    .lobby-main{ grid-template-columns: 262px minmax(0,1fr) 262px; gap: 12px; }
+    .nav-item{ font-size: 12px; letter-spacing: 1.8px; padding: 9px 11px; }
+    .play-label{ font-size: 44px; letter-spacing: 7px; }
+    .play-btn{ width: min(480px, 100%); }
+    .play-content{ min-height: 104px; padding: 20px 46px; }
+    .mode-card{ width: 160px; }
+    .mode-card .mc-art{ height: 80px; }
+  }
+  @media (max-width: 1240px){
+    .lobby-main{ grid-template-columns: 236px minmax(0,1fr) 236px; }
+    .brand-text b{ font-size: 17px; }
+    .brand-mark{ width:32px; height:32px; }
+    .nav-item{ font-size: 11px; letter-spacing: 1.4px; padding: 8px 8px; }
+    .mode-card{ width: 146px; }
+    .chat-stub{ min-width: 0; }
+  }
+  /* short laptop screens (768px tall) -- compress vertical rhythm */
+  @media (max-height: 850px){
+    .lobby-top{ padding-top: 9px; padding-bottom: 9px; }
+    .lobby-main{ padding-top: 11px; padding-bottom: 11px; gap: 11px; }
+    .lobby-col{ gap: 10px; }
+    .lobby-center{ gap: 13px; }
+    .avatar{ width:54px; height:54px; }
+    .avatar svg{ width:28px; height:28px; }
+    .profile-name{ font-size: 17px; }
+    .profile-head{ padding: 11px 12px 10px; }
+    .stat-row{ padding: 7px 11px; }
+    .stat-row .v{ font-size: 15px; }
+    .play-label{ font-size: 42px; }
+    .play-content{ padding: 17px 34px; min-height: 92px; }
+    .mode-card .mc-art{ height: 72px; }
+    .news-art{ height: 88px; }
+    .arena-banner{ display:none; }
+  }
+  @media (max-height: 700px){
+    .play-label{ font-size: 34px; letter-spacing: 5px; }
+    .play-content{ padding: 13px 26px; min-height: 76px; }
+    .mode-card .mc-art{ height: 60px; }
+    .news-art{ height: 72px; }
+  }
+
+  /* ---------- Narrow / touch: single scrolling column ---------- */
+  @media (max-width: 1000px){
+    #menuMain.lobby{ grid-template-rows: auto minmax(0,1fr) auto; }
+    .lobby-nav{ display:none; }
+    .lobby-main{
+      grid-template-columns: minmax(0,1fr);
+      overflow-y: auto; gap: 14px;
+    }
+    .lobby-col{ overflow: visible; }
+    .lobby-center{ order: -1; padding: 6px 0 2px; }
+    .mode-cards{ gap: 8px; }
+    .mode-card{ width: 132px; }
+    .mode-card.selected{ transform: scale(1.06); }
+    .play-label{ font-size: 34px; letter-spacing: 5px; }
+    .chat-stub{ display:none; }
+    .arena-banner{ display:none; }
+  }
 </style>
 </head>
 <body>
@@ -619,26 +1292,261 @@
 
   <div class="center-msg" id="centerMsg"></div>
 
-  <!-- MAIN MENU -->
-  <div class="menu-overlay" id="menuMain">
-    <div class="menu-title">SELECT MODE</div>
-    <div class="credits-display" id="creditsDisplayMain">◈ <span id="creditsAmountMain">0</span> CREDITS</div>
-    <div class="stats-line" id="statsLineMain">0 KILLS &middot; 0 WINS</div>
+  <!-- ============================================================
+       MAIN MENU  --  full-screen lobby.
+       Presentation only. Every action here proxies to the original
+       menu buttons, which now live (hidden) in #legacyControls at the
+       bottom of this block, so all existing game / shop / leaderboard
+       / auth / admin logic is untouched.
+       ============================================================ -->
+  <div class="menu-overlay lobby" id="menuMain">
 
-    <div class="account-panel">
-      <div class="account-status" id="accountStatus">NOT SIGNED IN &mdash; PROGRESS WON'T BE SAVED</div>
-      <div id="googleSignInBtn"></div>
-      <button class="menu-back hidden" id="signOutBtn">sign out</button>
+    <div class="lobby-bg">
+      <div class="lb-glow lb-glow-l"></div>
+      <div class="lb-glow lb-glow-r"></div>
+      <div class="lb-horizon"></div>
+      <div class="lb-floor"></div>
+      <div class="lb-vignette"></div>
     </div>
 
-    <div class="menu-group">
-	<button class="menu-btn" id="btnLocal">LOCAL 2 PLAYER</button>
-	<button class="menu-btn" id="btnOnline">ONLINE MULTIPLAYER</button>
-	<button class="menu-btn accent-2" id="btnAI">VS COMPUTER</button>
-      	<button class="menu-btn shop-entry" id="btnShop">SHOP</button>
-      	<button class="menu-btn leaderboard-entry" id="btnLeaderboard">LEADERBOARDS</button>
-      	<button class="menu-btn settings-entry" id="btnSettings">SETTINGS</button>
-      	<button class="menu-btn admin-entry hidden" id="btnAdmin">ADMIN</button>
+    <!-- ---------- TOP BAR ---------- -->
+    <header class="lobby-top">
+      <div class="lobby-brand">
+        <svg class="brand-mark" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+          <path d="M20 2 L34 11 L28 20 L34 29 L20 38 L6 29 L12 20 L6 11 Z" stroke="#3fd0ff" stroke-width="1.4" opacity=".55"/>
+          <path d="M20 7 L30 20 L20 33 L23 20 Z" fill="#ff5f9e"/>
+          <path d="M20 7 L10 20 L20 33 L17 20 Z" fill="#3fd0ff"/>
+        </svg>
+        <div class="brand-text"><b>DUEL</b><b>ARENA</b></div>
+      </div>
+
+      <nav class="lobby-nav">
+        <button class="nav-item active" data-act="play">PLAY</button>
+        <button class="nav-item" data-act="modes">MODES</button>
+        <button class="nav-item" data-act="shop">SHOP</button>
+        <button class="nav-item" data-act="leaderboards">LEADERBOARDS</button>
+        <button class="nav-item" data-act="profile">PROFILE</button>
+        <button class="nav-item nav-admin hidden" id="lobbyNavAdmin" data-act="admin">ADMIN</button>
+      </nav>
+
+      <div class="lobby-top-right">
+        <div class="credit-pill" title="Credits">
+          <span class="cp-gem">&#9670;</span>
+          <span class="cp-val" id="lobbyCredits">0</span>
+          <button class="cp-plus" data-act="shop" title="Spend credits in the shop">+</button>
+        </div>
+        <button class="icon-btn muted" data-act="friends" title="Friends">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3.2"/><path d="M17.5 14.2A4 4 0 0 1 22 18v2"/><path d="M16 4.3a3.2 3.2 0 0 1 0 6"/>
+          </svg>
+        </button>
+        <button class="icon-btn muted" data-act="mail" title="Mail">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>
+          </svg>
+        </button>
+        <button class="icon-btn" data-act="settings" title="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3.1"/>
+            <path d="M19.4 15a1.6 1.6 0 0 0 .32 1.77l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.6 1.6 0 0 0-1.77-.32 1.6 1.6 0 0 0-1 1.47V21a2 2 0 1 1-4 0v-.11A1.6 1.6 0 0 0 9 19.4a1.6 1.6 0 0 0-1.77.32l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.6 1.6 0 0 0 4.72 15a1.6 1.6 0 0 0-1.47-1H3a2 2 0 1 1 0-4h.11A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.32-1.77l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.6 1.6 0 0 0 9 4.72h.08A1.6 1.6 0 0 0 10 3.25V3a2 2 0 1 1 4 0v.11a1.6 1.6 0 0 0 1 1.47 1.6 1.6 0 0 0 1.77-.32l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.6 1.6 0 0 0 19.4 9v.08a1.6 1.6 0 0 0 1.47 1H21a2 2 0 1 1 0 4h-.11a1.6 1.6 0 0 0-1.47 1z"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- ---------- MAIN GRID ---------- -->
+    <main class="lobby-main">
+
+      <!-- ===== LEFT: player profile (all data from the existing account system) ===== -->
+      <aside class="lobby-col lobby-left">
+        <div class="lp">
+          <div class="profile-head">
+            <div class="avatar" id="lobbyAvatar">
+              <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
+                <path d="M17 3 L28 17 L17 31 L20 17 Z" fill="currentColor" opacity=".55"/>
+                <path d="M17 3 L6 17 L17 31 L14 17 Z" fill="currentColor"/>
+              </svg>
+            </div>
+            <div class="profile-id">
+              <div class="profile-name" id="lobbyName">GUEST</div>
+              <div class="profile-tag" id="accountStatus">NOT SIGNED IN &mdash; PROGRESS WON'T BE SAVED</div>
+              <div class="profile-auth">
+                <div id="googleSignInBtn"></div>
+                <button class="menu-back hidden" id="signOutBtn">sign out</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Ranked progression isn't part of the game yet -- reserved, not faked. -->
+          <div class="rank-strip">
+            <svg viewBox="0 0 30 30" fill="none" aria-hidden="true">
+              <path d="M15 2 L27 8 L27 17 C27 23 21 27 15 28 C9 27 3 23 3 17 L3 8 Z" stroke="rgba(160,190,225,.7)" stroke-width="1.3" fill="rgba(122,158,200,.10)"/>
+              <path d="M15 9 L20 15 L15 21 L10 15 Z" fill="rgba(190,215,245,.55)"/>
+            </svg>
+            <div class="rk">
+              <div class="micro">RANK</div>
+              <div class="rank-name">UNRANKED</div>
+            </div>
+            <span class="soon-tag">COMING SOON</span>
+          </div>
+
+          <div class="stat-list">
+            <div class="stat-row">
+              <svg viewBox="0 0 16 16" fill="none" stroke="#ffce54" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4.5 2h7v4a3.5 3.5 0 0 1-7 0z"/><path d="M4.5 3H2.5v1a2.5 2.5 0 0 0 2 2.4"/><path d="M11.5 3h2v1a2.5 2.5 0 0 1-2 2.4"/><path d="M6.5 9.5h3M5.5 14h5M8 9.5V14"/>
+              </svg>
+              <span class="k">WINS</span><span class="v" id="lobbyWins">0</span>
+            </div>
+            <div class="stat-row">
+              <svg viewBox="0 0 16 16" fill="none" stroke="#ff5f6d" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 2.5l9 9M11.5 2.5l-9 9"/><circle cx="12.6" cy="12.6" r="1.6"/><circle cx="3.4" cy="12.6" r="1.6"/>
+              </svg>
+              <span class="k">KILLS</span><span class="v" id="lobbyKills">0</span>
+            </div>
+            <div class="stat-row gold">
+              <svg viewBox="0 0 16 16" fill="none" stroke="#ffce54" stroke-width="1.4" stroke-linejoin="round">
+                <path d="M8 1.6 L13.6 8 L8 14.4 L2.4 8 Z"/>
+              </svg>
+              <span class="k">CREDITS</span><span class="v" id="lobbyCreditsStat">0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Daily challenges: no challenge system exists yet. -->
+        <div class="lp">
+          <div class="lp-head">
+            <span class="lp-title">DAILY CHALLENGES</span>
+            <span class="soon-tag">COMING SOON</span>
+          </div>
+          <div class="lp-body">
+            <div class="soon-block">
+              <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#7a9ec8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 4h16v4H4z"/><path d="M6 8v12h12V8"/><path d="M9.5 13.5l1.8 1.8 3.4-3.6"/>
+              </svg>
+              <div class="sb-main">IN DEVELOPMENT</div>
+              <div class="sb-sub">ROTATING OBJECTIVES AND REWARDS ARE ON THE WAY.</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ===== CENTER: play + existing game modes ===== -->
+      <section class="lobby-center">
+        <div class="arena-banner">
+          <div class="ab-plate">DUEL ARENA</div>
+          <div class="ab-mast"></div>
+        </div>
+
+        <button class="play-btn" id="lobbyPlay">
+          <span class="play-shape" aria-hidden="true">
+            <span class="play-edge"></span>
+            <span class="play-fill"></span>
+            <span class="play-sheen"></span>
+          </span>
+          <span class="play-content">
+            <span class="play-label">PLAY</span>
+            <span class="play-sub"><span id="lobbyPlaySub">ONLINE MULTIPLAYER</span><span class="chev">&raquo;</span></span>
+          </span>
+        </button>
+
+        <div class="mode-carousel">
+          <button class="carousel-arrow" id="lobbyModePrev" title="Previous mode">&lsaquo;</button>
+          <div class="mode-cards" id="lobbyModeCards"></div>
+          <button class="carousel-arrow" id="lobbyModeNext" title="Next mode">&rsaquo;</button>
+        </div>
+        <div class="mode-dots" id="lobbyModeDots"></div>
+      </section>
+
+      <!-- ===== RIGHT: reserved space for future systems ===== -->
+      <aside class="lobby-col lobby-right">
+        <div class="lp">
+          <div class="lp-head">
+            <span class="lp-title">FRIENDS</span>
+            <span class="soon-tag">COMING SOON</span>
+          </div>
+          <div class="lp-body">
+            <div class="ghost-stack">
+              <div class="ghost-row"><div class="ghost-av"></div><div class="ghost-lines"><span></span><span></span></div></div>
+              <div class="ghost-row"><div class="ghost-av"></div><div class="ghost-lines"><span></span><span></span></div></div>
+              <div class="ghost-row"><div class="ghost-av"></div><div class="ghost-lines"><span></span><span></span></div></div>
+            </div>
+            <div class="micro" style="text-align:center; margin-top:6px;">FRIENDS LIST NOT AVAILABLE YET</div>
+          </div>
+        </div>
+
+        <div class="lp">
+          <div class="lp-head">
+            <span class="lp-title magenta">NEWS &amp; EVENTS</span>
+            <span class="soon-tag">COMING SOON</span>
+          </div>
+          <div class="lp-body">
+            <div class="news-art">
+              <svg viewBox="0 0 240 110" preserveAspectRatio="none" fill="none" aria-hidden="true">
+                <path d="M30 70 L96 46 L84 62 L110 56 L44 84 L58 68 Z" fill="#3fd0ff" opacity=".75"/>
+                <path d="M210 70 L144 46 L156 62 L130 56 L196 84 L182 68 Z" fill="#ff5f9e" opacity=".75"/>
+                <path d="M0 96 H240" stroke="rgba(160,200,255,.35)" stroke-width="1"/>
+              </svg>
+              <span class="na-cap">ARENA UPDATES</span>
+            </div>
+            <div class="micro" style="text-align:center; margin-top:9px;">NO EVENT SYSTEM YET</div>
+          </div>
+        </div>
+
+        <div class="premium-strip" data-act="premium">
+          <svg viewBox="0 0 28 28" fill="none" stroke="#ffce54" stroke-width="1.4" stroke-linejoin="round">
+            <path d="M4 9 L9 13 L14 5 L19 13 L24 9 L21.5 22 H6.5 Z"/>
+          </svg>
+          <div>
+            <div class="ps-t">PREMIUM PASS</div>
+            <div class="micro">COMING SOON</div>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- ---------- BOTTOM BAR ---------- -->
+    <footer class="lobby-bottom">
+      <div class="chat-stub" title="Lobby chat is not implemented yet">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.5-5A8 8 0 1 1 21 12z"/>
+        </svg>
+        LOBBY CHAT &mdash; COMING SOON
+      </div>
+      <div class="spacer"></div>
+      <button class="ghost-btn" data-act="controls">CONTROLS</button>
+      <button class="ghost-btn" data-act="patch">PATCH NOTES</button>
+      <span class="version-tag" id="lobbyVersion">v1.0.0</span>
+    </footer>
+
+    <div class="lobby-toast" id="lobbyToast"></div>
+    <div class="lobby-modal hidden" id="lobbyModal">
+      <div class="lp lm-card">
+        <div class="lp-head">
+          <span class="lp-title" id="lobbyModalTitle">TITLE</span>
+        </div>
+        <div class="lm-body" id="lobbyModalBody"></div>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         ORIGINAL MENU CONTROLS -- hidden, but still the real ones.
+         The lobby above forwards clicks to these, so every existing
+         listener (mode flow, shop, leaderboards, settings, admin) and
+         every existing element lookup (creditsAmountMain, statsLineMain)
+         keeps working exactly as before.
+         ============================================================ -->
+    <div id="legacyControls" aria-hidden="true">
+      <div class="credits-display" id="creditsDisplayMain">&#9672; <span id="creditsAmountMain">0</span> CREDITS</div>
+      <div class="stats-line" id="statsLineMain">0 KILLS &middot; 0 WINS</div>
+      <div class="menu-group">
+        <button class="menu-btn" id="btnLocal">LOCAL 2 PLAYER</button>
+        <button class="menu-btn" id="btnOnline">ONLINE MULTIPLAYER</button>
+        <button class="menu-btn accent-2" id="btnAI">VS COMPUTER</button>
+        <button class="menu-btn shop-entry" id="btnShop">SHOP</button>
+        <button class="menu-btn leaderboard-entry" id="btnLeaderboard">LEADERBOARDS</button>
+        <button class="menu-btn settings-entry" id="btnSettings">SETTINGS</button>
+        <button class="menu-btn admin-entry hidden" id="btnAdmin">ADMIN</button>
+      </div>
     </div>
   </div>
 
@@ -1803,6 +2711,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       isAdmin = !!data.isAdmin;
       const adminBtn = document.getElementById('btnAdmin');
       if(adminBtn) adminBtn.classList.toggle('hidden', !isAdmin);
+      lobbySync();
     } catch(e){
       setAccountStatus('SIGN-IN FAILED \u2014 IS THE SERVER RUNNING?');
     }
@@ -1820,6 +2729,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     if(oBtn) oBtn.classList.add('hidden');
     const adminBtn = document.getElementById('btnAdmin');
     if(adminBtn) adminBtn.classList.add('hidden');
+    lobbySync();
     try{
       if(window.google && google.accounts && google.accounts.id){
         google.accounts.id.disableAutoSelect();
@@ -3101,6 +4011,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     creditsAmountShop.textContent = credits;
     const statsEl = document.getElementById('statsLineMain');
     if(statsEl) statsEl.textContent = stats.kills + ' KILLS \u00b7 ' + stats.wins + ' WINS';
+    lobbySync(); // mirror the same numbers into the lobby UI
   }
 
   function renderShop(){
@@ -5273,6 +6184,284 @@ updateDecoys(dt);
     }
   });
 
+  // ============================================================
+  // MAIN MENU LOBBY -- presentation layer only.
+  //
+  // Nothing below owns any game state. Every action forwards a click
+  // to one of the original menu buttons (now hidden inside
+  // #legacyControls), so the mode flow, shop, leaderboards, settings,
+  // admin panel and Google sign-in all still run through exactly the
+  // same code paths they always did.
+  // ============================================================
+
+  // Only the modes that actually exist in this build. Player counts are
+  // the real ones the match-size / netcode rules allow -- nothing invented.
+  const LOBBY_MODES = [
+    {
+      id: 'local',  btn: 'btnLocal',
+      name: 'LOCAL 2 PLAYER', desc: 'SHARED KEYBOARD VERSUS',
+      players: '2-4',
+      art: `<svg class="mc-art" viewBox="0 0 190 92" preserveAspectRatio="xMidYMid slice" fill="none">
+        <rect width="190" height="92" fill="#0a0f1a"/>
+        <ellipse cx="46" cy="46" rx="60" ry="46" fill="#3fd0ff" opacity=".20"/>
+        <ellipse cx="144" cy="46" rx="60" ry="46" fill="#ff5f9e" opacity=".20"/>
+        <path d="M34 46 L64 34 L57 46 L64 58 Z" fill="#3fd0ff"/>
+        <path d="M156 46 L126 34 L133 46 L126 58 Z" fill="#ff5f9e"/>
+        <path d="M70 46 H88" stroke="#3fd0ff" stroke-width="2.5" stroke-linecap="round" opacity=".85"/>
+        <path d="M120 46 H102" stroke="#ff5f9e" stroke-width="2.5" stroke-linecap="round" opacity=".85"/>
+        <path d="M0 74 H190" stroke="rgba(150,190,240,.25)" stroke-width="1"/>
+      </svg>`
+    },
+    {
+      id: 'online', btn: 'btnOnline',
+      name: 'ONLINE MULTIPLAYER', desc: 'DUEL A REAL OPPONENT',
+      players: '2',
+      art: `<svg class="mc-art" viewBox="0 0 190 92" preserveAspectRatio="xMidYMid slice" fill="none">
+        <rect width="190" height="92" fill="#0a0f1a"/>
+        <ellipse cx="95" cy="50" rx="90" ry="48" fill="#5a7bff" opacity=".18"/>
+        <ellipse cx="40" cy="46" rx="52" ry="42" fill="#3fd0ff" opacity=".26"/>
+        <ellipse cx="150" cy="46" rx="52" ry="42" fill="#ff4f9c" opacity=".26"/>
+        <path d="M26 46 L60 30 L51 46 L60 62 Z" fill="#3fd0ff"/>
+        <path d="M164 46 L130 30 L139 46 L130 62 Z" fill="#ff5f9e"/>
+        <path d="M95 26 L101 38 L95 34 L89 38 Z" fill="#ffce54"/>
+        <path d="M78 46 H112" stroke="rgba(255,255,255,.5)" stroke-width="1" stroke-dasharray="3 3"/>
+        <path d="M0 74 H190" stroke="rgba(150,190,240,.25)" stroke-width="1"/>
+      </svg>`
+    },
+    {
+      id: 'ai',     btn: 'btnAI',
+      name: 'VS COMPUTER', desc: 'PRACTICE AGAINST BOTS',
+      players: '1-4',
+      art: `<svg class="mc-art" viewBox="0 0 190 92" preserveAspectRatio="xMidYMid slice" fill="none">
+        <rect width="190" height="92" fill="#0a0f1a"/>
+        <ellipse cx="70" cy="46" rx="66" ry="44" fill="#3fd0ff" opacity=".22"/>
+        <path d="M40 46 L72 32 L64 46 L72 60 Z" fill="#3fd0ff"/>
+        <circle cx="132" cy="38" r="12" stroke="#ff5f6d" stroke-width="1.8"/>
+        <circle cx="132" cy="38" r="3" fill="#ff5f6d"/>
+        <circle cx="152" cy="62" r="8" stroke="#ff5f6d" stroke-width="1.6" opacity=".7"/>
+        <circle cx="152" cy="62" r="2" fill="#ff5f6d" opacity=".7"/>
+        <path d="M80 46 H112" stroke="#3fd0ff" stroke-width="2" stroke-linecap="round" opacity=".8"/>
+        <path d="M0 74 H190" stroke="rgba(150,190,240,.25)" stroke-width="1"/>
+      </svg>`
+    }
+  ];
+
+  let lobbyModeIndex = 1; // ONLINE sits centre-stage by default
+
+  const PEOPLE_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 13.5v-1.2a2.6 2.6 0 0 0-2.6-2.6H5.1a2.6 2.6 0 0 0-2.6 2.6v1.2"/><circle cx="6.75" cy="5.3" r="2.2"/><path d="M12.2 9.9a2.6 2.6 0 0 1 1.8 2.4v1.2"/></svg>';
+  const CROWN_ICON = '<svg class="mc-crown" width="18" height="12" viewBox="0 0 18 12" fill="none"><path d="M1 10 L3 2 L6.5 6 L9 1 L11.5 6 L15 2 L17 10 Z" fill="#ffce54" opacity=".9"/></svg>';
+
+  function lobbyEl(id){ return document.getElementById(id); }
+
+  function lobbyToast(msg){
+    const t = lobbyEl('lobbyToast');
+    if(!t) return;
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(()=>{ t.classList.remove('show'); }, 2200);
+  }
+
+  function lobbyOpenModal(title, bodyHTML){
+    const modal = lobbyEl('lobbyModal');
+    if(!modal) return;
+    lobbyEl('lobbyModalTitle').textContent = title;
+    lobbyEl('lobbyModalBody').innerHTML = bodyHTML +
+      '<button class="ghost-btn lm-close" id="lobbyModalClose">CLOSE</button>';
+    modal.classList.remove('hidden');
+    lobbyEl('lobbyModalClose').addEventListener('click', lobbyCloseModal);
+  }
+  function lobbyCloseModal(){
+    const modal = lobbyEl('lobbyModal');
+    if(modal) modal.classList.add('hidden');
+  }
+
+  function lobbySoonModal(title, line){
+    lobbyOpenModal(title,
+      '<div class="soon-block">'
+      + '<div class="sb-main">COMING SOON</div>'
+      + '<div class="sb-sub">' + line + '</div>'
+      + '</div>');
+  }
+
+  // Renders the existing keybindings -- same information as the in-game
+  // legend, just presented inside the lobby.
+  function lobbyControlsModal(){
+    lobbyOpenModal('CONTROLS',
+      '<div class="lm-section p1c">PLAYER ONE</div>'
+      + '<div class="lm-keys">'
+      +   '<div class="lm-keyrow"><b>W A S D</b>move</div>'
+      +   '<div class="lm-keyrow"><b>SPACE</b>shoot / kick</div>'
+      +   '<div class="lm-keyrow"><b>SHIFT</b>dash</div>'
+      +   '<div class="lm-keyrow"><b>Q / RIGHT-CLICK</b>ability</div>'
+      + '</div>'
+      + '<div class="lm-section p2c">PLAYER TWO</div>'
+      + '<div class="lm-keys">'
+      +   '<div class="lm-keyrow"><b>&larr; &uarr; &darr; &rarr;</b>move</div>'
+      +   '<div class="lm-keyrow"><b>ENTER</b>shoot / kick</div>'
+      +   '<div class="lm-keyrow"><b>/ ?</b>dash</div>'
+      +   '<div class="lm-keyrow"><b>. (PERIOD)</b>ability</div>'
+      + '</div>'
+      + '<div class="lm-section">GENERAL</div>'
+      + '<div class="lm-keys">'
+      +   '<div class="lm-keyrow"><b>ESC</b>exit to menu</div>'
+      + '</div>');
+  }
+
+  function renderLobbyModes(){
+    const wrap = lobbyEl('lobbyModeCards');
+    const dots = lobbyEl('lobbyModeDots');
+    if(!wrap) return;
+    wrap.innerHTML = '';
+    LOBBY_MODES.forEach((m, i)=>{
+      const card = document.createElement('div');
+      card.className = 'mode-card' + (i === lobbyModeIndex ? ' selected' : '');
+      card.innerHTML = CROWN_ICON + m.art
+        + '<div class="mc-name">' + m.name + '</div>'
+        + '<div class="mc-desc">' + m.desc + '</div>'
+        + '<div class="mc-players">' + PEOPLE_ICON + m.players + '</div>';
+      card.addEventListener('click', ()=>{
+        if(i === lobbyModeIndex) lobbyStartSelectedMode();
+        else selectLobbyMode(i);
+      });
+      wrap.appendChild(card);
+    });
+    if(dots){
+      dots.innerHTML = '';
+      LOBBY_MODES.forEach((m, i)=>{
+        const d = document.createElement('i');
+        if(i === lobbyModeIndex) d.className = 'on';
+        d.addEventListener('click', ()=> selectLobbyMode(i));
+        dots.appendChild(d);
+      });
+    }
+    const sub = lobbyEl('lobbyPlaySub');
+    if(sub) sub.textContent = LOBBY_MODES[lobbyModeIndex].name;
+  }
+
+  function selectLobbyMode(i){
+    lobbyModeIndex = (i + LOBBY_MODES.length) % LOBBY_MODES.length;
+    renderLobbyModes();
+  }
+
+  function lobbyStartSelectedMode(){
+    // Hands straight back to the original mode button -- the game type /
+    // match size / difficulty / aim-style flow after this is unchanged.
+    const menu = lobbyEl('menuMain');
+    if(!menu || menu.classList.contains('hidden')) return; // already left the lobby
+    const btn = lobbyEl(LOBBY_MODES[lobbyModeIndex].btn);
+    if(btn) btn.click();
+  }
+
+  // Pushes the live account data into the lobby. Called from
+  // updateCreditsDisplay(), sign-in and sign-out so it always mirrors
+  // whatever the existing systems already decided.
+  function lobbySync(){
+    const setTxt = (id, val)=>{ const el = lobbyEl(id); if(el) el.textContent = val; };
+    setTxt('lobbyCredits', credits);
+    setTxt('lobbyCreditsStat', credits);
+    setTxt('lobbyKills', stats.kills);
+    setTxt('lobbyWins', stats.wins);
+    setTxt('lobbyName', (loggedIn && accountName) ? accountName : 'GUEST');
+
+    const av = lobbyEl('lobbyAvatar');
+    if(av && typeof skinColor === 'function'){
+      const c = skinColor(p1SkinId);
+      av.style.color = c;
+      av.style.borderColor = c;
+      av.style.boxShadow = '0 0 18px ' + c + '55, inset 0 0 18px ' + c + '30';
+    }
+  }
+
+  function initLobby(){
+    renderLobbyModes();
+    lobbySync();
+
+    const prev = lobbyEl('lobbyModePrev');
+    const next = lobbyEl('lobbyModeNext');
+    if(prev) prev.addEventListener('click', ()=> selectLobbyMode(lobbyModeIndex - 1));
+    if(next) next.addEventListener('click', ()=> selectLobbyMode(lobbyModeIndex + 1));
+
+    const playBtn = lobbyEl('lobbyPlay');
+    if(playBtn){
+      playBtn.addEventListener('click', lobbyStartSelectedMode);
+      // :active alone can be inconsistent across browsers/touch, so the
+      // press feedback is also driven explicitly via a class toggle.
+      const press = ()=> playBtn.classList.add('pressed');
+      const release = ()=> playBtn.classList.remove('pressed');
+      playBtn.addEventListener('mousedown', press);
+      playBtn.addEventListener('touchstart', press, { passive: true });
+      ['mouseup','mouseleave','touchend','touchcancel','blur'].forEach(evt=>{
+        playBtn.addEventListener(evt, release);
+      });
+    }
+
+    // Every [data-act] control routes to an existing system, or to a
+    // clearly-labelled placeholder for something not built yet.
+    document.querySelectorAll('#menuMain [data-act]').forEach(el=>{
+      el.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        const act = el.dataset.act;
+        if(act === 'play')          { lobbyStartSelectedMode(); }
+        else if(act === 'modes')    {
+          const cards = lobbyEl('lobbyModeCards');
+          if(cards){
+            cards.animate(
+              [{ transform:'scale(1)' }, { transform:'scale(1.04)' }, { transform:'scale(1)' }],
+              { duration: 420, easing:'ease-out' }
+            );
+          }
+          lobbyToast('PICK A MODE, THEN HIT PLAY');
+        }
+        else if(act === 'shop')         { lobbyEl('btnShop').click(); }
+        else if(act === 'leaderboards') { lobbyEl('btnLeaderboard').click(); }
+        else if(act === 'settings')     { lobbyEl('btnSettings').click(); }
+        else if(act === 'admin')        { lobbyEl('btnAdmin').click(); }
+        else if(act === 'controls')     { lobbyControlsModal(); }
+        else if(act === 'profile')      { lobbySoonModal('PROFILE', 'A FULL PROFILE PAGE ISN\'T BUILT YET. YOUR WINS, KILLS AND CREDITS ARE ON THE CARD TO THE LEFT.'); }
+        else if(act === 'friends')      { lobbySoonModal('FRIENDS', 'FRIENDS LISTS, INVITES AND ONLINE STATUS ARE NOT IMPLEMENTED YET.'); }
+        else if(act === 'mail')         { lobbySoonModal('MAIL', 'THERE IS NO MAIL OR NOTIFICATION SYSTEM YET.'); }
+        else if(act === 'premium')      { lobbySoonModal('PREMIUM PASS', 'NO BATTLE PASS EXISTS YET. EVERYTHING IN THE SHOP IS BOUGHT WITH CREDITS YOU EARN.'); }
+        else if(act === 'patch')        { lobbySoonModal('PATCH NOTES', 'PATCH NOTES AREN\'T HOOKED UP YET.'); }
+      });
+    });
+
+    // Keep the nav item highlight sensible.
+    document.querySelectorAll('.lobby-nav .nav-item').forEach(item=>{
+      item.addEventListener('click', ()=>{
+        document.querySelectorAll('.lobby-nav .nav-item').forEach(n=>n.classList.remove('active'));
+        item.classList.add('active');
+      });
+    });
+
+    // The ADMIN nav item simply mirrors the real admin button's
+    // visibility, which the server decides at sign-in. It grants nothing
+    // by itself -- every admin request is still re-checked server-side.
+    const realAdmin = lobbyEl('btnAdmin');
+    const navAdmin  = lobbyEl('lobbyNavAdmin');
+    if(realAdmin && navAdmin && typeof MutationObserver !== 'undefined'){
+      const syncAdmin = ()=> navAdmin.classList.toggle('hidden', realAdmin.classList.contains('hidden'));
+      new MutationObserver(syncAdmin).observe(realAdmin, { attributes:true, attributeFilter:['class'] });
+      syncAdmin();
+    }
+
+    // Lobby-only keyboard shortcuts. Guarded on !started so they can
+    // never interfere with in-match input.
+    window.addEventListener('keydown', (e)=>{
+      const menu = lobbyEl('menuMain');
+      if(started || !menu || menu.classList.contains('hidden')) return;
+      const modal = lobbyEl('lobbyModal');
+      if(modal && !modal.classList.contains('hidden')){
+        if(e.key === 'Escape') lobbyCloseModal();
+        return;
+      }
+      if(e.key === 'ArrowLeft')  { e.preventDefault(); selectLobbyMode(lobbyModeIndex - 1); }
+      else if(e.key === 'ArrowRight'){ e.preventDefault(); selectLobbyMode(lobbyModeIndex + 1); }
+      else if(e.key === 'Enter') { e.preventDefault(); lobbyStartSelectedMode(); }
+    });
+  }
+
+  initLobby();
   fetchAbilityConfig();
   tryInitGoogle();
   updateCreditsDisplay();
