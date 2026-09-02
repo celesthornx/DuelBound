@@ -95,10 +95,30 @@ function isAdminSession(sessionToken) {
         account.email.toLowerCase() === ADMIN_EMAIL.toLowerCase());
 }
 
-// sessionToken -> google "sub". In-memory only -- if the server restarts,
-// signed-in players just click "Sign in with Google" again; their saved
-// progress on disk is untouched.
+// sessionToken -> google "sub".
+//
+// Persisted, not in-memory-only. When this map was rebuilt empty on every
+// boot, a redeploy silently invalidated the token every signed-in player's
+// tab was still holding: their /save calls came back 401, the client
+// ignored the status, and everything they earned after the redeploy was
+// dropped without any error. Sessions now survive a restart, so an open
+// tab keeps saving straight through a deploy.
+//
+// Kept as a plain in-memory object (loaded at boot, written through on
+// sign-in) so getAccountForSession/isAdminSession stay synchronous.
 const sessions = {};
+
+// Records a new session in memory AND in the store.
+async function persistSession(token, sub) {
+    sessions[token] = sub;
+    try {
+        await store.saveSession(token, { sub: sub, createdAt: Date.now() });
+    } catch (e) {
+        // The session still works on this instance; it just won't survive
+        // a restart. Not worth failing the sign-in over.
+        console.log("[storage] failed to persist session:", e.message);
+    }
+}
 
 function verifyGoogleToken(idToken) {
     return new Promise((resolve, reject) => {
@@ -380,7 +400,7 @@ const httpServer = http.createServer(async (req, res) => {
             }
 
             const sessionToken = crypto.randomBytes(24).toString("hex");
-            sessions[sessionToken] = sub;
+            await persistSession(sessionToken, sub);
 
             sendJson(res, 200, {
                 sessionToken: sessionToken,
@@ -977,6 +997,14 @@ async function startServer() {
         Object.assign(accounts, await store.loadAllAccounts());
         abilityConfig = await loadAbilityConfig();
         adminLog = await loadAdminLog();
+
+        // Restore live sessions so a redeploy doesn't invalidate the token
+        // every already-signed-in player is still holding.
+        const restored = await store.loadValidSessions();
+        for (const token of Object.keys(restored)) {
+            const row = restored[token];
+            if (row && accounts[row.sub]) sessions[token] = row.sub; // skip sessions whose account is gone
+        }
     } catch (e) {
         console.error("FATAL: could not open the account store:", e.message);
         console.error("Refusing to start -- serving with an empty account store " +
@@ -985,7 +1013,8 @@ async function startServer() {
     }
 
     console.log("[storage] backend: " + store.backendName +
-        " -- " + Object.keys(accounts).length + " account(s) loaded");
+        " -- " + Object.keys(accounts).length + " account(s), " +
+        Object.keys(sessions).length + " live session(s) loaded");
     if (!store.usingDatabase) {
         console.log("[storage] NOTE: no DATABASE_URL set, using the local filesystem. " +
             "On an ephemeral host (Render without a persistent disk) this data " +

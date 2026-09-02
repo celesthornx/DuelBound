@@ -42,6 +42,11 @@ const SEED_ACCOUNTS_FILE = path.join(__dirname, "accounts.json");
 // Shared helpers
 // ---------------------------------------------------------------------
 
+// How long a signed-in session stays valid. Sessions are persisted (see
+// below) so a redeploy doesn't sign everybody out mid-game, but they
+// shouldn't accumulate forever either.
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
 // Reads a JSON file. Returns `fallback` only when the file genuinely
 // does not exist. A file that EXISTS but cannot be parsed is a corrupt
 // store, not an empty one -- returning {} there is how a truncated
@@ -96,12 +101,14 @@ function makeWriteQueue() {
 // ---------------------------------------------------------------------
 function createFileBackend() {
     const accountsFile = path.join(DATA_DIR, "accounts.json");
+    const sessionsFile = path.join(DATA_DIR, "sessions.json");
     const docsDir = DATA_DIR;
     const enqueue = makeWriteQueue();
 
-    // In-memory mirror so a single-account save doesn't have to re-read
-    // the whole file (and can't lose a concurrent write to another key).
+    // In-memory mirrors so a single save doesn't have to re-read the
+    // whole file (and can't lose a concurrent write to another key).
     let accountsCache = {};
+    let sessionsCache = {};
 
     return {
         name: "file (" + DATA_DIR + ")",
@@ -142,6 +149,39 @@ function createFileBackend() {
         async saveDoc(key, value) {
             return enqueue("doc:" + key, () => {
                 writeJsonFileAtomic(path.join(docsDir, key + ".json"), value);
+            });
+        },
+
+        // Sessions are disposable -- the worst case for losing them is
+        // that players sign in again -- so unlike accounts, a corrupt or
+        // unreadable session file is discarded rather than fatal.
+        async loadValidSessions() {
+            let stored = {};
+            try {
+                stored = JSON.parse(fs.readFileSync(sessionsFile, "utf8"));
+            } catch (e) {
+                return {};
+            }
+            const cutoff = Date.now() - SESSION_TTL_MS;
+            const live = {};
+            for (const token of Object.keys(stored)) {
+                const row = stored[token];
+                if (row && row.sub && typeof row.createdAt === "number" && row.createdAt > cutoff) {
+                    live[token] = row;
+                }
+            }
+            sessionsCache = live;
+            // Rewrite immediately so expired rows don't linger forever.
+            if (Object.keys(live).length !== Object.keys(stored).length) {
+                try { writeJsonFileAtomic(sessionsFile, live); } catch (e) {}
+            }
+            return live;
+        },
+
+        async saveSession(token, record) {
+            sessionsCache[token] = record;
+            return enqueue("sessions", () => {
+                writeJsonFileAtomic(sessionsFile, sessionsCache);
             });
         }
     };
@@ -186,6 +226,16 @@ function createPostgresBackend() {
                 key        TEXT PRIMARY KEY,
                 data       JSONB NOT NULL,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+        `);
+        // Sessions live here rather than in memory so a redeploy does not
+        // silently sign every player out mid-game (their client keeps the
+        // token it already has, and its saves keep being accepted).
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS sessions (
+                token      TEXT PRIMARY KEY,
+                sub        TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )
         `);
     }
@@ -253,6 +303,30 @@ function createPostgresBackend() {
                     [key, JSON.stringify(value)]
                 )
             );
+        },
+
+        async loadValidSessions() {
+            // Drop anything past its TTL first, then load what's left.
+            await pool.query(
+                "DELETE FROM sessions WHERE created_at < now() - ($1::bigint * interval '1 millisecond')",
+                [SESSION_TTL_MS]
+            );
+            const { rows } = await pool.query("SELECT token, sub, created_at FROM sessions");
+            const out = {};
+            for (const row of rows) {
+                out[row.token] = { sub: row.sub, createdAt: new Date(row.created_at).getTime() };
+            }
+            return out;
+        },
+
+        async saveSession(token, record) {
+            return enqueue("session:" + token, () =>
+                pool.query(
+                    `INSERT INTO sessions (token, sub) VALUES ($1, $2)
+                     ON CONFLICT (token) DO UPDATE SET sub = EXCLUDED.sub`,
+                    [token, record.sub]
+                )
+            );
         }
     };
 }
@@ -266,5 +340,7 @@ module.exports = {
     loadAllAccounts: () => backend.loadAllAccounts(),
     saveAccount: (sub, record) => backend.saveAccount(sub, record),
     loadDoc: (key, fallback) => backend.loadDoc(key, fallback),
-    saveDoc: (key, value) => backend.saveDoc(key, value)
+    saveDoc: (key, value) => backend.saveDoc(key, value),
+    loadValidSessions: () => backend.loadValidSessions(),
+    saveSession: (token, record) => backend.saveSession(token, record)
 };
