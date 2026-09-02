@@ -1,1 +1,6 @@
 node_modules/
+
+# Storage-layer runtime artifacts (see storage.js). accounts.json itself
+# stays tracked -- it is the migration seed for the persistent store.
+*.tmp-*
+*.corrupt-*
