@@ -22,28 +22,39 @@ const GOOGLE_CLIENT_ID = "626321723959-98drobgk7pc43cf004psnfg0af816d10.apps.goo
 const ADMIN_EMAIL = "ultragodbit@gmail.com";
 
 // =====================================================================
-// ACCOUNT STORAGE -- a single JSON file on disk, keyed by the player's
-// Google account id ("sub"). No database needed for this scale of game.
+// ACCOUNT STORAGE -- keyed by the player's Google account id ("sub").
+//
+// Durability lives in storage.js, NOT on this instance's filesystem.
+// A container host like Render rebuilds the filesystem from the Git
+// checkout on every deploy, so anything written to a local accounts.json
+// is lost the next time the service is redeployed or restarted. See
+// storage.js for the backend selection (Postgres via DATABASE_URL, or
+// JSON files under DATA_DIR).
+//
+// `accounts` below stays an in-memory read cache of the whole store, so
+// every synchronous read path in this file (leaderboard, admin search,
+// isAdminSession) works exactly as it always did. Only the boot load and
+// the writes go through the storage layer.
 // =====================================================================
-const DB_FILE = path.join(__dirname, "accounts.json");
+const store = require("./storage");
 
-function loadAccounts() {
+const accounts = {}; // sub -> account record (populated in startServer())
+
+// Persists ONE account. Callers await this before replying, so a client
+// only ever sees "saved" once the write is durable.
+//
+// Deliberately per-account rather than "write the whole file": two
+// players saving at the same moment touch different rows/keys and can
+// never overwrite each other's progress.
+async function persistAccount(sub) {
+    if (!sub || !accounts[sub]) return;
     try {
-        return JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
+        await store.saveAccount(sub, accounts[sub]);
     } catch (e) {
-        return {};
+        console.log("[storage] failed to save account " + sub + ":", e.message);
+        throw e;
     }
 }
-
-function saveAccountsToDisk() {
-    try {
-        fs.writeFileSync(DB_FILE, JSON.stringify(accounts, null, 2));
-    } catch (e) {
-        console.log("Could not write accounts.json:", e.message);
-    }
-}
-
-const accounts = loadAccounts(); // sub -> account record
 
 function defaultAccount(name, email) {
     return {
@@ -84,10 +95,30 @@ function isAdminSession(sessionToken) {
         account.email.toLowerCase() === ADMIN_EMAIL.toLowerCase());
 }
 
-// sessionToken -> google "sub". In-memory only -- if the server restarts,
-// signed-in players just click "Sign in with Google" again; their saved
-// progress on disk is untouched.
+// sessionToken -> google "sub".
+//
+// Persisted, not in-memory-only. When this map was rebuilt empty on every
+// boot, a redeploy silently invalidated the token every signed-in player's
+// tab was still holding: their /save calls came back 401, the client
+// ignored the status, and everything they earned after the redeploy was
+// dropped without any error. Sessions now survive a restart, so an open
+// tab keeps saving straight through a deploy.
+//
+// Kept as a plain in-memory object (loaded at boot, written through on
+// sign-in) so getAccountForSession/isAdminSession stay synchronous.
 const sessions = {};
+
+// Records a new session in memory AND in the store.
+async function persistSession(token, sub) {
+    sessions[token] = sub;
+    try {
+        await store.saveSession(token, { sub: sub, createdAt: Date.now() });
+    } catch (e) {
+        // The session still works on this instance; it just won't survive
+        // a restart. Not worth failing the sign-in over.
+        console.log("[storage] failed to persist session:", e.message);
+    }
+}
 
 function verifyGoogleToken(idToken) {
     return new Promise((resolve, reject) => {
@@ -184,33 +215,40 @@ const FIELD_LIMITS = {
     ammoPenalty:         [0, 5]
 };
 
-const ABILITY_CONFIG_FILE = path.join(__dirname, "abilityConfig.json");
+// Ability balance is admin-editable at runtime, so it has exactly the
+// same ephemeral-filesystem problem accounts did and goes through the
+// same storage layer. Seeded from the committed abilityConfig.json.
+const ABILITY_CONFIG_SEED_FILE = path.join(__dirname, "abilityConfig.json");
 
-function loadAbilityConfig() {
-    let stored = {};
-    try {
-        stored = JSON.parse(fs.readFileSync(ABILITY_CONFIG_FILE, "utf8"));
-    } catch (e) {
-        stored = {};
-    }
-    // Merge onto defaults field-by-field so a missing file, a missing
+function mergeAbilityConfig(stored) {
+    // Merge onto defaults field-by-field so a missing store, a missing
     // ability, or a newly-added field never produces an undefined value.
     const merged = {};
     for (const abilityId of Object.keys(ABILITY_DEFAULTS)) {
-        merged[abilityId] = Object.assign({}, ABILITY_DEFAULTS[abilityId], stored[abilityId] || {});
+        merged[abilityId] = Object.assign({}, ABILITY_DEFAULTS[abilityId], (stored && stored[abilityId]) || {});
     }
     return merged;
 }
 
-function saveAbilityConfigToDisk() {
-    try {
-        fs.writeFileSync(ABILITY_CONFIG_FILE, JSON.stringify(abilityConfig, null, 2));
-    } catch (e) {
-        console.log("Could not write abilityConfig.json:", e.message);
+async function loadAbilityConfig() {
+    let stored = await store.loadDoc("abilityConfig", null);
+    if (stored === null) {
+        // Nothing stored yet -- seed from the file committed to the repo.
+        try {
+            stored = JSON.parse(fs.readFileSync(ABILITY_CONFIG_SEED_FILE, "utf8"));
+        } catch (e) {
+            stored = {};
+        }
     }
+    return mergeAbilityConfig(stored);
 }
 
-let abilityConfig = loadAbilityConfig();
+function persistAbilityConfig() {
+    store.saveDoc("abilityConfig", abilityConfig)
+        .catch(e => console.log("[storage] failed to save abilityConfig:", e.message));
+}
+
+let abilityConfig = mergeAbilityConfig({}); // replaced in startServer()
 
 // Clamps and type-checks a single incoming value against FIELD_LIMITS.
 // Returns null if the field name is unknown or the value isn't a finite
@@ -226,25 +264,27 @@ function clampField(key, rawValue) {
 // =====================================================================
 // ADMIN ACTION LOG -- most recent 100 balance changes, newest first.
 // =====================================================================
-const ADMIN_LOG_FILE = path.join(__dirname, "adminLog.json");
+const ADMIN_LOG_SEED_FILE = path.join(__dirname, "adminLog.json");
 
-function loadAdminLog() {
+async function loadAdminLog() {
+    const stored = await store.loadDoc("adminLog", null);
+    if (Array.isArray(stored)) return stored;
+    // Nothing stored yet -- seed from the file committed to the repo so
+    // the existing audit trail carries over on first boot.
     try {
-        return JSON.parse(fs.readFileSync(ADMIN_LOG_FILE, "utf8"));
+        const seed = JSON.parse(fs.readFileSync(ADMIN_LOG_SEED_FILE, "utf8"));
+        return Array.isArray(seed) ? seed : [];
     } catch (e) {
         return [];
     }
 }
 
-function saveAdminLogToDisk() {
-    try {
-        fs.writeFileSync(ADMIN_LOG_FILE, JSON.stringify(adminLog, null, 2));
-    } catch (e) {
-        console.log("Could not write adminLog.json:", e.message);
-    }
+function persistAdminLog() {
+    store.saveDoc("adminLog", adminLog)
+        .catch(e => console.log("[storage] failed to save adminLog:", e.message));
 }
 
-let adminLog = loadAdminLog();
+let adminLog = []; // replaced in startServer()
 
 // Shared by every admin action (ability balance changes and credit
 // grants alike) -- the single audit trail, newest first, capped at 100
@@ -252,7 +292,7 @@ let adminLog = loadAdminLog();
 function pushAdminLog(entry) {
     adminLog.unshift(Object.assign({ time: Date.now() }, entry));
     if (adminLog.length > 100) adminLog.length = 100;
-    saveAdminLogToDisk();
+    persistAdminLog();
 }
 
 function logAdminAction(account, abilityId, changes, actionType) {
@@ -351,16 +391,16 @@ const httpServer = http.createServer(async (req, res) => {
 
             if (!accounts[sub]) {
                 accounts[sub] = defaultAccount(info.name || info.email || "Player", info.email || "");
-                saveAccountsToDisk();
+                await persistAccount(sub);
             } else if (accounts[sub].email !== (info.email || "")) {
                 // Keep the stored email current -- this is what admin
                 // verification checks against, so it must stay accurate.
                 accounts[sub].email = info.email || "";
-                saveAccountsToDisk();
+                await persistAccount(sub);
             }
 
             const sessionToken = crypto.randomBytes(24).toString("hex");
-            sessions[sessionToken] = sub;
+            await persistSession(sessionToken, sub);
 
             sendJson(res, 200, {
                 sessionToken: sessionToken,
@@ -383,13 +423,30 @@ const httpServer = http.createServer(async (req, res) => {
                 sendJson(res, 401, { error: "Not signed in" });
                 return;
             }
-            const existing = accounts[sub] || defaultAccount("Player");
+            // A live session must map to a real stored account. If it
+            // doesn't, something is wrong upstream -- refuse rather than
+            // manufacture a default account, which would replace real
+            // progress with 100 credits / 0 kills.
+            const existing = accounts[sub];
+            if (!existing) {
+                sendJson(res, 409, { error: "Account not loaded -- sign in again" });
+                return;
+            }
+
+            // Accepts a client-supplied counter only if it's a real,
+            // non-negative, finite whole number; anything else (NaN,
+            // Infinity, negative, a string) keeps the stored value rather
+            // than corrupting the account.
+            const safeCount = (incoming, current) =>
+                (typeof incoming === "number" && isFinite(incoming) && incoming >= 0)
+                    ? Math.floor(incoming) : current;
+
             accounts[sub] = {
                 name: existing.name,
                 email: existing.email || "",
-                credits: typeof body.credits === "number" ? body.credits : existing.credits,
-                kills: typeof body.kills === "number" ? body.kills : existing.kills,
-                wins: typeof body.wins === "number" ? body.wins : existing.wins,
+                credits: safeCount(body.credits, existing.credits),
+                kills: safeCount(body.kills, existing.kills),
+                wins: safeCount(body.wins, existing.wins),
                 ownedSkins: Array.isArray(body.ownedSkins) ? body.ownedSkins : existing.ownedSkins,
                 ownedPowers: Array.isArray(body.ownedPowers) ? body.ownedPowers : existing.ownedPowers,
                 equippedPowers: Array.isArray(body.equippedPowers) ? body.equippedPowers : existing.equippedPowers,
@@ -404,7 +461,16 @@ const httpServer = http.createServer(async (req, res) => {
                 aimMode: (body.aimMode === "mouse" || body.aimMode === "movement") ? body.aimMode : (existing.aimMode || "movement"),
                 matchSize: [2, 3, 4].includes(body.matchSize) ? body.matchSize : (existing.matchSize || 2)
             };
-            saveAccountsToDisk();
+            try {
+                await persistAccount(sub);
+            } catch (e) {
+                // The write failed, so the cache no longer reflects the
+                // store. Put the previous record back and tell the client
+                // the save did not happen.
+                accounts[sub] = existing;
+                sendJson(res, 503, { error: "Could not save progress -- try again" });
+                return;
+            }
             sendJson(res, 200, { ok: true });
         } catch (e) {
             sendJson(res, 400, { error: "Bad request" });
@@ -490,11 +556,13 @@ const httpServer = http.createServer(async (req, res) => {
     // body: { sessionToken, playerId, amount }
     // Server-authoritative credit grant: verifies admin + target + amount,
     // then increments the account's own stored balance (never accepts a
-    // client-supplied newBalance) and writes it back atomically. Node's
-    // single-threaded event loop means everything from the initial read
-    // of accounts[playerId].credits to the write of accounts.json below
-    // runs with no `await` in between, so no other request can interleave
-    // and race it -- equivalent to an atomic addCredits(playerId, amount).
+    // client-supplied newBalance) and persists it. Node's single-threaded
+    // event loop means the read of accounts[playerId].credits and the
+    // increment below run with no `await` in between, so no other request
+    // can interleave and race the read-modify-write -- equivalent to an
+    // atomic addCredits(playerId, amount). The persist that follows is
+    // awaited and serialized per account by the storage layer, so
+    // concurrent grants are written in the order they were applied.
     if (req.method === "POST" && req.url === "/admin/credits") {
         try {
             const body = await readJsonBody(req);
@@ -519,7 +587,13 @@ const httpServer = http.createServer(async (req, res) => {
 
             const previousBalance = target.credits || 0;
             target.credits = previousBalance + amount; // atomic increment, not a client-supplied total
-            saveAccountsToDisk();
+            try {
+                await persistAccount(body.playerId);
+            } catch (e) {
+                target.credits = previousBalance; // write failed -- undo the in-memory grant
+                sendJson(res, 503, { error: "Could not save credit grant -- try again" });
+                return;
+            }
 
             pushAdminLog({
                 admin: adminAccount ? adminAccount.name : "unknown",
@@ -582,7 +656,7 @@ const httpServer = http.createServer(async (req, res) => {
                     }
                 }
 
-                saveAbilityConfigToDisk();
+                persistAbilityConfig();
                 logAdminAction(account, abilityId, changes, "save");
                 sendJson(res, 200, { ok: true, config: abilityConfig[abilityId] });
                 return;
@@ -600,7 +674,7 @@ const httpServer = http.createServer(async (req, res) => {
                     .filter(k => before[k] !== ABILITY_DEFAULTS[abilityId][k])
                     .map(k => ({ field: k, from: before[k], to: ABILITY_DEFAULTS[abilityId][k] }));
 
-                saveAbilityConfigToDisk();
+                persistAbilityConfig();
                 logAdminAction(account, abilityId, changes, "reset");
                 sendJson(res, 200, { ok: true, config: abilityConfig[abilityId] });
                 return;
@@ -612,7 +686,7 @@ const httpServer = http.createServer(async (req, res) => {
                     fresh[key] = Object.assign({}, ABILITY_DEFAULTS[key]);
                 }
                 abilityConfig = fresh;
-                saveAbilityConfigToDisk();
+                persistAbilityConfig();
                 logAdminAction(account, "ALL", [], "resetAll");
                 sendJson(res, 200, { ok: true, config: abilityConfig });
                 return;
@@ -634,9 +708,10 @@ const httpServer = http.createServer(async (req, res) => {
     sendJson(res, 404, { error: "Not found" });
 });
 
-console.log("DUEL ARENA SERVER STARTED on port " + PORT);
-console.log("Open http://localhost:" + PORT + " on this computer,");
-console.log("or http://<this computer's LAN IP>:" + PORT + " on the other player's computer.");
+// (The "server started" banner is printed by startServer() at the bottom
+// of this file, once the persistent store is loaded and the port is
+// actually open -- printing it here would announce a server that is not
+// listening yet.)
 
 // =====================================================================
 // WEBSOCKET RELAY -- movement/bullets/damage/skin/rematch for online
@@ -910,6 +985,47 @@ wss.on("connection", socket => {
 
 });
 
-httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log("DUEL ARENA SERVER STARTED on port " + PORT);
-});
+// =====================================================================
+// BOOT -- the persistent store is opened and fully loaded into memory
+// BEFORE the port is opened. Serving requests against a half-loaded
+// account cache is how a redeploy turns into "everyone lost their
+// progress", so a storage failure here stops the process instead.
+// =====================================================================
+async function startServer() {
+    try {
+        await store.init();
+        Object.assign(accounts, await store.loadAllAccounts());
+        abilityConfig = await loadAbilityConfig();
+        adminLog = await loadAdminLog();
+
+        // Restore live sessions so a redeploy doesn't invalidate the token
+        // every already-signed-in player is still holding.
+        const restored = await store.loadValidSessions();
+        for (const token of Object.keys(restored)) {
+            const row = restored[token];
+            if (row && accounts[row.sub]) sessions[token] = row.sub; // skip sessions whose account is gone
+        }
+    } catch (e) {
+        console.error("FATAL: could not open the account store:", e.message);
+        console.error("Refusing to start -- serving with an empty account store " +
+            "would overwrite real player progress on the next save.");
+        process.exit(1);
+    }
+
+    console.log("[storage] backend: " + store.backendName +
+        " -- " + Object.keys(accounts).length + " account(s), " +
+        Object.keys(sessions).length + " live session(s) loaded");
+    if (!store.usingDatabase) {
+        console.log("[storage] NOTE: no DATABASE_URL set, using the local filesystem. " +
+            "On an ephemeral host (Render without a persistent disk) this data " +
+            "does NOT survive a redeploy or restart.");
+    }
+
+    httpServer.listen(PORT, "0.0.0.0", () => {
+        console.log("DUEL ARENA SERVER STARTED on port " + PORT);
+        console.log("Open http://localhost:" + PORT + " on this computer,");
+        console.log("or http://<this computer's LAN IP>:" + PORT + " on the other player's computer.");
+    });
+}
+
+startServer();

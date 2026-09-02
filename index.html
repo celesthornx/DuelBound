@@ -3046,6 +3046,25 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         aimMode: aimMode,
         matchSize: savedMatchPlayerCount
       })
+    }).then(res => {
+      // fetch() only rejects on a network failure -- a 401/409/503 still
+      // resolves. Without this check a rejected save looked identical to a
+      // successful one, so progress could stop being stored while the
+      // player carried on with no idea anything was wrong.
+      if(res.ok) return;
+      if(res.status === 401 || res.status === 409){
+        // The session is no longer valid (expired, or revoked server-side).
+        // Say so instead of silently dropping everything from here on.
+        loggedIn = false;
+        sessionToken = null;
+        setAccountStatus('SESSION EXPIRED — SIGN IN AGAIN TO KEEP SAVING');
+        const gBtn = document.getElementById('googleSignInBtn');
+        const oBtn = document.getElementById('signOutBtn');
+        if(gBtn) gBtn.classList.remove('hidden');
+        if(oBtn) oBtn.classList.add('hidden');
+      } else {
+        setAccountStatus('COULD NOT SAVE PROGRESS — RETRYING');
+      }
     }).catch(()=>{ /* server unreachable -- keep playing, just not saved */ });
   }
 
