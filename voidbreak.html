@@ -35,7 +35,6 @@ body.ingame #cv{cursor:none}
 #hudTop{position:absolute;top:14px;left:0;right:0;display:flex;justify-content:center}
 #sectorWrap{text-align:center}
 #sectorLabel{font-family:'Orbitron';font-size:15px;letter-spacing:4px;color:#dff8ff;text-shadow:0 0 12px rgba(0,240,255,.6)}
-#sectorLabel span{color:#5f7f95}
 #roomType{font-size:15px;font-weight:600;letter-spacing:3px;color:#ff7d9b;margin-top:2px}
 #waveLabel{font-size:12px;letter-spacing:2px;color:#6e8ca0;margin-top:1px}
 #nodeStrip{display:flex;gap:7px;justify-content:center;margin-top:7px}
@@ -193,13 +192,30 @@ input[type=range]{width:180px;accent-color:var(--cy)}
 .ustack{font-size:12px;letter-spacing:2px;color:#6e93a5}
 .urar{font-family:'Orbitron';font-size:9px;letter-spacing:3px;margin-top:auto}
 .ucard.rc .urar{color:var(--cy)}.ucard.rr .urar{color:var(--pu)}.ucard.re .urar{color:var(--gold)}
-.endstats{display:grid;grid-template-columns:1fr 1fr;gap:10px 30px;margin:20px 0;max-width:420px}
+.endstats{display:grid;grid-template-columns:1fr 1fr;gap:10px 30px;margin:20px 0;max-width:440px}
 .est{display:flex;justify-content:space-between;font-size:16px;letter-spacing:1px}
 .est span{color:#8fb0c0}.est b{color:#eafcff;font-family:'Orbitron';font-size:14px}
 .est.shards b{color:var(--gold)}
 .endshards{text-align:center;font-family:'Orbitron';font-size:14px;letter-spacing:2px;color:var(--gold);margin:14px 0;
   border:1px dashed rgba(255,201,92,.4);padding:10px}
 .pausestats{text-align:center;color:#6e93a5;letter-spacing:2px;font-size:14px;margin-bottom:20px}
+/* ---- level chain ---- */
+.lvlchain{display:flex;flex-direction:column;align-items:stretch;margin:6px 0}
+.lvlarrow{text-align:center;color:rgba(0,240,255,.35);font-size:13px;line-height:1;padding:5px 0}
+.lvlcard{display:flex;align-items:center;gap:16px;border:1px solid rgba(0,240,255,.3);
+  padding:13px 18px;cursor:pointer;transition:all .15s;background:rgba(255,255,255,.02)}
+.lvlcard:hover:not(.locked):not(.future){background:rgba(0,240,255,.08);transform:translateX(5px)}
+.lvlcard.beaten{border-color:rgba(56,255,156,.45)}
+.lvlcard.locked{opacity:.45;cursor:default}
+.lvlcard.future{border-style:dashed;opacity:.28;cursor:default}
+.lvlcard .lnum{font-family:'Orbitron';font-size:24px;font-weight:900;color:rgba(0,240,255,.5);width:48px;flex:none}
+.lvlcard .lname{font-family:'Orbitron';font-size:16px;letter-spacing:2px;color:#eafcff}
+.lvlcard .lmeta{font-size:12.5px;color:#8fb0c0;letter-spacing:1.5px;margin-top:3px}
+.lvlcard .lstars{color:var(--rd)}
+.lvlcard .lstatus{margin-left:auto;font-family:'Orbitron';font-size:11px;letter-spacing:2px;color:#8fb0c0;flex:none}
+.lvlcard.beaten .lstatus{color:var(--gn)}
+.vicunlock{text-align:center;font-family:'Orbitron';font-size:12px;letter-spacing:2px;color:var(--gn);
+  margin:-8px 0 14px;text-shadow:0 0 12px rgba(56,255,156,.4)}
 </style>
 </head>
 <body>
@@ -209,7 +225,7 @@ input[type=range]{width:180px;accent-color:var(--cy)}
 
 <div id="hud" class="hidden">
   <div id="hudTop"><div id="sectorWrap">
-    <div id="sectorLabel">SECTOR 1 <span>/ 10</span></div>
+    <div id="sectorLabel">L1 · SECTOR 1 / 10</div>
     <div id="roomType">COMBAT</div>
     <div id="waveLabel"></div>
     <div id="nodeStrip"></div>
@@ -247,18 +263,30 @@ input[type=range]{width:180px;accent-color:var(--cy)}
     <button class="btn" id="btnSettings">SETTINGS</button>
   </div>
   <div class="menu-stats">
-    <div><i>&#9670;</i> <b id="menuShards">0</b> VOID SHARDS</div>
-    <div>RUNS <span id="menuRuns">0</span> &middot; BEST SECTOR <span id="menuBest">&ndash;</span> &middot; NULLS SLAIN <span id="menuKills">0</span></div>
+    <div>PROGRESS <span id="menuLevel">LEVEL 1</span></div>
+    <div><i>◆</i> <b id="menuShards">0</b> VOID SHARDS</div>
+    <div>RUNS <span id="menuRuns">0</span> · BEST SECTOR <span id="menuBest">–</span> · BOSSES SLAIN <span id="menuKills">0</span></div>
   </div>
+</div></div>
+
+<div class="overlay" id="ov-levels"><div class="panel" style="width:560px">
+  <h2 class="ovtitle">SECTOR CHAINS</h2><div class="ovsub">CHOOSE YOUR DESCENT</div>
+  <div class="lvlchain" id="lvlChain"></div>
+  <div class="ovnav"><button class="btn" id="lvlBack">BACK</button></div>
 </div></div>
 
 <div class="overlay" id="ov-howto"><div class="panel" style="width:640px">
   <h2 class="ovtitle">HOW TO PLAY</h2><div class="ovsub">SURVIVE THE COLLAPSE</div>
   <div class="howto-sec"><h3>CONTROLS</h3>
     <div class="krow"><span class="key">W A S D</span>Move</div>
-    <div class="krow"><span class="key">MOUSE</span>Aim &middot; <b>LEFT CLICK / HOLD</b> to fire</div>
+    <div class="krow"><span class="key">MOUSE</span>Aim · <b>LEFT CLICK / HOLD</b> to fire</div>
     <div class="krow"><span class="key">SPACE</span>Dash (costs energy, brief invulnerability)</div>
     <div class="krow"><span class="key">ESC / P</span>Pause</div>
+  </div>
+  <div class="howto-sec"><h3>PROGRESSION</h3>
+    <div class="tdesc">Each level is a chain of 10 sectors ending in a guardian boss.<br>
+    Beat a level's boss to permanently unlock the next chain.<br>
+    Fall, and your Void Shards carry over to the FORGE — permanent power for future runs.</div>
   </div>
   <div class="howto-sec"><h3>ROOMS</h3>
     <div class="trow"><span class="tname" style="color:var(--rd)">COMBAT</span><span class="tdesc">Clear all waves. Chance of a Void Upgrade.</span></div>
@@ -266,18 +294,22 @@ input[type=range]{width:180px;accent-color:var(--cy)}
     <div class="trow"><span class="tname" style="color:var(--gold)">TREASURE</span><span class="tdesc">Void Shard caches, sometimes a weapon cache.</span></div>
     <div class="trow"><span class="tname" style="color:var(--cy)">UPGRADE</span><span class="tdesc">A shrine offering rare upgrades.</span></div>
     <div class="trow"><span class="tname" style="color:var(--gn)">SANCTUM</span><span class="tdesc">Rest and restore your health.</span></div>
-    <div class="trow"><span class="tname" style="color:var(--rd)">THE NULL</span><span class="tdesc">The boss waits at sector 10. Three phases. Stay sharp.</span></div>
   </div>
-  <div class="howto-sec"><h3>THREATS</h3>
+  <div class="howto-sec"><h3>THREATS · LEVEL 1</h3>
     <div class="trow"><span class="tname" style="color:#ff6060">DRONE</span><span class="tdesc">Fast, orbits you and fires bursts.</span></div>
     <div class="trow"><span class="tname" style="color:#ff4080">BRUTE</span><span class="tdesc">Slow tank. Watch for its ground slam.</span></div>
     <div class="trow"><span class="tname" style="color:#ffbe50">SWARM</span><span class="tdesc">Tiny, weak, comes in packs.</span></div>
-    <div class="trow"><span class="tname" style="color:#be5aff">SNIPER</span><span class="tdesc">Keeps distance. Its laser telegraphs a lethal shot &mdash; dash sideways.</span></div>
+    <div class="trow"><span class="tname" style="color:#be5aff">SNIPER</span><span class="tdesc">Keeps distance. Its laser telegraphs a lethal shot — dash sideways.</span></div>
     <div class="trow"><span class="tname" style="color:#ff3636">CHASER</span><span class="tdesc">Extremely fast, lunges at you when it flashes.</span></div>
   </div>
+  <div class="howto-sec"><h3>THREATS · THE FRACTURE (LEVEL 2)</h3>
+    <div class="trow"><span class="tname" style="color:#be8cff">PHANTOM</span><span class="tdesc">Vanishes, then rematerializes nearby — watch the warning ring.</span></div>
+    <div class="trow"><span class="tname" style="color:#ff40aa">FRAC. DRONE</span><span class="tdesc">Tighter orbit, strafes sideways while firing its burst.</span></div>
+    <div class="trow"><span class="tname" style="color:#d63c9e">RAVAGER</span><span class="tdesc">Elite juggernaut. Charges along its telegraph line, lands with a shockwave.</span></div>
+  </div>
   <div class="howto-sec"><h3>TIPS</h3>
-    <div class="tdesc">Dash grants invulnerability &mdash; dodge through bullet rings.<br>
-    Shards are saved when you fall and buy permanent power in the VOID FORGE.<br>
+    <div class="tdesc">Dash grants invulnerability — dodge through bullet rings and hazard zones.<br>
+    When THE FRACTURED KING shows his gold ring, he is VULNERABLE — unload on him.<br>
     Upgrades stack: build crit + explode, or pierce + burn, or pure speed. Every run is different.</div>
   </div>
   <div class="ovnav"><button class="btn" id="howtoBack">BACK</button></div>
@@ -294,7 +326,7 @@ input[type=range]{width:180px;accent-color:var(--cy)}
 </div></div>
 
 <div class="overlay" id="ov-forge"><div class="panel" style="width:720px">
-  <h2 class="ovtitle">VOID FORGE</h2><div class="ovsub">PERMANENT UPGRADES &middot; PERSISTS BETWEEN RUNS</div>
+  <h2 class="ovtitle">VOID FORGE</h2><div class="ovsub">PERMANENT UPGRADES · PERSISTS BETWEEN RUNS</div>
   <div class="forge-balance"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#ffc95c" stroke-width="2"><path d="M12 2l6 10-6 10-6-10z"/></svg><span id="forgeShards">0</span> SHARDS AVAILABLE</div>
   <div id="forgeUpgrades"></div>
   <div class="fsec">ARSENAL</div>
@@ -303,7 +335,7 @@ input[type=range]{width:180px;accent-color:var(--cy)}
 </div></div>
 
 <div class="overlay" id="ov-weapons"><div class="panel" style="width:760px">
-  <h2 class="ovtitle">LOADOUT</h2><div class="ovsub">SELECT YOUR STARTING WEAPON</div>
+  <h2 class="ovtitle">LOADOUT</h2><div class="ovsub" id="wsSub">SELECT YOUR STARTING WEAPON</div>
   <div class="wgrid" id="wsGrid"></div>
   <div class="ovnav"><button class="btn" id="wsBack">BACK</button><button class="btn primary" id="wsStart">ENTER THE VOID</button></div>
 </div></div>
@@ -337,8 +369,9 @@ input[type=range]{width:180px;accent-color:var(--cy)}
 </div></div>
 
 <div class="overlay" id="ov-victory"><div class="panel" style="width:440px">
-  <h2 class="ovtitle" style="color:#d9fff1;text-shadow:0 0 16px rgba(56,255,156,.6)">NULL BROKEN</h2>
-  <div class="ovsub" style="color:#8fe9c0">THE DIMENSION SHATTERS. YOU ARE FREE.</div>
+  <h2 class="ovtitle" id="vicTitle" style="color:#d9fff1;text-shadow:0 0 16px rgba(56,255,156,.6)">NULL BROKEN</h2>
+  <div class="ovsub" id="vicSub" style="color:#8fe9c0">THE DIMENSION SHATTERS. YOU ARE FREE.</div>
+  <div class="vicunlock" id="vicUnlock"></div>
   <div class="endstats" id="vicStats"></div>
   <div class="endshards" id="vicShards"></div>
   <div class="ovnav"><button class="btn" id="vicMenu">MAIN MENU</button><button class="btn" id="vicForge">FORGE</button><button class="btn primary" id="vicAgain">PLAY AGAIN</button></div>
@@ -347,7 +380,11 @@ input[type=range]{width:180px;accent-color:var(--cy)}
 <script>
 'use strict';
 /* ============================================================
-   VOIDBREAK — a single-file roguelite
+   VOIDBREAK — single-file roguelite
+   Architecture: data-driven LEVELS array drives enemy pools,
+   elite pools, wave mixes, boss selection, difficulty and
+   environment theme. Add a new entry to LEVELS (+ a boss
+   implementation if it's a new guardian) to ship a new level.
    ============================================================ */
 
 /* ---------- 01 · UTILITIES ---------- */
@@ -370,7 +407,7 @@ const el=id=>document.getElementById(id);
 const SAVE_KEY='voidbreak_save_v1';
 const DEF_SAVE={shards:0,forge:{vit:0,pow:0,swift:0,core:0,drive:0,edge:0},
   weapons:{pulse:true,scatter:false,rail:false,plasma:false,voidb:false},
-  lastWeapon:'pulse',runs:0,best:0,kills:0,
+  lastWeapon:'pulse',runs:0,best:0,kills:0,beaten:{},
   settings:{vol:0.8,music:true,sfx:true,shake:true,dmgnum:true}};
 let save;
 function loadSave(){
@@ -380,6 +417,9 @@ function loadSave(){
     save.weapons=Object.assign({},DEF_SAVE.weapons,save.weapons||{});
     save.settings=Object.assign({},DEF_SAVE.settings,save.settings||{});
   }catch(e){save=JSON.parse(JSON.stringify(DEF_SAVE));}
+  save.beaten=save.beaten||{};
+  // legacy migration: pre-expansion saves only tracked total boss kills
+  if(save.kills>0&&!save.beaten[1])save.beaten[1]=true;
 }
 function saveGame(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(save));}catch(e){}}
 loadSave();
@@ -528,7 +568,6 @@ const cam={x:0,y:0,zoom:1,baseZoom:1,punchV:0,sx:0,sy:0,shake:0};
 function addShake(n){if(save.settings.shake)cam.shake=Math.min(34,cam.shake+n);}
 function camPunch(n){cam.punchV=Math.max(cam.punchV,n);}
 function updateCamera(dt){
-  // only follow the mouse-look while actually playing; otherwise hold framing on the player
   const ls=state==='playing'?1:0;
   const lookX=clamp((mouse.x-W/2)*0.12*ls,-70,70),lookY=clamp((mouse.y-H/2)*0.12*ls,-70,70);
   const tx=player?player.x+lookX:0,ty=player?player.y+lookY:0;
@@ -592,7 +631,7 @@ function handleKey(code){
       if(uiOpen&&curUI==='ov-swap'){closeUI();return;}
       setPause(!paused);
     }else if(paused)setPause(false);
-    else if(['howto','settings','forge','weapons'].includes(state))go('menu');
+    else if(['howto','settings','forge','weapons','levels'].includes(state))go('menu');
   }
 }
 
@@ -618,6 +657,7 @@ const ICONS={
   up_bulletspeed:'<path d="M3 12h10M9 7l5 5-5 5M15 7l5 5-5 5"/>',
   up_energy:'<rect x="4" y="8" width="14" height="8" rx="1"/><path d="M18 10h2v4h-2M7.5 11v2M10.5 11v2"/>',
   up_homing:'<circle cx="12" cy="12" r="8"/><path d="M12 12l4.5-4.5M12 4v2M12 18v2M4 12h2M18 12h2"/>',
+  up_resonance:'<path d="M3 12h4l3-8 4 16 3-8h4"/>',
 };
 function svgIcon(id,extra){return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" ${extra||''}>${ICONS[id]||''}</svg>`;}
 
@@ -656,6 +696,8 @@ const UPGRADES=[
   {id:'burn',name:'CAUTERIZE',desc:'Your hits ignite enemies, burning them over time.',rar:'e',w:2.5,icon:'up_burn'},
   {id:'dashshield',name:'AFTERGLOW',desc:'Gain a protective shield briefly after dashing.',rar:'e',w:2.5,icon:'up_dashshield'},
   {id:'homing',name:'HUNTER ROUNDS',desc:'Projectiles curve toward enemies.',rar:'e',w:2.5,icon:'up_homing'},
+  {id:'resonance',name:'RESONANCE',desc:'Dashing deals 250% weapon damage to enemies you pass through. Stacks. Found in the Fracture.',
+    rar:'e',w:2.5,icon:'up_resonance',minLevel:2,unlockOnBeat:2},
 ];
 const RARNAME={c:'COMMON',r:'RARE',e:'EPIC'};
 
@@ -674,6 +716,10 @@ const ETYPES={
   swarm:{hp:12,speed:195,r:8,color:[255,190,80],cdmg:6,shards:1},
   sniper:{hp:48,speed:85,r:14,color:[190,90,255],cdmg:0,shards:3},
   chaser:{hp:40,speed:235,r:12,color:[255,54,54],cdmg:16,shards:3},
+  /* Level 2 — The Fracture */
+  phantom:{hp:56,speed:72,r:14,color:[190,140,255],cdmg:14,shards:4},
+  fdrone:{hp:46,speed:178,r:13,color:[255,64,170],cdmg:11,shards:3},
+  ravager:{hp:400,speed:60,r:30,color:[214,60,150],cdmg:22,shards:14},
 };
 const ROOMMETA={
   combat:{label:'COMBAT SECTOR',sub:'HOSTILES DETECTED',color:[255,70,90],size:[1600,1000]},
@@ -681,15 +727,43 @@ const ROOMMETA={
   treasure:{label:'TREASURE VAULT',sub:'SHARD CACHES DETECTED',color:[255,201,92],size:[1200,840]},
   upgrade:{label:'UPGRADE SHRINE',sub:'RESONANCE DETECTED',color:[0,240,255],size:[1100,800]},
   heal:{label:'REST SANCTUM',sub:'RESTORATIVE FIELD DETECTED',color:[56,255,156],size:[1100,800]},
-  boss:{label:'THE NULL',sub:'DIMENSIONAL CORE',color:[255,45,85],size:[1700,1120]},
+  boss:{label:'GUARDIAN',sub:'DIMENSIONAL CORE',color:[255,45,85],size:[1700,1120]},
 };
+
+/* ---------- LEVELS — the data-driven progression core ----------
+   To add a level: append an entry here. waveOpts entries are
+   [enemyType, budgetCost, maxPerWave, minSector]. elitePool is
+   [type, minSector]. env themes the arena. boss picks the
+   guardian (register its logic in BOSSMETA + an update/draw fn). */
+const LEVELS=[
+  {id:1,name:'THE COLLAPSE',diff:1.0,depth:10,boss:'null',completionBonus:200,
+    waveOpts:[['swarm',5,1,1],['drone',2,2,1],['sniper',3,3,2],['chaser',3,3,2],['brute',7,1,3]],
+    elitePool:[['drone',1],['sniper',1],['chaser',1],['brute',4],['brute',4]],
+    eliteSupport:'drone',
+    env:{floor:'rgba(9,13,32,0.72)',grid:'rgba(0,240,255,0.05)',border:[0,240,255],
+      neb:[[0,180,255],[150,60,255]],ambient:null,cracks:false}},
+  {id:2,name:'THE FRACTURE',diff:1.22,depth:10,boss:'king',completionBonus:300,
+    waveOpts:[['swarm',5,2,1],['drone',2,2,1],['sniper',3,2,2],['chaser',3,2,1],['brute',7,1,2],
+      ['phantom',4,2,3],['fdrone',3,2,2]],
+    combos:[[['drone',2],['phantom',1]],[['sniper',2],['chaser',2]],
+      [['brute',1],['fdrone',2]],[['fdrone',2],['swarm',4]]],
+    elitePool:[['drone',1],['sniper',1],['chaser',1],['brute',2],['ravager',3],['ravager',4]],
+    eliteSupport:'fdrone',
+    secondElite:['chaser','drone','ravager'],
+    secondSupport:'phantom',secondSupportCount:2,
+    env:{floor:'rgba(15,9,34,0.75)',grid:'rgba(190,110,255,0.06)',border:[176,90,255],
+      neb:[[170,50,235],[255,40,100]],ambient:[[176,108,255],[255,60,120],[120,70,230]],cracks:true}},
+];
+const FUTURE_SLOTS=5; // total slots shown on the chain screen
+let selectedLevel=0;
+const curEnv=()=>run?run.level.env:LEVELS[0].env;
 
 /* ---------- 07 · WORLD STATE ---------- */
 let state='menu',paused=false,uiOpen=false,curUI=null,runActive=false;
 let transition=null,hitstopT=0,timeScale=1,tsTarget=1,hurtFlash=0,deathSeq=null,whiteT=0;
-let vicT=0,vicWarped=false; // victory warp-out sequence
+let vicT=0,vicWarped=false;
 let player=null,room=null,boss=null,bossActive=false,bossIntroT=0,bossIntroStage=0;
-let enemies=[],bullets=[],ebullets=[],particles=[],dmgNums=[],pickups=[],portals=[],spawnQueue=[],props=[],swings=[],hurtArcs=[];
+let enemies=[],bullets=[],ebullets=[],particles=[],dmgNums=[],pickups=[],portals=[],spawnQueue=[],props=[],swings=[],hurtArcs=[],hazards=[];
 let run=null;
 let frameCount=0;
 const u=id=>(run&&run.upgrades[id])||0;
@@ -737,8 +811,8 @@ function newPlayer(weapon){
     speed:280*(1+0.06*f.swift),
     dmgMult:1+0.10*f.pow,fireRateMult:1,projAdd:0,pierceAdd:0,crit:0.05+0.04*f.edge,
     bSpd:1,dashCD:1.1*(1-0.08*f.drive),dashPow:1,
-    burnS:0,explodeS:0,lifestealS:0,dashshieldS:0,homingS:0,
-    dashT:0,dashCd:0,dashDur:0.17,dashDir:0,invuln:0,shield:0,
+    burnS:0,explodeS:0,lifestealS:0,dashshieldS:0,homingS:0,resonanceS:0,
+    dashT:0,dashCd:0,dashDur:0.17,dashDir:0,invuln:0,shield:0,dashHits:null,
     dead:false,thrustT:0,ghostT:0,
   };
 }
@@ -757,7 +831,7 @@ function recomputeStats(){
   p.dashCD=1.1*(1-0.08*f.drive)*(1-0.04*u('dash'));
   p.dashPow=1+0.35*u('dash');
   p.burnS=u('burn');p.explodeS=u('explode');p.lifestealS=u('lifesteal');
-  p.dashshieldS=u('dashshield');p.homingS=u('homing');
+  p.dashshieldS=u('dashshield');p.homingS=u('homing');p.resonanceS=u('resonance');
   updateHUDWeapon();renderBuildInfo();
 }
 function updatePlayer(dt){
@@ -766,7 +840,6 @@ function updatePlayer(dt){
   p.fireTimer-=dt;p.invuln-=dt;p.muzzle-=dt;p.shield-=dt;
   if(p.dashCd>0){p.dashCd-=dt;if(p.dashCd<=0){SFX.dashReady();el('dashUI').classList.add('ready');}}
   p.energy=Math.min(p.maxenergy,p.energy+p.energyRegen*dt);
-  // aim
   const wx=cam.x+(mouse.x-W/2)/cam.zoom,wy=cam.y+(mouse.y-H/2)/cam.zoom;
   p.faceAng=angTo(p.x,p.y,wx,wy);
   // dash
@@ -776,6 +849,7 @@ function updatePlayer(dt){
       let ax=(keys['KeyD']?1:0)-(keys['KeyA']?1:0),ay=(keys['KeyS']?1:0)-(keys['KeyW']?1:0);
       p.dashDir=(ax||ay)?Math.atan2(ay,ax):p.faceAng;
       p.invuln=Math.max(p.invuln,0.28);
+      p.dashHits=new Set();
       if(p.dashshieldS>0)p.shield=0.8+0.35*p.dashshieldS;
       SFX.dash();addShake(2);el('dashUI').classList.remove('ready');
       ringFX(p.x,p.y,[0,240,255],46,0.3);
@@ -791,12 +865,29 @@ function updatePlayer(dt){
     p.ghostT-=dt;
     if(p.ghostT<=0){p.ghostT=0.016;
       part({x:p.x,y:p.y,life:0.3,ml:0.3,size:9,c:[0,240,255],type:'ghost',ang:p.faceAng});}
+    // RESONANCE: dash damages enemies it passes through
+    if(p.resonanceS>0){
+      const dd=WEAPONS[p.weapon].dmg*p.dmgMult*2.5*p.resonanceS;
+      for(const e of enemies){
+        if(e.dead||e.noHit||p.dashHits.has(e))continue;
+        if(dist(p.x,p.y,e.x,e.y)<p.r+e.r+8){
+          p.dashHits.add(e);
+          damageEnemy(e,dd,false,Math.cos(p.dashDir)*420,Math.sin(p.dashDir)*420);
+          sparks(e.x,e.y,[0,240,255],8,260);
+        }
+      }
+      if(bossActive&&boss&&!boss.dead&&!boss.dying&&!p.dashHits.has(boss)){
+        if(dist(p.x,p.y,boss.x,boss.y)<p.r+boss.r+8){
+          p.dashHits.add(boss);damageBoss(dd,false);
+          sparks(boss.x,boss.y,[0,240,255],10,300);
+        }
+      }
+    }
   }else{
     const k=1-Math.pow(0.0002,dt);
     p.vx=lerp(p.vx,ax*p.speed,k);p.vy=lerp(p.vy,ay*p.speed,k);
     p.x+=(p.vx+p.kx)*dt;p.y+=(p.vy+p.ky)*dt;
     p.kx-=p.kx*8*dt;p.ky-=p.ky*8*dt;
-    // thrust particles
     if(len>0){p.thrustT-=dt;if(p.thrustT<=0){p.thrustT=0.05;
       part({x:p.x-Math.cos(p.faceAng)*12,y:p.y-Math.sin(p.faceAng)*12,
         vx:-ax*rand(40,90)+rand(-25,25),vy:-ay*rand(40,90)+rand(-25,25),
@@ -824,7 +915,7 @@ function fireWeapon(){
     let hitAny=false;
     const hitList=t=>{const d=dist(p.x,p.y,t.x,t.y);
       if(d<range+t.r&&Math.abs(angDiff(p.faceAng,angTo(p.x,p.y,t.x,t.y)))<arc/2)return true;return false;};
-    for(const e of enemies){if(e.dead)continue;
+    for(const e of enemies){if(e.dead||e.noHit)continue;
       if(hitList(e)){hitAny=true;damageEnemy(e,w.dmg*p.dmgMult*(roll()?2.2:1),roll(),Math.cos(p.faceAng)*300,Math.sin(p.faceAng)*300);}}
     if(bossActive&&boss&&!boss.dead&&hitList(boss)){hitAny=true;damageBoss(w.dmg*p.dmgMult*(roll()?2.2:1),roll());}
     if(hitAny)addShake(3);
@@ -873,7 +964,7 @@ function updateBullets(dt){
     b.px=b.x;b.py=b.y;
     if(player.homingS>0){
       let best=null,bd=400*400;
-      for(const e of enemies){if(e.dead)continue;const d2=(e.x-b.x)**2+(e.y-b.y)**2;
+      for(const e of enemies){if(e.dead||e.noHit)continue;const d2=(e.x-b.x)**2+(e.y-b.y)**2;
         if(d2<bd){bd=d2;best=e;}}
       if(bossActive&&boss&&!boss.dead){const d2=(boss.x-b.x)**2+(boss.y-b.y)**2;if(d2<bd){bd=d2;best=boss;}}
       if(best){const ta=angTo(b.x,b.y,best.x,best.y),ca=Math.atan2(b.vy,b.vx);
@@ -881,7 +972,6 @@ function updateBullets(dt){
         const sp=Math.hypot(b.vx,b.vy);b.vx=Math.cos(na)*sp;b.vy=Math.sin(na)*sp;}
     }
     b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;
-    // walls
     if(room&&(b.x<-room.w/2||b.x>room.w/2||b.y<-room.h/2||b.y>room.h/2)){
       if(b.explode)explodeAt(b.x,b.y,b.explode.r,b.explode.dmg*player.dmgMult,b.c);
       else if(player.explodeS>0)explodeAt(b.x,b.y,explodeR(),explodeDmg(b),b.c);
@@ -892,10 +982,9 @@ function updateBullets(dt){
       if(b.explode)explodeAt(b.x,b.y,b.explode.r,b.explode.dmg*player.dmgMult,b.c);
       bullets.splice(i,1);continue;
     }
-    // enemies
     let removed=false;
     for(const e of enemies){
-      if(e.dead||b.hitSet.has(e))continue;
+      if(e.dead||e.noHit||b.hitSet.has(e))continue;
       const rr=e.r+b.size;
       if((e.x-b.x)**2+(e.y-b.y)**2<rr*rr){
         b.hitSet.add(e);
@@ -909,7 +998,6 @@ function updateBullets(dt){
       }
     }
     if(removed)continue;
-    // boss
     if(bossActive&&boss&&!boss.dead&&!boss.dying&&!b.hitSet.has(boss)){
       const rr=boss.r+b.size;
       if((boss.x-b.x)**2+(boss.y-b.y)**2<rr*rr){
@@ -929,7 +1017,7 @@ const explodeDmg=b=>b.dmg*(0.35+0.15*player.explodeS);
 function explodeAt(x,y,r,dmg,c){
   burstFX(x,y,c||[255,180,90],16,300);ringFX(x,y,c||[255,180,90],r,0.3);
   addShake(4);SFX.explosion();
-  for(const e of enemies){if(e.dead)continue;
+  for(const e of enemies){if(e.dead||e.noHit)continue;
     const d=dist(x,y,e.x,e.y);
     if(d<r+e.r){const f=1-0.5*(d/(r+e.r));
       damageEnemy(e,dmg*f,false,0,0);if(player.burnS>0)applyBurn(e);}}
@@ -938,23 +1026,23 @@ function explodeAt(x,y,r,dmg,c){
     if(d<r+boss.r)damageBoss(dmg*(1-0.5*(d/(r+boss.r))),false);}
 }
 function applyBurn(e){
-  if(e.dead)return;
+  if(e.dead||e.noHit)return;
   e.burnT=3;e.burnDps=Math.max(e.burnDps||0,6+4*(player.burnS-1));
 }
 function damageEnemy(e,dmg,crit,kx,ky){
-  if(e.dead)return;
+  if(e.dead||e.noHit)return;
   e.hp-=dmg;e.hitFlash=0.12;run.damage+=dmg;
   dmgNum(e.x,e.y,Math.round(dmg),crit?'#ffc95c':'#eafcff',crit?20:14);
   sparks(e.x,e.y,e.color,crit?9:4,crit?300:180);
   crit?SFX.crit():SFX.hit();
   addShake(crit?2.5:1);
-  const kb=(e.type==='brute'?0.1:1)*(e.elite?0.5:1);
+  const kb=(e.type==='brute'||e.type==='ravager'?0.1:1)*(e.elite?0.5:1);
   e.x+=(kx||0)*kb*0.02;e.y+=(ky||0)*kb*0.02;
   if(crit)camPunch(0.015);
   if(e.hp<=0)killEnemy(e);
 }
 function killEnemy(e){
-  if(e.dead)return;e.dead=true;run.kills++;
+  if(e.dead)return;e.dead=true;e.noHit=false;run.kills++;
   const c=e.elite?[255,201,92]:e.color;
   deathFX(e.x,e.y,c,e.r*(e.elite?2:1.4));
   addShake(e.elite?9:4);if(e.elite)camPunch(0.05);
@@ -1008,15 +1096,21 @@ function updatePickups(dt){
 
 /* ---------- 11 · ENEMIES ---------- */
 function createEnemy(type,x,y,elite){
-  const c=ETYPES[type];const ds=1+(run.depth-1)*0.13;
-  const e={type,x,y,r:c.r*(elite?1.35:1),elite:!!elite,color:c.color,c:c.color,
-    hp:c.hp*ds*(elite?2.7:1),maxhp:c.hp*ds*(elite?2.7:1),
-    speed:c.speed*(elite?1.12:1)*rand(0.92,1.08),cdmg:c.cdmg*(elite?1.35:1)*(1+(run.depth-1)*0.05),
-    shards:c.shards,t:rand(0,10),hitFlash:0,dead:false,faceAng:0,
-    shootT:rand(0.6,1.6),burst:0,burstT:0,windup:0,orbitDir:pick([-1,1]),
+  const c=ETYPES[type];const lv=run.level;
+  // difficulty = level multiplier × sector progression (gentle curve)
+  const ds=lv.diff*(1+(run.depth-1)*0.12);
+  const emult=elite?(type==='ravager'?1.9:2.7):1;
+  const rmult=elite?(type==='ravager'?1.15:1.35):1;
+  const e={type,x,y,r:c.r*rmult,elite:!!elite,color:c.color,c:c.color,
+    hp:c.hp*ds*emult,maxhp:c.hp*ds*emult,
+    speed:c.speed*(elite?1.12:1)*rand(0.92,1.08)*(1+(lv.diff-1)*0.25),
+    cdmg:c.cdmg*(elite?1.35:1)*(1+(run.depth-1)*0.05)*lv.diff,
+    shards:c.shards,t:rand(0,10),hitFlash:0,dead:false,noHit:false,faceAng:0,
+    shootT:rand(0.6,1.6),burst:0,burstT:0,windup:0,orbitDir:pick([-1,1]),strafeDir:pick([-1,1]),
     burnT:0,burnDps:0,burnAcc:0,burnTick:0,slamTele:0,slamCD:rand(1,2),lunge:0,lungeCD:rand(0.5,1.5),
-    aimT:rand(1.2,2.2),aiming:0,aimAng:0,kx:0,ky:0};
-  e.maxhp=e.hp;
+    aimT:rand(1.2,2.2),aiming:0,aimAng:0,kx:0,ky:0,
+    pstate:'vis',pT:0,tpT:rand(1.8,3.2),tpX:0,tpY:0,
+    rstate:'chase',rT:0,rCD:rand(1.5,2.5),rAng:0};
   return e;
 }
 function findSpawnPos(){
@@ -1035,9 +1129,6 @@ function queueWave(wave){
   }
   SFX.spawn();
 }
-/* FIXED: spawn-queue processing is now independent of the wave/clear system.
-   Previously it lived inside updateWaves(), which returned early in "cleared"
-   rooms — so every enemy the boss summoned was queued forever and never spawned. */
 function processSpawnQueue(dt){
   for(let i=spawnQueue.length-1;i>=0;i--){const s=spawnQueue[i];
     s.t-=dt;
@@ -1049,7 +1140,6 @@ function processSpawnQueue(dt){
   }
 }
 function updateWaves(dt){
-  // boss rooms have no wave list; their flow is driven entirely by the boss
   if(room.cleared||room.type==='boss')return;
   if(spawnQueue.length===0&&enemies.length===0){
     if(room.wi<room.waves.length){
@@ -1089,6 +1179,85 @@ function updateEnemies(dt){
             mvx=Math.cos(a)*rad+Math.cos(a+Math.PI/2)*tang;
             mvy=Math.sin(a)*rad+Math.sin(a+Math.PI/2)*tang;
             const ml=Math.hypot(mvx,mvy)||1;mvx=e.speed*mvx/ml;mvy=e.speed*mvy/ml;}
+          break;
+        case 'fdrone': // Fractured Drone: strafes sideways mid-burst, tighter orbit
+          if(e.burst>0){e.burstT-=dt;
+            if(e.burstT<=0){e.burst--;e.burstT=0.12;
+              const sa=a+rand(-0.05,0.05);
+              ebullets.push(eShot(e,sa,440,e.cdmg*0.8,e.c,6));SFX.bossShot();}
+            const pa=a+Math.PI/2*e.strafeDir;
+            mvx=Math.cos(pa)*e.speed*0.55;mvy=Math.sin(pa)*e.speed*0.55;
+          }else{
+            e.shootT-=dt;
+            if(e.shootT<=0&&d<560){e.burst=3;e.burstT=0.28;e.shootT=rand(1.5,2.1);
+              if(Math.random()<0.5)e.strafeDir*=-1;}
+            const rad=clamp((d-220)*2.5,-110,110);
+            const tang=e.orbitDir*115;
+            mvx=Math.cos(a)*rad+Math.cos(a+Math.PI/2)*tang;
+            mvy=Math.sin(a)*rad+Math.sin(a+Math.PI/2)*tang;
+            const ml=Math.hypot(mvx,mvy)||1;mvx=e.speed*mvx/ml;mvy=e.speed*mvy/ml;}
+          break;
+        case 'phantom':{ // vanish → warn ring → rematerialize near the player
+          switch(e.pstate){
+            case 'vis':
+              mvx=Math.cos(a)*e.speed;mvy=Math.sin(a)*e.speed;
+              if(Math.random()<dt*6)part({x:e.x+rand(-10,10),y:e.y+rand(-6,6),
+                vx:rand(-10,10),vy:rand(-30,-8),life:0.6,ml:0.6,size:2,c:[190,140,255],type:'spark',drag:1});
+              e.tpT-=dt;
+              if(e.tpT<=0){e.pstate='fade';e.pT=0.4;}
+              break;
+            case 'fade':
+              mvx=Math.cos(a)*e.speed*0.3;mvy=Math.sin(a)*e.speed*0.3;
+              e.pT-=dt;
+              if(e.pT<=0){
+                e.pstate='gone';e.pT=1.0;e.noHit=true;
+                const ta=rand(0,TAU),td=rand(190,300);
+                e.tpX=clamp(p.x+Math.cos(ta)*td,-room.w/2+40,room.w/2-40);
+                e.tpY=clamp(p.y+Math.sin(ta)*td,-room.h/2+40,room.h/2-40);
+              }
+              break;
+            case 'gone':
+              e.pT-=dt;
+              if(e.pT<=0){e.pstate='warn';e.pT=0.55;}
+              break;
+            case 'warn':
+              e.pT-=dt;
+              if(e.pT<=0){
+                e.x=e.tpX;e.y=e.tpY;e.noHit=false;e.pstate='vis';
+                e.tpT=rand(2.4,3.6);
+                burstFX(e.x,e.y,[190,140,255],10,240);ringFX(e.x,e.y,[190,140,255],60,0.35);
+                SFX.spawn();
+              }
+              break;
+          }
+          break;}
+        case 'ravager': // THE RAVAGER: brace → charge along telegraph → shockwave landing
+          switch(e.rstate){
+            case 'chase':
+              mvx=Math.cos(a)*e.speed;mvy=Math.sin(a)*e.speed;
+              e.rCD-=dt;
+              if(d<560&&e.rCD<=0){e.rstate='wind';e.rT=0.8;e.rAng=a;SFX.warn();}
+              break;
+            case 'wind':
+              e.rT-=dt;
+              if(e.rT<=0){e.rstate='dash';e.rT=0.38;SFX.charge();addShake(4);}
+              break;
+            case 'dash':
+              e.rT-=dt;
+              e.x+=Math.cos(e.rAng)*780*dt;e.y+=Math.sin(e.rAng)*780*dt;
+              part({x:e.x,y:e.y,life:0.22,ml:0.22,size:10,c:[214,60,150],type:'glow'});
+              if(e.rT<=0){
+                ringFX(e.x,e.y,[255,60,150],170,0.4);burstFX(e.x,e.y,[255,60,150],16,360);
+                addShake(12);SFX.explosion();
+                if(!p.dead&&dist(e.x,e.y,p.x,p.y)<165)hurtPlayer(e.cdmg*1.25,e.x,e.y);
+                e.rstate='rec';e.rT=0.7;e.rCD=3.4;
+              }
+              break;
+            case 'rec':
+              e.rT-=dt;
+              if(e.rT<=0)e.rstate='chase';
+              break;
+          }
           break;
         case 'brute':
           mvx=Math.cos(a)*e.speed;mvy=Math.sin(a)*e.speed;
@@ -1139,15 +1308,15 @@ function updateEnemies(dt){
     if(e.windup<=0&&e.lunge<=0&&e.slamTele<=0){e.x+=(mvx+e.kx)*dt;e.y+=(mvy+e.ky)*dt;}
     e.kx-=e.kx*6*dt;e.ky-=e.ky*6*dt;
     e.faceAng=lerpAng(e.faceAng,a,clamp(8*dt,0,1));
-    // contact damage
-    if(!p.dead&&d<e.r+p.r+2)hurtPlayer(e.cdmg,e.x,e.y);
+    // contact damage (phantoms are intangible while vanished)
+    if(!p.dead&&!e.noHit&&d<e.r+p.r+2)hurtPlayer(e.cdmg,e.x,e.y);
     // clamp
     const hw=room.w/2-e.r,hh=room.h/2-e.r;
     e.x=clamp(e.x,-hw,hw);e.y=clamp(e.y,-hh,hh);
   }
-  // separation
-  for(let i=0;i<enemies.length;i++){const a=enemies[i];if(a.dead)continue;
-    for(let j=i+1;j<enemies.length;j++){const b=enemies[j];if(b.dead)continue;
+  // separation (intangible phantoms excluded)
+  for(let i=0;i<enemies.length;i++){const a=enemies[i];if(a.dead||a.noHit)continue;
+    for(let j=i+1;j<enemies.length;j++){const b=enemies[j];if(b.dead||b.noHit)continue;
       const dx=b.x-a.x,dy=b.y-a.y,rr=a.r+b.r+4,d2=dx*dx+dy*dy;
       if(d2<rr*rr&&d2>0.01){const d=Math.sqrt(d2),push=(rr-d)/d*0.4;
         a.x-=dx*push;a.y-=dy*push;b.x+=dx*push;b.y+=dy*push;}}
@@ -1162,27 +1331,54 @@ function eShot(e,ang,spd,dmg,c,r){
     vx:Math.cos(ang)*spd,vy:Math.sin(ang)*spd,dmg,r:r||6,c:c,life:6};
 }
 
-/* ---------- 12 · BOSS ---------- */
-function createBoss(){
+/* ---------- 12 · BOSSES (data-driven via BOSSMETA) ---------- */
+const BOSSMETA={
+  null:{name:'THE NULL',introSub:'GUARDIAN OF THE COLLAPSE',color:[255,45,85],
+    thresholds:[0.70,0.35],ph2:'THE VOID CONTRACTS',ph3:'NULL RAGE UNBOUND',
+    on2:()=>{room.tw=1150;room.th=780;room.shrinking=true;},
+    on3:()=>{summonEnemies('chaser',2);}},
+  king:{name:'THE FRACTURED KING',introSub:'THE FRACTURE GIVEN FORM',color:[216,80,255],
+    thresholds:[0.65,0.30],ph2:'THE CROWN SPLINTERS',ph3:'KING OF NOTHING',
+    on2:()=>{summonEnemies('phantom',2,5);},
+    on3:()=>{summonEnemies('phantom',1,5);summonEnemies('fdrone',2,6);}},
+};
+function summonEnemies(type,n,cap){
+  if(cap!==undefined&&enemies.filter(e=>e.type===type&&!e.dead).length>=cap)return;
+  for(let i=0;i<n;i++){const pos=findSpawnPos();
+    spawnQueue.push({x:pos.x,y:pos.y,type,elite:false,t:0.85+i*0.12});}
+  SFX.spawn();
+}
+function createBoss(kind){
   bossActive=false;bossIntroT=0;bossIntroStage=0;
-  // phase 2/3 specials now have initial cooldowns so they don't fire the instant
-  // the player regains control after the phase-change stun
-  boss={x:0,y:-300,r:56,hp:5200,maxhp:5200,phase:1,t:0,invuln:0,hitFlash:0,eye:0,
-    vx:0,vy:0,dead:false,dying:0,
-    tRadial:3.0,tVolley:2.2,tRing:2.6,tSlam:3.4,tCharge:2.4,tSummon:9,tSpiral:1.8,
-    spiral:null,charge:null,slam:null,summonFlags:{}};
+  if(kind==='king'){
+    boss={kind:'king',x:0,y:-320,r:64,hp:7600,maxhp:7600,phase:1,t:0,invuln:0,hitFlash:0,eye:0,
+      vx:0,vy:0,dead:false,dying:0,
+      tRadial:3.2,tVolley:2.4,tSummon:8.5,tSlam:4.6,tSweep:3.0,tHazard:4.2,tShatter:6.5,
+      sweep:null,shatter:null,slam:null,charge:null,vulnT:0,summonFlags:{}};
+  }else{
+    boss={kind:'null',x:0,y:-300,r:56,hp:5200,maxhp:5200,phase:1,t:0,invuln:0,hitFlash:0,eye:0,
+      vx:0,vy:0,dead:false,dying:0,
+      tRadial:3.0,tVolley:2.2,tRing:0,tSlam:0,tCharge:0,tSummon:9,tSpiral:0,
+      spiral:null,charge:null,slam:null,summonFlags:{}};
+  }
 }
 function bossIntro(dt){
   bossIntroT+=dt;
+  const meta=BOSSMETA[boss.kind];
   if(bossIntroStage===0){bossIntroStage=1;
     showBanner('WARNING','DIMENSIONAL ANOMALY DETECTED',true);SFX.warn();addShake(6);cam.baseZoom=0.86;}
   if(bossIntroT>=1.1&&bossIntroStage===1){bossIntroStage=2;SFX.warn();}
   if(bossIntroT>=2.1&&bossIntroStage===2){
     bossIntroStage=3;bossActive=true;boss.t=0;
     Music.set('boss');
-    burstFX(boss.x,boss.y,[255,45,85],40,500);ringFX(boss.x,boss.y,[255,45,85],260,0.6);
+    burstFX(boss.x,boss.y,meta.color,40,500);ringFX(boss.x,boss.y,meta.color,260,0.6);
     addShake(18);cam.baseZoom=0.92;camPunch(0.1);SFX.phase();
-    showBanner('THE NULL','GUARDIAN OF THE COLLAPSE');
+    showBanner(meta.name,meta.introSub);
+    el('bossName').textContent=meta.name;
+    el('bossPhaseLabel').textContent='PHASE I';
+    const marks=el('bossBar').querySelectorAll('.pmark');
+    marks[0].style.left=(100*(1-meta.thresholds[0]))+'%';
+    marks[1].style.left=(100*(1-meta.thresholds[1]))+'%';
     el('bossBarWrap').classList.remove('hidden');
     updateBossBar();
   }
@@ -1190,7 +1386,13 @@ function bossIntro(dt){
 function bossShot(x,y,ang,spd,dmg,r){
   ebullets.push({x,y,vx:Math.cos(ang)*spd,vy:Math.sin(ang)*spd,dmg,r:r||7,c:[255,70,150],life:9});
 }
+/* --- shared dispatch --- */
 function updateBoss(dt){
+  if(!boss)return;
+  if(boss.kind==='king')updateKing(dt);else updateNull(dt);
+}
+/* --- Level 1 guardian: THE NULL (unchanged behavior) --- */
+function updateNull(dt){
   const b=boss;if(!b)return;
   b.t+=dt;b.hitFlash-=dt;b.invuln-=dt;b.eye-=dt;
   if(b.dying>0){
@@ -1203,7 +1405,6 @@ function updateBoss(dt){
   }
   const p=player;
   const dx=p.x-b.x,dy=p.y-b.y,d=Math.hypot(dx,dy)||1,a=Math.atan2(dy,dx);
-  // charge state machine
   if(b.charge){
     const c=b.charge;
     if(c.phase==='wind'){c.t-=dt;b.vx*=Math.pow(0.02,dt);b.vy*=Math.pow(0.02,dt);
@@ -1219,7 +1420,6 @@ function updateBoss(dt){
     const tvy=Math.sin(a)*spd*(d>170?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.7)*70;
     b.vx=lerp(b.vx,tvx,clamp(2.5*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.5*dt,0,1));
   }else{b.vx*=Math.pow(0.1,dt);b.vy*=Math.pow(0.1,dt);}
-  // slam
   if(b.slam){b.slam.t-=dt;
     if(b.slam.t<=0){
       const s=b.slam;
@@ -1227,12 +1427,10 @@ function updateBoss(dt){
       addShake(16);SFX.explosion();
       if(!p.dead&&dist(s.x,s.y,p.x,p.y)<170)hurtPlayer(32,s.x,s.y);
       b.slam=null;}}
-  // spiral
   if(b.spiral){b.spiral.t-=dt;b.spiral.em-=dt;
     if(b.spiral.em<=0){b.spiral.em=0.075;b.spiral.ang+=0.38;
       bossShot(b.x,b.y,b.spiral.ang,265,11,6);bossShot(b.x,b.y,b.spiral.ang+Math.PI,265,11,6);}
     if(b.spiral.t<=0){b.spiral=null;b.tSpiral=1.2;}}
-  // attacks
   if(b.invuln<=0&&!b.charge){
     b.tRadial-=dt;
     if(b.tRadial<=0){b.tRadial=b.phase===1?3.3:b.phase===2?2.7:3.0;
@@ -1268,56 +1466,170 @@ function updateBoss(dt){
           SFX.spawn();}}
     }else{
       const f=b.hp/b.maxhp;
-      if(f<0.86&&!b.summonFlags.a){b.summonFlags.a=1;summonDrones(3);}
-      if(f<0.74&&!b.summonFlags.b){b.summonFlags.b=1;summonDrones(3);}
+      if(f<0.86&&!b.summonFlags.a){b.summonFlags.a=1;summonEnemies('drone',3);}
+      if(f<0.74&&!b.summonFlags.b){b.summonFlags.b=1;summonEnemies('drone',3);}
     }
   }
-  // move
   b.x+=b.vx*dt;b.y+=b.vy*dt;
   const hw=room.w/2-b.r,hh=room.h/2-b.r;
   if(b.x<-hw){b.x=-hw;b.vx=Math.abs(b.vx)*0.3;}if(b.x>hw){b.x=hw;b.vx=-Math.abs(b.vx)*0.3;}
   if(b.y<-hh){b.y=-hh;b.vy=Math.abs(b.vy)*0.3;}if(b.y>hh){b.y=hh;b.vy=-Math.abs(b.vy)*0.3;}
-  // contact
   if(!p.dead&&d<b.r+p.r+2){
     hurtPlayer(b.charge&&b.charge.phase==='move'?26:18,b.x,b.y);
   }
 }
-function summonDrones(n){
-  for(let i=0;i<n;i++){const pos=findSpawnPos();
-    spawnQueue.push({x:pos.x,y:pos.y,type:'drone',elite:false,t:0.85+i*0.15});}
-  SFX.spawn();
+/* --- Level 2 guardian: THE FRACTURED KING ---
+   P1: patterns + targeted slam + drone summons.
+   P2 (65%): faster, sweeping projectile stream, floor hazard
+   zones, phantom summons.
+   P3 (30%): faster patterns, SHATTER (huge telegraphed nova)
+   that leaves him VULNERABLE (+50% damage taken) — the reward
+   window skilled players exploit. Every attack is telegraphed. */
+function updateKing(dt){
+  const b=boss;if(!b)return;
+  const p=player;
+  b.t+=dt;b.hitFlash-=dt;b.invuln-=dt;b.eye-=dt;b.vulnT-=dt;
+  if(b.dying>0){
+    b.dying-=dt;
+    if(Math.random()<dt*14){
+      const bx=b.x+rand(-b.r,b.r),by=b.y+rand(-b.r,b.r);
+      burstFX(bx,by,pick([[216,80,255],[255,201,92],[255,45,85]]),10,300);addShake(6);SFX.explosion();}
+    if(b.dying<=0){bossFinalBlast();return;}
+    return;
+  }
+  const dx=p.x-b.x,dy=p.y-b.y,d=Math.hypot(dx,dy)||1,a=Math.atan2(dy,dx);
+  // SHATTER — resolves into a huge nova, then the king is vulnerable
+  if(b.shatter){
+    b.shatter.t-=dt;b.vx*=Math.pow(0.02,dt);b.vy*=Math.pow(0.02,dt);
+    if(b.shatter.t<=0){
+      const s=b.shatter;
+      ringFX(s.x,s.y,[255,45,85],330,0.55);ringFX(s.x,s.y,[216,80,255],220,0.4);
+      burstFX(s.x,s.y,[255,45,85],34,520);
+      addShake(22);camPunch(0.1);SFX.explosion();
+      if(!p.dead&&dist(s.x,s.y,p.x,p.y)<300)hurtPlayer(34,s.x,s.y);
+      b.shatter=null;b.vulnT=1.9;b.invuln=0;
+      dmgNum(b.x,b.y-b.r-16,'VULNERABLE','#ffc95c',17);
+    }
+  }
+  // sweeping stream — rotating bullet fan the player weaves through
+  else if(b.sweep){
+    const s=b.sweep;s.t-=dt;s.em-=dt;
+    if(s.em<=0){s.em=0.085;
+      s.ang+=s.dir*0.17;
+      if(s.ang>s.base+1.4)s.dir=-1;
+      if(s.ang<s.base-1.4)s.dir=1;
+      bossShot(b.x,b.y,s.ang,330,12,6);
+    }
+    if(s.t<=0){
+      b.sweep=null;b.tSweep=b.phase===2?4.2:3.2;
+      if(b.phase===3){b.vulnT=1.1;dmgNum(b.x,b.y-b.r-16,'VULNERABLE','#ffc95c',17);}
+    }
+  }
+  // targeted slam (shared telegraph style with THE NULL)
+  if(b.slam){b.slam.t-=dt;
+    if(b.slam.t<=0){
+      const s=b.slam;
+      ringFX(s.x,s.y,[216,80,255],180,0.4);burstFX(s.x,s.y,[216,80,255],22,380);
+      addShake(16);SFX.explosion();
+      if(!p.dead&&dist(s.x,s.y,p.x,p.y)<170)hurtPlayer(26,s.x,s.y);
+      b.slam=null;}}
+  // movement (frozen while charging SHATTER; sluggish while vulnerable)
+  if(!b.shatter&&b.invuln<=0){
+    const spd=(b.phase===1?105:b.phase===2?185:255)*(b.vulnT>0?0.25:1)*(b.sweep?0.45:1);
+    const tvx=Math.cos(a)*spd*(d>190?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.8)*80;
+    const tvy=Math.sin(a)*spd*(d>190?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.8)*80;
+    b.vx=lerp(b.vx,tvx,clamp(2.5*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.5*dt,0,1));
+  }else{b.vx*=Math.pow(0.05,dt);b.vy*=Math.pow(0.05,dt);}
+  // attacks — never while charging shatter or stunned/vulnerable
+  if(!b.shatter&&b.invuln<=0&&!b.sweep&&b.vulnT<=0){
+    b.tRadial-=dt;
+    if(b.tRadial<=0){b.tRadial=b.phase===1?3.4:b.phase===2?2.9:2.5;
+      const n=b.phase===1?16:b.phase===2?20:24;
+      for(let i=0;i<n;i++)bossShot(b.x,b.y,i/n*TAU+b.t*0.7,255+b.phase*22,10);
+      b.eye=0.3;SFX.bossShot();}
+    b.tVolley-=dt;
+    if(b.tVolley<=0){b.tVolley=b.phase===1?2.4:b.phase===2?2.7:1.9;
+      const n=b.phase===3?7:5,sp=(n-1)*0.15;
+      for(let i=0;i<n;i++)bossShot(b.x,b.y,a-lerp(-sp/2,sp/2,i/(n-1)),375+b.phase*18,12);
+      b.eye=0.3;SFX.bossShot();}
+    b.tSlam-=dt;
+    if(b.tSlam<=0){b.tSlam=b.phase===1?5.0:4.3;b.slam={x:p.x,y:p.y,t:1.0};b.eye=0.4;SFX.warn();}
+    if(b.phase>=2){
+      b.tSweep-=dt;
+      if(b.tSweep<=0){b.tSweep=4.2;b.sweep={t:1.9,base:a,ang:a,dir:1,em:0};b.eye=0.4;SFX.warn();}
+      b.tHazard-=dt;
+      if(b.tHazard<=0){b.tHazard=5.0;
+        const n=2+randi(0,2);
+        for(let i=0;i<n;i++){
+          const hx=clamp(p.x+rand(-280,280),-room.w/2+70,room.w/2-70);
+          const hy=clamp(p.y+rand(-280,280),-room.h/2+70,room.h/2-70);
+          hazards.push({x:hx,y:hy,r:85,t:1.15});}
+        b.eye=0.4;SFX.warn();}
+    }
+    if(b.phase>=3){
+      b.tShatter-=dt;
+      if(b.tShatter<=0){b.tShatter=6.8;b.shatter={x:p.x,y:p.y,t:1.35};b.eye=0.5;SFX.warn();SFX.charge();}
+    }
+    b.tSummon-=dt;
+    if(b.tSummon<=0){
+      b.tSummon=b.phase===1?10:b.phase===2?9:7.5;
+      if(b.phase===1)summonEnemies('fdrone',3,6);
+      else if(b.phase===2)summonEnemies('phantom',2,5);
+      else{summonEnemies('phantom',2,5);summonEnemies('fdrone',2,6);}
+    }
+  }
+  b.x+=b.vx*dt;b.y+=b.vy*dt;
+  const hw=room.w/2-b.r,hh=room.h/2-b.r;
+  if(b.x<-hw){b.x=-hw;b.vx=Math.abs(b.vx)*0.3;}if(b.x>hw){b.x=hw;b.vx=-Math.abs(b.vx)*0.3;}
+  if(b.y<-hh){b.y=-hh;b.vy=Math.abs(b.vy)*0.3;}if(b.y>hh){b.y=hh;b.vy=-Math.abs(b.vy)*0.3;}
+  if(!p.dead&&d<b.r+p.r+2)hurtPlayer(20,b.x,b.y);
+}
+/* hazard zones (King phase 2+) — telegraph, then erupt */
+function updateHazards(dt){
+  for(let i=hazards.length-1;i>=0;i--){const hz=hazards[i];
+    hz.t-=dt;
+    if(hz.t<=0){
+      ringFX(hz.x,hz.y,[216,80,255],hz.r+20,0.35);burstFX(hz.x,hz.y,[216,80,255],12,300);
+      addShake(7);SFX.explosion();
+      if(player&&!player.dead&&dist(hz.x,hz.y,player.x,player.y)<hz.r+player.r)
+        hurtPlayer(14*run.level.diff,hz.x,hz.y);
+      hazards.splice(i,1);
+    }
+  }
 }
 function damageBoss(dmg,crit){
-  const b=boss;
+  const b=boss,meta=BOSSMETA[b.kind];
   if(!b||b.dying>0)return;
   if(b.invuln>0){ringFX(b.x,b.y,[190,130,255],b.r+30,0.3);return;}
+  if(b.vulnT>0)dmg*=1.5; // vulnerability window: +50% damage taken
   b.hp-=dmg;run.damage+=dmg;b.hitFlash=0.1;
   dmgNum(b.x+rand(-30,30),b.y-b.r,Math.round(dmg),crit?'#ffc95c':'#eafcff',crit?21:15);
   crit?SFX.crit():SFX.hit();
   addShake(crit?2.5:1);updateBossBar();
   if(b.hp<=0){b.hp=0;startBossDeath();return;}
   const f=b.hp/b.maxhp;
-  if(b.phase===1&&f<0.7)phaseTo(2);
-  else if(b.phase===2&&f<0.35)phaseTo(3);
+  if(b.phase===1&&f<meta.thresholds[0])phaseTo(2);
+  else if(b.phase===2&&f<meta.thresholds[1])phaseTo(3);
 }
 function phaseTo(n){
-  const b=boss;b.phase=n;b.invuln=1.5;
+  const b=boss,meta=BOSSMETA[b.kind];
+  b.phase=n;b.invuln=1.5;
+  b.sweep=null;b.shatter=null;b.slam=null;b.charge=null;
   for(const eb of ebullets)sparks(eb.x,eb.y,eb.c,3,140);
   ebullets.length=0;
-  ringFX(b.x,b.y,[255,45,85],420,0.7);burstFX(b.x,b.y,[255,45,85],30,450);
+  ringFX(b.x,b.y,meta.color,420,0.7);burstFX(b.x,b.y,meta.color,30,450);
   addShake(22);camPunch(0.12);SFX.phase();
   tsTarget=0.4;setTimeout(()=>{tsTarget=1;},420);
-  showBanner('PHASE '+(['I','II','III'][n-1]),n===2?'THE VOID CONTRACTS':n===3?'NULL RAGE UNBOUND':'');
+  showBanner('PHASE '+(['I','II','III'][n-1]),n===2?meta.ph2:n===3?meta.ph3:'');
   el('bossPhaseLabel').textContent='PHASE '+['I','II','III'][n-1];
-  if(n===2){room.tw=1150;room.th=780;room.shrinking=true;}
-  if(n===3){for(let i=0;i<2;i++){const pos=findSpawnPos();
-    spawnQueue.push({x:pos.x,y:pos.y,type:'chaser',elite:false,t:0.9});}}
+  if(n===2&&meta.on2)meta.on2();
+  if(n===3&&meta.on3)meta.on3();
 }
 function startBossDeath(){
   boss.dying=1.15;tsTarget=0.3;
   Music.set(null);
   for(const e of enemies)killEnemy(e);
-  spawnQueue.length=0;ebullets.length=0;
+  spawnQueue.length=0;ebullets.length=0;hazards.length=0;
 }
 function bossFinalBlast(){
   boss.dead=true;bossActive=false;
@@ -1334,15 +1646,17 @@ function updateBossBar(){
 }
 
 /* ---------- 13 · ROOMS & RUN FLOW ---------- */
-function newRun(){
-  run={depth:1,totalDepth:10,shards:0,kills:0,roomsCleared:0,damage:0,time:0,
+function newRun(levelIdx){
+  const lv=LEVELS[levelIdx];
+  run={level:lv,levelIdx,depth:1,totalDepth:lv.depth,shards:0,kills:0,roomsCleared:0,damage:0,time:0,
     upgrades:{},typeCounts:{combat:0,elite:0,treasure:0,upgrade:0,heal:0},hadElite:false,victoryBonus:0};
 }
-function startRun(weapon){
-  newRun();
+function startRun(weapon,levelIdx){
+  selectedLevel=levelIdx;
+  newRun(levelIdx);
   player=newPlayer(weapon);
   save.lastWeapon=weapon;saveGame();
-  enemies=[];bullets=[];ebullets=[];particles=[];dmgNums=[];pickups=[];portals=[];spawnQueue=[];props=[];swings=[];hurtArcs=[];
+  enemies=[];bullets=[];ebullets=[];particles=[];dmgNums=[];pickups=[];portals=[];spawnQueue=[];props=[];swings=[];hurtArcs=[];hazards=[];
   boss=null;bossActive=false;transition=null;deathSeq=null;
   vicT=0;vicWarped=false;runActive=true;
   timeScale=1;tsTarget=1;hurtFlash=0;hitstopT=0;whiteT=0;
@@ -1351,9 +1665,10 @@ function startRun(weapon){
   go('playing');
   Music.set('game');
   renderChips();renderNodeStrip();
+  showBanner('LEVEL '+run.level.id+' — '+run.level.name,'THE DESCENT BEGINS');
 }
 function roomOptions(){
-  if(run.depth>=9)return[{type:'boss'}];
+  if(run.depth>=run.level.depth-1)return[{type:'boss'}];
   const tc=run.typeCounts;
   const hpFrac=player?player.hp/player.maxhp:1;
   const pool=[];
@@ -1374,16 +1689,23 @@ function roomOptions(){
   }
   return chosen.map(t=>({type:t}));
 }
+/* waves are assembled from the level's data tables */
 function makeWaves(){
-  const depth=run.depth;
+  const lv=run.level,depth=run.depth;
   const waves=[];const nW=2+(depth>=4?1:0);
   for(let w=0;w<nW;w++){
+    // designed enemy combos replace the final wave at deeper sectors (level 2+)
+    if(w===nW-1&&depth>=5&&lv.combos&&Math.random()<0.45){
+      const combo=pick(lv.combos);
+      waves.push(combo.map(([type,count])=>({type,count,elite:false})));
+      continue;
+    }
     let budget=(7+depth*3.2)*(w===nW-1?1.25:0.85);
     const wave=[];
-    const opts=[['swarm',5,1,1],['drone',2,2,1],['sniper',3,3,depth>=2?1:0],['chaser',3,3,depth>=2?1:0],['brute',7,1,depth>=3?1:0]];
+    const opts=lv.waveOpts;
     let guard=0;
     while(budget>0&&guard++<40){
-      const avail=opts.filter(o=>o[3]>0&&o[1]<=budget+2);
+      const avail=opts.filter(o=>depth>=o[3]&&o[1]<=budget+2);
       if(!avail.length)break;
       const o=pick(avail);
       const count=Math.max(1,Math.min(o[2],Math.floor(budget/o[1])||1));
@@ -1396,21 +1718,40 @@ function makeWaves(){
   return waves;
 }
 function buildRoom(type){
-  const m=ROOMMETA[type];
-  enemies=[];bullets=[];ebullets=[];pickups=[];portals=[];spawnQueue=[];props=[];swings=[];
+  const m=ROOMMETA[type],env=run.level.env;
+  enemies=[];bullets=[];ebullets=[];pickups=[];portals=[];spawnQueue=[];props=[];swings=[];hazards=[];
   boss=null;bossActive=false;
   room={type,w:m.size[0],h:m.size[1],tw:m.size[0],th:m.size[1],
     waves:[],wi:0,waveDelay:0.7,cleared:type!=='combat'&&type!=='elite'&&type!=='boss',
-    clearT:0,portalsSpawned:false,pendingUpgrade:false,shrinking:false};
+    clearT:0,portalsSpawned:false,pendingUpgrade:false,shrinking:false,cracks:null};
   player.x=0;player.y=room.h/2-150;player.vx=0;player.vy=0;player.kx=0;player.ky=0;
   cam.x=player.x;cam.y=player.y-60;
   run.typeCounts[type]=(run.typeCounts[type]||0)+1;
+  // corruption cracks on the floor (level 2 theme)
+  if(env.cracks){
+    room.cracks=[];
+    for(let i=0;i<6;i++){
+      let x=rand(-room.w/2+60,room.w/2-60),y=rand(-room.h/2+60,room.h/2-60);
+      const pts=[[x,y]];let ang=rand(0,TAU);
+      for(let s=0;s<5;s++){ang+=rand(-0.8,0.8);const L=rand(40,110);
+        x=clamp(x+Math.cos(ang)*L,-room.w/2+30,room.w/2-30);
+        y=clamp(y+Math.sin(ang)*L,-room.h/2+30,room.h/2-30);
+        pts.push([x,y]);}
+      room.cracks.push(pts);
+    }
+  }
   if(type==='combat'){room.waves=makeWaves();room.pendingUpgrade=false;}
   else if(type==='elite'){
-    const et=pick(run.depth>=4?['drone','sniper','chaser','brute','brute']:['drone','sniper','chaser']);
+    const lv=run.level;
+    const pool=lv.elitePool.filter(o=>run.depth>=o[1]).map(o=>o[0]);
+    const et=pick(pool.length?pool:['drone']);
     room.w=ROOMMETA.elite.size[0];room.h=ROOMMETA.elite.size[1];
-    room.waves=[[{type:et,count:1,elite:true},{type:'drone',count:2,elite:false}]];
-    if(run.depth>=4)room.waves.push([{type:pick(['chaser','swarm','drone']),count:1,elite:true},{type:'swarm',count:5,elite:false}]);
+    room.waves=[[{type:et,count:1,elite:true},{type:lv.eliteSupport||'drone',count:2,elite:false}]];
+    if(run.depth>=4){
+      const st=pick(lv.secondElite||['chaser','swarm','drone']);
+      room.waves.push([{type:st,count:1,elite:true},
+        {type:(lv.secondSupport||'swarm'),count:(lv.secondSupportCount||5),elite:false}]);
+    }
     room.pendingUpgrade=true;run.hadElite=true;
   }
   else if(type==='treasure'){
@@ -1428,18 +1769,17 @@ function buildRoom(type){
   else if(type==='upgrade'){props.push({type:'shrine',x:0,y:0,used:false});}
   else if(type==='heal'){props.push({type:'fountain',x:0,y:0,used:false});
     spawnShards(rand(-120,120),-80,5);spawnShards(rand(-120,120),80,5);}
-  else if(type==='boss'){createBoss();Music.set(null);}
+  else if(type==='boss'){createBoss(run.level.boss);Music.set(null);}
   if(type!=='boss')Music.set('game');
-  showBanner(m.label,m.sub);
+  const bm=BOSSMETA[run.level.boss];
+  showBanner(type==='boss'?'GUARDIAN AHEAD':m.label,m.sub);
   el('roomType').textContent=m.label;
   el('roomType').style.color=rgb(m.color);
   el('waveLabel').textContent=(type==='combat'||type==='elite')?'':'—';
   el('bossBarWrap').classList.add('hidden');
+  el('bossName').textContent=bm.name;
   renderNodeStrip();updateHUD(true);
 }
-/* FIXED: boss rooms must never count as "cleared" via the wave system —
-   that instantly flagged the boss room clear at fight start (wrong banner,
-   wrong room count) and broke boss summons. */
 function roomCleared(){
   if(room.cleared||room.type==='boss')return;
   room.cleared=true;run.roomsCleared++;
@@ -1479,7 +1819,6 @@ function updateTransition(dt){
   if(tr.t>=tr.dur){transition=null;el('fade').style.opacity=0;}
 }
 function updateRoom(dt){
-  // arena shrink (boss phase 2)
   if(room.shrinking){
     let done=true;
     if(room.w>room.tw){room.w=Math.max(room.tw,room.w-300*dt);done=false;}
@@ -1488,10 +1827,8 @@ function updateRoom(dt){
     const hw=room.w/2-player.r,hh=room.h/2-player.r;
     player.x=clamp(player.x,-hw,hw);player.y=clamp(player.y,-hh,hh);
   }
-  // FIXED: spawn queue always processes, independent of room clear state
   processSpawnQueue(dt);
   if(room.type==='boss'&&!bossActive&&boss&&!boss.dead){bossIntro(dt);return;}
-  // props interactions (blocked while dying)
   const alive=!player.dead;
   for(const pr of props){
     if(pr.type==='chest'&&!pr.opened&&alive&&dist(pr.x,pr.y,player.x,player.y)<48){
@@ -1517,16 +1854,11 @@ function updateRoom(dt){
     return;
   }
   if(!room.portalsSpawned&&room.clearT>=1.05)spawnPortals();
-  // portals
   for(const po of portals){
     po.t+=dt;
     if(alive&&dist(po.x,po.y,player.x,player.y)<48){startTransition(po.type);break;}
   }
 }
-/* FIXED: victory is now a proper warp-out sequence — the player keeps rendering,
-   charges up, then deliberately flashes out of the dimension right as the
-   victory screen lands. Previously the player sprite simply vanished the moment
-   state left 'playing'. */
 function updateVictoryFX(rdt){
   if(vicWarped||!player)return;
   vicT+=rdt;
@@ -1543,25 +1875,39 @@ function updateVictoryFX(rdt){
   }
 }
 function victory(){
-  if(state!=='playing')return; // guard: death/victory race — first ending wins
+  if(state!=='playing')return;
   tsTarget=1;timeScale=1;
-  run.victoryBonus=200;run.shards+=200;
+  const lv=run.level;
+  // levelIdx lives on `run`, not on the LEVELS entry (`lv` only carries
+  // id/name/etc). Reading lv.levelIdx gave LEVELS[NaN] === undefined, so
+  // the "next chain unlocked" line never fired even when a next level existed.
+  const next=LEVELS[run.levelIdx+1];
+  const firstClear=!save.beaten[lv.id];
+  run.victoryBonus=lv.completionBonus;run.shards+=lv.completionBonus;
+  save.beaten[lv.id]=true; // unlocks the next chain
   runActive=false;state='victory';vicT=0;vicWarped=false;deathSeq=null;
   finalizeRun(true);
   run.roomsCleared=run.totalDepth;
   Music.set(null);SFX.victory();
   fillEndStats('vic');
+  el('vicTitle').textContent=lv.id===1?'NULL BROKEN':'FRACTURE BROKEN';
+  el('vicSub').textContent=lv.id===1?
+    'THE NULL IS SHATTERED. BUT SOMETHING STIRS DEEPER.':
+    'THE FRACTURE COLLAPSES. YOU HAVE BROKEN THROUGH.';
+  el('vicUnlock').textContent=
+    (next?(firstClear?'◆ LEVEL '+next.id+' UNLOCKED — '+next.name:'LEVEL '+next.id+' AVAILABLE — '+next.name)
+      :(firstClear?'◆ FUTURE SECTORS AWAIT DEVELOPMENT':'ALL CURRENT SECTORS CLEARED'));
   el('bossBarWrap').classList.add('hidden');
-  cam.baseZoom=0.8; // slow dramatic zoom-out
+  cam.baseZoom=0.8;
   setTimeout(()=>{el('ov-victory').classList.add('on');document.body.classList.remove('ingame');Music.set('menu');},1400);
 }
 function gameOver(){
-  if(state!=='playing')return; // guard: never overwrite the victory flow
+  if(state!=='playing')return;
   tsTarget=1;timeScale=1;state='gameover';deathSeq=null;runActive=false;
   finalizeRun(false);
   fillEndStats('go');
   el('bossBarWrap').classList.add('hidden');
-  Music.set('menu'); // stop the boss track droning over the death screen
+  Music.set('menu');
   el('ov-gameover').classList.add('on');
   document.body.classList.remove('ingame');
 }
@@ -1576,7 +1922,15 @@ function finalizeRun(victory_){
 let last=performance.now();
 function update(dt){
   run.time+=dt;
+  // level-2 ambient corruption motes
+  if(run.level.env.ambient&&room&&Math.random()<dt*10){
+    const vw=W/(2*cam.zoom)+40,vh=H/(2*cam.zoom)+40;
+    part({x:cam.x+rand(-vw,vw),y:cam.y+rand(-vh,vh),
+      vx:rand(-8,8),vy:rand(-24,-8),life:rand(2,4),ml:4,size:rand(1.2,2.6),
+      c:pick(run.level.env.ambient),type:'spark',drag:0});
+  }
   if(transition){updateTransition(dt);updateParticles(dt);return;}
+  updateHazards(dt);
   updatePlayer(dt);
   updateRoom(dt);
   if(room.type==='boss'&&bossActive&&boss&&!boss.dead)updateBoss(dt);
@@ -1597,7 +1951,6 @@ function frame(now){
     update(dt);
     if(deathSeq!==null){
       deathSeq-=rdt;
-      // FIXED: update(dt) already advances particles; don't double-update here
       if(deathSeq<=0){deathSeq=null;gameOver();}
     }
   }else if(state!=='playing'){
@@ -1605,8 +1958,6 @@ function frame(now){
     updateMenuBG(rdt);
     if(state==='victory')updateVictoryFX(rdt);
   }
-  // FIXED: camera stays framed on the world during end screens and
-  // settings-opened-from-pause (it used to drift off into the void)
   if(state==='playing'||state==='victory'||state==='gameover'||(state==='settings'&&runActive))updateCamera(rdt);
   else{
     cam.x+=rdt*30;cam.y=Math.sin(now*0.00008)*80;
@@ -1621,7 +1972,6 @@ function frame(now){
   for(const k in pressed)pressed[k]=false;
   frameCount++;
 }
-/* menu background ambient */
 let menuParts=[];
 function updateMenuBG(dt){
   if(menuParts.length<60&&Math.random()<dt*30){
@@ -1645,14 +1995,12 @@ function render(){
   ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.fillStyle='#04050c';ctx.fillRect(0,0,W,H);
   drawStars(starA,0.22);drawStars(starB,0.45);
-  // nebulas
+  const env=curEnv();
   ctx.globalCompositeOperation='lighter';
   ctx.globalAlpha=0.35;
-  ctx.drawImage(makeGlow(0,180,255,400),(W*0.25-cam.x*0.1)%W-400,(H*0.3-cam.y*0.1)%H-400,800,800);
-  ctx.drawImage(makeGlow(150,60,255,400),(W*0.8-cam.x*0.08)%W-400,(H*0.75-cam.y*0.08)%H-400,800,800);
+  ctx.drawImage(makeGlow(env.neb[0][0],env.neb[0][1],env.neb[0][2],400),(W*0.25-cam.x*0.1)%W-400,(H*0.3-cam.y*0.1)%H-400,800,800);
+  ctx.drawImage(makeGlow(env.neb[1][0],env.neb[1][1],env.neb[1][2],400),(W*0.8-cam.x*0.08)%W-400,(H*0.75-cam.y*0.08)%H-400,800,800);
   ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
-  // FIXED: the world (and the player) now stays rendered during end screens and
-  // while settings is open from pause — it used to vanish entirely
   const showWorld=state==='playing'||state==='gameover'||state==='victory'||(state==='settings'&&runActive);
   if(showWorld){
     ctx.save();
@@ -1662,7 +2010,6 @@ function render(){
     ctx.restore();
     if(state==='playing'&&!paused&&!uiOpen)renderScreenFX();
   }else{
-    // menu ambient
     ctx.globalCompositeOperation='lighter';
     for(const p of menuParts){ctx.globalAlpha=clamp(p.life/1.5,0,0.8);
       ctx.drawImage(makeGlow(p.c[0],p.c[1],p.c[2],12),p.x-12,p.y-12,24,24);}
@@ -1671,37 +2018,55 @@ function render(){
 }
 function renderWorld(){
   if(!room)return;
+  const env=curEnv();
   const hw=room.w/2,hh=room.h/2;
-  // floor
-  ctx.fillStyle='rgba(9,13,32,0.72)';
+  ctx.fillStyle=env.floor;
   ctx.fillRect(-hw,-hh,room.w,room.h);
-  // grid
-  ctx.strokeStyle='rgba(0,240,255,0.05)';ctx.lineWidth=1;
+  // corruption cracks (level 2)
+  if(room.cracks){
+    const ca=0.10+Math.sin(performance.now()*0.002)*0.05;
+    ctx.strokeStyle=`rgba(216,80,255,${ca})`;ctx.lineWidth=1.5;
+    for(const pts of room.cracks){
+      ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
+      for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i][0],pts[i][1]);
+      ctx.stroke();
+    }
+  }
+  ctx.strokeStyle=env.grid;ctx.lineWidth=1;
   ctx.beginPath();
   for(let x=Math.ceil(-hw/100)*100;x<=hw;x+=100){ctx.moveTo(x,-hh);ctx.lineTo(x,hh);}
   for(let y=Math.ceil(-hh/100)*100;y<=hh;y+=100){ctx.moveTo(-hw,y);ctx.lineTo(hw,y);}
   ctx.stroke();
-  // border
-  const bc=room.shrinking?[255,45,85]:[0,240,255];
+  const bc=room.shrinking?[255,45,85]:env.border;
   const pulse=0.35+Math.sin(performance.now()*(room.shrinking?0.012:0.004))*0.15;
   ctx.strokeStyle=rgba(bc,room.shrinking?pulse+0.3:pulse);ctx.lineWidth=3;
   ctx.strokeRect(-hw,-hh,room.w,room.h);
   ctx.strokeStyle=rgba(bc,0.12);ctx.lineWidth=10;
   ctx.strokeRect(-hw-5,-hh-5,room.w+10,room.h+10);
-  // corner brackets
   ctx.strokeStyle=rgba(bc,0.7);ctx.lineWidth=3;
   const cl=36;
   [[-hw,-hh,1,1],[hw,-hh,-1,1],[-hw,hh,1,-1],[hw,hh,-1,-1]].forEach(([x,y,sx,sy])=>{
     ctx.beginPath();ctx.moveTo(x+sx*cl,y);ctx.lineTo(x,y);ctx.lineTo(x,y+sy*cl);ctx.stroke();});
-  // props
   for(const pr of props)drawProp(pr);
-  // portals
   for(const po of portals)drawPortal(po);
-  // pickups
   for(const pk of pickups)drawPickup(pk);
+  // hazard zones (King)
+  for(const hz of hazards){
+    const pr=1-hz.t/1.15;
+    ctx.fillStyle=`rgba(216,80,255,${0.07+pr*0.16})`;
+    ctx.beginPath();ctx.arc(hz.x,hz.y,hz.r,0,TAU);ctx.fill();
+    ctx.strokeStyle=`rgba(216,80,255,${0.35+pr*0.5})`;ctx.lineWidth=2.5;
+    ctx.beginPath();ctx.arc(hz.x,hz.y,hz.r,0,TAU);ctx.stroke();
+    ctx.beginPath();ctx.arc(hz.x,hz.y,hz.r*pr,0,TAU);ctx.stroke();
+  }
   // spawn telegraphs
   for(const s of spawnQueue){
-    const pr=1-s.t/0.85;
+    // Queued spawns start at t=0.85+i*0.12, so the later ones in a group
+    // begin ABOVE the 0.85 divisor and would give a negative progress --
+    // and ctx.arc() throws on a negative radius, which aborts the rest of
+    // this frame's world render. Clamped so they just sit at their start
+    // state until their own telegraph begins.
+    const pr=clamp(1-s.t/0.85,0,1);
     ctx.strokeStyle=rgba(ETYPES[s.type].color,0.25+pr*0.5);
     ctx.lineWidth=2;
     ctx.beginPath();ctx.arc(s.x,s.y,30*(1-pr*0.5),0,TAU);ctx.stroke();
@@ -1722,22 +2087,27 @@ function renderWorld(){
       ctx.beginPath();ctx.moveTo(boss.x,boss.y);
       ctx.lineTo(boss.x+Math.cos(c.ang)*1800,boss.y+Math.sin(c.ang)*1800);ctx.stroke();
       ctx.setLineDash([]);}
+    // King SHATTER — big telegraphed nova
+    if(boss.kind==='king'&&boss.shatter){const s=boss.shatter,pr=1-s.t/1.35;
+      ctx.fillStyle=`rgba(255,45,85,${0.08+pr*0.15})`;
+      ctx.beginPath();ctx.arc(s.x,s.y,300,0,TAU);ctx.fill();
+      ctx.strokeStyle=`rgba(255,45,85,${0.35+pr*0.55})`;ctx.lineWidth=3;
+      ctx.beginPath();ctx.arc(s.x,s.y,300,0,TAU);ctx.stroke();
+      ctx.strokeStyle=`rgba(255,255,255,${pr*0.5})`;ctx.lineWidth=1.5;
+      ctx.beginPath();ctx.arc(s.x,s.y,300*pr,0,TAU);ctx.stroke();}
   }
-  // enemies
   for(const e of enemies)drawEnemy(e);
-  if(bossActive&&boss&&!boss.dead)drawBoss();
-  // player — FIXED: stays visible through the victory warp-out instead of
-  // vanishing the moment the run ends
+  if(bossActive&&boss&&!boss.dead){
+    if(boss.kind==='king')drawKing();else drawNullBoss();
+  }
   if(player&&!player.dead&&!vicWarped&&
      (state==='playing'||state==='victory'||(state==='settings'&&runActive)))drawPlayer();
-  // swings
   for(const s of swings){
     const pr=s.t/0.15;
     ctx.strokeStyle=`rgba(255,80,170,${pr*0.9})`;
     ctx.lineWidth=7*pr+2;
     ctx.beginPath();ctx.arc(player.x,player.y,s.range*(1-pr*0.25),s.ang-s.arc/2,s.ang+s.arc/2);ctx.stroke();
   }
-  // bullets
   ctx.lineCap='round';
   for(const b of bullets){
     ctx.globalCompositeOperation='lighter';
@@ -1748,7 +2118,6 @@ function renderWorld(){
     ctx.beginPath();ctx.moveTo(b.x-b.vx*tl,b.y-b.vy*tl);ctx.lineTo(b.x,b.y);ctx.stroke();
     if(b.crit){ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(b.x,b.y,b.size*0.55,0,TAU);ctx.fill();}
   }
-  // enemy bullets
   for(const b of ebullets){
     ctx.globalCompositeOperation='lighter';
     drawGlow(b.x,b.y,b.c,b.r*3.4);
@@ -1756,7 +2125,6 @@ function renderWorld(){
     ctx.fillStyle=rgb(b.c);ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,TAU);ctx.fill();
     ctx.fillStyle='rgba(255,255,255,0.85)';ctx.beginPath();ctx.arc(b.x,b.y,b.r*0.42,0,TAU);ctx.fill();
   }
-  // particles
   ctx.globalCompositeOperation='lighter';
   for(const p of particles){
     const a=clamp(p.life/p.ml,0,1);
@@ -1772,7 +2140,6 @@ function renderWorld(){
       ctx.restore();}
   }
   ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
-  // damage numbers
   ctx.textAlign='center';
   for(const d of dmgNums){
     const a=clamp(d.life/0.3,0,1);
@@ -1809,7 +2176,6 @@ function drawPlayer(){
     ctx.lineWidth=2.5;
     ctx.beginPath();ctx.arc(p.x,p.y,p.r+11,0,TAU);ctx.stroke();
   }
-  // victory charge-up aura
   if(state==='victory'){
     const pu=0.5+Math.sin(performance.now()*0.012)*0.3;
     ctx.strokeStyle=`rgba(0,240,255,${pu})`;ctx.lineWidth=2.5;
@@ -1820,12 +2186,34 @@ function drawPlayer(){
   }
 }
 function drawEnemy(e){
+  // phantoms are invisible while vanished
+  if(e.type==='phantom'){
+    if(e.pstate==='gone')return;
+    // rematerialization warning ring at the target position
+    if(e.pstate==='warn'){
+      const pr=1-e.pT/0.55;
+      ctx.strokeStyle=`rgba(190,140,255,${0.3+pr*0.6})`;ctx.lineWidth=2.5;
+      ctx.beginPath();ctx.arc(e.tpX,e.tpY,26,0,TAU);ctx.stroke();
+      ctx.fillStyle=`rgba(190,140,255,${0.08+pr*0.2})`;
+      ctx.beginPath();ctx.arc(e.tpX,e.tpY,26,0,TAU);ctx.fill();
+      ctx.beginPath();ctx.arc(e.tpX,e.tpY,34*pr,0,TAU);ctx.stroke();
+    }
+  }
+  // ravager charge telegraph
+  if(e.type==='ravager'&&e.rstate==='wind'){
+    ctx.strokeStyle=`rgba(255,60,150,${0.4+Math.sin(performance.now()*0.03)*0.3})`;
+    ctx.lineWidth=2.5;ctx.setLineDash([12,10]);
+    ctx.beginPath();ctx.moveTo(e.x,e.y);
+    ctx.lineTo(e.x+Math.cos(e.rAng)*900,e.y+Math.sin(e.rAng)*900);ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle='rgba(255,60,150,0.6)';ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(e.x,e.y,e.r+10,0,TAU);ctx.stroke();
+  }
   const flash=e.hitFlash>0;
   const c=flash?[255,255,255]:e.color;
   ctx.globalCompositeOperation='lighter';
   drawGlow(e.x,e.y,e.color,e.r*3);
   ctx.globalCompositeOperation='source-over';
-  // sniper laser
   if(e.type==='sniper'&&e.aiming>0){
     const a=clamp(e.aiming/1.1,0,1);
     ctx.strokeStyle=`rgba(230,80,255,${0.15+a*0.5*(0.6+Math.sin(performance.now()*0.03)*0.4)})`;
@@ -1833,7 +2221,6 @@ function drawEnemy(e){
     ctx.beginPath();ctx.moveTo(e.x,e.y);
     ctx.lineTo(e.x+Math.cos(e.aimAng)*1600,e.y+Math.sin(e.aimAng)*1600);ctx.stroke();
   }
-  // brute slam telegraph
   if(e.type==='brute'&&e.slamTele>0){
     const pr=1-e.slamTele/0.75;
     ctx.fillStyle=`rgba(255,64,128,${0.08+pr*0.2})`;
@@ -1841,16 +2228,16 @@ function drawEnemy(e){
     ctx.strokeStyle=`rgba(255,64,128,${0.4+pr*0.5})`;ctx.lineWidth=2.5;
     ctx.beginPath();ctx.arc(e.x,e.y,175,0,TAU);ctx.stroke();
   }
-  // hp bar
-  if(e.hp<e.maxhp){
+  if(e.hp<e.maxhp&&e.type!=='phantom'){
     const w=e.r*2.2,pr=clamp(e.hp/e.maxhp,0,1);
     ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(e.x-w/2,e.y-e.r-10,w,4);
     ctx.fillStyle=rgb(e.elite?[255,201,92]:e.color);ctx.fillRect(e.x-w/2,e.y-e.r-10,w*pr,4);
   }
   ctx.save();ctx.translate(e.x,e.y);
-  const shakeW=e.windup>0?Math.sin(performance.now()*0.09)*2.5:0;
+  const shakeW=(e.windup>0||(e.type==='ravager'&&e.rstate==='wind'))?Math.sin(performance.now()*0.09)*2.5:0;
   ctx.translate(shakeW,0);
   ctx.rotate(e.faceAng);
+  if(e.type==='phantom'&&e.pstate==='fade')ctx.globalAlpha=clamp(e.pT/0.4,0,1)*0.8;
   ctx.fillStyle=rgb(c);
   ctx.strokeStyle=flash?'#fff':rgba([255,255,255],0.5);
   ctx.lineWidth=1.4;
@@ -1860,6 +2247,32 @@ function drawEnemy(e){
       ctx.fill();ctx.stroke();
       ctx.fillStyle=flash?'#fff':'rgba(255,220,120,0.9)';
       ctx.beginPath();ctx.arc(2,0,3.4,0,TAU);ctx.fill();break;}
+    case 'fdrone':{
+      ctx.beginPath();ctx.moveTo(16,0);ctx.lineTo(-10,10);ctx.lineTo(-6,0);ctx.lineTo(-10,-10);ctx.closePath();
+      ctx.fill();ctx.stroke();
+      // fractured offset outline
+      ctx.strokeStyle=flash?'#fff':'rgba(255,120,220,0.8)';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(13,3);ctx.lineTo(-8,12);ctx.lineTo(-4,3);ctx.lineTo(-9,-9);ctx.closePath();ctx.stroke();
+      ctx.fillStyle=flash?'#fff':'rgba(255,150,240,0.95)';
+      ctx.beginPath();ctx.arc(2,0,3.2,0,TAU);ctx.fill();break;}
+    case 'phantom':{
+      ctx.beginPath();ctx.moveTo(16,0);ctx.lineTo(-2,7);ctx.lineTo(-14,3);ctx.lineTo(-8,0);ctx.lineTo(-14,-3);ctx.lineTo(-2,-7);ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle=flash?'#fff':'rgba(255,255,255,0.85)';
+      ctx.beginPath();ctx.arc(2,0,3,0,TAU);ctx.fill();break;}
+    case 'ravager':{
+      ctx.beginPath();
+      for(let i=0;i<8;i++){const aa=i/8*TAU;const rr=e.r*(i%2?0.82:1);
+        i?ctx.lineTo(Math.cos(aa)*rr,Math.sin(aa)*rr):ctx.moveTo(Math.cos(aa)*rr,Math.sin(aa)*rr);}
+      ctx.closePath();ctx.fill();ctx.stroke();
+      ctx.save();ctx.rotate(-e.t*0.9);
+      ctx.fillStyle=flash?'#fff':'rgba(255,110,200,0.9)';
+      ctx.beginPath();
+      for(let i=0;i<4;i++){const aa=i/4*TAU;
+        const x=Math.cos(aa)*e.r*0.5,y=Math.sin(aa)*e.r*0.5;
+        i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+      ctx.closePath();ctx.fill();
+      ctx.restore();break;}
     case 'brute':{
       ctx.beginPath();
       for(let i=0;i<6;i++){const a=i/6*TAU;const rr=e.r;
@@ -1881,31 +2294,28 @@ function drawEnemy(e){
       ctx.beginPath();ctx.moveTo(17,0);ctx.lineTo(-10,8);ctx.lineTo(-4,0);ctx.lineTo(-10,-8);ctx.closePath();
       ctx.fill();ctx.stroke();break;}
   }
-  ctx.restore();
-  // elite crown
+  ctx.restore();ctx.globalAlpha=1;
   if(e.elite){
     ctx.strokeStyle=`rgba(255,201,92,${0.6+Math.sin(performance.now()*0.006)*0.3})`;
     ctx.lineWidth=2;
     ctx.beginPath();ctx.arc(e.x,e.y,e.r+9,e.t,e.t+TAU*0.7);ctx.stroke();
   }
-  // windup flash
   if(e.windup>0){
     ctx.strokeStyle=`rgba(255,255,255,${0.4+Math.sin(performance.now()*0.08)*0.35})`;
     ctx.lineWidth=2;
     ctx.beginPath();ctx.arc(e.x,e.y,e.r+5,0,TAU);ctx.stroke();
   }
-  // burn tint
-  if(e.burnT>0){ctx.strokeStyle='rgba(255,140,50,0.5)';ctx.lineWidth=1.5;
+  if(e.burnT>0&&e.type!=='phantom'){ctx.strokeStyle='rgba(255,140,50,0.5)';ctx.lineWidth=1.5;
     ctx.beginPath();ctx.arc(e.x,e.y,e.r+3,0,TAU);ctx.stroke();}
 }
-function drawBoss(){
+/* THE NULL — unchanged visual */
+function drawNullBoss(){
   const b=boss;
   const phC=b.phase===1?[0,240,255]:b.phase===2?[190,130,255]:[255,45,85];
   ctx.globalCompositeOperation='lighter';
   drawGlow(b.x,b.y,phC,b.r*3.4);
   ctx.globalCompositeOperation='source-over';
   ctx.save();ctx.translate(b.x,b.y);
-  // rotating shards
   const rot=b.t*(b.phase===3?1.6:0.6);
   const nSh=b.phase===3?5:3;
   ctx.fillStyle=rgba(phC,0.85);
@@ -1915,7 +2325,6 @@ function drawBoss(){
     ctx.beginPath();ctx.moveTo(0,-16);ctx.lineTo(7,4);ctx.lineTo(-7,4);ctx.closePath();ctx.fill();
     ctx.restore();
   }
-  // core
   const g=ctx.createRadialGradient(0,0,4,0,0,b.r);
   g.addColorStop(0,rgb(b.hitFlash>0?[255,255,255]:[26,10,36]));
   g.addColorStop(1,rgb(b.hitFlash>0?[220,230,255]:[8,4,16]));
@@ -1923,12 +2332,10 @@ function drawBoss(){
   ctx.beginPath();ctx.arc(0,0,b.r,0,TAU);ctx.fill();
   ctx.strokeStyle=rgba(phC,0.8);ctx.lineWidth=3;
   ctx.beginPath();ctx.arc(0,0,b.r,0,TAU);ctx.stroke();
-  // inner ring
   ctx.save();ctx.rotate(-rot*1.5);
   ctx.strokeStyle=rgba(phC,0.4);ctx.lineWidth=2;ctx.setLineDash([18,12]);
   ctx.beginPath();ctx.arc(0,0,b.r*0.72,0,TAU);ctx.stroke();
   ctx.setLineDash([]);ctx.restore();
-  // eye
   const eyeC=b.eye>0?[255,255,255]:phC;
   ctx.fillStyle=rgb(eyeC);
   ctx.beginPath();ctx.arc(0,0,13+Math.sin(b.t*4)*2,0,TAU);ctx.fill();
@@ -1940,6 +2347,78 @@ function drawBoss(){
     ctx.strokeStyle=`rgba(190,130,255,${0.5+Math.sin(performance.now()*0.02)*0.3})`;
     ctx.lineWidth=4;
     ctx.beginPath();ctx.arc(b.x,b.y,b.r+18,0,TAU);ctx.stroke();
+  }
+}
+/* THE FRACTURED KING — larger, crowned, cracked, more corrupted */
+function drawKing(){
+  const b=boss;
+  const phC=b.phase===1?[200,120,255]:b.phase===2?[255,70,170]:[255,45,85];
+  ctx.globalCompositeOperation='lighter';
+  drawGlow(b.x,b.y,phC,b.r*3.6);
+  ctx.globalCompositeOperation='source-over';
+  ctx.save();ctx.translate(b.x,b.y);
+  const rot=b.t*(b.phase===3?1.7:0.65);
+  // seven erratic shards (vs the Null's 3-5)
+  ctx.fillStyle=rgba(phC,0.8);
+  for(let i=0;i<7;i++){
+    const a=rot+i/7*TAU+Math.sin(b.t*2+i)*0.12;
+    ctx.save();ctx.rotate(a);ctx.translate(0,-b.r-30);
+    ctx.beginPath();ctx.moveTo(0,-20);ctx.lineTo(8,5);ctx.lineTo(-8,5);ctx.closePath();ctx.fill();
+    ctx.restore();
+  }
+  // broken outer ring
+  ctx.save();ctx.rotate(-rot*0.8);
+  ctx.strokeStyle=rgba(phC,0.5);ctx.lineWidth=3;ctx.setLineDash([26,14]);
+  ctx.beginPath();ctx.arc(0,0,b.r+14,0,TAU);ctx.stroke();
+  ctx.setLineDash([]);ctx.restore();
+  // core
+  const g=ctx.createRadialGradient(0,0,6,0,0,b.r);
+  g.addColorStop(0,rgb(b.hitFlash>0?[255,255,255]:[34,10,46]));
+  g.addColorStop(1,rgb(b.hitFlash>0?[230,220,255]:[10,4,18]));
+  ctx.fillStyle=g;
+  ctx.beginPath();ctx.arc(0,0,b.r,0,TAU);ctx.fill();
+  ctx.strokeStyle=rgba(phC,0.85);ctx.lineWidth=3.5;
+  ctx.beginPath();ctx.arc(0,0,b.r,0,TAU);ctx.stroke();
+  // radiating fracture cracks (deterministic jitter)
+  ctx.strokeStyle=`rgba(255,255,255,${0.22+Math.sin(b.t*5)*0.12})`;ctx.lineWidth=1.6;
+  for(let i=0;i<5;i++){
+    const ca=i/5*TAU+0.5;
+    ctx.beginPath();ctx.moveTo(Math.cos(ca)*10,Math.sin(ca)*10);
+    let ang=ca,rr=14;
+    for(let s=0;s<3;s++){
+      ang+=Math.sin(i*3.7+s*2.9)*0.35;
+      rr+=(b.r-16)/3;
+      ctx.lineTo(Math.cos(ang)*rr,Math.sin(ang)*rr);
+    }
+    ctx.stroke();
+  }
+  // eye
+  const eyeC=b.eye>0?[255,255,255]:phC;
+  ctx.fillStyle=rgb(eyeC);
+  ctx.beginPath();ctx.arc(0,0,16+Math.sin(b.t*4)*2.5,0,TAU);ctx.fill();
+  ctx.globalCompositeOperation='lighter';
+  drawGlow(0,0,eyeC,52);
+  ctx.globalCompositeOperation='source-over';
+  // crown
+  ctx.fillStyle=rgba([255,201,92],0.9);
+  for(let i=-2;i<=2;i++){
+    if(i===0)continue;
+    const bx=i*15;
+    ctx.beginPath();ctx.moveTo(bx-5,-b.r+2);ctx.lineTo(bx,-b.r-17-Math.abs(i));ctx.lineTo(bx+5,-b.r+2);ctx.closePath();ctx.fill();
+  }
+  ctx.restore();
+  if(b.invuln>0){
+    ctx.strokeStyle=`rgba(190,130,255,${0.5+Math.sin(performance.now()*0.02)*0.3})`;
+    ctx.lineWidth=4;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r+18,0,TAU);ctx.stroke();
+  }
+  // vulnerability window — punish time
+  if(b.vulnT>0){
+    ctx.strokeStyle=`rgba(255,201,92,${0.5+Math.sin(performance.now()*0.02)*0.4})`;
+    ctx.lineWidth=3;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r+20,0,TAU);ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,0.4)';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r+27,0,TAU);ctx.stroke();
   }
 }
 function drawPickup(pk){
@@ -2018,7 +2497,6 @@ function drawPortal(po){
   ctx.beginPath();ctx.arc(0,0,26,t*2,t*2+TAU*0.7);ctx.stroke();
   ctx.strokeStyle=rgba(m.color,0.5);ctx.lineWidth=2;
   ctx.beginPath();ctx.arc(0,0,34,-t*1.3,-t*1.3+TAU*0.5);ctx.stroke();
-  // icon
   ctx.strokeStyle=rgba(m.color,1);ctx.lineWidth=2.2;ctx.lineCap='round';
   ctx.beginPath();
   if(po.type==='combat'){ctx.moveTo(-8,-8);ctx.lineTo(8,8);ctx.moveTo(8,-8);ctx.lineTo(-8,8);}
@@ -2029,17 +2507,15 @@ function drawPortal(po){
   else if(po.type==='boss'){ctx.moveTo(0,-9);ctx.lineTo(9,7);ctx.lineTo(-9,7);ctx.closePath();ctx.moveTo(0,-3);ctx.lineTo(0,1);ctx.moveTo(0,3.5);ctx.lineTo(0,4);}
   ctx.stroke();
   ctx.restore();
-  // label
   ctx.textAlign='center';
   ctx.font='700 15px Rajdhani';
   ctx.fillStyle=rgba(m.color,0.95);
-  ctx.fillText(po.type==='boss'?'THE NULL':m.label,po.x,po.y-52);
+  ctx.fillText(po.type==='boss'?BOSSMETA[run.level.boss].name:m.label,po.x,po.y-52);
   ctx.font='600 11px Rajdhani';
   ctx.fillStyle='rgba(255,255,255,0.5)';
   ctx.fillText(po.type==='boss'?'NO WAY OUT':(po.type==='elite'?'HIGH RISK · GUARANTEED UPGRADE':po.type==='treasure'?'SHARDS INSIDE':po.type==='heal'?'RESTORATION':po.type==='upgrade'?'FREE UPGRADE':'STANDARD ENGAGEMENT'),po.x,po.y-38);
 }
 function renderScreenFX(){
-  // crosshair
   crossPulse=Math.max(0,crossPulse-0.08);
   const ready=player&&player.dashCd<=0&&player.energy>=32;
   const c=ready?'#00f0ff':'#ff5d7d';
@@ -2050,13 +2526,12 @@ function renderScreenFX(){
     ctx.beginPath();ctx.moveTo(r,-4);ctx.lineTo(r,0);ctx.lineTo(r-5,0);ctx.stroke();ctx.restore();}
   ctx.fillStyle=c;ctx.beginPath();ctx.arc(0,0,1.8,0,TAU);ctx.fill();
   ctx.restore();
-  // off-screen enemy indicators
   const vw=W/(2*cam.zoom),vh=H/(2*cam.zoom);
   const m=26;
   const targets=enemies.slice();
   if(bossActive&&boss&&!boss.dead)targets.push(boss);
   for(const e of targets){
-    if(e.dead)continue;
+    if(e.dead||e.noHit)continue;
     if(e.x>cam.x-vw+30&&e.x<cam.x+vw-30&&e.y>cam.y-vh+30&&e.y<cam.y+vh-30)continue;
     let sx=(e.x-cam.x)*cam.zoom+W/2,sy=(e.y-cam.y)*cam.zoom+H/2;
     const cx=clamp(sx,m,W-m),cy=clamp(sy,m,H-m);
@@ -2068,7 +2543,6 @@ function renderScreenFX(){
     ctx.beginPath();ctx.moveTo(9,0);ctx.lineTo(-5,6);ctx.lineTo(-5,-6);ctx.closePath();ctx.fill();
     ctx.restore();ctx.globalAlpha=1;
   }
-  // hurt direction arcs
   for(const h of hurtArcs){
     ctx.save();ctx.translate(W/2,H/2);
     ctx.strokeStyle=`rgba(255,45,85,${h.t})`;ctx.lineWidth=6;
@@ -2098,7 +2572,7 @@ function updateHUD(force){
   if(force||hudCache.dash!==dR){hudCache.dash=dR;el('dashFill').style.transform='scaleX('+dP+')';}
   if(player.dashCd<=0)el('dashUI').classList.add('ready');
   setTxt('shardCount',run.shards);
-  setTxt('sectorLabel','SECTOR '+run.depth+' / '+run.totalDepth);
+  setTxt('sectorLabel','L'+run.level.id+' · SECTOR '+run.depth+' / '+run.totalDepth);
 }
 function flashEnergyBar(){
   const b=el('enFill');
@@ -2115,7 +2589,7 @@ function updateHUDWeapon(){
 }
 function renderBuildInfo(){
   const p=player;
-  el('buildInfo').textContent='DMG ×'+p.dmgMult.toFixed(2)+' · SPD ×'+(p.speed/280*(1-0.06*save.forge.swift*0)).toFixed(2)+' · CRIT '+Math.round(p.crit*100)+'%';
+  el('buildInfo').textContent='DMG ×'+p.dmgMult.toFixed(2)+' · SPD ×'+(p.speed/280).toFixed(2)+' · CRIT '+Math.round(p.crit*100)+'%';
 }
 function renderNodeStrip(){
   const strip=el('nodeStrip');strip.innerHTML='';
@@ -2131,7 +2605,7 @@ function renderChips(){
     const n=u(upg.id);if(!n)continue;
     const chip=document.createElement('div');
     chip.className='chip r'+upg.rar;
-    chip.innerHTML=svgIcon(upg.icon)+'<span>'+upg.name+'</span><b>&times;'+n+'</b>';
+    chip.innerHTML=svgIcon(upg.icon)+'<span>'+upg.name+'</span><b>×'+n+'</b>';
     list.appendChild(chip);
   }
 }
@@ -2149,7 +2623,7 @@ function toast(msg){
 }
 
 /* ---------- 18 · UI / MENUS ---------- */
-const OVERLAYS=['ov-menu','ov-howto','ov-settings','ov-forge','ov-weapons','ov-pause','ov-upgrade','ov-swap','ov-gameover','ov-victory'];
+const OVERLAYS=['ov-menu','ov-howto','ov-settings','ov-forge','ov-weapons','ov-pause','ov-upgrade','ov-swap','ov-gameover','ov-victory','ov-levels'];
 function hideAllOverlays(){OVERLAYS.forEach(id=>el(id).classList.remove('on'));}
 function go(s){
   state=s;paused=false;uiOpen=false;curUI=null;
@@ -2158,7 +2632,12 @@ function go(s){
   else if(s==='howto')el('ov-howto').classList.add('on');
   else if(s==='settings')el('ov-settings').classList.add('on');
   else if(s==='forge'){el('ov-forge').classList.add('on');buildForge();}
-  else if(s==='weapons'){el('ov-weapons').classList.add('on');buildWeaponSelect();}
+  else if(s==='levels'){el('ov-levels').classList.add('on');buildLevelChain();}
+  else if(s==='weapons'){
+    el('ov-weapons').classList.add('on');buildWeaponSelect();
+    const lv=LEVELS[selectedLevel];
+    el('wsSub').textContent='LEVEL '+lv.id+' — '+lv.name+' · CHOOSE YOUR WEAPON';
+  }
   else if(s==='playing'){el('hud').classList.remove('hidden');}
   document.body.classList.toggle('ingame',s==='playing');
   if(s!=='playing'){el('hud').classList.add('hidden');
@@ -2178,7 +2657,8 @@ function setPause(v){
   if(state!=='playing')return;
   paused=v;
   if(v){
-    el('pauseStats').textContent='SECTOR '+run.depth+'/10 · SHARDS '+run.shards+' · KILLS '+run.kills+' · ROOMS '+run.roomsCleared;
+    el('pauseStats').textContent='L'+run.level.id+' · SECTOR '+run.depth+'/'+run.totalDepth+
+      ' · SHARDS '+run.shards+' · KILLS '+run.kills+' · ROOMS '+run.roomsCleared;
     el('ov-pause').classList.add('on');document.body.classList.remove('ingame');
     if(musGain)musGain.gain.setTargetAtTime(save.settings.music?0.15:0,actx.currentTime,0.1);
   }else{
@@ -2191,10 +2671,50 @@ function refreshMenuStats(){
   setTxt('menuRuns',save.runs);
   setTxt('menuBest',save.best>0?save.best+' / 10':'–');
   setTxt('menuKills',save.kills);
+  let t='LEVEL 1';
+  if(save.beaten[LEVELS.length])t='ALL SECTORS CLEARED';
+  else if(save.beaten[1])t='LEVEL '+Math.min(LEVELS.length,2)+' UNLOCKED';
+  setTxt('menuLevel',t);
+}
+/* --- level chain (progression screen) --- */
+function buildLevelChain(){
+  const chain=el('lvlChain');chain.innerHTML='';
+  for(let i=0;i<FUTURE_SLOTS;i++){
+    if(i>0){const ar=document.createElement('div');ar.className='lvlarrow';ar.textContent='▼';chain.appendChild(ar);}
+    const lv=LEVELS[i];
+    const card=document.createElement('div');
+    if(!lv){
+      card.className='lvlcard future';
+      card.innerHTML=`<div class="lnum">${String(i+1).padStart(2,'0')}</div>
+        <div><div class="lname">FUTURE SECTOR</div>
+        <div class="lmeta">LOCKED · IN DEVELOPMENT</div></div>
+        <div class="lstatus">LOCKED</div>`;
+      chain.appendChild(card);continue;
+    }
+    const unlocked=i===0||!!save.beaten[i];
+    const beatenLvl=!!save.beaten[lv.id];
+    card.className='lvlcard'+(beatenLvl?' beaten':'')+(unlocked?'':' locked');
+    const stars='<span class="lstars">'+'★'.repeat(i+2)+'</span>'+'<span style="opacity:.3">'+'★'.repeat(3-i)+'</span>';
+    card.innerHTML=`<div class="lnum">${String(lv.id).padStart(2,'0')}</div>
+      <div><div class="lname">LEVEL ${lv.id} — ${lv.name}</div>
+      <div class="lmeta">${stars} · ${lv.depth} SECTORS · GUARDIAN: ${BOSSMETA[lv.boss].name}</div></div>
+      <div class="lstatus">${beatenLvl?'✓ CLEARED':unlocked?'▶ ENTER':'LOCKED'}</div>`;
+    if(unlocked)card.addEventListener('click',()=>{SFX.ui();selectedLevel=i;go('weapons');});
+    else{
+      const prev=LEVELS[i-1];
+      card.addEventListener('click',()=>{
+        SFX.error();
+        toast(prev?'DEFEAT '+BOSSMETA[prev.boss].name+' TO UNLOCK':'FUTURE SECTOR — IN DEVELOPMENT');
+      });
+    }
+    chain.appendChild(card);
+  }
 }
 /* --- upgrade selection --- */
 function grantChoices(rareBias){
-  const pool=UPGRADES.map(up=>({up,w:up.w*(rareBias&&up.rar==='c'?0.4:1)}));
+  const avail=UPGRADES.filter(up=>
+    (!up.minLevel||run.level.id>=up.minLevel||(up.unlockOnBeat&&save.beaten[up.unlockOnBeat])));
+  const pool=avail.map(up=>({up,w:up.w*(rareBias&&up.rar==='c'?0.4:1)}));
   const out=[];
   while(out.length<3&&pool.length){
     let tw=pool.reduce((s,p)=>s+p.w,0);
@@ -2215,7 +2735,7 @@ function openUpgradeSelect(rareBias){
     card.innerHTML=`<div class="ui2">${svgIcon(up.icon)}</div>
       <div class="uname">${up.name}</div>
       <div class="udesc">${up.desc}</div>
-      <div class="ustack">${n>0?'OWNED &times;'+n:'NEW'}</div>
+      <div class="ustack">${n>0?'OWNED ×'+n:'NEW'}</div>
       <div class="urar">${RARNAME[up.rar]}</div>`;
     card.addEventListener('click',()=>{
       applyUpgrade(up.id);
@@ -2246,7 +2766,6 @@ function openSwapSelect(){
   const options=WEAPON_KEYS.filter(k=>save.weapons[k]&&k!==player.weapon);
   if(!options.length)return;
   const nk=pick(options);
-  const nw=WEAPONS[nk],cw=WEAPONS[player.weapon];
   const wrap=el('swapCards');wrap.innerHTML='';
   const mk=(key,label)=>{
     const w=WEAPONS[key];
@@ -2272,8 +2791,9 @@ function openSwapSelect(){
 /* --- end screens --- */
 function fillEndStats(prefix){
   const rows=[
+    ['LEVEL','L'+run.level.id+' · '+run.level.name],
     ['ENEMIES DEFEATED',fmt(run.kills)],
-    ['ROOMS CLEARED',run.roomsCleared+' / 10'],
+    ['ROOMS CLEARED',run.roomsCleared+' / '+run.totalDepth],
     ['DAMAGE DEALT',fmt(run.damage)],
     ['RUN TIME',Math.floor(run.time/60)+':'+String(Math.floor(run.time%60)).padStart(2,'0')],
   ];
@@ -2283,8 +2803,8 @@ function fillEndStats(prefix){
     d.innerHTML='<span>'+k+'</span><b>'+v+'</b>';st.appendChild(d);
   });
   const sh=el(prefix+'Shards');
-  sh.innerHTML='&#9670; VOID SHARDS EARNED: '+run.shards+(prefix==='vic'?' (NULL BONUS +200)':'')+
-    ' &nbsp;&middot;&nbsp; TOTAL: '+save.shards;
+  sh.innerHTML='◆ VOID SHARDS EARNED: '+run.shards+(prefix==='vic'?' (GUARDIAN BONUS +'+run.victoryBonus+')':'')+
+    ' &nbsp;·&nbsp; TOTAL: '+save.shards;
 }
 /* --- forge --- */
 function buildForge(){
@@ -2300,7 +2820,7 @@ function buildForge(){
       <div class="fn">${f.name}</div><div class="fd">${f.desc}</div>
       <div class="pips">${pips}</div>
       <button class="fbuy" ${lvl>=f.max?'disabled':save.shards<cost?'disabled':''}>
-        ${lvl>=f.max?'MAXED':'&#9670; '+cost}</button>`;
+        ${lvl>=f.max?'MAXED':'◆ '+cost}</button>`;
     row.querySelector('.fbuy').addEventListener('click',()=>{
       if(lvl>=f.max)return;
       if(save.shards<cost){SFX.error();toast('NOT ENOUGH VOID SHARDS');return;}
@@ -2317,7 +2837,7 @@ function buildForge(){
     const card=document.createElement('div');card.className='wcard'+(owned?'':' locked');
     card.innerHTML=`<div class="wi" style="color:${owned?'var(--cy)':'#5a6a80'}">${svgIcon(w.icon)}</div>
       <div class="wn">${w.name}</div><div class="wd">${w.desc}</div>
-      <div class="wcost">${owned?'UNLOCKED':'&#9670; '+w.cost+' SHARDS'}</div>`;
+      <div class="wcost">${owned?'UNLOCKED':'◆ '+w.cost+' SHARDS'}</div>`;
     if(!owned)card.addEventListener('click',()=>{
       if(save.shards<w.cost){SFX.error();toast('NOT ENOUGH VOID SHARDS');return;}
       save.shards-=w.cost;save.weapons[k]=true;saveGame();SFX.buy();
@@ -2340,7 +2860,7 @@ function buildWeaponSelect(){
       <div class="wstat">RATE<div class="wbar"><i style="width:${w.bars[1]*100}%"></i></div></div>
       <div class="wstat">RANGE<div class="wbar"><i style="width:${w.bars[2]*100}%"></i></div></div>
       <div class="wstat">AREA<div class="wbar"><i style="width:${w.bars[3]*100}%"></i></div></div>`:
-      `<div class="wcost">LOCKED &middot; &#9670; ${w.cost}</div>`;
+      `<div class="wcost">LOCKED · ◆ ${w.cost}</div>`;
     card.innerHTML=`<div class="wi">${svgIcon(w.icon)}</div>
       <div class="wn">${w.name}</div><div class="wd">${w.desc}</div>${stats}`;
     if(owned)card.addEventListener('click',()=>{
@@ -2373,17 +2893,17 @@ function applyAudioSettings(){
   if(save.settings.music)Music.nextT=actx.currentTime+0.1;
 }
 /* --- wire buttons --- */
-el('btnStart').addEventListener('click',()=>{SFX.ui();go('weapons');});
+el('btnStart').addEventListener('click',()=>{SFX.ui();go('levels');});
 el('btnForge').addEventListener('click',()=>{SFX.ui();settingsReturn='menu';go('forge');});
 el('btnHowto').addEventListener('click',()=>{SFX.ui();go('howto');});
 el('btnSettings').addEventListener('click',()=>{SFX.ui();settingsReturn='menu';go('settings');syncSettingsUI();});
+el('lvlBack').addEventListener('click',()=>{SFX.ui();go('menu');});
 el('howtoBack').addEventListener('click',()=>{SFX.ui();go('menu');});
 el('setBack').addEventListener('click',()=>{SFX.ui();
   if(settingsReturn==='pause'){go('playing');setPause(true);}else go('menu');});
-el('forgeBack').addEventListener('click',()=>{SFX.ui();
-  go(settingsReturn==='gameover'?'menu':'menu');refreshMenuStats();});
-el('wsBack').addEventListener('click',()=>{SFX.ui();go('menu');});
-el('wsStart').addEventListener('click',()=>{SFX.ui();startRun(selWeapon);});
+el('forgeBack').addEventListener('click',()=>{SFX.ui();go('menu');refreshMenuStats();});
+el('wsBack').addEventListener('click',()=>{SFX.ui();go('levels');});
+el('wsStart').addEventListener('click',()=>{SFX.ui();startRun(selWeapon,selectedLevel);});
 el('pauseResume').addEventListener('click',()=>{SFX.ui();setPause(false);});
 el('pauseSettings').addEventListener('click',()=>{SFX.ui();settingsReturn='pause';setPause(false);go('settings');syncSettingsUI();});
 el('pauseQuit').addEventListener('click',()=>{
@@ -2394,10 +2914,10 @@ el('pauseQuit').addEventListener('click',()=>{
   Music.set('menu');
   go('menu');refreshMenuStats();
 });
-el('goAgain').addEventListener('click',()=>{SFX.ui();go('weapons');});
+el('goAgain').addEventListener('click',()=>{SFX.ui();go('levels');});
 el('goForge').addEventListener('click',()=>{SFX.ui();go('forge');});
 el('goMenu').addEventListener('click',()=>{SFX.ui();Music.set('menu');go('menu');refreshMenuStats();});
-el('vicAgain').addEventListener('click',()=>{SFX.ui();go('weapons');});
+el('vicAgain').addEventListener('click',()=>{SFX.ui();go('levels');});
 el('vicForge').addEventListener('click',()=>{SFX.ui();go('forge');});
 el('vicMenu').addEventListener('click',()=>{SFX.ui();Music.set('menu');go('menu');refreshMenuStats();});
 el('volMaster').addEventListener('input',e=>{
