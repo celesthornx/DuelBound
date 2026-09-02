@@ -1441,6 +1441,45 @@
   .lm-section.p2c{ color: var(--p2); }
   .lm-section:first-child{ margin-top:0; }
 
+  /* ---------- Patch Notes (inside the existing .lobby-modal/.lm-card) ----------
+     Reuses the modal shell above -- this is just the content shape for an
+     ongoing changelog: newest version first, each with short category
+     groups. See PATCH_NOTES / renderPatchNotes() / lobbyPatchNotesModal(). */
+  .pn-intro{
+    font-family:'Share Tech Mono', monospace; font-size: 10px; letter-spacing: 1px;
+    color: var(--ink-dim); line-height:1.6; margin-bottom: 16px;
+    padding-bottom: 12px; border-bottom: 1px solid var(--panel-edge);
+  }
+  .pn-entry{ margin-bottom: 18px; }
+  .pn-entry:last-child{ margin-bottom: 0; }
+  .pn-version{
+    display:flex; align-items:baseline; gap:8px; margin-bottom: 8px;
+  }
+  .pn-version b{
+    font-family:'Chakra Petch', sans-serif; font-weight:700; font-size: 13px;
+    letter-spacing: 1px; color: #fff;
+  }
+  .pn-version span{
+    font-family:'Share Tech Mono', monospace; font-size: 9px; letter-spacing: 1px;
+    color: var(--ink-dim);
+  }
+  .pn-cat{
+    font-family:'Chakra Petch', sans-serif; font-weight:700; font-size: 10px;
+    letter-spacing: 2px; margin: 10px 0 5px;
+  }
+  .pn-cat.new{ color: var(--p1); }
+  .pn-cat.improvements{ color: var(--gold); }
+  .pn-cat.balance{ color: var(--ink); }
+  .pn-cat.bugfixes{ color: var(--p2); }
+  .pn-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:5px; }
+  .pn-list li{
+    font-family:'Share Tech Mono', monospace; font-size: 11px; line-height:1.5;
+    color: rgba(216,232,250,.85); padding-left: 13px; position:relative;
+  }
+  .pn-list li::before{
+    content:'\2013'; position:absolute; left:0; color: var(--ink-dim);
+  }
+
   .lobby-toast{
     position:absolute; left:50%; bottom: 76px; transform: translate(-50%, 14px);
     z-index: 25; pointer-events:none; opacity:0;
@@ -7350,6 +7389,65 @@ updateDecoys(dt);
       + '</div>');
   }
 
+  // ---- Patch Notes ----
+  // The ongoing changelog shown from the lobby footer's PATCH NOTES
+  // button. This is the ONE place new entries get added -- newest
+  // version first, never remove or rewrite an existing entry. Duel Arena
+  // is pre-release, so versions are v0.x rather than a 1.0+ release
+  // number. Categories: NEW / IMPROVEMENTS / BALANCE / BUG FIXES --
+  // include only the ones an entry actually has.
+  const PATCH_NOTES = [
+    { version: 'v0.5', title: 'Patch Notes',
+      NEW: [
+        'Added this Patch Notes screen so you can see what’s new.'
+      ] },
+    { version: 'v0.4', title: 'Daily Challenges',
+      NEW: [
+        'Added Daily Challenges — 3 new objectives every day.',
+        'Added Daily Challenge rewards.',
+        'Added challenge progress tracking that saves to your account.'
+      ] },
+    { version: 'v0.3', title: 'Voidbreak: The Fracture',
+      NEW: [
+        'Added a new Voidbreak level, The Fracture, with new enemies and a new boss, The Fractured King.',
+        'Added the Resonance upgrade in Voidbreak.'
+      ] },
+    { version: 'v0.2', title: 'Account Reliability',
+      'BUG FIXES': [
+        'Fixed an issue where some players’ saved progress and credits could be lost after a server update.',
+        'Fixed a rare issue where staying signed in through a server restart could stop your progress from saving.'
+      ] },
+    { version: 'v0.1', title: 'Admin Panel Fixes',
+      IMPROVEMENTS: [
+        'The Admin Panel now scrolls properly so nothing is cut off at the bottom.'
+      ],
+      'BUG FIXES': [
+        'Fixed the player search bar not accepting "A" or "S" while gameplay controls were active.'
+      ] },
+  ];
+  const PATCH_NOTE_CATS = [
+    ['NEW', 'new'], ['IMPROVEMENTS', 'improvements'], ['BALANCE', 'balance'], ['BUG FIXES', 'bugfixes']
+  ];
+
+  function renderPatchNotes(){
+    let html = '<div class="pn-intro">PRE-RELEASE — DUEL ARENA IS STILL IN ACTIVE DEVELOPMENT. THIS LIST GROWS AS NEW UPDATES SHIP.</div>';
+    html += PATCH_NOTES.map(entry => {
+      let body = '<div class="pn-version"><b>' + entry.version + '</b><span>' + entry.title.toUpperCase() + '</span></div>';
+      body += PATCH_NOTE_CATS.map(([key, cls]) => {
+        const items = entry[key];
+        if(!items || !items.length) return '';
+        return '<div class="pn-cat ' + cls + '">' + key + '</div>'
+          + '<ul class="pn-list">' + items.map(t => '<li>' + t + '</li>').join('') + '</ul>';
+      }).join('');
+      return '<div class="pn-entry">' + body + '</div>';
+    }).join('');
+    return html;
+  }
+
+  function lobbyPatchNotesModal(){
+    lobbyOpenModal('PATCH NOTES', renderPatchNotes());
+  }
+
   function renderLobbyModes(){
     const wrap = lobbyEl('lobbyModeCards');
     const dots = lobbyEl('lobbyModeDots');
@@ -7464,7 +7562,7 @@ updateDecoys(dt);
         else if(act === 'profile')      { lobbySoonModal('PROFILE', 'A FULL PROFILE PAGE ISN\'T BUILT YET. YOUR WINS, KILLS AND CREDITS ARE ON THE CARD TO THE LEFT.'); }
         else if(act === 'friends')      { lobbySoonModal('FRIENDS', 'FRIENDS LISTS, INVITES AND ONLINE STATUS ARE NOT IMPLEMENTED YET.'); }
         else if(act === 'mail')         { lobbySoonModal('MAIL', 'THERE IS NO MAIL OR NOTIFICATION SYSTEM YET.'); }
-        else if(act === 'patch')        { lobbySoonModal('PATCH NOTES', 'PATCH NOTES AREN\'T HOOKED UP YET.'); }
+        else if(act === 'patch')        { lobbyPatchNotesModal(); }
       });
     });
 
