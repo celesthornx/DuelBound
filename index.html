@@ -1294,6 +1294,77 @@
     background: linear-gradient(90deg, rgba(0,240,255,.26), rgba(160,92,255,.2));
   }
 
+  /* ---------- Daily Challenges card ----------
+     Same .lp/.lp-head/.lp-title/.lp-body chrome as every other lobby
+     panel -- deliberately not its own visual system. See
+     fetchDailyChallenges()/renderDailyChallenges()/claimDailyChallenge()
+     in the script, and server.js's DAILY CHALLENGES block for where the
+     3-a-day set and the reset are actually decided. */
+  .dc-list{ display:flex; flex-direction:column; gap:9px; }
+  .dc-status{
+    font-family:'Share Tech Mono', monospace; font-size:9px; letter-spacing:1.4px;
+    color:var(--ink-dim); text-align:center; padding:8px 2px;
+  }
+  .dc-row{
+    border:1px solid var(--panel-edge); border-radius:3px;
+    background: rgba(122,158,200,.05);
+    padding:8px 10px 9px;
+    transition: border-color .25s ease, background .25s ease;
+  }
+  .dc-row.ready{ border-color: rgba(255,206,84,.45); background: rgba(255,206,84,.06); }
+  .dc-row.claimed{ border-color: rgba(63,208,255,.3); background: rgba(63,208,255,.045); opacity:.72; }
+  .dc-top{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+  .dc-name{
+    font-family:'Chakra Petch', sans-serif; font-weight:700;
+    font-size: 11.5px; letter-spacing: 1.6px; color: var(--ink);
+  }
+  .dc-row.claimed .dc-name{ color: var(--p1); }
+  .dc-reward{
+    display:flex; align-items:center; gap:3px; flex:0 0 auto; white-space:nowrap;
+    font-family:'Share Tech Mono', monospace; font-size:10px; color: var(--gold);
+  }
+  .dc-reward svg{ width:8px; height:8px; }
+  .dc-desc{
+    font-family:'Share Tech Mono', monospace; font-size:9.5px; letter-spacing:.5px;
+    color: var(--ink-dim); margin-top:2px;
+  }
+  .dc-barwrap{
+    position:relative; height:5px; border-radius:3px; margin-top:8px;
+    background: rgba(255,255,255,.06); overflow:hidden;
+  }
+  .dc-barfill{
+    height:100%; border-radius:3px;
+    background: linear-gradient(90deg, var(--p1), #8be9ff);
+    transition: width .35s ease;
+  }
+  .dc-row.ready .dc-barfill, .dc-row.claimed .dc-barfill{ background: linear-gradient(90deg, var(--gold), #ffe5a3); }
+  .dc-bottom{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:7px; }
+  .dc-progress{ font-family:'Share Tech Mono', monospace; font-size:9.5px; letter-spacing:.5px; color: var(--ink-dim); }
+  .dc-claim{
+    font-family:'Chakra Petch', sans-serif; font-weight:700; font-size:9.5px; letter-spacing:1.2px;
+    padding:6px 11px; border-radius:2px; min-height:28px;
+    border:1px solid rgba(122,158,200,.3); background: rgba(122,158,200,.07); color: var(--ink-dim);
+    cursor:default; transition: all .15s ease;
+  }
+  .dc-row.ready .dc-claim{
+    border-color: var(--gold); background: rgba(255,206,84,.16); color:#ffe9b8; cursor:pointer;
+  }
+  .dc-row.ready .dc-claim:hover{ background: rgba(255,206,84,.28); box-shadow:0 0 12px rgba(255,206,84,.25); }
+  .dc-row.ready .dc-claim:active{ transform: translateY(1px); }
+  .dc-row.claimed .dc-claim{
+    border-color: rgba(63,208,255,.35); background: rgba(63,208,255,.09); color: var(--p1); cursor:default;
+  }
+  /* One brief, subtle pulse on the row that was just claimed -- no
+     confetti, no scale bounce, just enough to confirm the click landed. */
+  .dc-row.claim-flash{ animation: dcClaimFlash .6s ease; }
+  @keyframes dcClaimFlash{
+    0%{ box-shadow: 0 0 0 0 rgba(63,208,255,.45); }
+    100%{ box-shadow: 0 0 0 9px rgba(63,208,255,0); }
+  }
+  @media (max-width: 1000px){
+    .dc-claim{ min-height:32px; padding:7px 13px; }
+  }
+
   /* ---------- Voidbreak overlay -- the minigame itself runs entirely
      inside its own iframe (own document/window/globals/CSS), so it can
      never collide with Duel Arena's own code or vice versa. Sits above
@@ -1620,19 +1691,21 @@
           </div>
         </div>
 
-        <!-- Daily challenges: no challenge system exists yet. -->
+        <!-- Daily Challenges: 3/day, the same for every player, picked and
+             reset server-side on the actual UTC calendar date (see
+             server.js's DAILY CHALLENGES block). Progress is tracked from
+             real gameplay events and rides the same account save as
+             everything else; rewards are granted by the server, not the
+             client -- see fetchDailyChallenges()/renderDailyChallenges()/
+             claimDailyChallenge() below. -->
         <div class="lp">
           <div class="lp-head">
             <span class="lp-title">DAILY CHALLENGES</span>
-            <span class="soon-tag">COMING SOON</span>
+            <span class="micro">RESETS DAILY</span>
           </div>
           <div class="lp-body">
-            <div class="soon-block">
-              <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#7a9ec8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 4h16v4H4z"/><path d="M6 8v12h12V8"/><path d="M9.5 13.5l1.8 1.8 3.4-3.6"/>
-              </svg>
-              <div class="sb-main">IN DEVELOPMENT</div>
-              <div class="sb-sub">ROTATING OBJECTIVES AND REWARDS ARE ON THE WAY.</div>
+            <div id="dcList" class="dc-list">
+              <div class="dc-status">SYNCING&hellip;</div>
             </div>
           </div>
         </div>
@@ -2710,6 +2783,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
           } else {
             credits += 15;
             stats.kills++;
+            bumpDailyProgress('kills');
             updateCreditsDisplay();
             saveProgress();
             endRound('p1');
@@ -2939,11 +3013,171 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     if(el) el.textContent = text;
   }
 
+  // ---- Daily Challenges ----
+  // Today's 3 challenges (name/desc/target/reward) always come from the
+  // server -- see server.js's DAILY CHALLENGES block, which is the only
+  // place that decides what they are and when they roll over. This file
+  // never invents or duplicates that logic; it only renders whatever
+  // /challenges/today answers and tracks progress toward it.
+  //
+  // todayUTC() must compute the exact same value as server.js's function
+  // of the same name (both just take the UTC calendar date) so a
+  // challenge finished right at local UI level lines up with what the
+  // server will credit it against.
+  function todayUTC(){ return new Date().toISOString().slice(0, 10); }
+
+  let dailyChallengeDefs = [];   // [{id,name,desc,category,target,reward}] for today, from the server
+  let dailyProgress = { date: null, kills: 0, wins: 0, matches: 0 };
+  let dailyClaimed = {};         // { [challengeId]: true }
+  let dailyChallengesReady = false;
+  let matchCountedToday = false; // guards "matches played" -- set once per match, cleared when a new one starts
+
+  // Bumps today's local progress for one stat (kills/wins/matches) the
+  // instant the matching gameplay event happens, so the panel updates
+  // immediately instead of waiting on a round-trip. The actual reward
+  // grant is still fully server-validated at claim time (see
+  // claimDailyChallenge) -- this only drives the progress bar.
+  function bumpDailyProgress(stat){
+    const today = todayUTC();
+    if(dailyProgress.date !== today){
+      dailyProgress = { date: today, kills: 0, wins: 0, matches: 0 };
+    }
+    dailyProgress[stat] = (dailyProgress[stat] || 0) + 1;
+    renderDailyChallenges();
+  }
+
+  // Counts one "match played" toward today's challenge -- called from
+  // every place a match actually concludes for the local player (Classic,
+  // Football, Heist). Guarded by matchCountedToday, which is cleared
+  // whenever a new match actually starts (fullReset/initFootballMode/
+  // initHeistMode), so this can only ever add one per match regardless of
+  // which of those three end-of-match code paths runs.
+  function countMatchPlayed(){
+    if(matchCountedToday) return;
+    matchCountedToday = true;
+    bumpDailyProgress('matches');
+    saveProgress();
+  }
+
+  // Fetches today's challenge defs and, for a signed-in player, that
+  // account's own progress/claimed state -- rolled forward server-side
+  // first if it was stale (offline across a reset, a server restart,
+  // etc.), so this always reflects a valid "today" the moment it answers.
+  async function fetchDailyChallenges(){
+    try{
+      const qs = (loggedIn && sessionToken) ? ('?sessionToken=' + encodeURIComponent(sessionToken)) : '';
+      const res = await fetch(ACCOUNT_SERVER_URL + '/challenges/today' + qs);
+      if(!res.ok) throw new Error('challenges fetch failed');
+      const data = await res.json();
+      dailyChallengeDefs = Array.isArray(data.challenges) ? data.challenges : [];
+      if(loggedIn){
+        // Signed-in players get their real, persisted progress back.
+        dailyProgress = Object.assign({ date: data.date }, data.progress || {});
+        dailyClaimed = data.claimed || {};
+      } else if(dailyProgress.date !== data.date){
+        // Guests have nothing persisted -- just make sure a day rollover
+        // while the tab was open doesn't leave stale numbers on screen.
+        dailyProgress = { date: data.date, kills: 0, wins: 0, matches: 0 };
+        dailyClaimed = {};
+      }
+      dailyChallengesReady = true;
+    }catch(e){
+      // Server unreachable -- leave whatever was last rendered (or the
+      // loading placeholder) rather than showing an empty/broken panel.
+    }
+    renderDailyChallenges();
+  }
+
+  function renderDailyChallenges(){
+    const list = document.getElementById('dcList');
+    if(!list) return;
+    if(!dailyChallengesReady || !dailyChallengeDefs.length){
+      list.innerHTML = '<div class="dc-status">SYNCING&hellip;</div>';
+      return;
+    }
+    list.innerHTML = dailyChallengeDefs.map(c => {
+      const have = Math.min(c.target, (dailyProgress[c.category] || 0));
+      const claimed = !!dailyClaimed[c.id];
+      const ready = !claimed && have >= c.target;
+      const pct = Math.round((have / c.target) * 100);
+      const rowClass = claimed ? 'claimed' : (ready ? 'ready' : '');
+      const btnLabel = claimed ? 'CLAIMED' : (ready ? (loggedIn ? 'CLAIM' : 'SIGN IN') : 'IN PROGRESS');
+      const btnDisabled = !ready;
+      return '<div class="dc-row ' + rowClass + '" data-id="' + c.id + '">'
+        + '<div class="dc-top">'
+          + '<span class="dc-name">' + c.name + '</span>'
+          + '<span class="dc-reward"><svg viewBox="0 0 16 16" fill="none" stroke="#ffce54" stroke-width="1.4" stroke-linejoin="round"><path d="M8 1.6 L13.6 8 L8 14.4 L2.4 8 Z"/></svg>+' + c.reward + '</span>'
+        + '</div>'
+        + '<div class="dc-desc">' + c.desc + '</div>'
+        + '<div class="dc-barwrap"><div class="dc-barfill" style="width:' + pct + '%"></div></div>'
+        + '<div class="dc-bottom">'
+          + '<span class="dc-progress">' + have + ' / ' + c.target + '</span>'
+          + '<button class="dc-claim" data-id="' + c.id + '"' + (btnDisabled ? ' disabled' : '') + '>' + btnLabel + '</button>'
+        + '</div>'
+      + '</div>';
+    }).join('');
+    list.querySelectorAll('.dc-claim').forEach(btn=>{
+      btn.addEventListener('click', ()=> claimDailyChallenge(btn.dataset.id));
+    });
+  }
+
+  async function claimDailyChallenge(challengeId){
+    if(!loggedIn || !sessionToken){
+      setAccountStatus('SIGN IN TO CLAIM DAILY CHALLENGE REWARDS');
+      return;
+    }
+    if(dailyClaimed[challengeId]) return; // already reflected locally -- avoid a redundant request
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/challenges/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionToken: sessionToken, challengeId: challengeId })
+      });
+      const data = await res.json().catch(()=>({}));
+      if(!res.ok){
+        lobbyToast(data.error || 'COULD NOT CLAIM REWARD');
+        return;
+      }
+      // The server just changed credits server-side -- sync the local,
+      // client-authoritative `credits` used by saveProgress()/the rest of
+      // the UI to match, so the NEXT save doesn't push a stale (pre-claim)
+      // number back and silently erase the reward.
+      credits = data.newBalance;
+      if(data.dailyChallenges){
+        dailyProgress = Object.assign({ date: data.dailyChallenges.date }, data.dailyChallenges.progress || {});
+        dailyClaimed = data.dailyChallenges.claimed || {};
+      } else {
+        dailyClaimed[challengeId] = true;
+      }
+      updateCreditsDisplay();
+      renderDailyChallenges();
+      if(typeof lobbyToast === 'function') lobbyToast('CHALLENGE COMPLETE — +' + data.reward + ' CREDITS');
+      // Subtle, single-shot feedback on the row that was just claimed --
+      // no confetti, no repeating animation.
+      const row = document.querySelector('.dc-row[data-id="' + CSS.escape(challengeId) + '"]');
+      if(row){ row.classList.add('claim-flash'); setTimeout(()=> row.classList.remove('claim-flash'), 650); }
+    }catch(e){
+      lobbyToast('COULD NOT REACH THE SERVER');
+    }
+  }
+
   function applyAccount(account){
     accountName = account.name;
     credits = account.credits;
     stats.kills = account.kills;
     stats.wins = account.wins;
+    if(account.dailyChallenges){
+      const today = todayUTC();
+      if(account.dailyChallenges.date === today){
+        dailyProgress = Object.assign({ date: today }, account.dailyChallenges.progress || {});
+      } else {
+        // Stored record predates today -- render as a fresh day locally;
+        // the server performs the same roll-forward on its own copy the
+        // next time it's touched (see ensureDailyChallenges in server.js).
+        dailyProgress = { date: today, kills: 0, wins: 0, matches: 0 };
+      }
+      dailyClaimed = account.dailyChallenges.claimed || {};
+    }
     ownedSkins.clear();
     (account.ownedSkins || ['cyan','red']).forEach(id => ownedSkins.add(id));
     ownedPowers.clear();
@@ -2997,6 +3231,10 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       const adminBtn = document.getElementById('btnAdmin');
       if(adminBtn) adminBtn.classList.toggle('hidden', !isAdmin);
       lobbySync();
+      // Re-fetch now that sessionToken is set, so the panel switches from
+      // the anonymous/guest view to this account's real persisted
+      // progress and claimed state right away.
+      fetchDailyChallenges();
     } catch(e){
       setAccountStatus('SIGN-IN FAILED \u2014 IS THE SERVER RUNNING?');
     }
@@ -3015,6 +3253,10 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     const adminBtn = document.getElementById('btnAdmin');
     if(adminBtn) adminBtn.classList.add('hidden');
     lobbySync();
+    // Drop back to the anonymous view -- same challenge list, but no
+    // personal (persisted) progress or claimed state attached to it.
+    dailyClaimed = {};
+    fetchDailyChallenges();
     try{
       if(window.google && google.accounts && google.accounts.id){
         google.accounts.id.disableAutoSelect();
@@ -3044,7 +3286,13 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         autoAimP1: autoAimP1,
         autoAimP2: autoAimP2,
         aimMode: aimMode,
-        matchSize: savedMatchPlayerCount
+        matchSize: savedMatchPlayerCount,
+        dailyChallengeProgress: {
+          date: dailyProgress.date || todayUTC(),
+          kills: dailyProgress.kills || 0,
+          wins: dailyProgress.wins || 0,
+          matches: dailyProgress.matches || 0
+        }
       })
     }).then(res => {
       // fetch() only rejects on a network failure -- a 401/409/503 still
@@ -3855,6 +4103,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   }
 
   function initFootballMode(){
+    matchCountedToday = false; // a fresh match -- "matches played" can count it again
     footballScore1 = 0;
     footballScore2 = 0;
     footballState = 'playing';
@@ -4005,6 +4254,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       if(footballWinnerId === 'p1'){
         credits += 40;
         stats.wins++;
+        bumpDailyProgress('wins');
         updateCreditsDisplay();
         saveProgress();
       }
@@ -4376,6 +4626,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   // since unlike Football's score this number doesn't live purely on
   // the client.
   function initHeistMode(){
+    matchCountedToday = false; // a fresh match -- "matches played" can count it again
     resetHeistState();
     resetPositions();
     bullets = [];
@@ -4424,11 +4675,13 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
 
   function endHeistMatch(){
     state = 'matchEnd';
+    countMatchPlayed();
     msgTimer = 0;
     const localSide = myBaseSide();
     if(heistWinnerSide === localSide){
       credits += 50;
       stats.wins++;
+      bumpDailyProgress('wins');
       updateCreditsDisplay();
       saveProgress();
     }
@@ -5184,6 +5437,7 @@ else{
       if(shooterId === 'p1' && target.id !== 'p1'){
         credits += 15;
         stats.kills++;
+        bumpDailyProgress('kills');
         updateCreditsDisplay();
         saveProgress();
       }
@@ -5673,6 +5927,7 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
           // only handles the match-win bonus now, see below).
           credits += 15;
           stats.kills++;
+          bumpDailyProgress('kills');
           updateCreditsDisplay();
           saveProgress();
           endRound('p1');
@@ -6058,10 +6313,11 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
     if(winnerId==='p1' && winner.score >= ROUNDS_TO_WIN){
       credits += matchWinBonus();
       stats.wins++;
+      bumpDailyProgress('wins');
       updateCreditsDisplay();
       saveProgress();
     }
-    if(winner.score >= ROUNDS_TO_WIN){ state = 'matchEnd'; }
+    if(winner.score >= ROUNDS_TO_WIN){ state = 'matchEnd'; countMatchPlayed(); }
   }
 
   function startRound(){
@@ -6071,6 +6327,7 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
   }
 
   function fullReset(){
+    matchCountedToday = false; // a fresh match -- "matches played" can count it again
     scoreCarry = { p1:0, p2:0 };
     extraBots = []; // force fresh bots (score reset to 0) for the new match
     lastRoundWinnerId = null;
@@ -6120,6 +6377,7 @@ updateDecoys(dt);
       if(footballMsgTimer<=0){
         if(footballState === 'matchEnd'){
           state = 'matchEnd';
+          countMatchPlayed();
         } else {
           resetFootballPositions();
           state = 'countdown';
@@ -6783,6 +7041,10 @@ updateDecoys(dt);
     }
     updateCreditsDisplay();
     menuMain.classList.remove('hidden');
+    // Refreshes challenge progress/claim state on return to the lobby --
+    // picks up anything just completed, and self-heals a date rollover
+    // that happened while a match was in progress.
+    fetchDailyChallenges();
   }
   exitBtn.addEventListener('click', exitToMenu);
   const muteBtn = document.getElementById('muteBtn');
@@ -7156,6 +7418,7 @@ updateDecoys(dt);
   function initLobby(){
     renderLobbyModes();
     lobbySync();
+    fetchDailyChallenges();
 
     const prev = lobbyEl('lobbyModePrev');
     const next = lobbyEl('lobbyModeNext');
