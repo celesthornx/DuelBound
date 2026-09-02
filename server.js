@@ -75,7 +75,8 @@ function defaultAccount(name, email) {
         autoAimP1: false,
         autoAimP2: false,
         aimMode: "movement",
-        matchSize: 2
+        matchSize: 2,
+        dailyChallenges: defaultDailyChallenges()
     };
 }
 
@@ -262,6 +263,114 @@ function clampField(key, rawValue) {
 }
 
 // =====================================================================
+// DAILY CHALLENGES
+//
+// Three challenges a day -- one each of "get N kills", "win N matches"
+// and "play N matches" -- picked deterministically from a small pool so
+// every player sees the SAME three challenges on the SAME UTC calendar
+// day, with no per-player state needed to decide what today's set is.
+//
+// The reset is the actual date, not "24h after this player last opened
+// the game": today's set is a pure function of today's date string, and
+// an account's stored progress/claimed state is rolled to a fresh
+// {progress:0, claimed:{}} the moment it's next touched (via /save or
+// /challenges/*) and its stored date no longer matches. That self-heals
+// correctly however long the account was untouched for -- offline play,
+// a server restart, a multi-day absence -- there is no in-memory-only
+// timer that a restart could lose.
+//
+// Trust boundary: PROGRESS counts ride on the same client-authoritative
+// /save path as the account's lifetime kills/wins/credits already do
+// (see the /save handler) -- that trust level is this codebase's
+// existing, deliberate tradeoff, not a new one introduced here. What is
+// NOT client-trusted is the reward itself: /challenges/claim
+// independently recomputes today's canonical challenge set, checks the
+// account's own stored progress against it, checks the claimed flag,
+// and increments credits by the server's own copy of the reward amount
+// -- never a client-supplied one. A modified client can lie about
+// progress (same as it already could about kills/wins); it cannot claim
+// a reward it hasn't earned or claim one twice.
+// =====================================================================
+const DAILY_CHALLENGE_POOL = {
+    kills: [
+        { id: "kills_10", name: "BLOODHOUND",   desc: "Get 10 kills", target: 10, reward: 40 },
+        { id: "kills_15", name: "SHARPSHOOTER", desc: "Get 15 kills", target: 15, reward: 55 },
+        { id: "kills_20", name: "REAPER",       desc: "Get 20 kills", target: 20, reward: 70 }
+    ],
+    wins: [
+        { id: "wins_2", name: "VICTOR",   desc: "Win 2 matches", target: 2, reward: 60 },
+        { id: "wins_3", name: "CHAMPION", desc: "Win 3 matches", target: 3, reward: 85 }
+    ],
+    matches: [
+        { id: "matches_3", name: "ARENA REGULAR", desc: "Play 3 matches", target: 3, reward: 30 },
+        { id: "matches_5", name: "DEDICATED",     desc: "Play 5 matches", target: 5, reward: 45 }
+    ]
+};
+const DAILY_CHALLENGE_CATEGORIES = ["kills", "wins", "matches"];
+
+// Today's UTC calendar date as "YYYY-MM-DD". UTC (not the server's local
+// zone, and not the player's) so every player and every server instance
+// agree on what day it is, and the reset moment is the same wall-clock
+// instant for everyone.
+function todayUTC() {
+    return new Date().toISOString().slice(0, 10);
+}
+
+// FNV-1a string hash -> mulberry32 PRNG. Small, dependency-free, and
+// -- the only property that actually matters here -- exactly
+// deterministic for a given date string, so every process/player
+// derives the identical sequence without any of them telling each other
+// what it is.
+function hashStringToSeed(str) {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < str.length; i++) {
+        h ^= str.charCodeAt(i);
+        h = Math.imul(h, 16777619) >>> 0;
+    }
+    return h >>> 0;
+}
+function mulberry32(seed) {
+    let t = seed >>> 0;
+    return function () {
+        t += 0x6D2B79F5;
+        let r = Math.imul(t ^ (t >>> 15), 1 | t);
+        r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+        return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+// Today's 3 challenges: one deterministically-picked variant per
+// category. Pure function of dateStr -- callable from anywhere without
+// touching any account.
+function getDailyChallenges(dateStr) {
+    const rng = mulberry32(hashStringToSeed("voidbreak-daily-" + dateStr));
+    return DAILY_CHALLENGE_CATEGORIES.map(category => {
+        const variants = DAILY_CHALLENGE_POOL[category];
+        const variant = variants[Math.floor(rng() * variants.length) % variants.length];
+        return Object.assign({ category: category }, variant);
+    });
+}
+
+// Returns a dailyChallenges record valid for TODAY, given an account's
+// stored one (which may be missing, malformed, or simply from an
+// earlier date). Never mutates its input -- returns the SAME reference
+// back when it's already valid for today (so callers can cheaply tell
+// "did this actually roll over"), or a fresh zeroed one otherwise.
+function ensureDailyChallenges(stored) {
+    const today = todayUTC();
+    if (stored && typeof stored === "object" && stored.date === today &&
+        stored.progress && typeof stored.progress === "object" &&
+        stored.claimed && typeof stored.claimed === "object") {
+        return stored;
+    }
+    return { date: today, progress: { kills: 0, wins: 0, matches: 0 }, claimed: {} };
+}
+
+function defaultDailyChallenges() {
+    return { date: null, progress: { kills: 0, wins: 0, matches: 0 }, claimed: {} };
+}
+
+// =====================================================================
 // ADMIN ACTION LOG -- most recent 100 balance changes, newest first.
 // =====================================================================
 const ADMIN_LOG_SEED_FILE = path.join(__dirname, "adminLog.json");
@@ -389,15 +498,25 @@ const httpServer = http.createServer(async (req, res) => {
             const info = await verifyGoogleToken(body.credential);
             const sub = info.sub;
 
+            let dirty = false;
             if (!accounts[sub]) {
                 accounts[sub] = defaultAccount(info.name || info.email || "Player", info.email || "");
-                await persistAccount(sub);
+                dirty = true;
             } else if (accounts[sub].email !== (info.email || "")) {
                 // Keep the stored email current -- this is what admin
                 // verification checks against, so it must stay accurate.
                 accounts[sub].email = info.email || "";
-                await persistAccount(sub);
+                dirty = true;
             }
+            // Rolls a stale (or pre-feature) dailyChallenges to a fresh
+            // set for today -- this is the "player was offline across a
+            // reset, or this account predates the feature" self-heal.
+            const rolledDC = ensureDailyChallenges(accounts[sub].dailyChallenges);
+            if (rolledDC !== accounts[sub].dailyChallenges) {
+                accounts[sub].dailyChallenges = rolledDC;
+                dirty = true;
+            }
+            if (dirty) await persistAccount(sub);
 
             const sessionToken = crypto.randomBytes(24).toString("hex");
             await persistSession(sessionToken, sub);
@@ -441,6 +560,26 @@ const httpServer = http.createServer(async (req, res) => {
                 (typeof incoming === "number" && isFinite(incoming) && incoming >= 0)
                     ? Math.floor(incoming) : current;
 
+            // Same client-authoritative trust level as kills/wins/credits
+            // above -- see the DAILY CHALLENGES comment block for why
+            // that's an accepted tradeoff here, not a new one. Rolls to a
+            // fresh {progress:0, claimed:{}} first if the stored record is
+            // missing or from an earlier day, THEN merges in today's
+            // progress if the client sent any -- so a stale/offline
+            // account always ends up in a valid state for today even if
+            // the client has nothing to report yet.
+            const dc = ensureDailyChallenges(existing.dailyChallenges);
+            let dailyProgress = dc.progress;
+            const incomingDC = body.dailyChallengeProgress;
+            if (incomingDC && typeof incomingDC === "object" && incomingDC.date === dc.date) {
+                dailyProgress = {
+                    kills: safeCount(incomingDC.kills, dc.progress.kills),
+                    wins: safeCount(incomingDC.wins, dc.progress.wins),
+                    matches: safeCount(incomingDC.matches, dc.progress.matches)
+                };
+            }
+            const newDailyChallenges = { date: dc.date, progress: dailyProgress, claimed: dc.claimed };
+
             accounts[sub] = {
                 name: existing.name,
                 email: existing.email || "",
@@ -459,7 +598,8 @@ const httpServer = http.createServer(async (req, res) => {
                 autoAimP1: typeof body.autoAimP1 === "boolean" ? body.autoAimP1 : (existing.autoAimP1 || false),
                 autoAimP2: typeof body.autoAimP2 === "boolean" ? body.autoAimP2 : (existing.autoAimP2 || false),
                 aimMode: (body.aimMode === "mouse" || body.aimMode === "movement") ? body.aimMode : (existing.aimMode || "movement"),
-                matchSize: [2, 3, 4].includes(body.matchSize) ? body.matchSize : (existing.matchSize || 2)
+                matchSize: [2, 3, 4].includes(body.matchSize) ? body.matchSize : (existing.matchSize || 2),
+                dailyChallenges: newDailyChallenges
             };
             try {
                 await persistAccount(sub);
@@ -472,6 +612,120 @@ const httpServer = http.createServer(async (req, res) => {
                 return;
             }
             sendJson(res, 200, { ok: true });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // ---- GET /challenges/today?sessionToken=... (sessionToken optional) ----
+    // Today's 3 challenges are the same for every player, so this needs
+    // no auth to list them. If a valid sessionToken IS given, the
+    // response also includes that account's own progress/claimed state
+    // for today -- rolling it to a fresh day first if it was stale, so a
+    // player returning after being offline across a reset (or a server
+    // restart) sees a correctly-zeroed board the moment they open the
+    // panel, not just the next time they happen to /save.
+    if (req.method === "GET" && req.url.startsWith("/challenges/today")) {
+        const urlObj = new URL(req.url, "http://x");
+        const today = todayUTC();
+        const defs = getDailyChallenges(today);
+        const sessionToken = urlObj.searchParams.get("sessionToken");
+        const sub = sessionToken ? sessions[sessionToken] : null;
+        const account = sub ? accounts[sub] : null;
+
+        let progress = { kills: 0, wins: 0, matches: 0 };
+        let claimed = {};
+        if (account) {
+            const dc = ensureDailyChallenges(account.dailyChallenges);
+            if (dc !== account.dailyChallenges) {
+                account.dailyChallenges = dc;
+                // Opportunistic self-heal write -- doesn't block or fail
+                // the response either way; worst case it just re-rolls
+                // (idempotently) again on the next request.
+                persistAccount(sub).catch(e =>
+                    console.log("[storage] failed to persist rolled dailyChallenges:", e.message));
+            }
+            progress = dc.progress;
+            claimed = dc.claimed;
+        }
+
+        sendJson(res, 200, {
+            date: today,
+            challenges: defs.map(d => ({
+                id: d.id, name: d.name, desc: d.desc,
+                category: d.category, target: d.target, reward: d.reward
+            })),
+            progress: progress,
+            claimed: claimed
+        });
+        return;
+    }
+
+    // ---- POST /challenges/claim ----
+    // body: { sessionToken, challengeId }
+    // Server-authoritative reward grant: independently recomputes TODAY's
+    // canonical challenge set (never trusts a client-sent definition),
+    // checks the account's own stored progress against it, checks the
+    // claimed flag, and credits the server's own copy of the reward --
+    // never a client-supplied amount. Mirrors /admin/credits' atomic
+    // read-modify-write-then-persist shape, with the same rollback on a
+    // failed write.
+    if (req.method === "POST" && req.url === "/challenges/claim") {
+        try {
+            const body = await readJsonBody(req);
+            const sub = sessions[body.sessionToken];
+            if (!sub) {
+                sendJson(res, 401, { error: "Not signed in" });
+                return;
+            }
+            const target = accounts[sub];
+            if (!target) {
+                sendJson(res, 409, { error: "Account not loaded -- sign in again" });
+                return;
+            }
+
+            const today = todayUTC();
+            const dc = ensureDailyChallenges(target.dailyChallenges);
+            const def = getDailyChallenges(today).find(c => c.id === body.challengeId);
+            if (!def) {
+                sendJson(res, 400, { error: "Not one of today's challenges" });
+                return;
+            }
+            if (dc.claimed[body.challengeId]) {
+                sendJson(res, 409, { error: "Already claimed" });
+                return;
+            }
+            const have = dc.progress[def.category] || 0;
+            if (have < def.target) {
+                sendJson(res, 400, { error: "Challenge not complete yet" });
+                return;
+            }
+
+            const previousBalance = target.credits || 0;
+            const previousDC = target.dailyChallenges;
+            target.credits = previousBalance + def.reward; // atomic increment, not a client-supplied total
+            target.dailyChallenges = {
+                date: dc.date,
+                progress: dc.progress,
+                claimed: Object.assign({}, dc.claimed, { [body.challengeId]: true })
+            };
+            try {
+                await persistAccount(sub);
+            } catch (e) {
+                target.credits = previousBalance; // write failed -- undo the in-memory grant
+                target.dailyChallenges = previousDC;
+                sendJson(res, 503, { error: "Could not save reward -- try again" });
+                return;
+            }
+
+            sendJson(res, 200, {
+                ok: true,
+                challengeId: body.challengeId,
+                reward: def.reward,
+                newBalance: target.credits,
+                dailyChallenges: target.dailyChallenges
+            });
         } catch (e) {
             sendJson(res, 400, { error: "Bad request" });
         }
