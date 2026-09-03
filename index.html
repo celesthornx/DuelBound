@@ -1559,6 +1559,208 @@
     .chat-stub{ display:none; }
     .arena-banner{ display:none; }
   }
+
+  /* ============================================================
+     RANKED
+     Reuses the existing panel/menu language (shop-panel, menu-btn,
+     menu-back) and only adds what ranked genuinely needs. Every
+     size here is fluid so the same markup works on a phone.
+     ============================================================ */
+  /* .shop-panel is `width:620px; max-width:92%`. Overriding max-width
+     with a flat px value drops that 92% viewport clamp, which is what
+     pushed this panel wider than a phone screen -- so the cap has to
+     stay viewport-relative as well as absolute. */
+  .ranked-panel{ max-width: min(460px, 92vw); }
+  .rk-season{
+    text-align:center; font-size:10px; letter-spacing:2.5px;
+    color: var(--gold); opacity:.9; margin:-6px 0 14px;
+  }
+  .rk-card{
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    background: rgba(10,15,25,.6); border:1px solid var(--panel-edge);
+    border-radius:12px; padding:14px; margin-bottom:14px;
+  }
+  .rk-badge{
+    flex:0 0 120px; min-width:120px; text-align:center;
+    border-radius:10px; padding:12px 8px;
+    background: rgba(20,28,42,.7);
+    border:1px solid rgba(122,158,200,.25);
+  }
+  .rk-badge-tier{
+    font-size:14px; font-weight:800; letter-spacing:1.5px;
+    color: var(--ink); line-height:1.25; word-break:break-word;
+  }
+  .rk-badge-rp{ font-size:11px; letter-spacing:1px; color: var(--ink-dim); margin-top:4px; }
+  .rk-info{ flex:1 1 180px; min-width:0; }
+  .rk-plabel{ font-size:9.5px; letter-spacing:2px; color: var(--ink-dim); }
+  .rk-pcount{ font-size:22px; font-weight:800; color: var(--p1); margin:2px 0 6px; }
+  .rk-pbar{
+    height:7px; border-radius:4px; overflow:hidden;
+    background: rgba(255,255,255,.08);
+  }
+  .rk-pbar > i{
+    display:block; height:100%; border-radius:4px;
+    background: linear-gradient(90deg, var(--p1), #7ee8ff);
+    transition: width .35s ease;
+  }
+  .rk-phint{ font-size:9px; letter-spacing:1.2px; color: var(--ink-dim); margin-top:6px; }
+  .rk-stats{ display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:6px; }
+  .rk-stat{ text-align:center; min-width:0; }
+  .rk-stat b{ display:block; font-size:16px; color: var(--ink); }
+  .rk-stat span{ font-size:8.5px; letter-spacing:1px; color: var(--ink-dim); }
+  .rk-sub{ font-size:10px; letter-spacing:1px; color: var(--ink-dim); margin-top:8px; }
+  .rk-signin{
+    text-align:center; font-size:11px; letter-spacing:1.4px;
+    color: var(--gold); padding:10px; margin-bottom:12px;
+    border:1px solid rgba(255,206,84,.3); border-radius:8px;
+    background: rgba(255,206,84,.06);
+  }
+  .rk-actions .menu-btn{ width:100%; }
+
+  /* ---- QUEUE ---- */
+  .rq-wrap{
+    width: min(94vw, 420px); text-align:center;
+    background: var(--panel-solid); border:1px solid var(--panel-edge);
+    border-radius:14px; padding:26px 20px;
+    max-height: 92vh; overflow-y: auto;
+  }
+  .rq-spinner{ display:flex; justify-content:center; gap:8px; margin:16px 0 18px; }
+  .rq-spinner > i{
+    width:11px; height:11px; border-radius:50%;
+    background: var(--p1); display:block;
+    animation: rqPulse 1.1s ease-in-out infinite;
+  }
+  .rq-spinner > i:nth-child(2){ animation-delay:.16s; }
+  .rq-spinner > i:nth-child(3){ animation-delay:.32s; }
+  @keyframes rqPulse{
+    0%,100%{ opacity:.25; transform: scale(.75); }
+    50%{ opacity:1; transform: scale(1.15); }
+  }
+  .rq-status{ font-size:13px; letter-spacing:2px; color: var(--ink); }
+  .rq-timer{ font-size:11px; letter-spacing:1.5px; color: var(--ink-dim); margin-top:10px; }
+  .rq-timer b{ color: var(--p1); font-size:15px; }
+  .rq-detail{ font-size:9.5px; letter-spacing:1.2px; color: var(--ink-dim); margin-top:6px; min-height:12px; }
+  .rq-cancel{ margin-top:20px; width:100%; }
+  .rq-found{
+    display:flex; align-items:center; justify-content:center;
+    gap:10px; margin:18px 0 6px; flex-wrap:nowrap;
+  }
+  .rqf-side{ flex:1 1 0; min-width:0; }
+  .rqf-name{
+    font-size:12px; font-weight:700; color: var(--ink);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .rqf-rank{ font-size:10.5px; letter-spacing:1px; color: var(--gold); margin-top:3px; }
+  .rqf-rp{ font-size:9.5px; color: var(--ink-dim); margin-top:2px; }
+  .rqf-vs{ flex:0 0 auto; font-size:13px; font-weight:800; color: var(--p2); letter-spacing:1px; }
+
+  /* ---- RESULT ---- */
+  .rr-title{
+    text-align:center; font-size:30px; font-weight:900; letter-spacing:5px;
+    margin-bottom:4px;
+  }
+  .rr-title.win{ color:#5ce08a; text-shadow:0 0 18px rgba(92,224,138,.5); }
+  .rr-title.loss{ color: var(--p2); text-shadow:0 0 18px rgba(255,95,109,.45); }
+  .rr-delta{ text-align:center; font-size:22px; font-weight:800; letter-spacing:1px; }
+  .rr-delta.up{ color:#5ce08a; }
+  .rr-delta.down{ color: var(--p2); }
+  .rr-delta.flat{ color: var(--ink-dim); }
+  .rr-track{
+    text-align:center; font-size:11px; letter-spacing:1.5px;
+    color: var(--ink-dim); margin:4px 0 14px;
+  }
+  .rr-promo{
+    text-align:center; border-radius:10px; padding:10px;
+    margin-bottom:12px; border:1px solid rgba(255,206,84,.35);
+    background: rgba(255,206,84,.08);
+  }
+  .rr-promo.down{ border-color: rgba(255,95,109,.35); background: rgba(255,95,109,.08); }
+  .rr-promo-tag{ font-size:13px; font-weight:800; letter-spacing:2.5px; color: var(--gold); }
+  .rr-promo.down .rr-promo-tag{ color: var(--p2); }
+  .rr-promo-move{ font-size:11px; letter-spacing:1.5px; color: var(--ink); margin-top:4px; }
+  .rr-placement{
+    text-align:center; margin-bottom:14px; padding:10px;
+    border:1px solid var(--panel-edge); border-radius:10px;
+  }
+  .rr-reveal{
+    text-align:center; margin-bottom:14px; padding:16px 10px;
+    border:1px solid rgba(255,206,84,.4); border-radius:10px;
+    background: rgba(255,206,84,.07);
+    animation: rrPop .5s cubic-bezier(.2,1.4,.4,1);
+  }
+  @keyframes rrPop{ from{ transform: scale(.86); opacity:0; } to{ transform: scale(1); opacity:1; } }
+  .rr-reveal-tag{ font-size:11px; letter-spacing:3px; color: var(--gold); }
+  .rr-reveal-rank{ font-size:26px; font-weight:900; letter-spacing:2px; color: var(--ink); margin:4px 0 2px; }
+  .rr-reveal-rp{ font-size:13px; letter-spacing:1.5px; color: var(--p1); }
+  .rr-grid{ margin-bottom:14px; }
+  .rr-row{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    padding:7px 0; border-bottom:1px solid rgba(122,158,200,.12);
+    font-size:10.5px; letter-spacing:1.2px;
+  }
+  .rr-row span{ color: var(--ink-dim); }
+  .rr-row b{ color: var(--ink); text-align:right; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .rr-note{
+    font-size:9.5px; letter-spacing:1px; color: var(--gold);
+    text-align:center; margin-bottom:10px; line-height:1.5;
+  }
+  #btnRankedContinue{ width:100%; }
+
+  /* ---- LADDER ---- */
+  .rl-you{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    padding:9px 12px; margin-bottom:10px; border-radius:8px;
+    border:1px solid rgba(63,208,255,.35); background: rgba(63,208,255,.08);
+    font-size:11px; letter-spacing:1.2px; color: var(--p1);
+  }
+  .rl-row{
+    display:grid; grid-template-columns: 34px minmax(0,1fr) auto;
+    gap:8px; align-items:center;
+    padding:8px 6px; border-bottom:1px solid rgba(122,158,200,.12);
+    font-size:11px;
+  }
+  .rl-row.me{ background: rgba(63,208,255,.09); border-radius:6px; }
+  .rl-pos{ color: var(--ink-dim); font-size:11px; text-align:center; }
+  .rl-row.top1 .rl-pos{ color:#ffce54; font-weight:800; }
+  .rl-row.top2 .rl-pos{ color:#d6dde8; font-weight:800; }
+  .rl-row.top3 .rl-pos{ color:#e0985c; font-weight:800; }
+  .rl-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color: var(--ink); }
+  .rl-sub{ display:block; font-size:9px; letter-spacing:.8px; color: var(--ink-dim); }
+  .rl-rp{ text-align:right; white-space:nowrap; }
+  .rl-rp b{ color: var(--p1); font-size:12px; }
+  .rl-rp span{ display:block; font-size:8.5px; color: var(--ink-dim); }
+  .rl-empty{ text-align:center; padding:26px 10px; font-size:11px; letter-spacing:1.4px; color: var(--ink-dim); line-height:1.7; }
+
+  /* ---- IN-MATCH BANNER ---- */
+  .ranked-banner{
+    position: fixed; top: 8px; left: 50%; transform: translateX(-50%);
+    z-index: 40; display:flex; align-items:center; gap:12px;
+    padding:6px 14px; border-radius:10px;
+    background: rgba(8,12,20,.82); border:1px solid rgba(255,206,84,.35);
+    max-width: min(96vw, 520px); pointer-events:none;
+  }
+  .rb-side{ flex:1 1 0; min-width:0; text-align:left; }
+  .rb-side.rb-right{ text-align:right; }
+  .rb-name{
+    font-size:10.5px; font-weight:700; color: var(--ink);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .rb-rank{ font-size:9px; letter-spacing:1px; color: var(--gold); margin-top:1px; }
+  .rb-mid{ flex:0 0 auto; text-align:center; }
+  .rb-tag{ font-size:8.5px; letter-spacing:2.5px; color: var(--gold); }
+  .rb-score{ font-size:14px; font-weight:800; color: var(--ink); letter-spacing:1px; }
+
+  @media (max-width: 700px){
+    .rk-card{ gap:10px; padding:11px; }
+    .rk-badge{ flex-basis:100%; min-width:0; }
+    .rk-stat b{ font-size:14px; }
+    .rr-title{ font-size:24px; letter-spacing:3px; }
+    .rr-delta{ font-size:19px; }
+    .ranked-banner{ gap:8px; padding:5px 10px; top:4px; }
+    .rb-score{ font-size:12px; }
+    .rb-name{ font-size:9.5px; }
+    .rq-wrap{ padding:20px 14px; }
+  }
 </style>
 </head>
 <body>
@@ -1608,6 +1810,24 @@
   <!-- ONLINE MULTIPLAYER PING BADGE (hidden outside mode==='online') -->
   <div class="ping-badge hidden" id="pingBadge">PING: -- ms</div>
 
+  <!-- RANKED IN-MATCH BANNER. Only shown during a ranked match -- it
+       adds the ranked context on top of the normal HUD rather than
+       replacing any of it. -->
+  <div class="ranked-banner hidden" id="rankedBanner">
+    <div class="rb-side">
+      <div class="rb-name" id="rbYouName">YOU</div>
+      <div class="rb-rank" id="rbYouRank">UNRANKED</div>
+    </div>
+    <div class="rb-mid">
+      <div class="rb-tag">RANKED</div>
+      <div class="rb-score" id="rbScore">0 &ndash; 0</div>
+    </div>
+    <div class="rb-side rb-right">
+      <div class="rb-name" id="rbFoeName">OPPONENT</div>
+      <div class="rb-rank" id="rbFoeRank">UNRANKED</div>
+    </div>
+  </div>
+
   <div class="center-msg" id="centerMsg"></div>
 
   <!-- ============================================================
@@ -1640,6 +1860,7 @@
 
       <nav class="lobby-nav">
         <button class="nav-item active" data-act="play">PLAY</button>
+        <button class="nav-item" data-act="ranked">RANKED</button>
         <button class="nav-item" data-act="modes">MODES</button>
         <button class="nav-item" data-act="shop">SHOP</button>
         <button class="nav-item" data-act="leaderboards">LEADERBOARDS</button>
@@ -2016,6 +2237,125 @@
       </div>
       <div class="shop-body" id="leaderboardBody"></div>
       <button class="menu-back" id="btnBackLeaderboard">&larr; back</button>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       RANKED
+       Four screens: the hub (your rank + ladder position), the live
+       queue, the post-match result, and the ladder. All of them read
+       server state only -- nothing here invents a number.
+       ============================================================ -->
+  <div class="menu-overlay hidden" id="menuRanked">
+    <div class="shop-panel ranked-panel">
+      <div class="menu-title">RANKED</div>
+      <div class="rk-season" id="rkSeason">SEASON 1</div>
+
+      <div class="rk-card" id="rkCard">
+        <div class="rk-badge" id="rkBadge">
+          <div class="rk-badge-tier" id="rkBadgeTier">UNRANKED</div>
+          <div class="rk-badge-rp" id="rkBadgeRP">&mdash;</div>
+        </div>
+        <div class="rk-info">
+          <div class="rk-placement hidden" id="rkPlacementWrap">
+            <div class="rk-plabel">PLACEMENT MATCHES</div>
+            <div class="rk-pcount" id="rkPlacementCount">0 / 10</div>
+            <div class="rk-pbar"><i id="rkPlacementBar" style="width:0%"></i></div>
+            <div class="rk-phint">COMPLETE YOUR PLACEMENTS TO EARN A RANK</div>
+          </div>
+          <div class="rk-stats hidden" id="rkStatsWrap">
+            <div class="rk-stat"><b id="rkWins">0</b><span>WINS</span></div>
+            <div class="rk-stat"><b id="rkLosses">0</b><span>LOSSES</span></div>
+            <div class="rk-stat"><b id="rkWinRate">0%</b><span>WIN RATE</span></div>
+            <div class="rk-stat"><b id="rkGames">0</b><span>GAMES</span></div>
+          </div>
+          <div class="rk-sub" id="rkPeak"></div>
+          <div class="rk-sub" id="rkPosition"></div>
+        </div>
+      </div>
+
+      <div class="rk-signin hidden" id="rkSignIn">SIGN IN WITH GOOGLE TO PLAY RANKED</div>
+
+      <div class="menu-group rk-actions" id="rkActions">
+        <button class="menu-btn accent-2" id="btnRankedQueue">FIND MATCH</button>
+        <button class="menu-btn" id="btnRankedLadder">LEADERBOARD</button>
+      </div>
+      <button class="menu-back" id="btnBackRanked">&larr; back</button>
+    </div>
+  </div>
+
+  <!-- RANKED QUEUE -->
+  <div class="menu-overlay hidden" id="menuRankedQueue">
+    <div class="rq-wrap">
+      <div class="menu-title">RANKED</div>
+      <div class="rq-spinner"><i></i><i></i><i></i></div>
+      <div class="rq-status" id="rqStatus">SEARCHING FOR OPPONENT...</div>
+      <div class="rq-timer">QUEUE TIME: <b id="rqTimer">00:00</b></div>
+      <div class="rq-detail" id="rqDetail"></div>
+
+      <!-- Match found: opponent reveal, shown in place of the spinner -->
+      <div class="rq-found hidden" id="rqFound">
+        <div class="rqf-side">
+          <div class="rqf-name" id="rqfYouName">YOU</div>
+          <div class="rqf-rank" id="rqfYouRank">UNRANKED</div>
+          <div class="rqf-rp" id="rqfYouRP"></div>
+        </div>
+        <div class="rqf-vs">VS</div>
+        <div class="rqf-side">
+          <div class="rqf-name" id="rqfFoeName">OPPONENT</div>
+          <div class="rqf-rank" id="rqfFoeRank">UNRANKED</div>
+          <div class="rqf-rp" id="rqfFoeRP"></div>
+        </div>
+      </div>
+
+      <button class="menu-btn rq-cancel" id="btnRankedCancel">CANCEL</button>
+    </div>
+  </div>
+
+  <!-- RANKED RESULT -->
+  <div class="menu-overlay hidden" id="menuRankedResult">
+    <div class="shop-panel ranked-panel">
+      <div class="rr-title" id="rrTitle">VICTORY</div>
+      <div class="rr-delta" id="rrDelta">+25 RP</div>
+      <div class="rr-track" id="rrTrack">2,684 &rarr; 2,709 RP</div>
+
+      <div class="rr-promo hidden" id="rrPromo">
+        <div class="rr-promo-tag" id="rrPromoTag">RANK UP!</div>
+        <div class="rr-promo-move" id="rrPromoMove"></div>
+      </div>
+
+      <div class="rr-placement hidden" id="rrPlacement">
+        <div class="rk-plabel">PLACEMENT PROGRESS</div>
+        <div class="rk-pcount" id="rrPlacementCount">1 / 10</div>
+        <div class="rk-pbar"><i id="rrPlacementBar" style="width:0%"></i></div>
+      </div>
+
+      <div class="rr-reveal hidden" id="rrReveal">
+        <div class="rr-reveal-tag">RANKED!</div>
+        <div class="rr-reveal-rank" id="rrRevealRank">GOLD III</div>
+        <div class="rr-reveal-rp" id="rrRevealRP">1,425 RP</div>
+      </div>
+
+      <div class="rr-grid">
+        <div class="rr-row"><span>OPPONENT</span><b id="rrFoeName">&mdash;</b></div>
+        <div class="rr-row"><span>THEIR RANK</span><b id="rrFoeRank">&mdash;</b></div>
+        <div class="rr-row"><span>YOUR RANK</span><b id="rrYouRank">&mdash;</b></div>
+        <div class="rr-row"><span>RECORD</span><b id="rrRecord">&mdash;</b></div>
+      </div>
+      <div class="rr-note hidden" id="rrNote"></div>
+
+      <button class="menu-btn accent-2" id="btnRankedContinue">CONTINUE</button>
+    </div>
+  </div>
+
+  <!-- RANKED LEADERBOARD -->
+  <div class="menu-overlay hidden" id="menuRankedLadder">
+    <div class="shop-panel">
+      <div class="menu-title">RANKED LEADERBOARD</div>
+      <div class="rk-season" id="rlSeason">SEASON 1</div>
+      <div class="rl-you hidden" id="rlYou"></div>
+      <div class="shop-body" id="rankedLadderBody"></div>
+      <button class="menu-back" id="btnBackRankedLadder">&larr; back</button>
     </div>
   </div>
 
@@ -2681,6 +3021,9 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       console.log("Connected to server!");
       startPingLoop();
       startNetworkSendLoop();
+      // A ranked queue join requested before the socket was ready is
+      // completed here (see startRankedQueue/rankedOnSocketOpen).
+      if(typeof rankedOnSocketOpen === 'function') rankedOnSocketOpen();
     };
 
     socket.onerror = function(){
@@ -2703,8 +3046,17 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         return;
       }
 
+      // ---- RANKED ----
+      // Handled first and entirely separately from the casual online
+      // protocol below. Returns true when it owned the message.
+      if(typeof handleRankedMessage === 'function' && handleRankedMessage(data)) return;
+
       if(data.type === "serverFull"){
-        setOnlineStatus('SERVER FULL \u2014 ONLY 2 PLAYERS ALLOWED');
+        // Only meaningful for CASUAL online play -- a full casual lobby
+        // does not stop ranked, which uses its own match rooms.
+        if(!(window.__ranked && (window.__ranked.queueing || window.__ranked.active))){
+          setOnlineStatus('SERVER FULL \u2014 ONLY 2 PLAYERS ALLOWED');
+        }
         return;
       }
 
@@ -2738,6 +3090,12 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       }
 
       if(data.type === "opponentLeft"){
+        // A ranked player may ALSO be holding a casual slot (slots are
+        // assigned on connect), so a ranked opponent dropping can fire
+        // this casual notice too. Ranked has its own disconnect/forfeit
+        // handling -- let it own the outcome instead of bouncing the
+        // player to the menu and losing the forfeit result.
+        if(window.__ranked && (window.__ranked.active || window.__ranked.queueing)) return;
         onlineOpponentReady = false;
         if(started){
           centerMsg.innerHTML = '<div class="big" style="color:var(--p2)">OPPONENT LEFT</div><div class="small">RETURNING TO MENU</div>';
@@ -6921,6 +7279,8 @@ updateDecoys(dt);
     menuOnline.classList.add('hidden');
     menuShop.classList.add('hidden');
     menuGameType.classList.add('hidden');
+    document.getElementById('menuRanked').classList.add('hidden');
+    document.getElementById('menuRankedQueue').classList.add('hidden');
     exitBtn.classList.remove('hidden');
     if(isTouchDevice) mobileControlsEl.classList.remove('hidden');
     started = true;
@@ -7544,6 +7904,7 @@ updateDecoys(dt);
         e.stopPropagation();
         const act = el.dataset.act;
         if(act === 'play')          { lobbyStartSelectedMode(); }
+        else if(act === 'ranked')   { openRankedHub(); }
         else if(act === 'modes')    {
           const cards = lobbyEl('lobbyModeCards');
           if(cards){
@@ -7559,7 +7920,7 @@ updateDecoys(dt);
         else if(act === 'settings')     { lobbyEl('btnSettings').click(); }
         else if(act === 'admin')        { lobbyEl('btnAdmin').click(); }
         else if(act === 'controls')     { lobbyControlsModal(); }
-        else if(act === 'profile')      { lobbySoonModal('PROFILE', 'A FULL PROFILE PAGE ISN\'T BUILT YET. YOUR WINS, KILLS AND CREDITS ARE ON THE CARD TO THE LEFT.'); }
+        else if(act === 'profile')      { openRankedProfileModal(); }
         else if(act === 'friends')      { lobbySoonModal('FRIENDS', 'FRIENDS LISTS, INVITES AND ONLINE STATUS ARE NOT IMPLEMENTED YET.'); }
         else if(act === 'mail')         { lobbySoonModal('MAIL', 'THERE IS NO MAIL OR NOTIFICATION SYSTEM YET.'); }
         else if(act === 'patch')        { lobbyPatchNotesModal(); }
@@ -7600,6 +7961,585 @@ updateDecoys(dt);
       else if(e.key === 'Enter') { e.preventDefault(); lobbyStartSelectedMode(); }
     });
   }
+
+  /* ================================================================
+     RANKED (client)
+     ----------------------------------------------------------------
+     This is a VIEW over server state, not a second game. It reuses the
+     existing WebSocket (connectOnline), the existing session token, and
+     the existing Duel Arena match loop -- it only adds the queue, the
+     ranked context and the result screen.
+     Every number shown here comes from the server. Nothing is invented
+     locally: the queue timer is the server's own `waited`, the score is
+     the server's own count, and RP/rank always come off a
+     ranked_match_result or /ranked/me payload.
+     ================================================================ */
+  const RANKED = {
+    active: false,        // are we in / entering a ranked match?
+    matchId: null,
+    slot: null,
+    you: null,
+    opponent: null,
+    rated: true,
+    score: { 1: 0, 2: 0 },
+    queueing: false,
+    waited: 0,
+    profile: null,
+    resultShown: false
+  };
+
+  const rkEl = id => document.getElementById(id);
+  const menuRanked       = rkEl('menuRanked');
+  const menuRankedQueue  = rkEl('menuRankedQueue');
+  const menuRankedResult = rkEl('menuRankedResult');
+  const menuRankedLadder = rkEl('menuRankedLadder');
+  const rankedBanner     = rkEl('rankedBanner');
+
+  const rkFmt = n => (typeof n === 'number' ? n.toLocaleString() : '—');
+  const rkTime = s => {
+    const t = Math.max(0, Math.floor(s));
+    return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0');
+  };
+  // A rank descriptor from the server -> display string. Falls back to
+  // UNRANKED rather than rendering "undefined" if anything is missing.
+  const rkRankName = r => (r && r.name ? String(r.name).toUpperCase() : 'UNRANKED');
+
+  function rkHideAll(){
+    [menuRanked, menuRankedQueue, menuRankedResult, menuRankedLadder].forEach(el=>{
+      if(el) el.classList.add('hidden');
+    });
+  }
+
+  // ---- HUB -------------------------------------------------------
+  async function openRankedHub(){
+    menuMain.classList.add('hidden');
+    rkHideAll();
+    menuRanked.classList.remove('hidden');
+    await refreshRankedProfile();
+  }
+
+  async function refreshRankedProfile(){
+    const signIn  = rkEl('rkSignIn');
+    const actions = rkEl('rkActions');
+    const card    = rkEl('rkCard');
+
+    if(!loggedIn || !sessionToken){
+      // Ranked genuinely requires an account -- there is nowhere to
+      // store RP for a guest. Say so instead of faking a profile.
+      signIn.classList.remove('hidden');
+      card.classList.add('hidden');
+      actions.classList.add('hidden');
+      return;
+    }
+    signIn.classList.add('hidden');
+    card.classList.remove('hidden');
+    actions.classList.remove('hidden');
+
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/ranked/me?sessionToken=' + encodeURIComponent(sessionToken));
+      if(!res.ok) throw new Error('http ' + res.status);
+      const data = await res.json();
+      RANKED.profile = data;
+      renderRankedProfile(data);
+    } catch(e){
+      rkEl('rkBadgeTier').textContent = 'UNAVAILABLE';
+      rkEl('rkBadgeRP').textContent = 'SERVER OFFLINE';
+      rkEl('rkPosition').textContent = '';
+    }
+  }
+
+  function renderRankedProfile(data){
+    const r = data.ranked;
+    rkEl('rkSeason').textContent = (data.config && data.config.seasonName
+      ? data.config.seasonName : 'SEASON').toUpperCase();
+
+    rkEl('rkBadgeTier').textContent = rkRankName(r.rank);
+    if(r.rank && r.rank.color) rkEl('rkBadgeTier').style.color = r.rank.color;
+    rkEl('rkBadgeRP').textContent = r.placementComplete ? rkFmt(r.rp) + ' RP' : 'NO RANK YET';
+
+    const placementWrap = rkEl('rkPlacementWrap');
+    const statsWrap     = rkEl('rkStatsWrap');
+
+    if(!r.placementComplete){
+      placementWrap.classList.remove('hidden');
+      statsWrap.classList.add('hidden');
+      rkEl('rkPlacementCount').textContent = r.placementGames + ' / ' + r.placementTotal;
+      rkEl('rkPlacementBar').style.width =
+        Math.min(100, (r.placementGames / r.placementTotal) * 100) + '%';
+    } else {
+      placementWrap.classList.add('hidden');
+      statsWrap.classList.remove('hidden');
+      rkEl('rkWins').textContent    = r.wins;
+      rkEl('rkLosses').textContent  = r.losses;
+      rkEl('rkWinRate').textContent = r.winRate + '%';
+      rkEl('rkGames').textContent   = r.games;
+    }
+
+    rkEl('rkPeak').textContent = (r.placementComplete && r.highestRank)
+      ? 'SEASON HIGH: ' + rkRankName(r.highestRank) + ' · ' + rkFmt(r.highestRP) + ' RP'
+      : '';
+    rkEl('rkPosition').textContent = (typeof data.position === 'number')
+      ? 'LEADERBOARD POSITION: #' + data.position : '';
+  }
+
+  // ---- QUEUE -----------------------------------------------------
+  function startRankedQueue(){
+    if(!loggedIn || !sessionToken){
+      lobbyToast('SIGN IN TO PLAY RANKED');
+      return;
+    }
+    RANKED.active = false;
+    RANKED.matchId = null;
+    RANKED.resultShown = false;
+    RANKED.queueing = true;
+    RANKED.waited = 0;
+
+    rkHideAll();
+    menuRankedQueue.classList.remove('hidden');
+    rkEl('rqFound').classList.add('hidden');
+    document.querySelector('.rq-spinner').classList.remove('hidden');
+    rkEl('rqStatus').textContent = 'CONNECTING...';
+    rkEl('rqTimer').textContent = '00:00';
+    rkEl('rqDetail').textContent = '';
+    rkEl('btnRankedCancel').textContent = 'CANCEL';
+
+    // Ranked always plays the standard 1v1 classic duel. This is set
+    // here explicitly and NEVER reads savedMatchPlayerCount, so the
+    // player's MATCH SIZE preference for normal modes is untouched.
+    mode = 'online';
+    gameType = 'classic';
+    matchPlayerCount = 2;
+
+    // Reuse the existing socket if it's already up, otherwise open one
+    // through the normal path.
+    if(socket && socket.readyState === WebSocket.OPEN){
+      sendRankedJoin();
+    } else {
+      connectOnline();
+      // connectOnline's onopen fires the join (see rankedOnSocketOpen).
+      RANKED.pendingJoin = true;
+    }
+  }
+
+  function sendRankedJoin(){
+    RANKED.pendingJoin = false;
+    if(socket && socket.readyState === WebSocket.OPEN){
+      socket.send(JSON.stringify({ type: 'ranked_queue_join', sessionToken: sessionToken }));
+      rkEl('rqStatus').textContent = 'SEARCHING FOR OPPONENT...';
+    }
+  }
+
+  function cancelRankedQueue(){
+    if(socket && socket.readyState === WebSocket.OPEN && RANKED.queueing){
+      socket.send(JSON.stringify({ type: 'ranked_queue_leave' }));
+    }
+    RANKED.queueing = false;
+    RANKED.active = false;
+    closeOnlineConnection();
+    rkHideAll();
+    menuRanked.classList.remove('hidden');
+    refreshRankedProfile();
+  }
+
+  // Called from connectOnline's onopen so a freshly-opened socket
+  // completes a queue join that was requested before it was ready.
+  function rankedOnSocketOpen(){
+    if(RANKED.pendingJoin) sendRankedJoin();
+  }
+
+  // ---- SERVER MESSAGES -------------------------------------------
+  // Returns true when the message was a ranked one and has been fully
+  // handled, so the normal online handler ignores it.
+  function handleRankedMessage(data){
+    if(typeof data.type !== 'string' || data.type.indexOf('ranked_') !== 0) return false;
+
+    if(data.type === 'ranked_error'){
+      RANKED.queueing = false;
+      rkEl('rqStatus').textContent = (data.message || 'RANKED UNAVAILABLE').toUpperCase();
+      rkEl('btnRankedCancel').textContent = 'BACK';
+      return true;
+    }
+
+    if(data.type === 'ranked_queue_joined'){
+      RANKED.queueing = true;
+      if(data.ranked) renderRankedProfileFromView(data.ranked);
+      return true;
+    }
+
+    // The queue timer is the SERVER's own elapsed count, pushed once a
+    // second -- not a local setInterval that would keep ticking if the
+    // connection died.
+    if(data.type === 'ranked_queue_status'){
+      RANKED.waited = data.waited;
+      rkEl('rqTimer').textContent = rkTime(data.waited);
+      rkEl('rqDetail').textContent = data.queued > 1
+        ? (data.queued + ' PLAYERS IN QUEUE · SEARCH RANGE ±' + data.range + ' RP')
+        : ('SEARCH RANGE ±' + data.range + ' RP');
+      return true;
+    }
+
+    if(data.type === 'ranked_queue_left'){
+      RANKED.queueing = false;
+      return true;
+    }
+
+    if(data.type === 'ranked_queue_timeout'){
+      RANKED.queueing = false;
+      rkEl('rqStatus').textContent = 'NO OPPONENT FOUND — TRY AGAIN';
+      rkEl('btnRankedCancel').textContent = 'BACK';
+      return true;
+    }
+
+    if(data.type === 'ranked_match_found'){
+      RANKED.queueing = false;
+      RANKED.active = true;
+      RANKED.matchId = data.matchId;
+      RANKED.slot = data.slot;
+      RANKED.you = data.you;
+      RANKED.opponent = data.opponent;
+      RANKED.rated = data.rated;
+      RANKED.score = { 1: 0, 2: 0 };
+      RANKED.resultShown = false;
+      showRankedMatchFound(data);
+      // Tell the server we've loaded in; it starts the match when both
+      // sides have confirmed.
+      if(socket && socket.readyState === WebSocket.OPEN){
+        socket.send(JSON.stringify({ type: 'ranked_match_ready' }));
+      }
+      return true;
+    }
+
+    if(data.type === 'ranked_match_start'){
+      rkHideAll();
+      showRankedBanner();
+      // Hand off to the EXISTING match pipeline unchanged.
+      beginGame();
+      return true;
+    }
+
+    if(data.type === 'ranked_score'){
+      RANKED.score = data.score;
+      updateRankedBanner();
+      return true;
+    }
+
+    if(data.type === 'ranked_opponent_disconnected'){
+      centerMsg.innerHTML = '<div class="big" style="color:var(--p2)">OPPONENT DISCONNECTED</div>'
+        + '<div class="small">FORFEIT IN ' + (data.forfeitInSec || 30) + 'S</div>';
+      return true;
+    }
+
+    if(data.type === 'ranked_match_result'){
+      showRankedResult(data);
+      return true;
+    }
+
+    if(data.type === 'ranked_match_abandoned'){
+      RANKED.active = false;
+      hideRankedBanner();
+      const reasons = {
+        leftBeforeStart: 'OPPONENT LEFT BEFORE THE MATCH STARTED',
+        bothDisconnected: 'MATCH ABANDONED',
+        timeout: 'MATCH TIMED OUT'
+      };
+      rkHideAll();
+      if(started){ exitToMenu(); }
+      menuMain.classList.add('hidden');
+      menuRanked.classList.remove('hidden');
+      refreshRankedProfile();
+      lobbyToast(reasons[data.reason] || 'MATCH CANCELLED — NO RP CHANGE');
+      return true;
+    }
+
+    return true; // unknown ranked_* message: swallow rather than leak
+  }
+
+  function renderRankedProfileFromView(view){
+    if(!RANKED.profile) RANKED.profile = { ranked: view, config: {}, position: null };
+    else RANKED.profile.ranked = view;
+    renderRankedProfile(RANKED.profile);
+  }
+
+  function showRankedMatchFound(data){
+    rkHideAll();
+    menuRankedQueue.classList.remove('hidden');
+    document.querySelector('.rq-spinner').classList.add('hidden');
+    rkEl('rqFound').classList.remove('hidden');
+    rkEl('rqStatus').textContent = 'OPPONENT FOUND';
+    rkEl('rqDetail').textContent = data.rated ? '' : 'UNRATED — REPEATED OPPONENT';
+    rkEl('btnRankedCancel').textContent = 'CANCEL';
+
+    rkEl('rqfYouName').textContent = data.you.name || 'YOU';
+    rkEl('rqfYouRank').textContent = rkRankName(data.you.rank);
+    rkEl('rqfYouRP').textContent   = data.you.placementComplete ? rkFmt(data.you.rp) + ' RP' : 'IN PLACEMENTS';
+    rkEl('rqfFoeName').textContent = data.opponent.name || 'OPPONENT';
+    rkEl('rqfFoeRank').textContent = rkRankName(data.opponent.rank);
+    rkEl('rqfFoeRP').textContent   = data.opponent.placementComplete ? rkFmt(data.opponent.rp) + ' RP' : 'IN PLACEMENTS';
+  }
+
+  // ---- IN-MATCH BANNER -------------------------------------------
+  function showRankedBanner(){
+    if(!RANKED.you || !RANKED.opponent) return;
+    rkEl('rbYouName').textContent = RANKED.you.name || 'YOU';
+    rkEl('rbYouRank').textContent = RANKED.you.placementComplete
+      ? rkRankName(RANKED.you.rank) + ' · ' + rkFmt(RANKED.you.rp) + ' RP' : 'UNRANKED';
+    rkEl('rbFoeName').textContent = RANKED.opponent.name || 'OPPONENT';
+    rkEl('rbFoeRank').textContent = RANKED.opponent.placementComplete
+      ? rkRankName(RANKED.opponent.rank) + ' · ' + rkFmt(RANKED.opponent.rp) + ' RP' : 'UNRANKED';
+    updateRankedBanner();
+    rankedBanner.classList.remove('hidden');
+  }
+  function updateRankedBanner(){
+    if(!RANKED.slot) return;
+    const mine = RANKED.score[RANKED.slot] || 0;
+    const theirs = RANKED.score[RANKED.slot === 1 ? 2 : 1] || 0;
+    rkEl('rbScore').textContent = mine + ' – ' + theirs;
+  }
+  function hideRankedBanner(){ rankedBanner.classList.add('hidden'); }
+
+  // ---- RESULT ----------------------------------------------------
+  function showRankedResult(data){
+    if(RANKED.resultShown) return; // exactly-once on the client too
+    RANKED.resultShown = true;
+    RANKED.active = false;
+    hideRankedBanner();
+
+    if(started) exitToMenu();
+    menuMain.classList.add('hidden');
+    rkHideAll();
+    menuRankedResult.classList.remove('hidden');
+
+    const r = data.result || {};
+    const title = rkEl('rrTitle');
+    title.textContent = data.won ? 'VICTORY' : 'DEFEAT';
+    title.className = 'rr-title ' + (data.won ? 'win' : 'loss');
+
+    const delta = rkEl('rrDelta');
+    const change = r.rpChange || 0;
+    if(!r.placementComplete){
+      // No RP is shown during placements -- there is no rating yet.
+      delta.textContent = data.won ? 'PLACEMENT WIN' : 'PLACEMENT LOSS';
+      delta.className = 'rr-delta ' + (data.won ? 'up' : 'down');
+      rkEl('rrTrack').textContent = '';
+    } else if(change === 0){
+      delta.textContent = data.rated ? '±0 RP' : 'UNRATED';
+      delta.className = 'rr-delta flat';
+      rkEl('rrTrack').textContent = data.rated ? '' : 'REPEATED OPPONENT — NO RP AWARDED';
+    } else {
+      delta.textContent = (change > 0 ? '+' : '') + change + ' RP';
+      delta.className = 'rr-delta ' + (change > 0 ? 'up' : 'down');
+      rkEl('rrTrack').textContent = (r.rpBefore !== null && r.rpBefore !== undefined)
+        ? rkFmt(r.rpBefore) + ' → ' + rkFmt(r.rpAfter) + ' RP' : '';
+    }
+
+    // Placement progress / rank reveal
+    const pl = rkEl('rrPlacement');
+    const rev = rkEl('rrReveal');
+    pl.classList.add('hidden');
+    rev.classList.add('hidden');
+    if(r.placementJustCompleted){
+      rev.classList.remove('hidden');
+      rkEl('rrRevealRank').textContent = rkRankName(r.rankAfter);
+      rkEl('rrRevealRP').textContent = rkFmt(r.rpAfter) + ' RP';
+    } else if(!r.placementComplete && typeof r.placementGames === 'number'){
+      pl.classList.remove('hidden');
+      rkEl('rrPlacementCount').textContent = r.placementGames + ' / ' + r.placementTotal;
+      rkEl('rrPlacementBar').style.width =
+        Math.min(100, (r.placementGames / r.placementTotal) * 100) + '%';
+    }
+
+    // Promotion / demotion
+    const promo = rkEl('rrPromo');
+    promo.classList.add('hidden');
+    promo.classList.remove('down');
+    if(r.promoted || r.demoted){
+      promo.classList.remove('hidden');
+      if(r.demoted) promo.classList.add('down');
+      rkEl('rrPromoTag').textContent = r.promoted ? 'RANK UP!' : 'RANK DOWN';
+      rkEl('rrPromoMove').textContent =
+        rkRankName(r.rankBefore) + ' → ' + rkRankName(r.rankAfter);
+    }
+
+    rkEl('rrFoeName').textContent = (data.opponent && data.opponent.name) || '—';
+    rkEl('rrFoeRank').textContent = rkRankName(data.opponent && data.opponent.rank);
+    rkEl('rrYouRank').textContent = rkRankName(r.rankAfter);
+    rkEl('rrRecord').textContent  = (r.wins || 0) + 'W · ' + (r.losses || 0) + 'L';
+
+    // A failed database write must NEVER be presented as a successful
+    // RP award -- the server tells us whether it actually saved.
+    const note = rkEl('rrNote');
+    if(data.saved === false){
+      note.classList.remove('hidden');
+      note.textContent = '⚠ THIS RESULT COULD NOT BE SAVED TO THE SERVER. '
+        + 'YOUR RP MAY BE UNCHANGED — CHECK YOUR PROFILE.';
+    } else if(data.reason === 'forfeit'){
+      note.classList.remove('hidden');
+      note.textContent = data.won ? 'OPPONENT DISCONNECTED — WIN BY FORFEIT'
+                                  : 'YOU DISCONNECTED — LOSS BY FORFEIT';
+    } else {
+      note.classList.add('hidden');
+    }
+
+    if(data.ranked) renderRankedProfileFromView(data.ranked);
+  }
+
+  // ---- LADDER ----------------------------------------------------
+  async function openRankedLadder(){
+    rkHideAll();
+    menuRankedLadder.classList.remove('hidden');
+    const body = rkEl('rankedLadderBody');
+    const you  = rkEl('rlYou');
+    body.innerHTML = '<div class="rl-empty">LOADING...</div>';
+    you.classList.add('hidden');
+
+    try{
+      const qs = sessionToken ? ('?sessionToken=' + encodeURIComponent(sessionToken)) : '';
+      const res = await fetch(ACCOUNT_SERVER_URL + '/ranked/leaderboard' + qs);
+      if(!res.ok) throw new Error('http ' + res.status);
+      const data = await res.json();
+
+      rkEl('rlSeason').textContent = (data.seasonName || 'SEASON').toUpperCase();
+
+      if(!data.entries.length){
+        body.innerHTML = '<div class="rl-empty">NO RANKED PLAYERS YET.<br>'
+          + 'COMPLETE 10 PLACEMENT MATCHES TO APPEAR HERE.</div>';
+        return;
+      }
+
+      body.innerHTML = data.entries.map(e=>{
+        const isMe = data.you && data.you.position === e.position;
+        const top = e.position <= 3 ? ' top' + e.position : '';
+        return '<div class="rl-row' + top + (isMe ? ' me' : '') + '">'
+          + '<div class="rl-pos">' + e.position + '</div>'
+          + '<div class="rl-name">' + escapeHtmlRk(e.name)
+          + '<span class="rl-sub" style="color:' + (e.rank.color || '') + '">'
+          + rkRankName(e.rank) + '</span></div>'
+          + '<div class="rl-rp"><b>' + rkFmt(e.rp) + ' RP</b>'
+          + '<span>' + e.wins + 'W · ' + e.losses + 'L</span></div>'
+          + '</div>';
+      }).join('');
+
+      if(data.you){
+        you.classList.remove('hidden');
+        you.innerHTML = '<span>YOUR RANK: #' + data.you.position + '</span>'
+          + '<b>' + rkFmt(data.you.rp) + ' RP · ' + rkRankName(data.you.rank) + '</b>';
+      } else if(loggedIn){
+        you.classList.remove('hidden');
+        you.innerHTML = '<span>YOU ARE NOT RANKED YET</span><b>FINISH PLACEMENTS</b>';
+      }
+    } catch(e){
+      body.innerHTML = '<div class="rl-empty">LEADERBOARD UNAVAILABLE</div>';
+    }
+  }
+
+  // Ladder names come from other players' accounts, so they are escaped
+  // rather than injected as HTML.
+  function escapeHtmlRk(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    })[c]);
+  }
+
+  function leaveRanked(){
+    if(RANKED.queueing && socket && socket.readyState === WebSocket.OPEN){
+      socket.send(JSON.stringify({ type: 'ranked_queue_leave' }));
+    }
+    RANKED.queueing = false;
+    RANKED.active = false;
+    hideRankedBanner();
+    rkHideAll();
+    menuMain.classList.remove('hidden');
+  }
+
+  // ---- PROFILE MODAL ---------------------------------------------
+  // Reuses the existing lobby modal rather than adding another screen.
+  // Shows the account's normal progression AND its ranked section.
+  async function openRankedProfileModal(){
+    if(!loggedIn){
+      lobbyOpenModal('PROFILE',
+        '<div class="rl-empty">SIGN IN WITH GOOGLE TO VIEW YOUR PROFILE.<br>'
+        + 'GUEST PROGRESS IS NOT SAVED.</div>');
+      return;
+    }
+    lobbyOpenModal('PROFILE', '<div class="rl-empty">LOADING...</div>');
+    let data = null;
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/ranked/me?sessionToken=' + encodeURIComponent(sessionToken));
+      if(res.ok) data = await res.json();
+    } catch(e){ /* fall through to the offline view below */ }
+
+    let html = '<div class="rr-grid">'
+      + '<div class="rr-row"><span>PLAYER</span><b>' + escapeHtmlRk(accountName || 'PLAYER') + '</b></div>'
+      + '<div class="rr-row"><span>CREDITS</span><b>' + credits + '</b></div>'
+      + '<div class="rr-row"><span>KILLS</span><b>' + stats.kills + '</b></div>'
+      + '<div class="rr-row"><span>WINS</span><b>' + stats.wins + '</b></div>'
+      + '</div>';
+
+    if(!data){
+      html += '<div class="rl-empty">RANKED STATS UNAVAILABLE — SERVER OFFLINE</div>';
+      lobbyOpenModal('PROFILE', html);
+      return;
+    }
+
+    const r = data.ranked;
+    html += '<div class="rk-season" style="margin:14px 0 8px">'
+      + ((data.config && data.config.seasonName) || 'SEASON').toUpperCase() + ' · RANKED</div>';
+
+    if(!r.placementComplete){
+      html += '<div class="rr-placement" style="margin-bottom:0">'
+        + '<div class="rk-plabel">UNRANKED — PLACEMENT MATCHES</div>'
+        + '<div class="rk-pcount">' + r.placementGames + ' / ' + r.placementTotal + '</div>'
+        + '<div class="rk-pbar"><i style="width:'
+        + Math.min(100, (r.placementGames / r.placementTotal) * 100) + '%"></i></div>'
+        + '</div>';
+    } else {
+      html += '<div style="text-align:center;margin-bottom:10px">'
+        + '<div style="font-size:22px;font-weight:900;letter-spacing:2px;color:'
+        + (r.rank.color || '#e8edf5') + '">' + rkRankName(r.rank) + '</div>'
+        + '<div style="font-size:13px;color:var(--p1);letter-spacing:1.5px">'
+        + rkFmt(r.rp) + ' RP</div></div>'
+        + '<div class="rr-grid">'
+        + '<div class="rr-row"><span>RANKED WINS</span><b>' + r.wins + '</b></div>'
+        + '<div class="rr-row"><span>RANKED LOSSES</span><b>' + r.losses + '</b></div>'
+        + '<div class="rr-row"><span>TOTAL RANKED GAMES</span><b>' + r.games + '</b></div>'
+        + '<div class="rr-row"><span>WIN RATE</span><b>' + r.winRate + '%</b></div>'
+        + '<div class="rr-row"><span>HIGHEST RP</span><b>' + rkFmt(r.highestRP) + '</b></div>'
+        + '<div class="rr-row"><span>SEASON HIGH</span><b>'
+        + (r.highestRank ? rkRankName(r.highestRank) : '—') + '</b></div>'
+        + (typeof data.position === 'number'
+            ? '<div class="rr-row"><span>LEADERBOARD</span><b>#' + data.position + '</b></div>' : '')
+        + '</div>';
+    }
+
+    if(r.history && r.history.length){
+      html += '<div class="rk-season" style="margin:12px 0 6px">PAST SEASONS</div><div class="rr-grid">'
+        + r.history.map(h => '<div class="rr-row"><span>' + escapeHtmlRk(h.season) + '</span><b>'
+          + (h.highestRank ? rkRankName(h.highestRank) : '—') + ' · ' + rkFmt(h.highestRP) + ' RP · '
+          + h.wins + 'W/' + h.losses + 'L</b></div>').join('')
+        + '</div>';
+    }
+
+    lobbyOpenModal('PROFILE', html);
+  }
+
+  // ---- WIRING ----------------------------------------------------
+  rkEl('btnRankedQueue').addEventListener('click', startRankedQueue);
+  rkEl('btnRankedLadder').addEventListener('click', openRankedLadder);
+  rkEl('btnBackRanked').addEventListener('click', leaveRanked);
+  rkEl('btnRankedCancel').addEventListener('click', cancelRankedQueue);
+  rkEl('btnBackRankedLadder').addEventListener('click', ()=>{
+    rkHideAll();
+    menuRanked.classList.remove('hidden');
+    refreshRankedProfile();
+  });
+  rkEl('btnRankedContinue').addEventListener('click', ()=>{
+    rkHideAll();
+    menuRanked.classList.remove('hidden');
+    refreshRankedProfile();
+  });
+
+  // Expose the couple of hooks the existing online code calls into.
+  window.__ranked = RANKED;
 
   initLobby();
   fetchAbilityConfig();
