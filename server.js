@@ -38,6 +38,11 @@ const ADMIN_EMAIL = "ultragodbit@gmail.com";
 // =====================================================================
 const store = require("./storage");
 
+// Ranked rating/rank/season maths. Pure functions only -- the queue,
+// the match rooms and persistence all live in this file (see the RANKED
+// section further down).
+const Ranked = require("./ranked");
+
 const accounts = {}; // sub -> account record (populated in startServer())
 
 // Persists ONE account. Callers await this before replying, so a client
@@ -76,8 +81,30 @@ function defaultAccount(name, email) {
         autoAimP2: false,
         aimMode: "movement",
         matchSize: 2,
-        dailyChallenges: defaultDailyChallenges()
+        dailyChallenges: defaultDailyChallenges(),
+        ranked: Ranked.defaultRankedRecord()
     };
+}
+
+// Brings an account up to the current ranked shape and persists it only
+// if something actually changed. Safe to call on any account at any
+// time: ensureRankedRecord() only ever fills in missing/invalid fields
+// (and rolls a stale season into history), never removes or resets
+// existing data, and returns the same reference when nothing changed.
+//
+// This is the ONLY migration path -- existing accounts pick up ranked
+// defaults lazily the first time they're touched, so nothing has to
+// rewrite the whole store at boot.
+function ensureAccountRanked(sub) {
+    const account = accounts[sub];
+    if (!account) return null;
+    const ensured = Ranked.ensureRankedRecord(account);
+    if (ensured !== account.ranked) {
+        account.ranked = ensured;
+        persistAccount(sub).catch(e =>
+            console.log("[ranked] failed to persist ranked migration for " + sub + ":", e.message));
+    }
+    return account.ranked;
 }
 
 // Resolves a sessionToken to that player's account record, or null.
@@ -371,6 +398,610 @@ function defaultDailyChallenges() {
 }
 
 // =====================================================================
+// RANKED -- queue, match rooms, and server-authoritative results.
+//
+// HOW RESULTS ARE DECIDED (and the honest limits of it)
+// ----------------------------------------------------
+// This codebase has no server-side game simulation: the WebSocket layer
+// relays position/bullets/damage and the clients simulate everything.
+// So the server cannot independently "see" who won a round.
+//
+// What it CAN do -- and what this implements -- is exploit the direction
+// the existing protocol already reports in. A `damage` message describes
+// the SENDER'S OWN health, and carries `eliminated` when the sender's own
+// player died. In other words every elimination is self-reported by the
+// player who LOST that round. That is an admission against interest:
+//
+//   * A cheater CANNOT forge a win. There is no "I killed them" message
+//     to fake -- to gain a round they would need the OPPONENT'S client
+//     to send "I died", which they do not control.
+//   * The server counts rounds itself from those self-reports and
+//     declares the match winner at roundsToWin. The clients are never
+//     asked who won and are never believed if they say.
+//
+// So the RP-relevant question ("who won") is server-decided from
+// messages that can only ever be sent to a player's own detriment.
+//
+// The residual risks, stated plainly rather than papered over:
+//   1. A modified client can REFUSE to report its own death. It cannot
+//      win that way -- it just stalls the match -- so this is handled as
+//      abandonment (disconnect forfeit + match timeout) rather than as a
+//      result.
+//   2. Two consenting accounts can feed each other wins. No amount of
+//      message validation fixes collusion; it is mitigated by the
+//      repeat-opponent rule (see ranked.js isPairingRated) which makes
+//      the 4th+ match between the same pair inside an hour unrated.
+// Genuinely fixing (1) and (2) needs a server-side authoritative
+// simulation, which is a rewrite of the whole game loop and explicitly
+// out of scope here.
+// =====================================================================
+
+const RANKED_CONFIG = Ranked.RANKED_CONFIG;
+
+// sub -> queue entry. Keyed by ACCOUNT, not by socket, so the same
+// account cannot occupy two queue slots from two tabs.
+const rankedQueue = new Map();
+
+// matchId -> match room.
+const rankedMatches = new Map();
+
+// sub -> matchId, so a reconnecting/duplicate socket can be told it is
+// already in a match instead of silently starting a second one.
+const rankedPlayerMatch = new Map();
+
+// Match ids are server-generated and unguessable. The random suffix is
+// what stops a client submitting results for a match it invented.
+function newRankedMatchId() {
+    const d = new Date();
+    const stamp = d.toISOString().slice(0, 10).replace(/-/g, "") +
+        "_" + String(d.getUTCHours()).padStart(2, "0") + String(d.getUTCMinutes()).padStart(2, "0");
+    return "ranked_" + stamp + "_" + crypto.randomBytes(6).toString("hex");
+}
+
+// Ranked match history, newest first. Capped and persisted through the
+// same storage layer everything else uses.
+const RANKED_HISTORY_LIMIT = 300;
+let rankedHistory = []; // replaced in startServer()
+
+function persistRankedHistory() {
+    store.saveDoc("rankedHistory", rankedHistory)
+        .catch(e => console.log("[ranked] failed to save match history:", e.message));
+}
+
+function pushRankedHistory(entry) {
+    rankedHistory.unshift(entry);
+    if (rankedHistory.length > RANKED_HISTORY_LIMIT) rankedHistory.length = RANKED_HISTORY_LIMIT;
+    persistRankedHistory();
+}
+
+// ---------------------------------------------------------------------
+// QUEUE
+// ---------------------------------------------------------------------
+function rankedQueueStatusFor(entry) {
+    const waitedSec = (Date.now() - entry.joinedAt) / 1000;
+    return {
+        type: "ranked_queue_status",
+        waited: Math.floor(waitedSec),
+        range: Ranked.matchmakingRange(entry.record, waitedSec),
+        queued: rankedQueue.size
+    };
+}
+
+function joinRankedQueue(conn, sessionToken) {
+    const sub = sessions[sessionToken];
+    if (!sub) {
+        send(conn, { type: "ranked_error", code: "auth", message: "Sign in to play Ranked" });
+        return;
+    }
+    if (!accounts[sub]) {
+        send(conn, { type: "ranked_error", code: "account", message: "Account not loaded -- sign in again" });
+        return;
+    }
+    // Already playing a ranked match on another tab/socket.
+    if (rankedPlayerMatch.has(sub)) {
+        send(conn, { type: "ranked_error", code: "inMatch", message: "You are already in a ranked match" });
+        return;
+    }
+
+    const record = ensureAccountRanked(sub);
+
+    // Re-queueing from a second tab replaces the first entry rather than
+    // creating a duplicate (the Map key is the account).
+    const previous = rankedQueue.get(sub);
+    if (previous && previous.conn !== conn) {
+        send(previous.conn, { type: "ranked_queue_left", reason: "replaced" });
+        previous.conn.rankedQueued = false;
+    }
+
+    const entry = {
+        sub: sub,
+        conn: conn,
+        record: record,
+        name: accounts[sub].name || "Player",
+        joinedAt: Date.now()
+    };
+    rankedQueue.set(sub, entry);
+    conn.rankedSub = sub;
+    conn.rankedQueued = true;
+
+    send(conn, {
+        type: "ranked_queue_joined",
+        ranked: Ranked.publicRankedView(accounts[sub])
+    });
+    send(conn, rankedQueueStatusFor(entry));
+
+    // Try immediately so two players already waiting pair up without
+    // waiting for the next tick.
+    tryMatchRankedQueue();
+}
+
+function leaveRankedQueue(sub, reason) {
+    const entry = rankedQueue.get(sub);
+    if (!entry) return false;
+    rankedQueue.delete(sub);
+    if (entry.conn) entry.conn.rankedQueued = false;
+    send(entry.conn, { type: "ranked_queue_left", reason: reason || "left" });
+    return true;
+}
+
+// Pairs everyone who can legally be paired right now. Oldest waiter
+// first, so the longest-waiting player gets the widest band applied to
+// them and is served before newer arrivals.
+function tryMatchRankedQueue() {
+    if (rankedQueue.size < 2) return;
+    const now = Date.now();
+
+    const waiting = Array.from(rankedQueue.values())
+        .filter(e => e.conn && e.conn.socket.readyState === WebSocket.OPEN)
+        .sort((a, b) => a.joinedAt - b.joinedAt);
+
+    const used = new Set();
+
+    for (let i = 0; i < waiting.length; i++) {
+        const a = waiting[i];
+        if (used.has(a.sub)) continue;
+
+        let best = null;
+        let bestGap = Infinity;
+
+        for (let j = i + 1; j < waiting.length; j++) {
+            const b = waiting[j];
+            if (used.has(b.sub)) continue;
+            if (b.sub === a.sub) continue;
+
+            const aWaited = (now - a.joinedAt) / 1000;
+            const bWaited = (now - b.joinedAt) / 1000;
+            if (!Ranked.isAcceptableMatch(a, b, aWaited, bWaited)) continue;
+
+            // Closest rating wins among everyone acceptable.
+            const gap = Math.abs((a.record.rp || 0) - (b.record.rp || 0));
+            if (gap < bestGap) { bestGap = gap; best = b; }
+        }
+
+        if (best) {
+            used.add(a.sub);
+            used.add(best.sub);
+            rankedQueue.delete(a.sub);
+            rankedQueue.delete(best.sub);
+            a.conn.rankedQueued = false;
+            best.conn.rankedQueued = false;
+            createRankedMatch(a, best);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------
+// MATCH ROOMS
+// ---------------------------------------------------------------------
+function createRankedMatch(entryA, entryB) {
+    const matchId = newRankedMatchId();
+
+    // Anti-farm is evaluated ONCE, when the match is created, from both
+    // sides -- so a pair can't dodge it by whoever happens to report
+    // first, and the rated-ness is fixed before a single shot is fired.
+    const ratedA = Ranked.isPairingRated(entryA.record, entryB.sub);
+    const ratedB = Ranked.isPairingRated(entryB.record, entryA.sub);
+    const rated = ratedA && ratedB;
+
+    const match = {
+        id: matchId,
+        season: RANKED_CONFIG.season,
+        rated: rated,
+        createdAt: Date.now(),
+        startedAt: null,
+        // Round wins as counted BY THIS SERVER from self-reported
+        // eliminations -- never from a client claiming a win.
+        score: { 1: 0, 2: 0 },
+        finished: false,
+        // The single guard that makes result processing exactly-once.
+        resultApplied: false,
+        players: {},
+        disconnectTimer: null,
+        timeoutTimer: null
+    };
+
+    const setup = (slot, entry, oppEntry) => {
+        const conn = entry.conn;
+        conn.rankedMatchId = matchId;
+        conn.rankedSlot = slot;
+        conn.rankedSub = entry.sub;
+        match.players[slot] = {
+            slot: slot,
+            sub: entry.sub,
+            name: entry.name,
+            conn: conn,
+            // Snapshot the rating at match START. Using the live record
+            // at result time would let a player's other concurrent match
+            // change the maths of this one.
+            rpAtStart: entry.record.placementComplete ? entry.record.rp : null,
+            rankAtStart: Ranked.getRankForRecord(entry.record),
+            placementCompleteAtStart: !!entry.record.placementComplete,
+            connected: true
+        };
+        rankedPlayerMatch.set(entry.sub, matchId);
+    };
+
+    setup(1, entryA, entryB);
+    setup(2, entryB, entryA);
+
+    rankedMatches.set(matchId, match);
+
+    // A match nobody ever finishes must not leak. This is also what
+    // covers "both clients silently vanished without a close event".
+    match.timeoutTimer = setTimeout(() => {
+        if (!match.finished) abandonRankedMatch(match, "timeout");
+    }, RANKED_CONFIG.matchTimeoutMs);
+
+    // Tell each side who they're facing. Only public rank info is sent --
+    // never the opponent's email or account id.
+    for (const slot of [1, 2]) {
+        const me = match.players[slot];
+        const them = match.players[slot === 1 ? 2 : 1];
+        send(me.conn, {
+            type: "ranked_match_found",
+            matchId: matchId,
+            slot: slot,
+            rated: rated,
+            season: RANKED_CONFIG.season,
+            roundsToWin: RANKED_CONFIG.roundsToWin,
+            you: {
+                name: me.name,
+                rp: me.rpAtStart,
+                rank: me.rankAtStart,
+                placementComplete: me.placementCompleteAtStart
+            },
+            opponent: {
+                name: them.name,
+                rp: them.rpAtStart,
+                rank: them.rankAtStart,
+                placementComplete: them.placementCompleteAtStart
+            }
+        });
+    }
+
+    console.log("[ranked] match " + matchId + " created: " +
+        entryA.name + " (" + (entryA.record.rp || 0) + ") vs " +
+        entryB.name + " (" + (entryB.record.rp || 0) + ")" + (rated ? "" : " [UNRATED - repeat pairing]"));
+
+    return match;
+}
+
+// Both clients confirm they've loaded in; the match clock starts when
+// the second one does.
+function rankedMatchReady(conn) {
+    const match = rankedMatches.get(conn.rankedMatchId);
+    if (!match || match.finished) return;
+    const me = match.players[conn.rankedSlot];
+    if (!me) return;
+    me.ready = true;
+    const other = match.players[conn.rankedSlot === 1 ? 2 : 1];
+    if (other && other.ready && !match.startedAt) {
+        match.startedAt = Date.now();
+        for (const slot of [1, 2]) {
+            send(match.players[slot].conn, { type: "ranked_match_start", matchId: match.id });
+        }
+    }
+}
+
+// The server's own round counter. `loserSlot` is the slot of the player
+// whose client reported ITS OWN elimination, so the round goes to the
+// other one. See the trust discussion at the top of this section.
+function registerRankedElimination(match, loserSlot) {
+    if (!match || match.finished) return;
+    const winnerSlot = loserSlot === 1 ? 2 : 1;
+    match.score[winnerSlot]++;
+
+    for (const slot of [1, 2]) {
+        send(match.players[slot].conn, {
+            type: "ranked_score",
+            matchId: match.id,
+            score: match.score
+        });
+    }
+
+    if (match.score[winnerSlot] >= RANKED_CONFIG.roundsToWin) {
+        completeRankedMatch(match, winnerSlot, "rounds");
+    }
+}
+
+// ---------------------------------------------------------------------
+// completeRankedMatch -- THE single place a ranked match produces RP.
+//
+// Exactly-once by construction: the first thing it does is claim the
+// match via `resultApplied`. Every other path into it (round win,
+// forfeit, timeout, a client spamming messages) hits that guard, so a
+// client sending "I won" twenty times still produces exactly one result.
+// ---------------------------------------------------------------------
+async function completeRankedMatch(match, winnerSlot, reason) {
+    if (!match || match.resultApplied) return;
+    match.resultApplied = true; // claim BEFORE any await -- no interleaving
+    match.finished = true;
+
+    if (match.timeoutTimer) { clearTimeout(match.timeoutTimer); match.timeoutTimer = null; }
+    if (match.disconnectTimer) { clearTimeout(match.disconnectTimer); match.disconnectTimer = null; }
+
+    const winner = match.players[winnerSlot];
+    const loser = match.players[winnerSlot === 1 ? 2 : 1];
+
+    // Re-read the live records at completion time (they are the source
+    // of truth), but use the START-time ratings for the RP maths so the
+    // result of this match can't be shifted by anything that happened
+    // elsewhere while it was being played.
+    const summaries = {};
+    const applied = [];
+
+    for (const p of [winner, loser]) {
+        const won = p === winner;
+        const opponent = won ? loser : winner;
+        const account = accounts[p.sub];
+        if (!account) continue;
+
+        const before = ensureAccountRanked(p.sub);
+        const opponentRP = opponent.rpAtStart !== null
+            ? opponent.rpAtStart
+            : RANKED_CONFIG.startingRP; // unranked opponent -> treat as baseline
+
+        const result = Ranked.applyMatchResult(before, {
+            won: won,
+            opponentRP: opponentRP,
+            rated: match.rated
+        });
+
+        // Record the pairing for the anti-farm window.
+        result.record.recentOpponents = Ranked.recordPairing(result.record, opponent.sub);
+
+        account.ranked = result.record;
+        summaries[p.slot] = result.summary;
+        applied.push({ sub: p.sub, slot: p.slot, record: result.record, summary: result.summary });
+    }
+
+    // Persist BOTH accounts before telling anyone they gained RP. If a
+    // write fails the client is told the result did not save, rather
+    // than being shown a promotion that isn't in the database.
+    let persistError = null;
+    for (const row of applied) {
+        try {
+            await persistAccount(row.sub);
+        } catch (e) {
+            persistError = e;
+            console.log("[ranked] FAILED to persist result for " + row.sub + ":", e.message);
+        }
+    }
+
+    pushRankedHistory({
+        matchId: match.id,
+        season: match.season,
+        rated: match.rated,
+        reason: reason,
+        at: Date.now(),
+        players: [1, 2].map(slot => {
+            const p = match.players[slot];
+            const s = summaries[slot];
+            return {
+                name: p.name,
+                id: p.sub,
+                slot: slot,
+                won: slot === winnerSlot,
+                rpBefore: s ? s.rpBefore : null,
+                rpChange: s ? s.rpChange : 0,
+                rpAfter: s ? s.rpAfter : null
+            };
+        }),
+        winnerSlot: winnerSlot,
+        score: match.score,
+        saved: !persistError
+    });
+
+    // Tell each side their own result (and only the public half of the
+    // opponent's).
+    for (const slot of [1, 2]) {
+        const p = match.players[slot];
+        const them = match.players[slot === 1 ? 2 : 1];
+        const s = summaries[slot];
+        if (!p.conn) continue;
+        send(p.conn, {
+            type: "ranked_match_result",
+            matchId: match.id,
+            won: slot === winnerSlot,
+            reason: reason,
+            rated: match.rated,
+            score: match.score,
+            saved: !persistError,
+            error: persistError ? "Result could not be saved -- it may not have applied" : null,
+            result: s || null,
+            opponent: {
+                name: them.name,
+                rank: summaries[them.slot] ? summaries[them.slot].rankAfter : them.rankAtStart,
+                rp: summaries[them.slot] ? summaries[them.slot].rpAfter : them.rpAtStart
+            },
+            ranked: accounts[p.sub] ? Ranked.publicRankedView(accounts[p.sub]) : null
+        });
+    }
+
+    cleanupRankedMatch(match);
+    invalidateRankedLeaderboard(); // both ladders just moved
+
+    console.log("[ranked] match " + match.id + " complete (" + reason + "): " +
+        winner.name + " beat " + loser.name + " " +
+        match.score[winnerSlot] + "-" + match.score[winnerSlot === 1 ? 2 : 1] +
+        (match.rated ? "" : " [unrated]"));
+}
+
+// A match that ended without a winner (both gone, or timed out before
+// anyone scored). Nobody's RP moves.
+function abandonRankedMatch(match, reason) {
+    if (!match || match.resultApplied) return;
+    match.resultApplied = true;
+    match.finished = true;
+    if (match.timeoutTimer) { clearTimeout(match.timeoutTimer); match.timeoutTimer = null; }
+    if (match.disconnectTimer) { clearTimeout(match.disconnectTimer); match.disconnectTimer = null; }
+
+    for (const slot of [1, 2]) {
+        const p = match.players[slot];
+        if (p && p.conn) send(p.conn, { type: "ranked_match_abandoned", matchId: match.id, reason: reason });
+    }
+    cleanupRankedMatch(match);
+    console.log("[ranked] match " + match.id + " abandoned (" + reason + ")");
+}
+
+function cleanupRankedMatch(match) {
+    for (const slot of [1, 2]) {
+        const p = match.players[slot];
+        if (!p) continue;
+        if (rankedPlayerMatch.get(p.sub) === match.id) rankedPlayerMatch.delete(p.sub);
+        if (p.conn) {
+            p.conn.rankedMatchId = null;
+            p.conn.rankedSlot = null;
+        }
+    }
+    rankedMatches.delete(match.id);
+}
+
+// A player's socket dropped. Before the match has started this just
+// cancels it; once it's underway it becomes a forfeit after a grace
+// period, so a blip doesn't lose the match but a rage-quit doesn't
+// escape it either.
+function handleRankedDisconnect(conn) {
+    const sub = conn.rankedSub;
+
+    if (conn.rankedQueued && sub) leaveRankedQueue(sub, "disconnected");
+
+    const matchId = conn.rankedMatchId;
+    if (!matchId) return;
+    const match = rankedMatches.get(matchId);
+    if (!match || match.finished) return;
+
+    const me = match.players[conn.rankedSlot];
+    const other = match.players[conn.rankedSlot === 1 ? 2 : 1];
+    if (me) me.connected = false;
+
+    // Both gone -> nothing to award to anybody.
+    if (other && !other.connected) {
+        abandonRankedMatch(match, "bothDisconnected");
+        return;
+    }
+
+    // Never started -> cancel cleanly, no result.
+    if (!match.startedAt) {
+        abandonRankedMatch(match, "leftBeforeStart");
+        return;
+    }
+
+    if (other && other.conn) {
+        send(other.conn, {
+            type: "ranked_opponent_disconnected",
+            matchId: match.id,
+            forfeitInSec: Math.round(RANKED_CONFIG.disconnectForfeitMs / 1000)
+        });
+    }
+
+    if (match.disconnectTimer) clearTimeout(match.disconnectTimer);
+    match.disconnectTimer = setTimeout(() => {
+        if (match.finished) return;
+        const stillGone = match.players[conn.rankedSlot] && !match.players[conn.rankedSlot].connected;
+        if (!stillGone) return; // they came back
+        const survivor = match.players[conn.rankedSlot === 1 ? 2 : 1];
+        if (survivor && survivor.connected) {
+            completeRankedMatch(match, survivor.slot, "forfeit");
+        } else {
+            abandonRankedMatch(match, "bothDisconnected");
+        }
+    }, RANKED_CONFIG.disconnectForfeitMs);
+}
+
+// Queue housekeeping. Also the thing that keeps the client's "queue
+// time" honest -- it's the server's own clock being pushed out, not a
+// number the client made up.
+const RANKED_TICK_MS = 1000;
+setInterval(() => {
+    const now = Date.now();
+    for (const entry of Array.from(rankedQueue.values())) {
+        // Drop entries whose socket died without a close event.
+        if (!entry.conn || entry.conn.socket.readyState !== WebSocket.OPEN) {
+            rankedQueue.delete(entry.sub);
+            continue;
+        }
+        const waitedSec = (now - entry.joinedAt) / 1000;
+        if (waitedSec > RANKED_CONFIG.matchmaking.maxQueueSec) {
+            rankedQueue.delete(entry.sub);
+            entry.conn.rankedQueued = false;
+            send(entry.conn, { type: "ranked_queue_timeout" });
+            continue;
+        }
+        send(entry.conn, rankedQueueStatusFor(entry));
+    }
+    tryMatchRankedQueue();
+}, RANKED_TICK_MS);
+
+// ---------------------------------------------------------------------
+// LEADERBOARD
+//
+// Built from the in-memory account cache (the same one the existing
+// /leaderboard uses), and -- importantly -- CACHED. Sorting every
+// account on every request is the thing requirement 20 warns about, so
+// the sorted array is rebuilt at most once every few seconds and only
+// the public columns are ever materialised.
+// ---------------------------------------------------------------------
+const RANKED_LB_TTL_MS = 5000;
+let rankedLbCache = { at: 0, rows: [] };
+
+function getRankedLeaderboard() {
+    const now = Date.now();
+    if (now - rankedLbCache.at < RANKED_LB_TTL_MS) return rankedLbCache.rows;
+
+    const rows = [];
+    for (const sub of Object.keys(accounts)) {
+        const account = accounts[sub];
+        const record = account && account.ranked;
+        // Only ranked (placement-complete) players appear on the ladder.
+        if (!record || typeof record !== "object") continue;
+        if (record.season !== RANKED_CONFIG.season) continue;
+        if (!record.placementComplete) continue;
+        if ((record.games || 0) <= 0) continue;
+        rows.push({
+            sub: sub,
+            name: account.name || "Player",
+            rp: record.rp || 0,
+            wins: record.wins || 0,
+            losses: record.losses || 0,
+            games: record.games || 0
+        });
+    }
+    // Primary sort RP; ties broken by wins then fewer games, so an
+    // identical RP is ordered by who did more with it.
+    rows.sort((a, b) => (b.rp - a.rp) || (b.wins - a.wins) || (a.games - b.games));
+
+    rankedLbCache = { at: now, rows: rows };
+    return rows;
+}
+
+// Invalidates the cache so a just-finished match is reflected promptly
+// rather than up to TTL later.
+function invalidateRankedLeaderboard() {
+    rankedLbCache.at = 0;
+}
+
+// =====================================================================
 // ADMIN ACTION LOG -- most recent 100 balance changes, newest first.
 // =====================================================================
 const ADMIN_LOG_SEED_FILE = path.join(__dirname, "adminLog.json");
@@ -599,7 +1230,22 @@ const httpServer = http.createServer(async (req, res) => {
                 autoAimP2: typeof body.autoAimP2 === "boolean" ? body.autoAimP2 : (existing.autoAimP2 || false),
                 aimMode: (body.aimMode === "mouse" || body.aimMode === "movement") ? body.aimMode : (existing.aimMode || "movement"),
                 matchSize: [2, 3, 4].includes(body.matchSize) ? body.matchSize : (existing.matchSize || 2),
-                dailyChallenges: newDailyChallenges
+                dailyChallenges: newDailyChallenges,
+                // RANKED IS DELIBERATELY NOT READ FROM `body`.
+                //
+                // This handler rebuilds the account field-by-field, so a
+                // field that isn't carried over here is destroyed on the
+                // next save. Ranked therefore has to be carried -- but
+                // ONLY from the stored record, never from the request.
+                //
+                // That is also exactly what makes ranked tamper-proof
+                // against this endpoint: kills/wins/credits above are
+                // client-authoritative by existing design, but RP, rank,
+                // ranked W/L and placement state can only ever be changed
+                // by the server's own match pipeline (completeRankedMatch).
+                // A client POSTing {ranked:{rp:99999}} here has no effect
+                // whatsoever.
+                ranked: Ranked.ensureRankedRecord(existing)
             };
             try {
                 await persistAccount(sub);
@@ -744,6 +1390,266 @@ const httpServer = http.createServer(async (req, res) => {
             .slice(0, 20);
 
         sendJson(res, 200, { sort: sortKey, entries: entries });
+        return;
+    }
+
+    // ---- GET /ranked/me?sessionToken=... ----
+    // The signed-in player's own ranked profile. Requires auth because
+    // it's the player's own record; returns only publicRankedView (no
+    // email, no opponent identities).
+    if (req.method === "GET" && req.url.startsWith("/ranked/me")) {
+        const urlObj = new URL(req.url, "http://x");
+        const sub = sessions[urlObj.searchParams.get("sessionToken")];
+        if (!sub || !accounts[sub]) {
+            sendJson(res, 401, { error: "Not signed in" });
+            return;
+        }
+        ensureAccountRanked(sub);
+
+        // The player's own ladder position, computed from the same
+        // cached, sorted array the leaderboard uses.
+        const rows = getRankedLeaderboard();
+        let position = null;
+        for (let i = 0; i < rows.length; i++) {
+            if (rows[i].sub === sub) { position = i + 1; break; }
+        }
+
+        sendJson(res, 200, {
+            ranked: Ranked.publicRankedView(accounts[sub]),
+            position: position,
+            config: {
+                season: RANKED_CONFIG.season,
+                seasonName: RANKED_CONFIG.seasonName,
+                placementGames: RANKED_CONFIG.placementGames,
+                winRP: RANKED_CONFIG.winRP,
+                lossRP: RANKED_CONFIG.lossRP,
+                roundsToWin: RANKED_CONFIG.roundsToWin,
+                tiers: Ranked.RANK_TIERS.map(t => ({
+                    id: t.id, name: t.name, min: t.min,
+                    max: t.max === Infinity ? null : t.max, color: t.color
+                }))
+            }
+        });
+        return;
+    }
+
+    // ---- GET /ranked/leaderboard?sessionToken=...&limit=... ----
+    // Public ladder. sessionToken is optional and only used to report
+    // "your rank is #47"; the rows themselves expose nothing but the
+    // public ranked columns -- never emails, never account ids.
+    if (req.method === "GET" && req.url.startsWith("/ranked/leaderboard")) {
+        const urlObj = new URL(req.url, "http://x");
+        const limitRaw = parseInt(urlObj.searchParams.get("limit"), 10);
+        const limit = Number.isInteger(limitRaw) ? Math.max(1, Math.min(100, limitRaw)) : 20;
+
+        const rows = getRankedLeaderboard();
+        const sub = sessions[urlObj.searchParams.get("sessionToken")];
+
+        let you = null;
+        if (sub) {
+            for (let i = 0; i < rows.length; i++) {
+                if (rows[i].sub === sub) {
+                    const rank = Ranked.getRankFromRP(rows[i].rp);
+                    you = {
+                        position: i + 1, name: rows[i].name, rp: rows[i].rp,
+                        wins: rows[i].wins, losses: rows[i].losses, rank: rank
+                    };
+                    break;
+                }
+            }
+        }
+
+        sendJson(res, 200, {
+            season: RANKED_CONFIG.season,
+            seasonName: RANKED_CONFIG.seasonName,
+            total: rows.length,
+            you: you,
+            // `sub` is deliberately stripped here -- it is the player's
+            // Google account id and has no business leaving the server.
+            entries: rows.slice(0, limit).map((r, i) => ({
+                position: i + 1,
+                name: r.name,
+                rp: r.rp,
+                wins: r.wins,
+                losses: r.losses,
+                games: r.games,
+                rank: Ranked.getRankFromRP(r.rp)
+            }))
+        });
+        return;
+    }
+
+    // ---- GET /admin/ranked?sessionToken=...&view=history|players ----
+    // Admin-only ranked visibility. Re-checks isAdminSession exactly the
+    // way every other admin endpoint does -- there is no client-supplied
+    // admin flag anywhere in here.
+    if (req.method === "GET" && req.url.startsWith("/admin/ranked")) {
+        const urlObj = new URL(req.url, "http://x");
+        if (!isAdminSession(urlObj.searchParams.get("sessionToken"))) {
+            sendJson(res, 403, { error: "Forbidden -- admin access required" });
+            return;
+        }
+        const view = urlObj.searchParams.get("view") || "history";
+
+        if (view === "history") {
+            sendJson(res, 200, { history: rankedHistory.slice(0, 50) });
+            return;
+        }
+        if (view === "players") {
+            const rows = getRankedLeaderboard();
+            sendJson(res, 200, {
+                season: RANKED_CONFIG.season,
+                queued: rankedQueue.size,
+                liveMatches: rankedMatches.size,
+                players: rows.slice(0, 100).map(r => ({
+                    id: r.sub, name: r.name, rp: r.rp,
+                    wins: r.wins, losses: r.losses, games: r.games,
+                    rank: Ranked.getRankFromRP(r.rp).name
+                }))
+            });
+            return;
+        }
+        sendJson(res, 400, { error: "Unknown view" });
+        return;
+    }
+
+    // ---- POST /admin/ranked ----
+    // body: { sessionToken, action, ... }
+    // Admin ranked controls. Server-authoritative like every other admin
+    // action, audited through the same pushAdminLog trail.
+    if (req.method === "POST" && req.url === "/admin/ranked") {
+        try {
+            const body = await readJsonBody(req);
+            if (!isAdminSession(body.sessionToken)) {
+                sendJson(res, 403, { error: "Forbidden -- admin access required" });
+                return;
+            }
+            const adminAccount = getAccountForSession(body.sessionToken);
+
+            // Wipe ONE player's ranked data back to a fresh record. Only
+            // ever touches `ranked` -- credits/kills/wins/skins/powers
+            // are not read or written here at all.
+            if (body.action === "resetPlayer") {
+                const target = accounts[body.playerId];
+                if (!target) {
+                    sendJson(res, 404, { error: "Player not found" });
+                    return;
+                }
+                const before = Ranked.publicRankedView(target);
+                target.ranked = Ranked.defaultRankedRecord();
+                try {
+                    await persistAccount(body.playerId);
+                } catch (e) {
+                    sendJson(res, 503, { error: "Could not save -- try again" });
+                    return;
+                }
+                invalidateRankedLeaderboard();
+                pushAdminLog({
+                    admin: adminAccount ? adminAccount.name : "unknown",
+                    type: "rankedReset",
+                    targetPlayer: target.name,
+                    targetId: body.playerId,
+                    previousRP: before.rp,
+                    previousRank: before.rank ? before.rank.name : null
+                });
+                sendJson(res, 200, { ok: true, ranked: Ranked.publicRankedView(target) });
+                return;
+            }
+
+            // Roll EVERY account into the next season. Archives each
+            // player's current season into their own history first (see
+            // ranked.js rolloverToSeason) -- no season data is deleted.
+            if (body.action === "startSeason") {
+                const newSeason = String(body.season || "").trim();
+                if (!newSeason || newSeason.length > 32) {
+                    sendJson(res, 400, { error: "Invalid season id" });
+                    return;
+                }
+                if (newSeason === RANKED_CONFIG.season) {
+                    sendJson(res, 400, { error: "That season is already active" });
+                    return;
+                }
+                // Refuse while matches are live -- rolling mid-match
+                // would apply a result into the wrong season.
+                if (rankedMatches.size > 0) {
+                    sendJson(res, 409, { error: "Ranked matches are in progress -- try again shortly" });
+                    return;
+                }
+
+                const previous = RANKED_CONFIG.season;
+                RANKED_CONFIG.season = newSeason;
+                RANKED_CONFIG.seasonName = String(body.seasonName || ("Season " + newSeason)).slice(0, 48);
+
+                let rolled = 0;
+                for (const sub of Object.keys(accounts)) {
+                    const account = accounts[sub];
+                    if (!account.ranked || typeof account.ranked !== "object") continue;
+                    if (account.ranked.season === newSeason) continue;
+                    account.ranked = Ranked.rolloverToSeason(account.ranked, RANKED_CONFIG);
+                    try {
+                        await persistAccount(sub);
+                        rolled++;
+                    } catch (e) {
+                        console.log("[ranked] season rollover failed to save " + sub + ":", e.message);
+                    }
+                }
+                // Persist the active season itself, or a restart would
+                // silently revert to the code default.
+                await store.saveDoc("rankedSeason", {
+                    season: RANKED_CONFIG.season, seasonName: RANKED_CONFIG.seasonName
+                }).catch(e => console.log("[ranked] failed to persist season:", e.message));
+
+                invalidateRankedLeaderboard();
+                pushAdminLog({
+                    admin: adminAccount ? adminAccount.name : "unknown",
+                    type: "rankedSeasonStart",
+                    fromSeason: previous,
+                    toSeason: newSeason,
+                    accountsRolled: rolled
+                });
+                sendJson(res, 200, { ok: true, season: newSeason, accountsRolled: rolled });
+                return;
+            }
+
+            // Live RP tuning. Clamped server-side; the admin UI's own
+            // input limits are only UX.
+            if (body.action === "config") {
+                const allowed = {
+                    winRP: [1, 200], lossRP: [0, 200], startingRP: [0, 5000],
+                    placementGames: [1, 50], minRP: [0, 1000]
+                };
+                const changes = [];
+                for (const key of Object.keys(allowed)) {
+                    if (!(key in body)) continue;
+                    const n = Number(body[key]);
+                    if (!Number.isInteger(n)) continue;
+                    const [lo, hi] = allowed[key];
+                    const clamped = Math.max(lo, Math.min(hi, n));
+                    if (RANKED_CONFIG[key] !== clamped) {
+                        changes.push({ field: key, from: RANKED_CONFIG[key], to: clamped });
+                        RANKED_CONFIG[key] = clamped;
+                    }
+                }
+                if (changes.length) {
+                    await store.saveDoc("rankedConfig", {
+                        winRP: RANKED_CONFIG.winRP, lossRP: RANKED_CONFIG.lossRP,
+                        startingRP: RANKED_CONFIG.startingRP,
+                        placementGames: RANKED_CONFIG.placementGames, minRP: RANKED_CONFIG.minRP
+                    }).catch(e => console.log("[ranked] failed to persist config:", e.message));
+                    pushAdminLog({
+                        admin: adminAccount ? adminAccount.name : "unknown",
+                        type: "rankedConfig",
+                        changes: changes
+                    });
+                }
+                sendJson(res, 200, { ok: true, config: RANKED_CONFIG, changes: changes });
+                return;
+            }
+
+            sendJson(res, 400, { error: "Unknown action" });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
         return;
     }
 
@@ -1005,41 +1911,61 @@ function send(player, obj) {
 
 wss.on("connection", socket => {
 
+    // Every connection gets a lightweight envelope. For CASUAL play this
+    // is exactly the old `player` object in one of the two global slots
+    // (unchanged behaviour). For RANKED the same object is instead
+    // attached to a match room, which is what allows more than one
+    // ranked match to be in progress at a time without touching the
+    // legacy slots at all.
+    const conn = {
+        socket: socket,
+        // casual slot id (1/2) or null when this connection never took
+        // a casual slot
+        id: null,
+        x: 0, y: 270, facing: 0, lastSeq: 0,
+        // ranked state
+        rankedSub: null,
+        rankedQueued: false,
+        rankedMatchId: null,
+        rankedSlot: null
+    };
+
+    // ---- Casual slot assignment (unchanged) ----
+    // A connection that ends up playing ranked simply never uses this,
+    // and a full server no longer refuses the connection outright: it
+    // still has to be able to queue for ranked, which needs no slot.
     let id = null;
     if (!slots[1]) id = 1;
     else if (!slots[2]) id = 2;
 
-    if (id === null) {
-        socket.send(JSON.stringify({ type: "serverFull" }));
-        socket.close();
-        return;
+    if (id !== null) {
+        conn.id = id;
+        conn.x = id === 1 ? 130 : 770;
+        conn.facing = id === 1 ? 0 : Math.PI;
+        slots[id] = conn;
+        console.log("Player " + id + " connected");
+
+        send(conn, {
+            type: "welcome",
+            id: id,
+            x: conn.x,
+            y: conn.y,
+            facing: conn.facing
+        });
+
+        const opponent = slots[otherId(id)];
+        if (opponent) {
+            send(conn, { type: "opponentJoined" });
+            send(opponent, { type: "opponentJoined" });
+        }
+    } else {
+        // No casual slot free. Previously this closed the socket; now it
+        // stays open so ranked queueing still works, and the client is
+        // told the casual lobby is full exactly as before.
+        send(conn, { type: "serverFull" });
     }
 
-    const player = {
-        id: id,
-        socket: socket,
-        x: id === 1 ? 130 : 770,
-        y: 270,
-        facing: id === 1 ? 0 : Math.PI,
-        lastSeq: 0
-    };
-
-    slots[id] = player;
-    console.log("Player " + id + " connected");
-
-    send(player, {
-        type: "welcome",
-        id: id,
-        x: player.x,
-        y: player.y,
-        facing: player.facing
-    });
-
-    const opponent = slots[otherId(id)];
-    if (opponent) {
-        send(player, { type: "opponentJoined" });
-        send(opponent, { type: "opponentJoined" });
-    }
+    const player = conn; // keep the original name for the relay code below
 
     socket.on("message", raw => {
 
@@ -1047,9 +1973,81 @@ wss.on("connection", socket => {
         try {
             data = JSON.parse(raw.toString());
         } catch (error) {
-            console.log("Invalid message from player " + id);
+            console.log("Invalid message from connection");
             return;
         }
+
+        // =============================================================
+        // RANKED MESSAGES -- handled before (and entirely separately
+        // from) the casual relay below.
+        // =============================================================
+        if (typeof data.type === "string" && data.type.indexOf("ranked_") === 0) {
+
+            if (data.type === "ranked_queue_join") {
+                joinRankedQueue(conn, data.sessionToken);
+                return;
+            }
+            if (data.type === "ranked_queue_leave") {
+                if (conn.rankedSub) leaveRankedQueue(conn.rankedSub, "left");
+                return;
+            }
+            if (data.type === "ranked_match_ready") {
+                rankedMatchReady(conn);
+                return;
+            }
+            // NOTE: there is deliberately NO "ranked_match_result" or
+            // "I won" message a client can send. The winner is decided
+            // by this server from self-reported eliminations (see
+            // registerRankedElimination) and nowhere else.
+            return;
+        }
+
+        // =============================================================
+        // RANKED IN-MATCH RELAY
+        //
+        // A connection inside a ranked match relays to its ROOM
+        // opponent, not to the global casual slot, so several ranked
+        // matches can run concurrently. The gameplay payloads are
+        // relayed byte-for-byte identically to casual play -- the only
+        // thing the server does extra is COUNT eliminations itself.
+        // =============================================================
+        if (conn.rankedMatchId) {
+            const match = rankedMatches.get(conn.rankedMatchId);
+            if (!match || match.finished) return;
+            const me = match.players[conn.rankedSlot];
+            const foe = match.players[conn.rankedSlot === 1 ? 2 : 1];
+            if (!me || !foe) return;
+
+            if (data.type === "ping") {
+                send(conn, { type: "pong", t: data.t, ack: conn.lastSeq || 0 });
+                return;
+            }
+
+            if (data.type === "position" && typeof data.seq === "number") conn.lastSeq = data.seq;
+
+            // The elimination report. `data.eliminated` on a `damage`
+            // message means "MY player just died" -- so the round goes
+            // to the opponent. This is the server's own count; the
+            // clients are never asked, and never believed, about who won.
+            if (data.type === "damage" && data.eliminated) {
+                send(foe.conn, {
+                    type: "damage",
+                    health: data.health,
+                    shieldCharges: data.shieldCharges,
+                    eliminated: true
+                });
+                registerRankedElimination(match, conn.rankedSlot);
+                return;
+            }
+
+            // Everything else is a straight relay to the room opponent.
+            send(foe.conn, data);
+            return;
+        }
+
+        // =============================================================
+        // CASUAL RELAY -- completely unchanged from here down.
+        // =============================================================
 
         // Lightweight ping/pong for RTT measurement -- answered straight
         // back to the sender and does NOT require an opponent to be
@@ -1228,13 +2226,26 @@ wss.on("connection", socket => {
 
     socket.on("close", () => {
 
-        console.log("Player " + id + " disconnected");
+        // Ranked cleanup first: drops any queue entry and turns an
+        // in-progress ranked match into a forfeit/abandon as appropriate
+        // (see handleRankedDisconnect). This is what guarantees a closed
+        // browser can never leave a ghost in the queue.
+        handleRankedDisconnect(conn);
 
-        slots[id] = null;
-        resetHeistState(); // leaving a Heist match cleans up its state for the next match
-
-        const opponent = slots[otherId(id)];
-        send(opponent, { type: "opponentLeft" });
+        // Casual slot cleanup -- unchanged, but only for a connection
+        // that actually held a slot.
+        if (conn.id !== null) {
+            console.log("Player " + conn.id + " disconnected");
+            // Only release the slot if it is still OURS. A reconnect that
+            // took the same slot number must not be evicted by the old
+            // socket's late close event.
+            if (slots[conn.id] === conn) {
+                slots[conn.id] = null;
+                resetHeistState(); // leaving a Heist match cleans up its state for the next match
+                const opponent = slots[otherId(conn.id)];
+                send(opponent, { type: "opponentLeft" });
+            }
+        }
     });
 
 });
@@ -1251,6 +2262,29 @@ async function startServer() {
         Object.assign(accounts, await store.loadAllAccounts());
         abilityConfig = await loadAbilityConfig();
         adminLog = await loadAdminLog();
+
+        // Ranked: match history, plus the live season/config, which are
+        // admin-editable at runtime and so must survive a restart rather
+        // than snapping back to the code defaults.
+        const storedHistory = await store.loadDoc("rankedHistory", null);
+        rankedHistory = Array.isArray(storedHistory) ? storedHistory : [];
+
+        const storedSeason = await store.loadDoc("rankedSeason", null);
+        if (storedSeason && typeof storedSeason.season === "string" && storedSeason.season) {
+            RANKED_CONFIG.season = storedSeason.season;
+            if (storedSeason.seasonName) RANKED_CONFIG.seasonName = storedSeason.seasonName;
+        }
+        const storedRankedCfg = await store.loadDoc("rankedConfig", null);
+        if (storedRankedCfg && typeof storedRankedCfg === "object") {
+            for (const key of ["winRP", "lossRP", "startingRP", "placementGames", "minRP"]) {
+                const v = storedRankedCfg[key];
+                if (Number.isInteger(v)) RANKED_CONFIG[key] = v;
+            }
+        }
+        // The queue and live matches are in-memory only and are simply
+        // GONE after a restart -- which is the correct outcome. Nothing
+        // is reconstructed, so a restart can never leave a ghost player
+        // stuck in a queue or a zombie match holding someone's account.
 
         // Restore live sessions so a redeploy doesn't invalidate the token
         // every already-signed-in player is still holding.
