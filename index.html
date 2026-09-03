@@ -1761,6 +1761,139 @@
     .rb-name{ font-size:9.5px; }
     .rq-wrap{ padding:20px 14px; }
   }
+
+  /* ============================================================
+     FRIENDS
+     Same panel/menu language as the rest of the game. Everything
+     is fluid so one markup works on desktop and phone.
+     ============================================================ */
+  .friends-panel{ max-width: min(520px, 94vw); max-height: min(560px, 88vh); }
+  .fr-head{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:10px; width:100%;
+  }
+  .fr-counts{ display:flex; align-items:center; gap:8px; }
+  #frCount{ font-size:10px; letter-spacing:1.5px; color: var(--ink-dim); }
+  .fr-reqcount{
+    font-size:10px; font-weight:800; letter-spacing:1px; color:#0a0f1a;
+    background: var(--gold); border-radius:10px; padding:2px 8px;
+  }
+  .fr-searchbar{ display:flex; gap:8px; width:100%; }
+  .fr-input{
+    flex:1 1 auto; min-width:0;
+    background: rgba(10,15,25,.7); border:1px solid var(--panel-edge);
+    color: var(--ink); border-radius:8px; padding:9px 11px;
+    font-family: inherit; font-size:12px; letter-spacing:1px;
+  }
+  .fr-input:focus{ outline:none; border-color: var(--p1); }
+  .fr-input::placeholder{ color: var(--ink-dim); letter-spacing:1px; }
+  .fr-btn{
+    flex:0 0 auto; cursor:pointer; font-family: inherit;
+    font-size:10px; font-weight:700; letter-spacing:1.2px;
+    border-radius:7px; padding:8px 12px; min-height:34px;
+    background: rgba(63,208,255,.12); color: var(--p1);
+    border:1px solid rgba(63,208,255,.4);
+    transition: background .15s ease, transform .1s ease;
+  }
+  .fr-btn:hover{ background: rgba(63,208,255,.22); }
+  .fr-btn:active{ transform: scale(.96); }
+  .fr-btn[disabled]{ opacity:.45; cursor:default; }
+  .fr-btn-go{ background: rgba(63,208,255,.2); }
+  .fr-btn-ok{ background: rgba(92,224,138,.14); color:#5ce08a; border-color: rgba(92,224,138,.42); }
+  .fr-btn-ok:hover{ background: rgba(92,224,138,.24); }
+  .fr-btn-no{ background: rgba(255,95,109,.12); color: var(--p2); border-color: rgba(255,95,109,.4); }
+  .fr-btn-no:hover{ background: rgba(255,95,109,.22); }
+  .fr-btn-muted{ background: rgba(122,158,200,.1); color: var(--ink-dim); border-color: var(--panel-edge); }
+  .fr-signin{
+    text-align:center; font-size:11px; letter-spacing:1.4px; color: var(--gold);
+    padding:10px; border:1px solid rgba(255,206,84,.3); border-radius:8px;
+    background: rgba(255,206,84,.06); width:100%;
+  }
+  .fr-body{ width:100%; overflow-y:auto; -webkit-overflow-scrolling: touch; }
+  .fr-section{
+    font-size:9.5px; letter-spacing:2.2px; color: var(--ink-dim);
+    margin:12px 0 7px; padding-bottom:5px;
+    border-bottom:1px solid rgba(122,158,200,.14);
+  }
+  .fr-section:first-child{ margin-top:2px; }
+  .fr-row{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:9px 8px; border-radius:8px; margin-bottom:5px;
+    background: rgba(255,255,255,.02);
+    border:1px solid transparent;
+  }
+  .fr-row:hover{ background: rgba(63,208,255,.06); border-color: rgba(63,208,255,.16); }
+  .fr-dot{ flex:0 0 auto; width:9px; height:9px; border-radius:50%; background:#5a6474; }
+  .fr-dot.online{ background:#5ce08a; box-shadow:0 0 7px rgba(92,224,138,.75); }
+  .fr-dot.inMatch{ background: var(--gold); box-shadow:0 0 7px rgba(255,206,84,.7); }
+  .fr-dot.voidbreak{ background: var(--p1); box-shadow:0 0 7px rgba(63,208,255,.7); }
+  .fr-meta{ flex:1 1 130px; min-width:0; }
+  .fr-name{
+    font-size:12px; font-weight:700; color: var(--ink);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .fr-sub{ font-size:9.5px; letter-spacing:1px; color: var(--ink-dim); margin-top:2px; }
+  .fr-sub b{ color: var(--gold); font-weight:600; }
+  .fr-actions{ flex:0 0 auto; display:flex; gap:6px; flex-wrap:wrap; }
+  .fr-empty{
+    text-align:center; padding:22px 10px; font-size:10.5px;
+    letter-spacing:1.3px; color: var(--ink-dim); line-height:1.8;
+  }
+  .fr-confirm{
+    padding:10px; border-radius:8px; margin-bottom:6px;
+    border:1px solid rgba(255,95,109,.4); background: rgba(255,95,109,.08);
+  }
+  .fr-confirm-q{ font-size:11px; letter-spacing:1px; color: var(--ink); margin-bottom:8px; }
+  .fr-confirm-btns{ display:flex; gap:8px; }
+
+  /* ---- FRIEND PROFILE ---- */
+  .fp-head{ display:flex; align-items:center; gap:12px; width:100%; margin-bottom:12px; }
+  .fp-avatar{
+    flex:0 0 auto; width:46px; height:46px; border-radius:50%;
+    border:2px solid var(--p1); background: rgba(63,208,255,.12);
+  }
+  .fp-id{ min-width:0; }
+  .fp-name{
+    font-size:17px; font-weight:800; letter-spacing:1px; color: var(--ink);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .fp-presence{ font-size:10px; letter-spacing:1.5px; color: var(--ink-dim); margin-top:2px; }
+  .fr-profile-actions{ width:100%; }
+  .fr-profile-actions .menu-btn{ width:100%; }
+
+  /* ---- TOASTS ---- */
+  .fr-toasts{
+    position: fixed; right: 14px; bottom: 14px; z-index: 90;
+    display:flex; flex-direction:column; gap:8px;
+    max-width: min(300px, 88vw); pointer-events:none;
+  }
+  .fr-toast{
+    pointer-events:auto;
+    background: rgba(10,15,25,.95); border:1px solid var(--panel-edge-2);
+    border-left:3px solid var(--p1);
+    border-radius:8px; padding:9px 12px;
+    animation: frSlide .28s ease-out;
+  }
+  .fr-toast.gold{ border-left-color: var(--gold); }
+  .fr-toast.green{ border-left-color:#5ce08a; }
+  @keyframes frSlide{ from{ transform: translateX(24px); opacity:0; } to{ transform:none; opacity:1; } }
+  .fr-toast-title{ font-size:10px; font-weight:800; letter-spacing:1.6px; color: var(--ink); }
+  .fr-toast-body{ font-size:10px; letter-spacing:.8px; color: var(--ink-dim); margin-top:3px; line-height:1.5; }
+  .fr-toast-btns{ display:flex; gap:6px; margin-top:8px; }
+
+  @media (max-width: 700px){
+    .friends-panel{ max-height: 90vh; }
+    .fr-row{ padding:9px 6px; gap:8px; }
+    /* Actions drop to their own full-width line so the buttons stay
+       comfortably tappable instead of being squeezed next to the name. */
+    .fr-meta{ flex:1 1 100%; }
+    .fr-actions{ flex:1 1 100%; }
+    .fr-actions .fr-btn{ flex:1 1 0; min-height:38px; }
+    .fr-searchbar{ flex-wrap:wrap; }
+    .fr-input{ flex:1 1 100%; min-height:38px; }
+    .fr-btn-go{ flex:1 1 100%; min-height:38px; }
+    .fr-toasts{ right:8px; left:8px; bottom:8px; max-width:none; }
+  }
 </style>
 </head>
 <body>
@@ -2246,6 +2379,58 @@
        queue, the post-match result, and the ladder. All of them read
        server state only -- nothing here invents a number.
        ============================================================ -->
+  <!-- ============================================================
+       FRIENDS
+       Search, incoming/outgoing requests and the friends list, all
+       driven by real server state over the existing HTTP + WebSocket
+       infrastructure.
+       ============================================================ -->
+  <div class="menu-overlay hidden" id="menuFriends">
+    <div class="shop-panel friends-panel">
+      <div class="fr-head">
+        <div class="menu-title">FRIENDS</div>
+        <div class="fr-counts">
+          <span id="frCount">0/100</span>
+          <span class="fr-reqcount hidden" id="frReqCount">0</span>
+        </div>
+      </div>
+
+      <div class="fr-searchbar">
+        <input type="text" id="frSearchInput" class="fr-input" placeholder="Search players..."
+               autocomplete="off" maxlength="32">
+        <button class="fr-btn fr-btn-go" id="frSearchBtn">SEARCH</button>
+      </div>
+
+      <div class="fr-signin hidden" id="frSignIn">SIGN IN WITH GOOGLE TO USE FRIENDS</div>
+
+      <div class="shop-body fr-body" id="frBody"></div>
+
+      <button class="menu-back" id="btnBackFriends">&larr; back</button>
+    </div>
+  </div>
+
+  <!-- FRIEND PROFILE -->
+  <div class="menu-overlay hidden" id="menuFriendProfile">
+    <div class="shop-panel ranked-panel">
+      <div class="fp-head">
+        <div class="fp-avatar" id="fpAvatar"></div>
+        <div class="fp-id">
+          <div class="fp-name" id="fpName">PLAYER</div>
+          <div class="fp-presence" id="fpPresence">OFFLINE</div>
+        </div>
+      </div>
+      <div class="rr-grid" id="fpStats"></div>
+      <div class="menu-group fr-profile-actions">
+        <button class="menu-btn accent-2 hidden" id="btnFpInvite">INVITE TO MATCH</button>
+        <button class="menu-btn danger hidden" id="btnFpRemove">REMOVE FRIEND</button>
+      </div>
+      <button class="menu-back" id="btnBackFriendProfile">&larr; back</button>
+    </div>
+  </div>
+
+  <!-- FRIEND TOASTS (requests, presence, invites) -->
+  <div class="fr-toasts" id="frToasts"></div>
+
   <div class="menu-overlay hidden" id="menuRanked">
     <div class="shop-panel ranked-panel">
       <div class="menu-title">RANKED</div>
@@ -3632,12 +3817,26 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       // the anonymous/guest view to this account's real persisted
       // progress and claimed state right away.
       fetchDailyChallenges();
+      // Friends: open the presence connection and load the list. This is
+      // what makes the player visible to their friends while they are
+      // just sitting in the lobby.
+      connectPresence();
+      refreshFriends();
     } catch(e){
       setAccountStatus('SIGN-IN FAILED \u2014 IS THE SERVER RUNNING?');
     }
   }
 
   function signOut(){
+    // Drop the presence connection FIRST, while the token is still
+    // valid, so this account goes offline for its friends immediately
+    // rather than lingering until the socket times out.
+    disconnectPresence();
+    FRIENDS.friends = []; FRIENDS.incoming = []; FRIENDS.outgoing = [];
+    FRIENDS.counts = { friends: 0, incoming: 0, outgoing: 0, maxFriends: FRIENDS.counts.maxFriends };
+    FRIENDS.announced = {};
+    FRIENDS.myId = null;
+    updateFriendsBadge();
     sessionToken = null;
     loggedIn = false;
     accountName = null;
@@ -7285,6 +7484,9 @@ updateDecoys(dt);
     if(isTouchDevice) mobileControlsEl.classList.remove('hidden');
     started = true;
     startMusic();
+    // Friends presence: entering a match. syncActivity() derives the
+    // state itself, so there is one definition of "what am I doing".
+    if(typeof syncActivity === 'function') syncActivity();
     if(mode === 'online' && socket && socket.readyState === WebSocket.OPEN){
       socket.send(JSON.stringify({ type: 'skin', color: skinColor(p1SkinId), skinId: p1SkinId }));
     }
@@ -7417,6 +7619,8 @@ updateDecoys(dt);
     state = 'menu';
     centerMsg.innerHTML = '';
     closeOnlineConnection();
+    // Friends presence: back in the menus.
+    if(typeof syncActivity === 'function') syncActivity();
     stopMusic();
     exitBtn.classList.add('hidden');
     menuOnline.classList.add('hidden');
@@ -7613,6 +7817,8 @@ updateDecoys(dt);
     voidbreakOverlay.classList.remove('hidden');
     menuMain.classList.add('hidden');
     voidbreakFrame.focus();
+    // Friends presence: friends see "IN VOIDBREAK".
+    if(typeof syncActivity === 'function') syncActivity();
   }
   function exitVoidbreak(){
     voidbreakOverlay.classList.add('hidden');
@@ -7621,6 +7827,7 @@ updateDecoys(dt);
     // running invisibly in the background.
     voidbreakFrame.src = 'about:blank';
     menuMain.classList.remove('hidden');
+    if(typeof syncActivity === 'function') syncActivity();
   }
   btnVoidbreakPlay.addEventListener('click', launchVoidbreak);
   btnVoidbreakExit.addEventListener('click', exitVoidbreak);
@@ -7921,7 +8128,7 @@ updateDecoys(dt);
         else if(act === 'admin')        { lobbyEl('btnAdmin').click(); }
         else if(act === 'controls')     { lobbyControlsModal(); }
         else if(act === 'profile')      { openRankedProfileModal(); }
-        else if(act === 'friends')      { lobbySoonModal('FRIENDS', 'FRIENDS LISTS, INVITES AND ONLINE STATUS ARE NOT IMPLEMENTED YET.'); }
+        else if(act === 'friends')      { openFriends(); }
         else if(act === 'mail')         { lobbySoonModal('MAIL', 'THERE IS NO MAIL OR NOTIFICATION SYSTEM YET.'); }
         else if(act === 'patch')        { lobbyPatchNotesModal(); }
       });
@@ -8450,6 +8657,572 @@ updateDecoys(dt);
     rkHideAll();
     menuMain.classList.remove('hidden');
   }
+
+  /* ================================================================
+     FRIENDS (client)
+     ----------------------------------------------------------------
+     Two halves:
+       1. A PRESENCE connection, opened at sign-in. It is the same
+          WebSocket server as gameplay, but asks for ?presence=1 so the
+          server never gives it a casual duel slot -- otherwise idle
+          players sitting in the lobby would occupy the two casual
+          slots and lock out players actually trying to duel.
+       2. A view over the server's friends state. Every list, count and
+          status here comes from the server; nothing is invented or
+          cached optimistically.
+     ================================================================ */
+  const FRIENDS = {
+    socket: null,
+    ready: false,
+    myId: null,
+    friends: [],
+    incoming: [],
+    outgoing: [],
+    counts: { friends: 0, incoming: 0, outgoing: 0, maxFriends: 100 },
+    searchResults: null,   // null = not searching, [] = no matches
+    searchQuery: '',
+    confirmRemoveId: null, // which friend has an inline confirm open
+    profile: null,
+    reconnectTimer: null,
+    reconnectDelay: 1000,
+    // Presence events we've already announced, so a friend flapping or
+    // a second tab can't spam the same "is now online" toast.
+    announced: {}
+  };
+
+  const frEl = id => document.getElementById(id);
+  const menuFriends = frEl('menuFriends');
+  const menuFriendProfile = frEl('menuFriendProfile');
+
+  const PRESENCE_LABEL = {
+    online: 'ONLINE', inMatch: 'IN MATCH', voidbreak: 'IN VOIDBREAK', offline: 'OFFLINE'
+  };
+
+  function frEscape(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    })[c]);
+  }
+
+  // ---- PRESENCE CONNECTION ---------------------------------------
+  function connectPresence(){
+    if(!loggedIn || !sessionToken) return;
+    disconnectPresence();
+
+    // Same server, same protocol -- ?presence=1 only tells it not to
+    // hand this connection a casual slot.
+    const url = ONLINE_SERVER_URL + (ONLINE_SERVER_URL.indexOf('?') >= 0 ? '&' : '/?') + 'presence=1';
+    let ws;
+    try{ ws = new WebSocket(url); } catch(e){ return; }
+    FRIENDS.socket = ws;
+
+    ws.onopen = function(){
+      FRIENDS.reconnectDelay = 1000;
+      ws.send(JSON.stringify({ type: 'presence_hello', sessionToken: sessionToken }));
+    };
+
+    ws.onmessage = function(event){
+      let data;
+      try{ data = JSON.parse(event.data); } catch(e){ return; }
+      handleFriendsMessage(data);
+    };
+
+    ws.onclose = function(){
+      FRIENDS.ready = false;
+      if(FRIENDS.socket === ws) FRIENDS.socket = null;
+      // Reconnect with backoff while still signed in, so a dropped
+      // connection doesn't silently leave the player invisible.
+      if(loggedIn && sessionToken){
+        clearTimeout(FRIENDS.reconnectTimer);
+        FRIENDS.reconnectTimer = setTimeout(connectPresence, FRIENDS.reconnectDelay);
+        FRIENDS.reconnectDelay = Math.min(20000, FRIENDS.reconnectDelay * 2);
+      }
+    };
+
+    ws.onerror = function(){ /* onclose handles the retry */ };
+  }
+
+  function disconnectPresence(){
+    clearTimeout(FRIENDS.reconnectTimer);
+    FRIENDS.reconnectTimer = null;
+    if(FRIENDS.socket){
+      try{ FRIENDS.socket.onclose = null; FRIENDS.socket.close(); } catch(e){}
+    }
+    FRIENDS.socket = null;
+    FRIENDS.ready = false;
+  }
+
+  // Tells the server what this player is doing, so friends see a
+  // meaningful status instead of just "online".
+  function reportActivity(activity){
+    if(FRIENDS.socket && FRIENDS.socket.readyState === WebSocket.OPEN && FRIENDS.ready){
+      FRIENDS.socket.send(JSON.stringify({ type: 'presence_activity', activity: activity }));
+    }
+  }
+  // Derives the current activity from the game's own state, so there is
+  // one definition rather than sprinkling reportActivity() everywhere.
+  function syncActivity(){
+    const vb = document.getElementById('voidbreakOverlay');
+    const inVoidbreak = vb && !vb.classList.contains('hidden');
+    reportActivity(inVoidbreak ? 'voidbreak' : (started ? 'inMatch' : 'online'));
+  }
+
+  function handleFriendsMessage(data){
+    if(!data || typeof data.type !== 'string') return false;
+
+    if(data.type === 'presence_ready'){
+      FRIENDS.ready = true;
+      FRIENDS.myId = data.id;
+      if(data.friends) applyFriendsPayload(data.friends);
+      syncActivity();
+      return true;
+    }
+    if(data.type === 'presence_error'){
+      return true;
+    }
+    if(data.type === 'friends_update'){
+      applyFriendsPayload(data);
+      if(data.notice) showFriendNotice(data.notice);
+      return true;
+    }
+    if(data.type === 'friend_presence'){
+      applyPresenceChange(data);
+      return true;
+    }
+    if(data.type === 'friend_invite'){
+      showInviteToast(data);
+      return true;
+    }
+    if(data.type === 'friend_invite_accepted'){
+      frToast('INVITE ACCEPTED', frEscape(data.with && data.with.name) + ' is joining you in the online lobby.', 'green');
+      // Send BOTH players through the existing online lobby -- this
+      // deliberately does not invent a private matchmaking path.
+      openOnlineLobbyForInvite();
+      return true;
+    }
+    if(data.type === 'friend_invite_declined'){
+      frToast('INVITE DECLINED', frEscape(data.by && data.by.name) + ' declined your invite.');
+      return true;
+    }
+    return false;
+  }
+
+  function applyFriendsPayload(p){
+    if(Array.isArray(p.friends)) FRIENDS.friends = p.friends;
+    if(Array.isArray(p.incoming)) FRIENDS.incoming = p.incoming;
+    if(Array.isArray(p.outgoing)) FRIENDS.outgoing = p.outgoing;
+    if(p.counts) FRIENDS.counts = p.counts;
+    updateFriendsBadge();
+    if(menuFriends && !menuFriends.classList.contains('hidden')) renderFriends();
+  }
+
+  // A presence delta for one friend -- patched in place so the list
+  // doesn't have to be refetched.
+  function applyPresenceChange(evt){
+    let changed = false;
+    FRIENDS.friends.forEach(f=>{
+      if(f.id === evt.id && f.presence !== evt.presence){
+        // Only announce a real offline -> online transition, and only
+        // once per friend per session (requirement 12: no spam).
+        if(evt.presence !== 'offline' && f.presence === 'offline' && !FRIENDS.announced[evt.id]){
+          FRIENDS.announced[evt.id] = true;
+          frToast('FRIEND ONLINE', frEscape(evt.name) + ' is now online.', 'green');
+        }
+        if(evt.presence === 'offline') FRIENDS.announced[evt.id] = false;
+        f.presence = evt.presence;
+        changed = true;
+      }
+    });
+    if(changed && menuFriends && !menuFriends.classList.contains('hidden')) renderFriends();
+    if(changed && menuFriendProfile && !menuFriendProfile.classList.contains('hidden')
+       && FRIENDS.profile && FRIENDS.profile.id === evt.id){
+      FRIENDS.profile.presence = evt.presence;
+      frEl('fpPresence').textContent = PRESENCE_LABEL[evt.presence] || 'OFFLINE';
+    }
+  }
+
+  function showFriendNotice(notice){
+    if(notice.kind === 'requestReceived' && notice.from){
+      frToast('FRIEND REQUEST', frEscape(notice.from.name) + ' sent you a friend request.', 'gold', 'VIEW', openFriends);
+    } else if(notice.kind === 'requestAccepted' && notice.from){
+      frToast('FRIEND ADDED', frEscape(notice.from.name) + ' accepted your friend request.', 'green');
+    }
+  }
+
+  // ---- TOASTS ----------------------------------------------------
+  function frToast(title, body, kind, actionLabel, actionFn){
+    const wrap = frEl('frToasts');
+    if(!wrap) return;
+    const el = document.createElement('div');
+    el.className = 'fr-toast' + (kind ? ' ' + kind : '');
+    el.innerHTML = '<div class="fr-toast-title">' + frEscape(title) + '</div>'
+      + '<div class="fr-toast-body">' + body + '</div>';
+    if(actionLabel){
+      const btns = document.createElement('div');
+      btns.className = 'fr-toast-btns';
+      const b = document.createElement('button');
+      b.className = 'fr-btn';
+      b.textContent = actionLabel;
+      b.addEventListener('click', ()=>{ el.remove(); if(actionFn) actionFn(); });
+      btns.appendChild(b);
+      el.appendChild(btns);
+    }
+    wrap.appendChild(el);
+    // Cap the stack so a burst can never bury the screen.
+    while(wrap.children.length > 4) wrap.removeChild(wrap.firstChild);
+    setTimeout(()=>{ if(el.parentNode) el.remove(); }, actionLabel ? 12000 : 6000);
+  }
+
+  function showInviteToast(data){
+    const wrap = frEl('frToasts');
+    if(!wrap) return;
+    const el = document.createElement('div');
+    el.className = 'fr-toast gold';
+    el.innerHTML = '<div class="fr-toast-title">MATCH INVITE</div>'
+      + '<div class="fr-toast-body">' + frEscape(data.from && data.from.name)
+      + ' invited you to a match.</div>';
+    const btns = document.createElement('div');
+    btns.className = 'fr-toast-btns';
+    const respond = (accept)=>{
+      if(FRIENDS.socket && FRIENDS.socket.readyState === WebSocket.OPEN){
+        FRIENDS.socket.send(JSON.stringify({
+          type: 'friend_invite_respond', inviteId: data.inviteId, accept: accept }));
+      }
+      el.remove();
+    };
+    const yes = document.createElement('button');
+    yes.className = 'fr-btn fr-btn-ok'; yes.textContent = 'ACCEPT';
+    yes.addEventListener('click', ()=> respond(true));
+    const no = document.createElement('button');
+    no.className = 'fr-btn fr-btn-no'; no.textContent = 'DECLINE';
+    no.addEventListener('click', ()=> respond(false));
+    btns.appendChild(yes); btns.appendChild(no);
+    el.appendChild(btns);
+    wrap.appendChild(el);
+    setTimeout(()=>{ if(el.parentNode) el.remove(); }, (data.expiresInSec || 60) * 1000);
+  }
+
+  // Routes an accepted invite into the EXISTING online lobby. No second
+  // multiplayer implementation -- it presses the same path a player
+  // would take by hand.
+  function openOnlineLobbyForInvite(){
+    if(started) return; // don't yank someone out of a live match
+    frHideAll();
+    if(typeof rkHideAll === 'function') rkHideAll();
+    pendingMode = 'online';
+    gameType = 'classic';
+    matchPlayerCount = 2;
+    menuMain.classList.add('hidden');
+    menuGameType.classList.add('hidden');
+    mode = 'online';
+    document.getElementById('onlineStartGroup').classList.add('hidden');
+    menuOnline.classList.remove('hidden');
+    connectOnline();
+  }
+
+  // ---- API -------------------------------------------------------
+  async function friendsApi(action, id){
+    const res = await fetch(ACCOUNT_SERVER_URL + '/friends/action', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionToken: sessionToken, action: action, id: id })
+    });
+    const data = await res.json().catch(()=> ({}));
+    if(res.ok) applyFriendsPayload(data);
+    return { ok: res.ok, data: data };
+  }
+
+  async function refreshFriends(){
+    if(!loggedIn || !sessionToken) return;
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/friends/list?sessionToken='
+        + encodeURIComponent(sessionToken));
+      if(res.ok) applyFriendsPayload(await res.json());
+    } catch(e){}
+  }
+
+  function updateFriendsBadge(){
+    const btn = document.querySelector('#menuMain [data-act="friends"]');
+    if(!btn) return;
+    const n = FRIENDS.counts.incoming || 0;
+    btn.classList.toggle('has-badge', n > 0);
+    btn.setAttribute('title', n > 0 ? ('Friends (' + n + ' request' + (n === 1 ? '' : 's') + ')') : 'Friends');
+  }
+
+  // ---- UI --------------------------------------------------------
+  function frHideAll(){
+    if(menuFriends) menuFriends.classList.add('hidden');
+    if(menuFriendProfile) menuFriendProfile.classList.add('hidden');
+  }
+
+  function openFriends(){
+    menuMain.classList.add('hidden');
+    if(typeof rkHideAll === 'function') rkHideAll();
+    frHideAll();
+    menuFriends.classList.remove('hidden');
+    FRIENDS.searchResults = null;
+    FRIENDS.confirmRemoveId = null;
+    const input = frEl('frSearchInput');
+    if(input) input.value = '';
+
+    const signIn = frEl('frSignIn');
+    const body = frEl('frBody');
+    const bar = document.querySelector('.fr-searchbar');
+    if(!loggedIn || !sessionToken){
+      signIn.classList.remove('hidden');
+      bar.classList.add('hidden');
+      body.innerHTML = '';
+      frEl('frCount').textContent = '';
+      return;
+    }
+    signIn.classList.add('hidden');
+    bar.classList.remove('hidden');
+    renderFriends();
+    refreshFriends();
+  }
+
+  function presenceRowHtml(p, extraSub){
+    const label = PRESENCE_LABEL[p.presence] || 'OFFLINE';
+    const rank = p.rank ? ('<b>' + frEscape(p.rank.name.toUpperCase()) + '</b> · ') : '';
+    return '<span class="fr-dot ' + frEscape(p.presence) + '"></span>'
+      + '<div class="fr-meta">'
+      + '<div class="fr-name">' + frEscape(p.name) + '</div>'
+      + '<div class="fr-sub">' + rank + (extraSub || label) + '</div>'
+      + '</div>';
+  }
+
+  function renderFriends(){
+    const body = frEl('frBody');
+    if(!body) return;
+
+    frEl('frCount').textContent = FRIENDS.counts.friends + '/' + FRIENDS.counts.maxFriends;
+    const reqBadge = frEl('frReqCount');
+    if(FRIENDS.counts.incoming > 0){
+      reqBadge.classList.remove('hidden');
+      reqBadge.textContent = FRIENDS.counts.incoming + ' REQ';
+    } else {
+      reqBadge.classList.add('hidden');
+    }
+
+    let html = '';
+
+    // --- search results ---
+    if(FRIENDS.searchResults !== null){
+      html += '<div class="fr-section">SEARCH RESULTS'
+        + (FRIENDS.searchQuery ? ' — "' + frEscape(FRIENDS.searchQuery.toUpperCase()) + '"' : '')
+        + '</div>';
+      if(!FRIENDS.searchResults.length){
+        html += '<div class="fr-empty">NO PLAYERS FOUND.<br>SEARCH BY THEIR EXACT DISPLAY NAME.</div>';
+      } else {
+        FRIENDS.searchResults.forEach(p=>{
+          let action;
+          if(p.relation === 'friends')       action = '<button class="fr-btn fr-btn-muted" disabled>FRIENDS</button>';
+          else if(p.relation === 'requested')action = '<button class="fr-btn fr-btn-muted" data-fr-cancel="' + frEscape(p.id) + '">CANCEL</button>';
+          else if(p.relation === 'incoming') action = '<button class="fr-btn fr-btn-ok" data-fr-accept="' + frEscape(p.id) + '">ACCEPT</button>';
+          else                               action = '<button class="fr-btn" data-fr-add="' + frEscape(p.id) + '">ADD FRIEND</button>';
+          html += '<div class="fr-row">' + presenceRowHtml(p)
+            + '<div class="fr-actions">' + action + '</div></div>';
+        });
+      }
+      html += '<div class="fr-section" style="margin-top:16px">'
+        + '<button class="fr-btn fr-btn-muted" id="frClearSearch">&larr; BACK TO FRIENDS</button></div>';
+      body.innerHTML = html;
+      wireFriendButtons();
+      return;
+    }
+
+    // --- incoming requests ---
+    if(FRIENDS.incoming.length){
+      html += '<div class="fr-section">FRIEND REQUESTS (' + FRIENDS.incoming.length + ')</div>';
+      FRIENDS.incoming.forEach(p=>{
+        html += '<div class="fr-row">' + presenceRowHtml(p)
+          + '<div class="fr-actions">'
+          + '<button class="fr-btn fr-btn-ok" data-fr-accept="' + frEscape(p.id) + '">ACCEPT</button>'
+          + '<button class="fr-btn fr-btn-no" data-fr-decline="' + frEscape(p.id) + '">DECLINE</button>'
+          + '</div></div>';
+      });
+    }
+
+    // --- outgoing ---
+    if(FRIENDS.outgoing.length){
+      html += '<div class="fr-section">SENT REQUESTS (' + FRIENDS.outgoing.length + ')</div>';
+      FRIENDS.outgoing.forEach(p=>{
+        html += '<div class="fr-row">' + presenceRowHtml(p, 'PENDING')
+          + '<div class="fr-actions">'
+          + '<button class="fr-btn fr-btn-muted" data-fr-cancel="' + frEscape(p.id) + '">CANCEL</button>'
+          + '</div></div>';
+      });
+    }
+
+    // --- friends ---
+    html += '<div class="fr-section">MY FRIENDS (' + FRIENDS.friends.length + ')</div>';
+    if(!FRIENDS.friends.length){
+      html += '<div class="fr-empty">NO FRIENDS YET.<br>SEARCH FOR A PLAYER ABOVE TO SEND A REQUEST.</div>';
+    } else {
+      FRIENDS.friends.forEach(p=>{
+        if(FRIENDS.confirmRemoveId === p.id){
+          html += '<div class="fr-confirm">'
+            + '<div class="fr-confirm-q">REMOVE ' + frEscape(p.name.toUpperCase()) + ' FROM FRIENDS?</div>'
+            + '<div class="fr-confirm-btns">'
+            + '<button class="fr-btn fr-btn-muted" data-fr-cancelremove="1">CANCEL</button>'
+            + '<button class="fr-btn fr-btn-no" data-fr-remove="' + frEscape(p.id) + '">REMOVE</button>'
+            + '</div></div>';
+          return;
+        }
+        const canInvite = p.presence !== 'offline';
+        html += '<div class="fr-row">' + presenceRowHtml(p)
+          + '<div class="fr-actions">'
+          + '<button class="fr-btn" data-fr-profile="' + frEscape(p.id) + '">PROFILE</button>'
+          + (canInvite ? '<button class="fr-btn fr-btn-ok" data-fr-invite="' + frEscape(p.id) + '">INVITE</button>' : '')
+          + '<button class="fr-btn fr-btn-no" data-fr-confirm="' + frEscape(p.id) + '">REMOVE</button>'
+          + '</div></div>';
+      });
+    }
+
+    body.innerHTML = html;
+    wireFriendButtons();
+  }
+
+  // One delegated wiring pass. Buttons carry the target id in a data
+  // attribute, so no closure captures a stale list entry.
+  function wireFriendButtons(){
+    const body = frEl('frBody');
+    if(!body) return;
+    const run = async (action, id, btn)=>{
+      if(btn) btn.disabled = true;
+      const r = await friendsApi(action, id);
+      if(!r.ok && r.data && r.data.error) lobbyToast(String(r.data.error).toUpperCase());
+      if(FRIENDS.searchResults !== null) await doFriendSearch(FRIENDS.searchQuery, true);
+      else renderFriends();
+    };
+    body.querySelectorAll('[data-fr-add]').forEach(b=>
+      b.addEventListener('click', ()=> run('request', b.dataset.frAdd, b)));
+    body.querySelectorAll('[data-fr-accept]').forEach(b=>
+      b.addEventListener('click', ()=> run('accept', b.dataset.frAccept, b)));
+    body.querySelectorAll('[data-fr-decline]').forEach(b=>
+      b.addEventListener('click', ()=> run('decline', b.dataset.frDecline, b)));
+    body.querySelectorAll('[data-fr-cancel]').forEach(b=>
+      b.addEventListener('click', ()=> run('cancel', b.dataset.frCancel, b)));
+    body.querySelectorAll('[data-fr-remove]').forEach(b=>
+      b.addEventListener('click', ()=>{ FRIENDS.confirmRemoveId = null; run('remove', b.dataset.frRemove, b); }));
+    body.querySelectorAll('[data-fr-confirm]').forEach(b=>
+      b.addEventListener('click', ()=>{ FRIENDS.confirmRemoveId = b.dataset.frConfirm; renderFriends(); }));
+    body.querySelectorAll('[data-fr-cancelremove]').forEach(b=>
+      b.addEventListener('click', ()=>{ FRIENDS.confirmRemoveId = null; renderFriends(); }));
+    body.querySelectorAll('[data-fr-profile]').forEach(b=>
+      b.addEventListener('click', ()=> openFriendProfile(b.dataset.frProfile)));
+    body.querySelectorAll('[data-fr-invite]').forEach(b=>
+      b.addEventListener('click', async ()=>{
+        const r = await friendsApi('invite', b.dataset.frInvite);
+        lobbyToast(r.ok ? 'INVITE SENT' : String((r.data && r.data.error) || 'COULD NOT INVITE').toUpperCase());
+      }));
+    const clear = frEl('frClearSearch');
+    if(clear) clear.addEventListener('click', ()=>{
+      FRIENDS.searchResults = null;
+      const input = frEl('frSearchInput');
+      if(input) input.value = '';
+      renderFriends();
+    });
+  }
+
+  async function doFriendSearch(q, silent){
+    const query = String(q == null ? '' : q).trim();
+    FRIENDS.searchQuery = query;
+    if(!query){
+      FRIENDS.searchResults = null;
+      renderFriends();
+      return;
+    }
+    if(!silent) frEl('frBody').innerHTML = '<div class="fr-empty">SEARCHING...</div>';
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/friends/search?sessionToken='
+        + encodeURIComponent(sessionToken) + '&q=' + encodeURIComponent(query));
+      const data = await res.json();
+      FRIENDS.searchResults = Array.isArray(data.results) ? data.results : [];
+    } catch(e){
+      FRIENDS.searchResults = [];
+    }
+    renderFriends();
+  }
+
+  // ---- FRIEND PROFILE --------------------------------------------
+  async function openFriendProfile(id){
+    frHideAll();
+    menuFriendProfile.classList.remove('hidden');
+    frEl('fpName').textContent = 'LOADING...';
+    frEl('fpPresence').textContent = '';
+    frEl('fpStats').innerHTML = '';
+    frEl('btnFpInvite').classList.add('hidden');
+    frEl('btnFpRemove').classList.add('hidden');
+
+    let data = null;
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/friends/profile?sessionToken='
+        + encodeURIComponent(sessionToken) + '&id=' + encodeURIComponent(id));
+      if(res.ok) data = (await res.json()).profile;
+    } catch(e){}
+
+    if(!data){
+      frEl('fpName').textContent = 'UNAVAILABLE';
+      frEl('fpStats').innerHTML = '<div class="fr-empty">COULD NOT LOAD THIS PROFILE.</div>';
+      return;
+    }
+    FRIENDS.profile = data;
+
+    frEl('fpName').textContent = data.name;
+    frEl('fpPresence').textContent = PRESENCE_LABEL[data.presence] || 'OFFLINE';
+    const av = frEl('fpAvatar');
+    if(av && typeof skinColor === 'function'){
+      const c = skinColor(data.skinId);
+      av.style.borderColor = c;
+      av.style.background = c + '22';
+      av.style.boxShadow = '0 0 16px ' + c + '55';
+    }
+
+    const row = (k, v) => '<div class="rr-row"><span>' + k + '</span><b>' + v + '</b></div>';
+    let stats = row('WINS', data.wins) + row('KILLS', data.kills);
+    if(data.ranked && data.ranked.placementComplete){
+      stats += row('RANK', frEscape(data.ranked.rank.name.toUpperCase()))
+        + row('RP', (data.ranked.rp || 0).toLocaleString())
+        + row('RANKED RECORD', data.ranked.wins + 'W · ' + data.ranked.losses + 'L')
+        + row('WIN RATE', data.ranked.winRate + '%');
+    } else {
+      stats += row('RANKED', 'UNRANKED');
+    }
+    stats += row('FRIENDS', data.friendCount);
+    frEl('fpStats').innerHTML = stats;
+
+    if(data.presence !== 'offline') frEl('btnFpInvite').classList.remove('hidden');
+    frEl('btnFpRemove').classList.remove('hidden');
+  }
+
+  // ---- WIRING ----------------------------------------------------
+  frEl('btnBackFriends').addEventListener('click', ()=>{
+    frHideAll();
+    menuMain.classList.remove('hidden');
+  });
+  frEl('btnBackFriendProfile').addEventListener('click', ()=>{
+    frHideAll();
+    menuFriends.classList.remove('hidden');
+    renderFriends();
+  });
+  frEl('frSearchBtn').addEventListener('click', ()=> doFriendSearch(frEl('frSearchInput').value));
+  frEl('frSearchInput').addEventListener('keydown', e=>{
+    if(e.key === 'Enter'){ e.preventDefault(); doFriendSearch(frEl('frSearchInput').value); }
+  });
+  frEl('btnFpInvite').addEventListener('click', async ()=>{
+    if(!FRIENDS.profile) return;
+    const r = await friendsApi('invite', FRIENDS.profile.id);
+    lobbyToast(r.ok ? 'INVITE SENT' : String((r.data && r.data.error) || 'COULD NOT INVITE').toUpperCase());
+  });
+  frEl('btnFpRemove').addEventListener('click', async ()=>{
+    if(!FRIENDS.profile) return;
+    FRIENDS.confirmRemoveId = FRIENDS.profile.id;
+    frHideAll();
+    menuFriends.classList.remove('hidden');
+    renderFriends();
+  });
+
+  window.__friends = FRIENDS;
 
   // ---- PROFILE MODAL ---------------------------------------------
   // Reuses the existing lobby modal rather than adding another screen.

@@ -43,6 +43,11 @@ const store = require("./storage");
 // section further down).
 const Ranked = require("./ranked");
 
+// Friends data shape, validation and public views. Pure functions only;
+// persistence, presence and the WebSocket wiring live in this file (see
+// the FRIENDS section further down).
+const Friends = require("./friends");
+
 const accounts = {}; // sub -> account record (populated in startServer())
 
 // Persists ONE account. Callers await this before replying, so a client
@@ -82,7 +87,12 @@ function defaultAccount(name, email) {
         aimMode: "movement",
         matchSize: 2,
         dailyChallenges: defaultDailyChallenges(),
-        ranked: Ranked.defaultRankedRecord()
+        ranked: Ranked.defaultRankedRecord(),
+        // Friend lists hold stable account ids (Google "sub"), never emails.
+        friends: [],
+        incomingFriendRequests: [],
+        outgoingFriendRequests: [],
+        blocked: []
     };
 }
 
@@ -1002,6 +1012,627 @@ function invalidateRankedLeaderboard() {
 }
 
 // =====================================================================
+// FRIENDS -- presence, two-sided writes, and real-time events.
+//
+// PRESENCE: WHY A DEDICATED CONNECTION
+// ------------------------------------
+// Two facts about the existing architecture decided this design:
+//
+//   1. The client only opened a WebSocket when ENTERING online/ranked
+//      play. A player sitting in the lobby had no socket at all, so
+//      presence built purely on the existing connections would have
+//      reported almost everybody offline.
+//   2. A casual slot (`slots` = {1,2}) is claimed ON CONNECT. If idle
+//      lobby players opened a socket just to be visible, they would
+//      occupy the two casual slots and break casual matchmaking for
+//      the players actually trying to duel.
+//
+// So a presence connection opts OUT of slot assignment (the client asks
+// for it with ?presence=1, see the wss connection handler). It is the
+// same WebSocket server, the same protocol and the same message loop --
+// not a second networking system -- it simply never takes a slot and
+// never participates in the gameplay relay.
+//
+// Presence is keyed by ACCOUNT and counts connections, because one
+// player legitimately has several at once (a presence socket plus a
+// gameplay socket, or two tabs). An account is online while it has at
+// least one live authenticated connection, so closing one tab does not
+// make a player in a match on another tab appear offline.
+//
+// TRUST: being online is a server fact (there is a live socket this
+// server accepted a valid sessionToken on). The finer activity label
+// (in a match / in Voidbreak) is reported by the client, but it can
+// only ever decorate a connection the server already verified -- a
+// client cannot use it to fake being online.
+// =====================================================================
+
+const FRIENDS_CONFIG = Friends.FRIENDS_CONFIG;
+
+// sub -> { conns:Set<conn>, activity, since, lastSeen }
+const presence = new Map();
+
+function presenceStateOf(sub) {
+    const row = presence.get(sub);
+    if (!row || row.conns.size === 0) return Friends.PRESENCE.OFFLINE;
+    return row.activity || Friends.PRESENCE.ONLINE;
+}
+
+// Attaches an authenticated connection to an account's presence.
+// Returns true when the account transitioned offline -> online, so the
+// caller knows whether to broadcast (and therefore never spams friends
+// with an event per tab -- requirement 12).
+function presenceAttach(sub, conn) {
+    let row = presence.get(sub);
+    const wasOffline = !row || row.conns.size === 0;
+    if (!row) {
+        row = { conns: new Set(), activity: Friends.PRESENCE.ONLINE, since: Date.now(), lastSeen: Date.now() };
+        presence.set(sub, row);
+    }
+    row.conns.add(conn);
+    row.lastSeen = Date.now();
+    if (wasOffline) {
+        row.activity = Friends.PRESENCE.ONLINE;
+        row.since = Date.now();
+    }
+    return wasOffline;
+}
+
+// Detaches one connection. Returns true only when the LAST connection
+// went away, i.e. the account actually went offline.
+function presenceDetach(sub, conn) {
+    const row = presence.get(sub);
+    if (!row) return false;
+    row.conns.delete(conn);
+    if (row.conns.size === 0) {
+        presence.delete(sub);
+        return true;
+    }
+    return false;
+}
+
+// Client-reported activity label. Validated against a fixed list, and
+// only ever applied to an account that already has a live connection.
+function presenceSetActivity(sub, activity) {
+    const row = presence.get(sub);
+    if (!row || row.conns.size === 0) return false;
+    if (Friends.VALID_ACTIVITIES.indexOf(activity) === -1) return false;
+    if (row.activity === activity) return false;
+    row.activity = activity;
+    row.lastSeen = Date.now();
+    return true;
+}
+
+// Sends a message to every live connection an account has (all tabs).
+function sendToAccount(sub, payload) {
+    const row = presence.get(sub);
+    if (!row) return;
+    for (const conn of row.conns) send(conn, payload);
+}
+
+// Tells an account's online friends that something about it changed.
+// Only ever sends to CURRENT friends, so this cannot be used to probe
+// anyone else's presence.
+function broadcastToFriends(sub, payload) {
+    const account = accounts[sub];
+    if (!account || !Array.isArray(account.friends)) return;
+    for (const friendSub of account.friends) {
+        if (presenceStateOf(friendSub) !== Friends.PRESENCE.OFFLINE) {
+            sendToAccount(friendSub, payload);
+        }
+    }
+}
+
+function presenceEventFor(sub) {
+    const account = accounts[sub];
+    return {
+        type: "friend_presence",
+        id: sub,
+        name: account ? account.name : "Player",
+        presence: presenceStateOf(sub)
+    };
+}
+
+// ---------------------------------------------------------------------
+// MIGRATION -- lazy, idempotent, additive. Mirrors ensureAccountRanked.
+// ---------------------------------------------------------------------
+function ensureAccountFriends(sub) {
+    const account = accounts[sub];
+    if (!account) return null;
+    const fixed = Friends.ensureFriendsRecord(account);
+    if (fixed) {
+        // Assign field-by-field so nothing else on the account is touched.
+        account.friends = fixed.friends;
+        account.incomingFriendRequests = fixed.incomingFriendRequests;
+        account.outgoingFriendRequests = fixed.outgoingFriendRequests;
+        account.blocked = fixed.blocked;
+        persistAccount(sub).catch(e =>
+            console.log("[friends] failed to persist migration for " + sub + ":", e.message));
+    }
+    return account;
+}
+
+// ---------------------------------------------------------------------
+// TWO-SIDED WRITES
+//
+// A friendship lives on TWO account records and the store has no
+// cross-key transaction, so "write both" needs an explicit failure
+// story. applyFriendMutation():
+//   1. snapshots both sides' four lists,
+//   2. applies the change in memory,
+//   3. persists both,
+//   4. and on ANY failure restores BOTH snapshots in memory and reports
+//      failure -- so a half-written pair never becomes the live state.
+//
+// A crash between the two writes is still possible (nothing short of a
+// real transaction prevents that), which is what reconcileFriendships()
+// at boot is for: it repairs one-sided links rather than leaving them
+// forever.
+// ---------------------------------------------------------------------
+const FRIEND_LIST_KEYS = ["friends", "incomingFriendRequests", "outgoingFriendRequests", "blocked"];
+
+function snapshotFriendLists(account) {
+    const snap = {};
+    for (const key of FRIEND_LIST_KEYS) {
+        snap[key] = Array.isArray(account[key]) ? account[key].slice() : [];
+    }
+    return snap;
+}
+function restoreFriendLists(account, snap) {
+    for (const key of FRIEND_LIST_KEYS) account[key] = snap[key];
+}
+
+// `mutate` receives both accounts and edits them in memory. Returns
+// { ok:true } or { ok:false, error }.
+async function applyFriendMutation(subA, subB, mutate) {
+    const a = accounts[subA];
+    const b = accounts[subB];
+    if (!a || !b) return { ok: false, error: "Player not found" };
+
+    const snapA = snapshotFriendLists(a);
+    const snapB = snapshotFriendLists(b);
+
+    mutate(a, b);
+
+    try {
+        await persistAccount(subA);
+    } catch (e) {
+        restoreFriendLists(a, snapA);
+        restoreFriendLists(b, snapB);
+        console.log("[friends] write failed for " + subA + ", rolled back:", e.message);
+        return { ok: false, error: "Could not save -- try again" };
+    }
+
+    try {
+        await persistAccount(subB);
+    } catch (e) {
+        // The FIRST write already landed, so rolling back in memory is
+        // not enough -- the stored copy of A has to be put back too.
+        restoreFriendLists(a, snapA);
+        restoreFriendLists(b, snapB);
+        try {
+            await persistAccount(subA);
+        } catch (e2) {
+            // Both the write and its compensation failed. Say so loudly
+            // rather than pretending it worked; reconcileFriendships()
+            // repairs this shape on the next boot.
+            console.log("[friends] CRITICAL: could not roll back " + subA +
+                " after " + subB + " failed:", e2.message);
+        }
+        console.log("[friends] write failed for " + subB + ", rolled back:", e.message);
+        return { ok: false, error: "Could not save -- try again" };
+    }
+
+    return { ok: true };
+}
+
+// Boot-time repair for any one-sided link left by a crash mid-write.
+// Conservative on purpose: a half-made friendship is DOWNGRADED (the
+// dangling side is dropped) rather than completed, because inventing a
+// friendship neither player confirmed is worse than losing a request
+// they can simply send again.
+function reconcileFriendships() {
+    let repaired = 0;
+    for (const sub of Object.keys(accounts)) {
+        const account = accounts[sub];
+        const fixed = Friends.ensureFriendsRecord(account);
+        if (fixed) {
+            account.friends = fixed.friends;
+            account.incomingFriendRequests = fixed.incomingFriendRequests;
+            account.outgoingFriendRequests = fixed.outgoingFriendRequests;
+            account.blocked = fixed.blocked;
+            repaired++;
+        }
+    }
+
+    const dirty = new Set();
+    for (const sub of Object.keys(accounts)) {
+        const account = accounts[sub];
+
+        // friends must be mutual, and must point at an account that
+        // still exists (requirement 18: no broken references).
+        const goodFriends = [];
+        for (const other of account.friends) {
+            const otherAccount = accounts[other];
+            if (!otherAccount) { dirty.add(sub); continue; }
+            if (Array.isArray(otherAccount.friends) && otherAccount.friends.includes(sub)) {
+                goodFriends.push(other);
+            } else {
+                dirty.add(sub);
+            }
+        }
+        if (goodFriends.length !== account.friends.length) account.friends = goodFriends;
+
+        // An outgoing request must have a matching incoming one.
+        const goodOut = [];
+        for (const other of account.outgoingFriendRequests) {
+            const otherAccount = accounts[other];
+            if (otherAccount && Array.isArray(otherAccount.incomingFriendRequests)
+                && otherAccount.incomingFriendRequests.includes(sub)) {
+                goodOut.push(other);
+            } else { dirty.add(sub); }
+        }
+        if (goodOut.length !== account.outgoingFriendRequests.length) account.outgoingFriendRequests = goodOut;
+
+        const goodIn = [];
+        for (const other of account.incomingFriendRequests) {
+            const otherAccount = accounts[other];
+            if (otherAccount && Array.isArray(otherAccount.outgoingFriendRequests)
+                && otherAccount.outgoingFriendRequests.includes(sub)) {
+                goodIn.push(other);
+            } else { dirty.add(sub); }
+        }
+        if (goodIn.length !== account.incomingFriendRequests.length) account.incomingFriendRequests = goodIn;
+    }
+
+    for (const sub of dirty) {
+        persistAccount(sub).catch(e =>
+            console.log("[friends] reconcile write failed for " + sub + ":", e.message));
+    }
+    if (repaired || dirty.size) {
+        console.log("[friends] reconcile: " + repaired + " record(s) normalised, " +
+            dirty.size + " inconsistent link(s) repaired");
+    }
+}
+
+// ---------------------------------------------------------------------
+// VIEWS
+// ---------------------------------------------------------------------
+function friendViewOf(sub) {
+    const account = accounts[sub];
+    if (!account) return null;
+    return Friends.publicPlayerView(sub, account, presenceStateOf(sub),
+        Ranked.publicRankedView(account));
+}
+
+// The whole Friends panel payload in one round trip -- list, both
+// request directions, and the counts. Only public fields, and only as
+// many account reads as the player actually has relationships.
+function friendsPayloadFor(sub) {
+    const account = ensureAccountFriends(sub);
+    if (!account) return null;
+
+    const friends = Friends.sortFriendViews(
+        account.friends.map(friendViewOf).filter(Boolean));
+    const incoming = account.incomingFriendRequests.map(friendViewOf).filter(Boolean);
+    const outgoing = account.outgoingFriendRequests.map(friendViewOf).filter(Boolean);
+
+    return {
+        friends: friends,
+        incoming: incoming,
+        outgoing: outgoing,
+        counts: {
+            friends: friends.length,
+            incoming: incoming.length,
+            outgoing: outgoing.length,
+            maxFriends: FRIENDS_CONFIG.maxFriends
+        }
+    };
+}
+
+// Pushes a fresh payload to an account's live connections. Used after
+// any change so every open tab converges without a refresh.
+function pushFriendsUpdate(sub, reason, extra) {
+    if (presenceStateOf(sub) === Friends.PRESENCE.OFFLINE) return;
+    const payload = friendsPayloadFor(sub);
+    if (!payload) return;
+    sendToAccount(sub, Object.assign({
+        type: "friends_update",
+        reason: reason || "change",
+        friends: payload.friends,
+        incoming: payload.incoming,
+        outgoing: payload.outgoing,
+        counts: payload.counts
+    }, extra || {}));
+}
+
+// ---------------------------------------------------------------------
+// SEARCH -- server-side, public fields only, capped.
+// ---------------------------------------------------------------------
+function searchPlayers(query, viewerSub) {
+    const q = String(query || "").trim().toLowerCase();
+    if (q.length < FRIENDS_CONFIG.searchMinChars) return [];
+
+    const viewer = accounts[viewerSub];
+    const results = [];
+
+    for (const sub of Object.keys(accounts)) {
+        if (sub === viewerSub) continue; // never offer yourself
+        const account = accounts[sub];
+        const name = (account.name || "").toLowerCase();
+        // Name match only. Searching by raw account id is deliberately
+        // NOT supported: it would turn this into an id-confirmation
+        // oracle, and ids are not something players see anyway.
+        if (!name.includes(q)) continue;
+        // Blocking (either direction) hides the player entirely.
+        if (viewer && (Friends.isBlocked(viewer, sub) || Friends.isBlocked(account, viewerSub))) continue;
+
+        const view = friendViewOf(sub);
+        if (!view) continue;
+        // Tell the client what it can offer, so it doesn't render an
+        // ADD button that the server would only reject.
+        view.relation = !viewer ? "none"
+            : Friends.isFriend(viewer, sub) ? "friends"
+            : Friends.hasOutgoingRequest(viewer, sub) ? "requested"
+            : Friends.hasIncomingRequest(viewer, sub) ? "incoming"
+            : "none";
+        results.push(view);
+        if (results.length >= FRIENDS_CONFIG.searchMaxResults) break;
+    }
+
+    // Exact name matches first, then alphabetical -- so searching a full
+    // name puts that player at the top.
+    results.sort((a, b) => {
+        const ax = a.name.toLowerCase() === q ? 0 : 1;
+        const bx = b.name.toLowerCase() === q ? 0 : 1;
+        if (ax !== bx) return ax - bx;
+        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    });
+    return results;
+}
+
+// ---------------------------------------------------------------------
+// OPERATIONS -- each one authenticates, validates, writes BOTH sides,
+// and notifies both players' live connections.
+// ---------------------------------------------------------------------
+
+async function sendFriendRequest(fromSub, toSub) {
+    const fromAccount = ensureAccountFriends(fromSub);
+    const toAccount = accounts[toSub] ? ensureAccountFriends(toSub) : null;
+
+    const verdict = Friends.canSendRequest(fromSub, toSub, fromAccount, toAccount, FRIENDS_CONFIG);
+
+    // Simultaneous requests: they already asked us, so the correct
+    // outcome is ONE friendship, not a second mirrored request.
+    if (!verdict.ok && verdict.code === "reciprocal") {
+        return acceptFriendRequest(fromSub, toSub);
+    }
+    if (!verdict.ok) return { ok: false, code: verdict.code, error: verdict.message };
+
+    const result = await applyFriendMutation(fromSub, toSub, (a, b) => {
+        a.outgoingFriendRequests = Friends.withValue(a.outgoingFriendRequests, toSub);
+        b.incomingFriendRequests = Friends.withValue(b.incomingFriendRequests, fromSub);
+    });
+    if (!result.ok) return { ok: false, code: "storage", error: result.error };
+
+    pushFriendsUpdate(fromSub, "requestSent");
+    pushFriendsUpdate(toSub, "requestReceived", {
+        notice: { kind: "requestReceived", from: friendViewOf(fromSub) }
+    });
+    return { ok: true, action: "requested" };
+}
+
+async function acceptFriendRequest(sub, fromSub) {
+    const account = ensureAccountFriends(sub);
+    const other = accounts[fromSub] ? ensureAccountFriends(fromSub) : null;
+    if (!other) return { ok: false, code: "notFound", error: "Player not found" };
+
+    // Already friends -> succeed idempotently rather than duplicating.
+    if (Friends.isFriend(account, fromSub) && Friends.isFriend(other, sub)) {
+        return { ok: true, action: "alreadyFriends" };
+    }
+    if (!Friends.hasIncomingRequest(account, fromSub)) {
+        return { ok: false, code: "noRequest", error: "No pending request from that player" };
+    }
+    if ((account.friends || []).length >= FRIENDS_CONFIG.maxFriends) {
+        return { ok: false, code: "full", error: "Friend list full" };
+    }
+    if ((other.friends || []).length >= FRIENDS_CONFIG.maxFriends) {
+        return { ok: false, code: "targetFull", error: "That player's friend list is full" };
+    }
+
+    const result = await applyFriendMutation(sub, fromSub, (me, them) => {
+        me.incomingFriendRequests = Friends.without(me.incomingFriendRequests, fromSub);
+        me.outgoingFriendRequests = Friends.without(me.outgoingFriendRequests, fromSub);
+        them.outgoingFriendRequests = Friends.without(them.outgoingFriendRequests, sub);
+        them.incomingFriendRequests = Friends.without(them.incomingFriendRequests, sub);
+        me.friends = Friends.withValue(me.friends, fromSub);
+        them.friends = Friends.withValue(them.friends, sub);
+    });
+    if (!result.ok) return { ok: false, code: "storage", error: result.error };
+
+    pushFriendsUpdate(sub, "requestAccepted");
+    pushFriendsUpdate(fromSub, "requestAccepted", {
+        notice: { kind: "requestAccepted", from: friendViewOf(sub) }
+    });
+    return { ok: true, action: "accepted" };
+}
+
+async function declineFriendRequest(sub, fromSub) {
+    const account = ensureAccountFriends(sub);
+    const other = accounts[fromSub] ? ensureAccountFriends(fromSub) : null;
+    if (!other) {
+        // Their account is gone -- still clear our dangling entry.
+        if (Friends.hasIncomingRequest(account, fromSub)) {
+            account.incomingFriendRequests = Friends.without(account.incomingFriendRequests, fromSub);
+            await persistAccount(sub).catch(() => {});
+            pushFriendsUpdate(sub, "requestDeclined");
+        }
+        return { ok: true, action: "declined" };
+    }
+    if (!Friends.hasIncomingRequest(account, fromSub)) {
+        return { ok: true, action: "noRequest" }; // idempotent
+    }
+
+    const result = await applyFriendMutation(sub, fromSub, (me, them) => {
+        me.incomingFriendRequests = Friends.without(me.incomingFriendRequests, fromSub);
+        them.outgoingFriendRequests = Friends.without(them.outgoingFriendRequests, sub);
+    });
+    if (!result.ok) return { ok: false, code: "storage", error: result.error };
+
+    pushFriendsUpdate(sub, "requestDeclined");
+    pushFriendsUpdate(fromSub, "requestDeclined");
+    return { ok: true, action: "declined" };
+}
+
+// Withdraw a request WE sent.
+async function cancelFriendRequest(sub, toSub) {
+    const account = ensureAccountFriends(sub);
+    const other = accounts[toSub] ? ensureAccountFriends(toSub) : null;
+    if (!Friends.hasOutgoingRequest(account, toSub)) return { ok: true, action: "noRequest" };
+    if (!other) {
+        account.outgoingFriendRequests = Friends.without(account.outgoingFriendRequests, toSub);
+        await persistAccount(sub).catch(() => {});
+        pushFriendsUpdate(sub, "requestCancelled");
+        return { ok: true, action: "cancelled" };
+    }
+
+    const result = await applyFriendMutation(sub, toSub, (me, them) => {
+        me.outgoingFriendRequests = Friends.without(me.outgoingFriendRequests, toSub);
+        them.incomingFriendRequests = Friends.without(them.incomingFriendRequests, sub);
+    });
+    if (!result.ok) return { ok: false, code: "storage", error: result.error };
+
+    pushFriendsUpdate(sub, "requestCancelled");
+    pushFriendsUpdate(toSub, "requestCancelled");
+    return { ok: true, action: "cancelled" };
+}
+
+async function removeFriend(sub, otherSub) {
+    const account = ensureAccountFriends(sub);
+    const other = accounts[otherSub] ? ensureAccountFriends(otherSub) : null;
+
+    if (!other) {
+        // Dangling reference to a deleted account -- clean our side only.
+        if (Friends.isFriend(account, otherSub)) {
+            account.friends = Friends.without(account.friends, otherSub);
+            await persistAccount(sub).catch(() => {});
+            pushFriendsUpdate(sub, "friendRemoved");
+        }
+        return { ok: true, action: "removed" };
+    }
+    // Not friends (already removed) -> idempotent success, and never
+    // touches anyone else's list.
+    if (!Friends.isFriend(account, otherSub) && !Friends.isFriend(other, sub)) {
+        return { ok: true, action: "notFriends" };
+    }
+
+    const result = await applyFriendMutation(sub, otherSub, (me, them) => {
+        me.friends = Friends.without(me.friends, otherSub);
+        them.friends = Friends.without(them.friends, sub);
+    });
+    if (!result.ok) return { ok: false, code: "storage", error: result.error };
+
+    pushFriendsUpdate(sub, "friendRemoved");
+    pushFriendsUpdate(otherSub, "friendRemoved", {
+        notice: { kind: "friendRemoved" }
+    });
+    return { ok: true, action: "removed" };
+}
+
+// A friend's public profile. Gated on an ACTUAL friendship (or self) --
+// being able to name someone is not enough to read their profile.
+function getFriendProfile(viewerSub, targetSub) {
+    const viewer = ensureAccountFriends(viewerSub);
+    const target = accounts[targetSub];
+    if (!target) return { ok: false, error: "Player not found" };
+
+    const isSelf = viewerSub === targetSub;
+    if (!isSelf && !Friends.isFriend(viewer, targetSub)) {
+        return { ok: false, error: "You can only view a friend's profile" };
+    }
+    return {
+        ok: true,
+        profile: Friends.publicProfileView(targetSub, target, presenceStateOf(targetSub),
+            Ranked.publicRankedView(target))
+    };
+}
+
+// ---------------------------------------------------------------------
+// MATCH INVITES
+//
+// Deliberately minimal and honest. The existing casual online lobby is
+// ONE global 2-slot room -- there is no room/code system to direct two
+// specific players into, so an invite cannot reserve a private match.
+// What this does is real and useful: it delivers a genuine invite over
+// the live connection, and on accept tells BOTH clients to open the
+// existing online lobby. It never claims to have matched them privately.
+// ---------------------------------------------------------------------
+const pendingInvites = new Map(); // inviteId -> {from, to, at}
+const INVITE_TTL_MS = 60 * 1000;
+
+function inviteFriend(fromSub, toSub) {
+    const fromAccount = ensureAccountFriends(fromSub);
+    if (!Friends.isFriend(fromAccount, toSub)) {
+        return { ok: false, error: "You can only invite friends" };
+    }
+    if (presenceStateOf(toSub) === Friends.PRESENCE.OFFLINE) {
+        return { ok: false, error: "That friend is offline" };
+    }
+    const inviteId = crypto.randomBytes(8).toString("hex");
+    pendingInvites.set(inviteId, { from: fromSub, to: toSub, at: Date.now() });
+
+    sendToAccount(toSub, {
+        type: "friend_invite",
+        inviteId: inviteId,
+        from: friendViewOf(fromSub),
+        expiresInSec: Math.round(INVITE_TTL_MS / 1000)
+    });
+    return { ok: true, inviteId: inviteId };
+}
+
+function respondToInvite(sub, inviteId, accept) {
+    const invite = pendingInvites.get(inviteId);
+    if (!invite) return { ok: false, error: "Invite expired" };
+    // Only the invited account may answer it.
+    if (invite.to !== sub) return { ok: false, error: "Not your invite" };
+    pendingInvites.delete(inviteId);
+
+    if (!accept) {
+        sendToAccount(invite.from, {
+            type: "friend_invite_declined", by: friendViewOf(sub)
+        });
+        return { ok: true, accepted: false };
+    }
+    // Both sides are told to head for the existing online lobby. The
+    // lobby itself is unchanged -- this is a nudge, not a new matchmaker.
+    const payload = kind => ({
+        type: "friend_invite_accepted",
+        with: friendViewOf(kind === "from" ? invite.to : invite.from)
+    });
+    sendToAccount(invite.from, payload("from"));
+    sendToAccount(invite.to, payload("to"));
+    return { ok: true, accepted: true };
+}
+
+// Housekeeping: expire invites and sweep presence rows whose sockets
+// died without a close event.
+setInterval(() => {
+    const now = Date.now();
+    for (const [id, invite] of Array.from(pendingInvites.entries())) {
+        if (now - invite.at > INVITE_TTL_MS) pendingInvites.delete(id);
+    }
+    for (const [sub, row] of Array.from(presence.entries())) {
+        for (const conn of Array.from(row.conns)) {
+            if (!conn.socket || conn.socket.readyState !== WebSocket.OPEN) row.conns.delete(conn);
+        }
+        if (row.conns.size === 0) {
+            presence.delete(sub);
+            broadcastToFriends(sub, presenceEventFor(sub));
+        }
+    }
+}, 15000);
+
+// =====================================================================
 // ADMIN ACTION LOG -- most recent 100 balance changes, newest first.
 // =====================================================================
 const ADMIN_LOG_SEED_FILE = path.join(__dirname, "adminLog.json");
@@ -1245,7 +1876,21 @@ const httpServer = http.createServer(async (req, res) => {
                 // by the server's own match pipeline (completeRankedMatch).
                 // A client POSTing {ranked:{rp:99999}} here has no effect
                 // whatsoever.
-                ranked: Ranked.ensureRankedRecord(existing)
+                ranked: Ranked.ensureRankedRecord(existing),
+                // FRIEND LISTS ARE DELIBERATELY NOT READ FROM `body`.
+                //
+                // Exactly the same reasoning as `ranked` above: this
+                // handler rebuilds the account field-by-field, so these
+                // MUST be carried or they would be wiped on the next
+                // save -- but only ever from the STORED record, never
+                // from the request. A client POSTing
+                // {friends:["someone"]} here has no effect at all;
+                // friendships can only be created by the server's own
+                // request/accept pipeline, which writes both sides.
+                friends: Array.isArray(existing.friends) ? existing.friends : [],
+                incomingFriendRequests: Array.isArray(existing.incomingFriendRequests) ? existing.incomingFriendRequests : [],
+                outgoingFriendRequests: Array.isArray(existing.outgoingFriendRequests) ? existing.outgoingFriendRequests : [],
+                blocked: Array.isArray(existing.blocked) ? existing.blocked : []
             };
             try {
                 await persistAccount(sub);
@@ -1390,6 +2035,107 @@ const httpServer = http.createServer(async (req, res) => {
             .slice(0, 20);
 
         sendJson(res, 200, { sort: sortKey, entries: entries });
+        return;
+    }
+
+    // =================================================================
+    // FRIENDS ENDPOINTS
+    //
+    // Every one of them resolves the caller from their sessionToken
+    // server-side. The client never states who it is, and no handler
+    // accepts a caller-supplied "my id" -- the acting account is always
+    // sessions[token]. That is what makes it impossible to act as
+    // somebody else by editing a request body.
+    // =================================================================
+
+    // ---- GET /friends?sessionToken=... ----
+    if (req.method === "GET" && req.url.startsWith("/friends/list")) {
+        const urlObj = new URL(req.url, "http://x");
+        const sub = sessions[urlObj.searchParams.get("sessionToken")];
+        if (!sub || !accounts[sub]) {
+            sendJson(res, 401, { error: "Not signed in" });
+            return;
+        }
+        const payload = friendsPayloadFor(sub);
+        sendJson(res, 200, payload);
+        return;
+    }
+
+    // ---- GET /friends/search?sessionToken=...&q=... ----
+    // Server-side search. Returns at most searchMaxResults public views;
+    // the browser never receives the account store.
+    if (req.method === "GET" && req.url.startsWith("/friends/search")) {
+        const urlObj = new URL(req.url, "http://x");
+        const sub = sessions[urlObj.searchParams.get("sessionToken")];
+        if (!sub || !accounts[sub]) {
+            sendJson(res, 401, { error: "Not signed in" });
+            return;
+        }
+        const q = urlObj.searchParams.get("q") || "";
+        if (q.trim().length < FRIENDS_CONFIG.searchMinChars) {
+            sendJson(res, 200, { results: [] });
+            return;
+        }
+        sendJson(res, 200, { results: searchPlayers(q, sub) });
+        return;
+    }
+
+    // ---- GET /friends/profile?sessionToken=...&id=... ----
+    if (req.method === "GET" && req.url.startsWith("/friends/profile")) {
+        const urlObj = new URL(req.url, "http://x");
+        const sub = sessions[urlObj.searchParams.get("sessionToken")];
+        if (!sub || !accounts[sub]) {
+            sendJson(res, 401, { error: "Not signed in" });
+            return;
+        }
+        const result = getFriendProfile(sub, urlObj.searchParams.get("id"));
+        sendJson(res, result.ok ? 200 : 403, result.ok ? result : { error: result.error });
+        return;
+    }
+
+    // ---- POST /friends/action ----
+    // body: { sessionToken, action, id }
+    // One authenticated entry point for every mutation, so the auth and
+    // validation cannot drift between them.
+    if (req.method === "POST" && req.url === "/friends/action") {
+        try {
+            const body = await readJsonBody(req);
+            const sub = sessions[body.sessionToken];
+            if (!sub || !accounts[sub]) {
+                sendJson(res, 401, { error: "Not signed in" });
+                return;
+            }
+            const targetId = typeof body.id === "string" ? body.id : "";
+            if (!targetId) {
+                sendJson(res, 400, { error: "Missing player id" });
+                return;
+            }
+
+            let result;
+            switch (body.action) {
+                case "request": result = await sendFriendRequest(sub, targetId); break;
+                case "accept":  result = await acceptFriendRequest(sub, targetId); break;
+                case "decline": result = await declineFriendRequest(sub, targetId); break;
+                case "cancel":  result = await cancelFriendRequest(sub, targetId); break;
+                case "remove":  result = await removeFriend(sub, targetId); break;
+                case "invite":  result = inviteFriend(sub, targetId); break;
+                default:
+                    sendJson(res, 400, { error: "Unknown action" });
+                    return;
+            }
+
+            if (!result.ok) {
+                // 409 for "the request is understood but the current
+                // state forbids it" (already friends, self, full...),
+                // which the UI turns into a friendly message.
+                sendJson(res, result.code === "storage" ? 503 : 409,
+                    { error: result.error, code: result.code });
+                return;
+            }
+            sendJson(res, 200, Object.assign({ ok: true }, result, friendsPayloadFor(sub)));
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
         return;
     }
 
@@ -1909,7 +2655,16 @@ function send(player, obj) {
     }
 }
 
-wss.on("connection", socket => {
+wss.on("connection", (socket, request) => {
+
+    // A presence connection asks for it explicitly with ?presence=1 and
+    // is NEVER given a casual slot. That is the whole point: idle lobby
+    // players need to be visible to their friends without occupying one
+    // of the two casual duel slots (see the FRIENDS section above).
+    let isPresenceOnly = false;
+    try {
+        isPresenceOnly = /[?&]presence=1(&|$)/.test(request && request.url ? request.url : "");
+    } catch (e) { isPresenceOnly = false; }
 
     // Every connection gets a lightweight envelope. For CASUAL play this
     // is exactly the old `player` object in one of the two global slots
@@ -1927,16 +2682,25 @@ wss.on("connection", socket => {
         rankedSub: null,
         rankedQueued: false,
         rankedMatchId: null,
-        rankedSlot: null
+        rankedSlot: null,
+        // friends/presence state
+        authSub: null,
+        presenceOnly: isPresenceOnly
     };
 
     // ---- Casual slot assignment (unchanged) ----
     // A connection that ends up playing ranked simply never uses this,
     // and a full server no longer refuses the connection outright: it
     // still has to be able to queue for ranked, which needs no slot.
+    //
+    // A PRESENCE connection skips this entirely -- it must never consume
+    // a casual slot, or idle players in the lobby would lock out the
+    // players actually trying to duel.
     let id = null;
-    if (!slots[1]) id = 1;
-    else if (!slots[2]) id = 2;
+    if (!isPresenceOnly) {
+        if (!slots[1]) id = 1;
+        else if (!slots[2]) id = 2;
+    }
 
     if (id !== null) {
         conn.id = id;
@@ -1958,10 +2722,13 @@ wss.on("connection", socket => {
             send(conn, { type: "opponentJoined" });
             send(opponent, { type: "opponentJoined" });
         }
-    } else {
+    } else if (!isPresenceOnly) {
         // No casual slot free. Previously this closed the socket; now it
         // stays open so ranked queueing still works, and the client is
         // told the casual lobby is full exactly as before.
+        //
+        // A presence connection never wanted a slot, so it must NOT be
+        // told the lobby is full -- that message drives casual UI.
         send(conn, { type: "serverFull" });
     }
 
@@ -1974,6 +2741,81 @@ wss.on("connection", socket => {
             data = JSON.parse(raw.toString());
         } catch (error) {
             console.log("Invalid message from connection");
+            return;
+        }
+
+        // =============================================================
+        // FRIENDS / PRESENCE MESSAGES
+        //
+        // Handled first, and available on ANY connection (presence or
+        // gameplay) so a player in a match still counts as online and
+        // still receives friend events.
+        // =============================================================
+        if (typeof data.type === "string" && data.type.indexOf("presence_") === 0) {
+
+            // Authenticates this socket. This is the ONLY way a socket
+            // becomes associated with an account -- the client cannot
+            // simply declare an id, it has to present a session token
+            // this server itself issued.
+            if (data.type === "presence_hello") {
+                const sub = sessions[data.sessionToken];
+                if (!sub || !accounts[sub]) {
+                    send(conn, { type: "presence_error", message: "Not signed in" });
+                    return;
+                }
+                // Re-identifying on the same socket (e.g. a re-sign-in)
+                // detaches the previous account first.
+                if (conn.authSub && conn.authSub !== sub) {
+                    const wentOffline = presenceDetach(conn.authSub, conn);
+                    if (wentOffline) broadcastToFriends(conn.authSub, presenceEventFor(conn.authSub));
+                }
+                conn.authSub = sub;
+                ensureAccountFriends(sub);
+                const cameOnline = presenceAttach(sub, conn);
+
+                send(conn, {
+                    type: "presence_ready",
+                    id: sub,
+                    friends: friendsPayloadFor(sub)
+                });
+                // Only announce a genuine offline -> online transition,
+                // so opening a second tab doesn't notify everyone again.
+                if (cameOnline) broadcastToFriends(sub, presenceEventFor(sub));
+                return;
+            }
+
+            if (!conn.authSub) return; // everything below needs identity
+
+            // Cosmetic activity label on top of a verified connection.
+            if (data.type === "presence_activity") {
+                if (presenceSetActivity(conn.authSub, data.activity)) {
+                    broadcastToFriends(conn.authSub, presenceEventFor(conn.authSub));
+                }
+                return;
+            }
+
+            if (data.type === "presence_ping") {
+                const row = presence.get(conn.authSub);
+                if (row) row.lastSeen = Date.now();
+                send(conn, { type: "presence_pong" });
+                return;
+            }
+            return;
+        }
+
+        if (typeof data.type === "string" && data.type.indexOf("friend_") === 0) {
+            if (!conn.authSub) {
+                send(conn, { type: "presence_error", message: "Not signed in" });
+                return;
+            }
+            // Invite responses are the only friend action that arrives
+            // over the socket rather than HTTP, because they are a
+            // live, expiring exchange between two connected players.
+            if (data.type === "friend_invite_respond") {
+                const result = respondToInvite(conn.authSub, data.inviteId, !!data.accept);
+                if (!result.ok) send(conn, { type: "presence_error", message: result.error });
+                return;
+            }
             return;
         }
 
@@ -2047,7 +2889,13 @@ wss.on("connection", socket => {
 
         // =============================================================
         // CASUAL RELAY -- completely unchanged from here down.
+        //
+        // A presence connection stops here. It holds no casual slot, so
+        // letting it reach the relay below would make it read
+        // slots[otherId(null)] and relay stray gameplay messages into
+        // somebody else's real match.
         // =============================================================
+        if (conn.presenceOnly || conn.id === null) return;
 
         // Lightweight ping/pong for RTT measurement -- answered straight
         // back to the sender and does NOT require an opponent to be
@@ -2226,7 +3074,16 @@ wss.on("connection", socket => {
 
     socket.on("close", () => {
 
-        // Ranked cleanup first: drops any queue entry and turns an
+        // Presence first: drop this connection from its account, and
+        // tell that account's friends only if it was the LAST one (so
+        // closing one of two tabs doesn't show the player as offline).
+        if (conn.authSub) {
+            const sub = conn.authSub;
+            const wentOffline = presenceDetach(sub, conn);
+            if (wentOffline) broadcastToFriends(sub, presenceEventFor(sub));
+        }
+
+        // Ranked cleanup: drops any queue entry and turns an
         // in-progress ranked match into a forfeit/abandon as appropriate
         // (see handleRankedDisconnect). This is what guarantees a closed
         // browser can never leave a ghost in the queue.
@@ -2285,6 +3142,11 @@ async function startServer() {
         // GONE after a restart -- which is the correct outcome. Nothing
         // is reconstructed, so a restart can never leave a ghost player
         // stuck in a queue or a zombie match holding someone's account.
+
+        // Friends: normalise every record and repair any one-sided link
+        // a crash mid-write could have left behind. Runs once, at boot,
+        // against the fully-loaded account cache.
+        reconcileFriendships();
 
         // Restore live sessions so a redeploy doesn't invalidate the token
         // every already-signed-in player is still holding.
