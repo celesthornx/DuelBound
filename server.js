@@ -128,6 +128,7 @@ function defaultAccount(name, email) {
         autoAimP2: false,
         aimMode: "movement",
         matchSize: 2,
+        deviceMode: "auto",
         xp: 0,
         level: 1,
         dailyChallenges: defaultDailyChallenges(),
@@ -2112,6 +2113,7 @@ const httpServer = http.createServer(async (req, res) => {
                 autoAimP2: typeof body.autoAimP2 === "boolean" ? body.autoAimP2 : (existing.autoAimP2 || false),
                 aimMode: (body.aimMode === "mouse" || body.aimMode === "movement") ? body.aimMode : (existing.aimMode || "movement"),
                 matchSize: [2, 3, 4].includes(body.matchSize) ? body.matchSize : (existing.matchSize || 2),
+                deviceMode: ["auto", "iphone", "ipad", "computer"].includes(body.deviceMode) ? body.deviceMode : (existing.deviceMode || "auto"),
                 // XP/LEVEL ARE DELIBERATELY NOT READ FROM `body`, for the
                 // exact same reason ranked/friends aren't: this handler
                 // rebuilds the account field-by-field, so xp/level MUST be
