@@ -86,6 +86,7 @@ function defaultAccount(name, email) {
         autoAimP2: false,
         aimMode: "movement",
         matchSize: 2,
+        deviceMode: "auto",
         dailyChallenges: defaultDailyChallenges(),
         ranked: Ranked.defaultRankedRecord(),
         // Friend lists hold stable account ids (Google "sub"), never emails.
@@ -1861,6 +1862,7 @@ const httpServer = http.createServer(async (req, res) => {
                 autoAimP2: typeof body.autoAimP2 === "boolean" ? body.autoAimP2 : (existing.autoAimP2 || false),
                 aimMode: (body.aimMode === "mouse" || body.aimMode === "movement") ? body.aimMode : (existing.aimMode || "movement"),
                 matchSize: [2, 3, 4].includes(body.matchSize) ? body.matchSize : (existing.matchSize || 2),
+                deviceMode: ["auto", "iphone", "ipad", "computer"].includes(body.deviceMode) ? body.deviceMode : (existing.deviceMode || "auto"),
                 dailyChallenges: newDailyChallenges,
                 // RANKED IS DELIBERATELY NOT READ FROM `body`.
                 //

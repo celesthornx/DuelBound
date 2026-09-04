@@ -2,6 +2,17 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<!-- Without this the page had NO viewport meta tag at all -- mobile
+     Safari/Chrome fell back to a virtual ~980px desktop viewport and
+     scaled the whole page down to fit, which is the root cause behind
+     most of the "wrong layout"/blurry-scaling reports on iPhone and
+     iPad. width=device-width + initial-scale=1 makes 1 CSS px actually
+     equal 1 device px (before devicePixelRatio); viewport-fit=cover is
+     required for the env(safe-area-inset-*) values used throughout this
+     file to resolve to anything other than 0 on notched/rounded-corner
+     devices; user-scalable=no prevents an accidental pinch-zoom from
+     breaking the fixed-position HUD/joysticks mid-match. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>DUEL ARENA</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
@@ -102,7 +113,14 @@
     top:0; left:0; right:0;
     display:flex;
     justify-content:space-between;
-    padding: 22px 30px;
+    /* env(safe-area-inset-*) keeps the score/ammo panels clear of a
+       notch or rounded corner -- on a landscape iPhone in particular,
+       the notch sits on the LEFT or RIGHT edge, not the top, which a
+       plain top-only inset would miss entirely. */
+    padding: calc(22px + env(safe-area-inset-top, 0px))
+             calc(30px + env(safe-area-inset-right, 0px))
+             22px
+             calc(30px + env(safe-area-inset-left, 0px));
     pointer-events:none;
     font-family:'Share Tech Mono', monospace;
     z-index:2;
@@ -664,7 +682,7 @@
     .restart-btn{ font-size: 12px; padding: 12px 22px; min-height: 44px; }
   }
   .exit-btn{
-    position:absolute; top:10px; left:50%; transform: translateX(-50%);
+    position:absolute; top: calc(10px + env(safe-area-inset-top, 0px)); left:50%; transform: translateX(-50%);
     background: rgba(10,13,20,0.7);
     border: 1px solid var(--ink-dim);
     color: var(--ink-dim);
@@ -678,7 +696,9 @@
   .exit-btn:hover{ border-color: var(--p2); color: var(--p2); background: rgba(255,95,109,0.08); }
 
   .mute-btn{
-    position:absolute; top:10px; right:10px;
+    position:absolute;
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    right: calc(10px + env(safe-area-inset-right, 0px));
     background: rgba(10,13,20,0.7);
     border: 1px solid var(--ink-dim);
     color: var(--ink);
@@ -694,7 +714,7 @@
 
   /* ---- Football Mode scoreboard ---- */
   .football-score{
-    position:absolute; top:6px; left:50%; transform: translateX(-50%);
+    position:absolute; top: calc(6px + env(safe-area-inset-top, 0px)); left:50%; transform: translateX(-50%);
     font-family:'Share Tech Mono', monospace;
     font-size: 15px; letter-spacing: 3px;
     color: var(--ink);
@@ -711,7 +731,7 @@
      mode==='online' and a match is running (see beginGame/exitToMenu).
      Never appears in Local 2 Player or VS Computer. ---- */
   .ping-badge{
-    position:absolute; top:42px; left:50%; transform: translateX(-50%);
+    position:absolute; top: calc(42px + env(safe-area-inset-top, 0px)); left:50%; transform: translateX(-50%);
     font-family:'Share Tech Mono', monospace;
     font-size: 10px; letter-spacing: 2px;
     color: #5dffa0;
@@ -725,32 +745,94 @@
   .ping-badge.fair{ color:#ffce54; border-color: rgba(255,206,84,0.35); }
   .ping-badge.high{ color: var(--p2); border-color: rgba(255,95,109,0.35); }
 
-  /* ---- Mobile touch controls ---- */
-  .mobile-controls{ position:absolute; inset:0; z-index:6; pointer-events:none; }
-  .joy-zone{ position:absolute; bottom:0; width:50%; height:60%; pointer-events:auto; touch-action:none; }
+  /* ---- Mobile touch controls ----
+     Sized/positioned entirely from CSS custom properties that the JS
+     device layer (applyDeviceLayout(), see index.html's script) swaps
+     by writing data-device="iphone"|"ipad" on #mobileControls -- iPad
+     gets its own numbers here (bigger sticks, farther apart, more
+     margin) rather than the iPhone layout just being scaled up. Every
+     anchor is expressed as env(safe-area-inset-*) + an offset, so the
+     joysticks/buttons stay clear of notches, rounded corners and the
+     home-indicator strip on any device, in either orientation. */
+  .mobile-controls{
+    position:absolute; inset:0; z-index:6; pointer-events:none;
+    /* iPhone defaults. Dash/ability sit STACKED ABOVE the aim stick
+       (same reasoning as the iPad tier below) rather than beside it --
+       centers separated by less than joy-radius+action-radius would
+       overlap the stick, so anchor-y is deliberately well clear of the
+       stick's own top edge (joy-anchor-y + joy-size/2). */
+    --joy-size: 96px;
+    --joy-knob-size: 44px;
+    --joy-anchor-x: 92px;
+    --joy-anchor-y: 108px;
+    --action-size: 62px;
+    --action-gap: 12px;
+    --dash-anchor-x: 44px;
+    --dash-anchor-y: 214px;
+    --ability-anchor-x: 118px;
+    --ability-anchor-y: 214px;
+  }
+  .mobile-controls[data-device="ipad"]{
+    /* iPad: NOT the iPhone numbers scaled up -- bigger sticks, pushed
+       further into the corners since there's much more bezel/hand room
+       to work with on a tablet held in two hands, and the dash/ability
+       buttons sit stacked above the aim stick (clear of its radius)
+       instead of squeezed beside it. */
+    --joy-size: 132px;
+    --joy-knob-size: 58px;
+    --joy-anchor-x: 132px;
+    --joy-anchor-y: 132px;
+    --action-size: 74px;
+    --action-gap: 18px;
+    --dash-anchor-x: 56px;
+    --dash-anchor-y: 260px;
+    --ability-anchor-x: 148px;
+    --ability-anchor-y: 260px;
+  }
+  .joy-zone{ position:absolute; bottom:0; width:55%; height:70%; pointer-events:auto; touch-action:none; }
   .joy-zone.joy-move{ left:0; }
   .joy-zone.joy-aim{ right:0; }
+  /* Fixed, ALWAYS-VISIBLE stick base -- anchored to the safe-area
+     corner, never hidden/relocated on touch (see requirement #4: the
+     player must see both sticks before ever touching the screen). Only
+     the knob moves; .dragging is a purely cosmetic touched-state. */
   .joy-base{
-    position:absolute; width:96px; height:96px; border-radius:50%;
-    border:2px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.05);
-    transform:translate(-50%,-50%); display:none; pointer-events:none;
+    position:absolute; width:var(--joy-size); height:var(--joy-size); border-radius:50%;
+    border:2px solid rgba(255,255,255,0.28); background:rgba(255,255,255,0.06);
+    pointer-events:none;
+    transition: border-color .15s ease, background-color .15s ease;
   }
-  .joy-base.active{ display:block; }
+  .joy-move .joy-base{
+    left: calc(env(safe-area-inset-left, 0px) + var(--joy-anchor-x) - var(--joy-size) / 2);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + var(--joy-anchor-y) - var(--joy-size) / 2);
+  }
+  .joy-aim .joy-base{
+    right: calc(env(safe-area-inset-right, 0px) + var(--joy-anchor-x) - var(--joy-size) / 2);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + var(--joy-anchor-y) - var(--joy-size) / 2);
+  }
+  .joy-base.dragging{ border-color:rgba(255,255,255,0.55); background:rgba(255,255,255,0.12); }
   .joy-knob{
-    position:absolute; width:44px; height:44px; border-radius:50%;
+    position:absolute; width:var(--joy-knob-size); height:var(--joy-knob-size); border-radius:50%;
     left:50%; top:50%; transform:translate(-50%,-50%);
     background:rgba(63,208,255,0.35); border:2px solid var(--p1);
     box-shadow:0 0 14px rgba(63,208,255,0.5);
+    /* Smooth glide back to center on release; suppressed while actively
+       dragging (see positionJoyKnob) so the knob tracks the finger with
+       zero added lag. */
+    transition: transform .14s ease-out;
   }
+  .joy-base.dragging .joy-knob{ transition:none; }
   .joy-aim .joy-knob{ background:rgba(255,95,109,0.35); border-color:var(--p2); box-shadow:0 0 14px rgba(255,95,109,0.5); }
   .joy-hint{
-    position:absolute; bottom:6px; width:100%; text-align:center;
+    position:absolute;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
+    width:100%; text-align:center;
     font-family:'Share Tech Mono', monospace; font-size:9px; letter-spacing:1.5px;
     color:var(--ink-dim); pointer-events:none;
   }
   .touch-action-btn{
     position:absolute; z-index:7; pointer-events:auto; touch-action:none;
-    width:64px; height:64px; border-radius:50%;
+    width:var(--action-size); height:var(--action-size); border-radius:50%;
     display:flex; align-items:center; justify-content:center;
     font-family:'Share Tech Mono', monospace; font-weight:700;
     font-size:10px; letter-spacing:1px; text-align:center; line-height:1.2;
@@ -760,18 +842,47 @@
   }
   .touch-action-btn.pressed{ background:rgba(255,255,255,0.18); }
   #touchDashBtn{
-    right:18px; bottom:64%;
+    right: calc(env(safe-area-inset-right, 0px) + var(--dash-anchor-x) - var(--action-size) / 2);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + var(--dash-anchor-y) - var(--action-size) / 2);
     border-color:var(--p1); color:var(--p1);
     box-shadow:0 0 10px rgba(63,208,255,0.25);
   }
   #touchDashBtn.pressed{ background:rgba(63,208,255,0.22); box-shadow:0 0 16px rgba(63,208,255,0.5); }
   #touchAbilityBtn{
-    right:96px; bottom:64%;
+    right: calc(env(safe-area-inset-right, 0px) + var(--ability-anchor-x) - var(--action-size) / 2);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + var(--ability-anchor-y) - var(--action-size) / 2);
     border-color:#ffce54; color:#ffce54;
     box-shadow:0 0 10px rgba(255,206,84,0.25);
   }
   #touchAbilityBtn.pressed{ background:rgba(255,206,84,0.22); box-shadow:0 0 16px rgba(255,206,84,0.5); }
   #touchAbilityBtn.hidden{ display:none; }
+
+  /* ---- Orientation gate: shown whenever the effective device is
+     mobile (iPhone/iPad) and the viewport is currently taller than it
+     is wide. Reuses the same full-viewport overlay language as every
+     other .menu-overlay instead of a bespoke element. ---- */
+  .rotate-gate{
+    position:fixed; inset:0; z-index:50;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+    background: radial-gradient(ellipse at center, var(--void-2) 0%, var(--void) 75%);
+    text-align:center; padding: 24px;
+  }
+  .rotate-gate .rotate-icon{
+    font-size:46px; line-height:1;
+    animation: rotate-hint 1.6s ease-in-out infinite;
+  }
+  @keyframes rotate-hint{
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(90deg); }
+  }
+  .rotate-gate .rotate-title{
+    font-family:'Chakra Petch', sans-serif; font-weight:700;
+    font-size:20px; letter-spacing:3px; color:var(--ink);
+  }
+  .rotate-gate .rotate-sub{
+    font-family:'Share Tech Mono', monospace;
+    font-size:12px; letter-spacing:2px; color:var(--ink-dim);
+  }
 
   /* ============================================================
      MAIN MENU LOBBY  --  full-screen AAA-style lobby shell.
@@ -1776,7 +1887,7 @@
 
   /* ---- IN-MATCH BANNER ---- */
   .ranked-banner{
-    position: fixed; top: 8px; left: 50%; transform: translateX(-50%);
+    position: fixed; top: calc(8px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%);
     z-index: 40; display:flex; align-items:center; gap:12px;
     padding:6px 14px; border-radius:10px;
     background: rgba(8,12,20,.82); border:1px solid rgba(255,206,84,.35);
@@ -2298,6 +2409,23 @@
     <div class="shop-panel">
       <div class="menu-title">PLAYER SETTINGS</div>
       <div class="settings-note">
+        Device Compatibility controls which layout and controls the game
+        uses. AUTO detects your device automatically (touch capability,
+        screen size, and iPad-specific checks); the other three options
+        force that device's layout/controls regardless of what's
+        actually detected. Changes apply immediately.
+      </div>
+      <div class="settings-row">
+        <span class="settings-label p1">DEVICE COMPATIBILITY</span>
+        <span class="aim-type-group">
+          <button class="toggle-btn" id="btnDeviceAuto" data-device-mode="auto">AUTO</button>
+          <button class="toggle-btn" id="btnDeviceIphone" data-device-mode="iphone">IPHONE</button>
+          <button class="toggle-btn" id="btnDeviceIpad" data-device-mode="ipad">IPAD</button>
+          <button class="toggle-btn" id="btnDeviceComputer" data-device-mode="computer">COMPUTER</button>
+        </span>
+      </div>
+      <div class="settings-note" id="deviceDetectedNote" style="color:#5dffa0;"></div>
+      <div class="settings-note">
         Aim Type is how Player One aims in every mode. Mouse Aim aims freely
         with the pointer while moving independently; Keyboard Aim faces the
         way you move. Touch devices always use the on-screen aim stick.
@@ -2643,6 +2771,17 @@
     <button class="touch-action-btn" id="touchDashBtn">DASH</button>
     <button class="touch-action-btn hidden" id="touchAbilityBtn">ABILITY</button>
   </div>
+</div>
+
+<!-- Shown whenever the effective device is iPhone/iPad AND the viewport
+     is currently portrait -- see applyDeviceLayout()/updateRotateGate()
+     in the script. Sits above literally everything (menus included)
+     since neither the HUD nor any menu is designed to fit a portrait
+     phone/tablet viewport. -->
+<div class="rotate-gate hidden" id="rotateGate">
+  <div class="rotate-icon">&#128241;</div>
+  <div class="rotate-title">ROTATE YOUR DEVICE</div>
+  <div class="rotate-sub">PLAY IN LANDSCAPE</div>
 </div>
 
 <div class="legend" id="legend">
@@ -3901,6 +4040,11 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       savedMatchPlayerCount = account.matchSize;
       saveMatchSizeLocally();
     }
+    if(['auto','iphone','ipad','computer'].includes(account.deviceMode)){
+      deviceMode = account.deviceMode;
+      saveDeviceModeLocally();
+      if(typeof applyDeviceLayout === 'function') applyDeviceLayout();
+    }
     updateCreditsDisplay();
   }
 
@@ -3998,6 +4142,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         autoAimP2: autoAimP2,
         aimMode: aimMode,
         matchSize: savedMatchPlayerCount,
+        deviceMode: deviceMode,
         dailyChallengeProgress: {
           date: dailyProgress.date || todayUTC(),
           kills: dailyProgress.kills || 0,
@@ -4083,26 +4228,87 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
 
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
+  // W/H are the game's fixed INTERNAL/LOGICAL resolution -- every
+  // game-world coordinate (arena bounds, collision, player/bullet
+  // positions, drawing calls) stays in this 900x540 space forever, no
+  // matter what device or screen this renders on. Captured once, before
+  // applyCanvasResolution() below ever touches the actual canvas.width/
+  // height DOM attributes for devicePixelRatio sharpness, so W/H can
+  // never drift even though canvas.width itself will no longer equal 900.
   const W = canvas.width, H = canvas.height;
 
-  // Fullscreen presentation only -- the canvas's drawing-buffer
-  // resolution (W/H above, from its width/height attributes) never
-  // changes, so every game-world coordinate stays exactly as before.
-  // This just picks the largest on-screen size that preserves the
-  // W:H aspect ratio and fits the viewport, and sets it as the real
-  // rendered pixel size (not %/object-fit) so canvas.getBoundingClientRect()
-  // -- which the existing mouse-aim math already scales through --
-  // always matches the visible arena exactly, with no dead letterbox
-  // margin inside the element itself.
+  // The viewport's actual visible size in CSS px. Prefers
+  // window.visualViewport over window.innerWidth/innerHeight -- on iOS
+  // Safari in particular, innerHeight includes space the on-screen
+  // toolbar/URL bar is currently covering, which is exactly the kind of
+  // "browser UI changes" the layout needs to react correctly to (task
+  // requirement #3/#7). visualViewport reports the CURRENTLY visible
+  // area instead, and fires its own resize/scroll events when Safari's
+  // chrome shows/hides or the page pinch-zooms.
+  function getViewportSize(){
+    const vv = window.visualViewport;
+    if(vv) return { w: vv.width, h: vv.height };
+    return { w: window.innerWidth, h: window.innerHeight };
+  }
+
+  // Bumps the canvas's actual raster resolution to match
+  // devicePixelRatio (clamped -- an uncapped DPR on some Android/iPad
+  // Pro panels would allocate a needlessly huge backbuffer) so gameplay
+  // renders crisply on retina/high-DPI screens instead of the fixed
+  // 900x540 buffer being visibly upscaled and blurry. ctx.setTransform
+  // bakes that scale in ONCE as the context's persistent base transform,
+  // so every existing draw call -- which is written entirely in the
+  // original 900x540 logical space -- keeps working completely
+  // unchanged; only the physical pixel density it rasterizes to changes.
+  // This never affects canvas.getBoundingClientRect() (still CSS px)
+  // and therefore never affects the existing mouse/touch coordinate math
+  // below, which already scales through rect.width/rect.height, not
+  // canvas.width/height.
+  function applyCanvasResolution(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    const targetW = Math.round(W * dpr);
+    const targetH = Math.round(H * dpr);
+    if(canvas.width !== targetW) canvas.width = targetW;
+    if(canvas.height !== targetH) canvas.height = targetH;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  // Fullscreen presentation only -- the canvas's LOGICAL drawing
+  // resolution (W/H, see above) never changes, so every game-world
+  // coordinate stays exactly as before. This just picks the largest
+  // on-screen size that preserves the W:H aspect ratio and fits the
+  // viewport, and sets it as the real rendered CSS pixel size (not
+  // %/object-fit) so canvas.getBoundingClientRect() -- which the
+  // existing mouse-aim math already scales through -- always matches
+  // the visible arena exactly, with no dead letterbox margin inside the
+  // element itself, no stretching, and no distortion.
   function fitCanvasToViewport(){
-    const vw = window.innerWidth, vh = window.innerHeight;
+    const { w: vw, h: vh } = getViewportSize();
     let w = vw, h = vw * (H/W);
     if(h > vh){ h = vh; w = vh * (W/H); }
     canvas.style.width = w + 'px';
     canvas.style.height = h + 'px';
+    applyCanvasResolution();
+    // deviceLayoutReady guards against calling into the device-layout
+    // functions before the DOM refs/consts they close over (further
+    // down the file, in the Mobile / touch controls section) have
+    // actually been declared -- this very first fitCanvasToViewport()
+    // call below runs immediately, well before that point in the
+    // script's top-to-bottom execution.
+    if(deviceLayoutReady){
+      layoutMobileControls();
+      updateRotateGate();
+    }
   }
+  let deviceLayoutReady = false;
+  let settingsUIReady = false;
   fitCanvasToViewport();
   window.addEventListener('resize', fitCanvasToViewport);
+  window.addEventListener('orientationchange', fitCanvasToViewport);
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize', fitCanvasToViewport);
+    window.visualViewport.addEventListener('scroll', fitCanvasToViewport);
+  }
 
   const centerMsg = document.getElementById('centerMsg');
   const scoreP1El = document.getElementById('scoreP1');
@@ -4221,6 +4427,25 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     const storedAimMode = localStorage.getItem(AIM_MODE_KEY);
     if(storedAimMode === 'mouse' || storedAimMode === 'movement') aimMode = storedAimMode;
   } catch(e){}
+
+  // ---- DEVICE COMPATIBILITY (SETTINGS) ----
+  // 'auto' (default) lets detectDeviceCategory() below decide between
+  // 'iphone'/'ipad'/'computer' from touch capability + screen size +
+  // UA checks; the other three values force that layout/control scheme
+  // regardless of what's actually detected. See applyDeviceLayout()
+  // further down (defined once the DOM elements it touches exist) for
+  // where this actually takes effect -- setDeviceMode() in the settings
+  // wiring calls it immediately so a change never needs a page reload.
+  let deviceMode = 'auto'; // 'auto' | 'iphone' | 'ipad' | 'computer'
+  const DEVICE_MODE_KEY = 'duelarena.deviceMode';
+  function saveDeviceModeLocally(){
+    try{ localStorage.setItem(DEVICE_MODE_KEY, deviceMode); } catch(e){}
+  }
+  try{
+    const storedDeviceMode = localStorage.getItem(DEVICE_MODE_KEY);
+    if(['auto','iphone','ipad','computer'].includes(storedDeviceMode)) deviceMode = storedDeviceMode;
+  } catch(e){}
+
   let gameType = 'classic'; // 'classic' | 'football' | 'heist' | 'bombrun' -- picked on the GAME TYPE menu
   let pendingMode = null;   // which of local/online/ai the player picked, remembered while they choose gameType
 
@@ -6111,14 +6336,83 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   window.addEventListener('mouseup', (e)=>{ if(e.button===0) mouseIsDown = false; });
   canvas.addEventListener('contextmenu', (e)=>{ e.preventDefault(); });
 
+  // ---- Device detection ----
+  // Determines 'iphone' | 'ipad' | 'computer' from actual device
+  // signals -- touch capability, UA hints, and screen geometry -- never
+  // from which half of the screen a player happens to touch. The tricky
+  // case is iPadOS 13+: Safari there deliberately reports a desktop-
+  // Mac-style UA string (no "iPad" substring) to get served desktop
+  // sites, so a UA-only check misidentifies every modern iPad as a
+  // computer. The standard workaround is the one used here: a UA that
+  // claims "Macintosh" but ALSO reports multi-point touch support is
+  // physically impossible on a real Mac (no production Mac has a
+  // touchscreen), so that combination is treated as an iPad.
+  function detectDeviceCategory(){
+    const ua = navigator.userAgent || '';
+    const touchPoints = navigator.maxTouchPoints || navigator.msMaxTouchPoints || 0;
+    const hasTouch = ('ontouchstart' in window) || touchPoints > 0;
+
+    const isIPadUA = /iPad/.test(ua);
+    const isIPhoneUA = /iPhone|iPod/.test(ua);
+    // iPadOS 13+ Safari masquerading as desktop Safari (see comment above).
+    const isIPadOS13Plus = /Macintosh/.test(ua) && hasTouch && touchPoints > 1;
+    const isAndroidUA = /Android/.test(ua);
+    // Android's own UA convention: phones include "Mobile", tablets don't.
+    const isAndroidPhone = isAndroidUA && /Mobile/.test(ua);
+    const isAndroidTablet = isAndroidUA && !/Mobile/.test(ua);
+
+    if(isIPadUA || isIPadOS13Plus) return 'ipad';
+    if(isIPhoneUA) return 'iphone';
+    if(isAndroidPhone) return 'iphone';
+    if(isAndroidTablet) return 'ipad';
+
+    if(hasTouch){
+      // Some other touch device with no recognizable UA marker (e.g. a
+      // touch-enabled Windows/ChromeOS laptop, or a browser that strips
+      // UA details) -- fall back to the CSS-pixel screen size, which is
+      // what actually determines whether a phone-sized or tablet-sized
+      // layout reads correctly. window.screen is used instead of
+      // innerWidth/innerHeight because it reflects the physical display
+      // rather than the current (possibly split/resized) browser window.
+      const w = window.screen ? window.screen.width : window.innerWidth;
+      const h = window.screen ? window.screen.height : window.innerHeight;
+      const shortSide = Math.min(w, h);
+      // ~600 CSS px is the standard phone/tablet shortest-side cutoff --
+      // every iPhone (max ~430) falls under it, every iPad (min 744)
+      // falls well over it.
+      return shortSide >= 600 ? 'ipad' : 'iphone';
+    }
+
+    // No touch support at all -- an ordinary mouse/keyboard computer,
+    // touch-first tablet APIs like navigator.maxTouchPoints notwithstanding.
+    return 'computer';
+  }
+
+  // Resolved once per page load -- a real device's category can't change
+  // mid-session (unlike the MANUAL override, which can change any time
+  // via Settings; see deviceMode/applyDeviceLayout below).
+  const detectedDeviceCategory = detectDeviceCategory();
+  function effectiveDeviceCategory(){
+    return deviceMode === 'auto' ? detectedDeviceCategory : deviceMode;
+  }
+
   // ---- Mobile / touch controls ----
-  // Left half of the screen is a floating move-stick; right half is a
-  // combined aim+shoot stick -- drag it to aim (facing follows live),
-  // release to fire in the direction you released at. A quick tap with
-  // barely any drag instead auto-aims: at the nearest opponent normally,
-  // or at the goal if you're currently holding the ball in Football Mode.
-  const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
-  if(isTouchDevice){ const legendEl = document.getElementById('legend'); if(legendEl) legendEl.style.display = 'none'; }
+  // Left side is a fixed, always-visible move-stick; right side is a
+  // fixed, always-visible combined aim+shoot stick -- drag it to aim
+  // (facing follows live), release to fire in the direction you
+  // released at. A quick tap with barely any drag instead auto-aims: at
+  // the nearest opponent normally, or at the goal if you're currently
+  // holding the ball in Football Mode.
+  //
+  // isTouchDevice drives every mobile-specific branch elsewhere in this
+  // file (input assembly, HUD, controls visibility) and used to be a
+  // one-time `const` computed from raw touch capability alone. It's now
+  // a reactive `let` driven by the effective device (AUTO detection or
+  // a manual Settings override), recomputed by applyDeviceLayout()
+  // below so changing the DEVICE setting takes effect immediately, with
+  // no page reload, and so a manual COMPUTER override can force it
+  // false even on an actual touchscreen.
+  let isTouchDevice = false;
 
   let touchMoveX = 0, touchMoveY = 0;
   let touchAiming = false, touchAimAngle = 0;
@@ -6132,16 +6426,30 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   const joyMoveBase = document.getElementById('joyMoveBase');
   const joyAimZone = document.getElementById('joyAimZone');
   const joyAimBase = document.getElementById('joyAimBase');
+  const rotateGateEl = document.getElementById('rotateGate');
+  const legendEl = document.getElementById('legend');
 
   function positionJoyKnob(baseEl, dx, dy){
     const knob = baseEl.querySelector('.joy-knob');
     if(knob) knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
   }
-  function showJoyBase(baseEl, x, y){
-    baseEl.style.left = x + 'px'; baseEl.style.top = y + 'px';
-    baseEl.classList.add('active'); positionJoyKnob(baseEl, 0, 0);
+  // The stick base is now a FIXED, ALWAYS-VISIBLE element (positioned
+  // entirely by CSS -- see .joy-base/.joy-move/.joy-aim above), so
+  // "showing"/"hiding" it on touch no longer means toggling its
+  // existence or moving it to the touch point -- it only adds/removes a
+  // purely cosmetic .dragging highlight and recenters the knob.
+  function beginJoyDrag(baseEl){
+    baseEl.classList.add('dragging');
+    positionJoyKnob(baseEl, 0, 0);
   }
-  function hideJoyBase(baseEl){ baseEl.classList.remove('active'); positionJoyKnob(baseEl, 0, 0); }
+  function endJoyDrag(baseEl){
+    baseEl.classList.remove('dragging');
+    positionJoyKnob(baseEl, 0, 0);
+  }
+  // Legacy names kept as aliases so nothing else in the file (beginGame/
+  // exitToMenu's touch-state reset) needs to change.
+  const showJoyBase = beginJoyDrag;
+  const hideJoyBase = endJoyDrag;
 
   // What a tap should auto-target: opponent's goal if you're holding the
   // ball in Football Mode, otherwise the nearest opponent.
@@ -6154,6 +6462,19 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     return target ? { x: target.x, y: target.y } : null;
   }
 
+  // moveBaseX/Y and aimBaseX/Y are the DRAG ANCHOR each stick's knob
+  // moves relative to. They used to be set to wherever the finger first
+  // touched down (a "floating" joystick); now that the base is a fixed,
+  // always-visible element (see requirement #4/#5), the anchor is read
+  // from that element's own on-screen center via getBoundingClientRect
+  // instead -- so the knob always visibly moves relative to the base
+  // the player can actually see, matching finger position exactly no
+  // matter where in the zone the touch started.
+  function joyBaseCenter(baseEl){
+    const r = baseEl.getBoundingClientRect();
+    return { x: r.left + r.width/2, y: r.top + r.height/2 };
+  }
+
   let moveTouchId = null, moveBaseX = 0, moveBaseY = 0;
   let aimTouchId = null, aimBaseX = 0, aimBaseY = 0, aimMaxDrag = 0;
 
@@ -6161,8 +6482,9 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     if(moveTouchId !== null) return;
     const t = e.changedTouches[0];
     moveTouchId = t.identifier;
-    moveBaseX = t.clientX; moveBaseY = t.clientY;
-    showJoyBase(joyMoveBase, moveBaseX, moveBaseY);
+    const c = joyBaseCenter(joyMoveBase);
+    moveBaseX = c.x; moveBaseY = c.y;
+    beginJoyDrag(joyMoveBase);
     e.preventDefault();
   }, { passive:false });
 
@@ -6183,7 +6505,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     for(const t of e.changedTouches){
       if(t.identifier !== moveTouchId) continue;
       moveTouchId = null; touchMoveX = 0; touchMoveY = 0;
-      hideJoyBase(joyMoveBase);
+      endJoyDrag(joyMoveBase);
     }
   }
   joyMoveZone.addEventListener('touchend', endMoveTouch);
@@ -6193,9 +6515,10 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     if(aimTouchId !== null) return;
     const t = e.changedTouches[0];
     aimTouchId = t.identifier;
-    aimBaseX = t.clientX; aimBaseY = t.clientY;
+    const c = joyBaseCenter(joyAimBase);
+    aimBaseX = c.x; aimBaseY = c.y;
     aimMaxDrag = 0;
-    showJoyBase(joyAimBase, aimBaseX, aimBaseY);
+    beginJoyDrag(joyAimBase);
     e.preventDefault();
   }, { passive:false });
 
@@ -6262,6 +6585,93 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     touchAbilityBtn.classList.toggle('hidden', !(p1 && p1.hasAbility));
   }
 
+  // Whether the game is intended to be played horizontally -- true for
+  // every mobile device (iPhone/iPad); computer is exempt since a
+  // desktop/laptop window being narrower than it is tall doesn't mean
+  // anything is actually wrong.
+  function requiresLandscape(){
+    const dev = effectiveDeviceCategory();
+    return dev === 'iphone' || dev === 'ipad';
+  }
+
+  // Shows/hides the "ROTATE YOUR DEVICE" gate. Recomputed on every
+  // resize/orientation change (see fitCanvasToViewport) and every time
+  // the effective device changes (applyDeviceLayout), so it reacts
+  // immediately either way -- rotating the device, or switching the
+  // manual DEVICE setting while already in portrait.
+  function updateRotateGate(){
+    if(!rotateGateEl) return;
+    const { w, h } = getViewportSize();
+    const isPortrait = h > w;
+    rotateGateEl.classList.toggle('hidden', !(requiresLandscape() && isPortrait));
+  }
+
+  // Applies the effective device (AUTO detection, or a manual Settings
+  // override) to every part of the layout that depends on it: control
+  // scheme (isTouchDevice), which CSS sizing/position tier the on-screen
+  // sticks and buttons use (data-device), the legend, mobile-controls
+  // visibility during a live match, and the rotate gate. Called once at
+  // startup and again immediately whenever the DEVICE setting changes
+  // (see setDeviceMode in the Settings wiring) -- so switching it never
+  // needs a page reload, per requirement #2.
+  function applyDeviceLayout(){
+    const dev = effectiveDeviceCategory();
+    isTouchDevice = (dev === 'iphone' || dev === 'ipad');
+
+    if(mobileControlsEl) mobileControlsEl.dataset.device = dev;
+    if(legendEl) legendEl.style.display = isTouchDevice ? 'none' : '';
+
+    // If a match is already in progress, apply the control scheme
+    // immediately instead of waiting for the next beginGame()/exitToMenu().
+    if(typeof started !== 'undefined' && started && mobileControlsEl){
+      mobileControlsEl.classList.toggle('hidden', !isTouchDevice);
+      if(!isTouchDevice){
+        // Forcing COMPUTER (or losing touch capability) mid-match --
+        // clear any in-flight touch state exactly like exitToMenu()
+        // does, so a stale stick drag can't keep steering the player.
+        touchMoveX = 0; touchMoveY = 0; touchAiming = false; touchFireQueued = false;
+        moveTouchId = null; aimTouchId = null;
+        endJoyDrag(joyMoveBase); endJoyDrag(joyAimBase);
+      }
+    }
+    if(typeof updateTouchAbilityButtonVisibility === 'function') updateTouchAbilityButtonVisibility();
+
+    updateRotateGate();
+    // settingsUIReady guards against calling into updateDeviceSettingsUI()
+    // before the Settings-menu DOM refs it closes over (declared much
+    // further down, in the Settings wiring) exist yet -- see where the
+    // flag flips true, right after that block finishes. typeof can't be
+    // used to guard this the way it guards a plain function reference:
+    // updateDeviceSettingsUI itself is a hoisted function declaration
+    // (always safely callable), but ITS BODY reads `let`/`const`
+    // bindings that are genuinely still in their temporal dead zone this
+    // early in the script.
+    if(settingsUIReady) updateDeviceSettingsUI();
+  }
+
+  // Kept as a distinct hook (called from fitCanvasToViewport on every
+  // resize/orientation change) even though the actual stick/button
+  // positioning lives entirely in CSS custom properties keyed off
+  // data-device (see .mobile-controls rules) -- this just keeps that
+  // attribute correct if effectiveDeviceCategory() output could ever
+  // depend on viewport size in the future, and is where any future
+  // JS-driven layout tweaks belong instead of a second parallel system.
+  function layoutMobileControls(){
+    if(mobileControlsEl) mobileControlsEl.dataset.device = effectiveDeviceCategory();
+  }
+
+  // Everything fitCanvasToViewport()'s layoutMobileControls()/
+  // updateRotateGate() calls close over (rotateGateEl, detectedDeviceCategory,
+  // etc.) is now declared, so it's safe for future resize/orientation
+  // events to call into them -- see the deviceLayoutReady guard inside
+  // fitCanvasToViewport() itself, near the top of the script.
+  deviceLayoutReady = true;
+
+  // NOTE: the initial applyDeviceLayout() call is deferred until after
+  // `let started` exists further down (it reads `started` to decide
+  // whether to touch mobileControlsEl's visibility) -- see the call
+  // right after `let started = false;`.
+
   function makePlayer(id, x, y, color, keys, facing, isAI, opts){
     opts = opts || {};
     const maxAmmo = opts.maxAmmo || MAX_AMMO;
@@ -6306,6 +6716,15 @@ let state = "menu";
 let roundTimer, msgTimer;
 let scoreCarry = null;
   let started = false;
+  // Now that `started` exists, run the initial device-layout pass (see
+  // the definition of applyDeviceLayout() above, in the Mobile / touch
+  // controls section) -- this is what makes AUTO detection take effect
+  // for the very first frame, before the player has touched any Settings.
+  // Also re-runs fitCanvasToViewport() so its layoutMobileControls()/
+  // updateRotateGate() calls -- skipped on the very first pass, before
+  // deviceLayoutReady flipped true -- actually run once.
+  applyDeviceLayout();
+  fitCanvasToViewport();
 
   const keysDown = {};
   const keysPressed = {};
@@ -8351,6 +8770,24 @@ updateDecoys(dt);
   const btnAimTypeMouse = document.getElementById('btnAimTypeMouse');
   const btnAimTypeKeyboard = document.getElementById('btnAimTypeKeyboard');
   const matchSizeBtns = document.querySelectorAll('#menuSettings .aim-type-group [data-count]');
+  const deviceModeBtns = document.querySelectorAll('#menuSettings [data-device-mode]');
+  const deviceDetectedNote = document.getElementById('deviceDetectedNote');
+
+  const DEVICE_LABELS = { iphone: 'IPHONE', ipad: 'IPAD', computer: 'COMPUTER' };
+
+  // Separate from updateSettingsUI() (which only touches elements that
+  // matter while the Settings panel is open) because applyDeviceLayout()
+  // also calls this every time the effective device changes, including
+  // at page load, well before the player has ever opened Settings.
+  function updateDeviceSettingsUI(){
+    if(!deviceModeBtns || !deviceModeBtns.length) return;
+    deviceModeBtns.forEach(b => b.classList.toggle('on', b.dataset.deviceMode === deviceMode));
+    if(deviceDetectedNote){
+      deviceDetectedNote.textContent = (deviceMode === 'auto')
+        ? `AUTO — ${DEVICE_LABELS[detectedDeviceCategory] || detectedDeviceCategory.toUpperCase()} DETECTED`
+        : `MANUAL OVERRIDE — USING ${DEVICE_LABELS[deviceMode] || deviceMode.toUpperCase()} LAYOUT`;
+    }
+  }
 
   function updateSettingsUI(){
     btnAimTypeMouse.classList.toggle('on', aimMode === 'mouse');
@@ -8360,6 +8797,7 @@ updateDecoys(dt);
     toggleAutoAimP1.classList.toggle('on', autoAimP1);
     toggleAutoAimP2.textContent = autoAimP2 ? 'ON' : 'OFF';
     toggleAutoAimP2.classList.toggle('on', autoAimP2);
+    updateDeviceSettingsUI();
   }
 
   btnSettings.addEventListener('click', ()=>{
@@ -8371,6 +8809,21 @@ updateDecoys(dt);
     menuSettings.classList.add('hidden');
     menuMain.classList.remove('hidden');
   });
+  function setDeviceMode(next){
+    deviceMode = next;
+    saveDeviceModeLocally();
+    saveProgress();
+    // Applies immediately -- no reload -- per requirement #2. This also
+    // refreshes the Settings UI itself (applyDeviceLayout calls
+    // updateDeviceSettingsUI), so the two never need updating separately.
+    applyDeviceLayout();
+    fitCanvasToViewport();
+  }
+  deviceModeBtns.forEach(btn=>{
+    btn.addEventListener('click', ()=>setDeviceMode(btn.dataset.deviceMode));
+  });
+  settingsUIReady = true;
+  updateDeviceSettingsUI(); // one immediate pass -- picks up whatever applyDeviceLayout() computed before this block existed
   function setAimMode(next){
     aimMode = next;
     updateSettingsUI();
