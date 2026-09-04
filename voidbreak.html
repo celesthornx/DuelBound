@@ -2977,6 +2977,17 @@ function victory(){
   const next=LEVELS[lv.levelIdx+1];
   const firstClear=!save.beaten[lv.id];
   run.victoryBonus=lv.completionBonus;run.shards+=lv.completionBonus;
+  // Tells the Duel Arena lobby (this always runs inside its iframe --
+  // see launchVoidbreak() in index.html) that a level was beaten for
+  // the FIRST time, so it can report it for the main account's XP
+  // system. Only on firstClear -- replaying a beaten level for more
+  // Void Shards (this run's own separate, untouched economy) is not a
+  // new "meaningful achievement" and shouldn't be XP-farmable. Fully
+  // fire-and-forget and additive: nothing in Voidbreak reads a reply,
+  // so this can never affect anything else in this file.
+  if(!save.beaten[lv.id] && window.parent){
+    try{ window.parent.postMessage({ type:'voidbreak_complete', levelId: lv.id }, '*'); }catch(e){}
+  }
   save.beaten[lv.id]=true;
   runActive=false;state='victory';vicT=0;vicWarped=false;deathSeq=null;
   finalizeRun(true);
