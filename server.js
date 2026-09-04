@@ -2645,6 +2645,25 @@ function resetHeistState() {
     heistDestroyed = false;
 }
 
+// =====================================================================
+// BOMB RUN MODE -- server-authoritative carrier + score, same shape as
+// Heist's HP above. Position/bullets/damage/deaths/respawns stay on the
+// existing self-report relay (unchanged trust model), but WHO currently
+// holds the one bomb, and the score/winner, are decided here so both
+// clients can never disagree about a pickup or a goal.
+// =====================================================================
+let bombCarrier = null; // null | 1 | 2 (slot number)
+let bombScore = { 1: 0, 2: 0 };
+let bombMatchOver = false;
+let bombWinner = null;
+
+function resetBombState() {
+    bombCarrier = null;
+    bombScore = { 1: 0, 2: 0 };
+    bombMatchOver = false;
+    bombWinner = null;
+}
+
 function otherId(id) {
     return id === 1 ? 2 : 1;
 }
@@ -3046,7 +3065,74 @@ wss.on("connection", (socket, request) => {
             }
         }
 
-        // ---- FOOTBALL MODE / HEIST MODE (generic relay) ----
+        // ---- BOMB RUN MODE: match start / rematch -- carrier cleared,
+        // score reset to 0/0. Mirrors heistReset above exactly.
+        else if (data.type === "bombReset") {
+
+            resetBombState();
+            const payload = { type: "bombUpdate", carrier: null, x: null, y: null };
+            send(player, payload);
+            send(opponent, payload);
+        }
+
+        // ---- BOMB RUN MODE: a pickup claim. Only granted if nobody
+        // currently holds the bomb -- this is what makes it impossible
+        // for both players to simultaneously "win" a race to the bomb,
+        // and impossible to duplicate the single bomb. `by` is the
+        // claimant's own slot number; x/y is their own reported position
+        // (trusted the same way every other position report already is),
+        // used only as where the bomb should now visually sit.
+        else if (data.type === "bombPickup") {
+
+            if (!bombMatchOver && bombCarrier === null) {
+                bombCarrier = id; // trust only the connection's own slot, never a client-supplied id
+                const payload = { type: "bombUpdate", carrier: bombCarrier, x: data.x, y: data.y };
+                send(player, payload);
+                send(opponent, payload);
+            }
+        }
+
+        // ---- BOMB RUN MODE: a drop -- either from a manual drop or the
+        // carrier dying (see index.html's handleBombDeath). Only the
+        // player CURRENTLY holding the bomb can drop it, so a stray or
+        // late message from the other player can never clear a live
+        // carrier by mistake.
+        else if (data.type === "bombDrop") {
+
+            const claimedId = id; // this connection's own slot number
+            if (!bombMatchOver && bombCarrier === claimedId) {
+                bombCarrier = null;
+                const payload = { type: "bombUpdate", carrier: null, x: data.x, y: data.y };
+                send(player, payload);
+                send(opponent, payload);
+            }
+        }
+
+        // ---- BOMB RUN MODE: a goal claim. Only granted if the claimant
+        // is the CURRENTLY-held carrier -- exactly the same guard as
+        // heistHit's "only the shooter's own client reports its own
+        // bullets" -- so a forged goal claim from a modified client (or a
+        // stale message after already dropping) can never score. First
+        // to 3 ends the match; otherwise the bomb resets to center and
+        // play continues.
+        else if (data.type === "bombGoal") {
+
+            if (!bombMatchOver && bombCarrier === id) {
+                bombScore[id] = (bombScore[id] || 0) + 1;
+                bombCarrier = null;
+                let winner = null;
+                if (bombScore[1] >= 3 || bombScore[2] >= 3) {
+                    bombMatchOver = true;
+                    winner = bombScore[1] > bombScore[2] ? 1 : 2;
+                    bombWinner = winner;
+                }
+                const payload = { type: "bombGoalUpdate", scorer: id, score1: bombScore[1], score2: bombScore[2], matchOver: bombMatchOver, winner: winner };
+                send(player, payload);
+                send(opponent, payload);
+            }
+        }
+
+        // ---- FOOTBALL MODE / HEIST MODE / BOMB RUN MODE (generic relay) ----
         // Every football-related message (footballKick, footballBall,
         // footballGoal, footballRespawn, and any future footballXxx type)
         // plus heist messages that don't need server-side validation
@@ -3060,7 +3146,7 @@ wss.on("connection", (socket, request) => {
         // to do with it. This also means new message types for either
         // mode can be added on the client later without ever touching
         // server.js again.
-        else if (typeof data.type === "string" && (data.type.indexOf("football") === 0 || data.type.indexOf("heist") === 0)) {
+        else if (typeof data.type === "string" && (data.type.indexOf("football") === 0 || data.type.indexOf("heist") === 0 || data.type.indexOf("bomb") === 0)) {
 
             send(opponent, data);
         }
@@ -3099,6 +3185,7 @@ wss.on("connection", (socket, request) => {
             if (slots[conn.id] === conn) {
                 slots[conn.id] = null;
                 resetHeistState(); // leaving a Heist match cleans up its state for the next match
+                resetBombState(); // leaving a Bomb Run match cleans up its state for the next match
                 const opponent = slots[otherId(conn.id)];
                 send(opponent, { type: "opponentLeft" });
             }

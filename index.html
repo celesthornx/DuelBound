@@ -1983,6 +1983,12 @@
     <span class="fb-l">P1 HEIST</span> <span id="heistHpLeft">20/20</span> &middot; <span id="heistHpRight">20/20</span> <span class="fb-r">P2 HEIST</span>
   </div>
 
+  <!-- BOMB RUN MODE SCOREBOARD (hidden unless gameType==='bombrun') -->
+  <div class="football-score hidden" id="bombScoreDisplay">
+    <span class="fb-l">P1</span> <span id="bombScoreLeft">0</span> - <span id="bombScoreRight">0</span> <span class="fb-r">P2</span>
+    <span id="bombCarrierLine" style="display:block; font-size:11px; letter-spacing:2px; margin-top:2px; color:#ffce54;">BOMB: CENTER</span>
+  </div>
+
   <!-- ONLINE MULTIPLAYER PING BADGE (hidden outside mode==='online') -->
   <div class="ping-badge hidden" id="pingBadge">PING: -- ms</div>
 
@@ -2282,6 +2288,7 @@
       <button class="menu-btn" id="btnModeClassic">CLASSIC<br><span style="font-size:9px;color:var(--ink-dim);letter-spacing:1.5px;">FIRST TO 3 ROUNDS</span></button>
       <button class="menu-btn accent-2" id="btnModeFootball">&#9917; FOOTBALL<br><span style="font-size:9px;color:var(--ink-dim);letter-spacing:1.5px;">FIRST TO 3 GOALS</span></button>
       <button class="menu-btn" id="btnModeHeist" style="border-color:#ffce54;color:#ffce54;">&#128274; HEIST<br><span style="font-size:9px;color:var(--ink-dim);letter-spacing:1.5px;">DESTROY THE ENEMY BASE</span></button>
+      <button class="menu-btn" id="btnModeBombRun" style="border-color:#ff5566;color:#ff5566;">&#128163; BOMB RUN<br><span style="font-size:9px;color:var(--ink-dim);letter-spacing:1.5px;">FIRST TO 3 DELIVERIES</span></button>
     </div>
     <button class="menu-back" id="btnBackGameType">&larr; back</button>
   </div>
@@ -3403,7 +3410,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
           }
         }
         if(data.eliminated && mode==='online' && state==='playing'){
-          if(gameType === 'football' || gameType === 'heist'){
+          if(gameType === 'football' || gameType === 'heist' || gameType === 'bombrun'){
             // Our local view of the opponent just needs to reflect
             // "not alive" so rendering/collision stop until THEIR own
             // client finishes its respawn countdown and tells us via
@@ -3611,12 +3618,73 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         return;
       }
 
+      // ---- BOMB RUN MODE MESSAGES ----
+      // See the "BOMB RUN SETTINGS" section further down for
+      // registerBombPickup(), applyBombPickup(), updateBombRun(), etc.
+      // Carrier identity, drops and goals are all server-confirmed (see
+      // server.js's 'bombPickup'/'bombDrop'/'bombGoal'/'bombReset'
+      // handlers) -- these handlers are the ONLY place bomb.carrier and
+      // the score actually change in online mode; registerBombPickup()/
+      // registerBombGoal() never guess locally while online. IMPORTANT:
+      // the sender's "p1" is always THEIR OWN local player, same id-flip
+      // used above for bullets/damage/football/heist -- but the server's
+      // own broadcasts (bombUpdate/bombGoalUpdate) already speak in
+      // absolute slot numbers (1/2), translated below.
+      if(data.type === "bombRespawn"){
+        if(gameType !== 'bombrun') return;
+        if(p2){
+          p2.alive = true;
+          p2.health = p2.maxHealth;
+          p2.shieldCharges = p2.maxShieldCharges;
+          p2.x = data.x; p2.y = data.y; p2.facing = data.facing;
+          p2.netX = data.x; p2.netY = data.y;
+          p2SnapshotBuffer = [];
+          pushSnapshot(p2SnapshotBuffer, data.x, data.y, data.facing);
+        }
+        return;
+      }
+
+      // The server's authoritative bomb-carrier state after a confirmed
+      // pickup or drop -- data.carrier is a slot number (1/2) or null,
+      // translated into our local p1/p2 id using myPlayerID.
+      if(data.type === "bombUpdate"){
+        if(gameType !== 'bombrun') return;
+        const localCarrier = data.carrier === null ? null : (data.carrier === myPlayerID ? 'p1' : 'p2');
+        bomb.carrier = localCarrier;
+        if(data.x !== undefined) bomb.x = data.x;
+        if(data.y !== undefined) bomb.y = data.y;
+        bombPickupLock = false;
+        if(localCarrier) playDecoySpawnSound();
+        return;
+      }
+
+      // The server's authoritative score after a confirmed goal --
+      // data.scorer is a slot number (1/2), translated the same way.
+      if(data.type === "bombGoalUpdate"){
+        if(gameType !== 'bombrun') return;
+        const localScorer = data.scorer === myPlayerID ? 'p1' : 'p2';
+        if(localScorer === 'p1') bombScore1++; else bombScore2++;
+        playShockwaveSound();
+        bomb.carrier = null;
+        bomb.x = W/2; bomb.y = H/2;
+        bombPickupLock = false;
+        state = 'bombGoal';
+        bombMsgTimer = 1.8;
+        if(bombScore1 >= BOMB_WIN_SCORE || bombScore2 >= BOMB_WIN_SCORE){
+          bombWinnerId = bombScore1 > bombScore2 ? 'p1' : 'p2';
+          bombState = 'matchEnd';
+        }
+        return;
+      }
+
       if(data.type === "rematch"){
         if(mode==='online' && state==='matchEnd'){
           if(gameType === 'football'){
             initFootballMode();
           } else if(gameType === 'heist'){
             initHeistMode();
+          } else if(gameType === 'bombrun'){
+            initBombRunMode();
           } else {
             fullReset();
           }
@@ -4108,6 +4176,24 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   // below), with zero changes to any of those functions.
   const HEIST_COVERS = CLASSIC_COVERS.concat(HEIST_BASES);
 
+  // Bomb Run's two delivery zones -- one per side, same placement as the
+  // Heist bases (clear of spawn points, clear of the map edge), but
+  // UNLIKE Heist's bases these are NOT solid cover -- a carrier has to
+  // be able to walk INTO the zone to deliver the bomb, so they're plain
+  // trigger rects, exactly like Football's goal rects (footballGoalRects,
+  // also never added to FOOTBALL_COVERS). Each carries a `bombSide` tag
+  // (1 = Player One's OWN base -- Player One scores by reaching side 2,
+  // and vice versa) so the goal check below can tell which zone a
+  // carrier has walked into.
+  const BOMB_ZONE_W = 64, BOMB_ZONE_H = 100;
+  const BOMB_BASE_1 = { x: 22, y: H/2 - BOMB_ZONE_H/2, w: BOMB_ZONE_W, h: BOMB_ZONE_H, bombSide: 1 };
+  const BOMB_BASE_2 = { x: W - 22 - BOMB_ZONE_W, y: H/2 - BOMB_ZONE_H/2, w: BOMB_ZONE_W, h: BOMB_ZONE_H, bombSide: 2 };
+  const BOMB_BASES = [BOMB_BASE_1, BOMB_BASE_2];
+  // Reuses Classic's normal 5 obstacles, dropping the center wall like
+  // Football does since the bomb spawns exactly there -- the delivery
+  // zones themselves are deliberately NOT included here.
+  const BOMB_COVERS = CLASSIC_COVERS.filter((c, i) => i !== 0);
+
   // `covers` is what every collision/LOS/rendering function below
   // actually reads -- it's swapped between the sets above whenever a
   // match starts (see beginGame()), so Classic Mode is completely
@@ -4135,7 +4221,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     const storedAimMode = localStorage.getItem(AIM_MODE_KEY);
     if(storedAimMode === 'mouse' || storedAimMode === 'movement') aimMode = storedAimMode;
   } catch(e){}
-  let gameType = 'classic'; // 'classic' | 'football' | 'heist' -- picked on the GAME TYPE menu
+  let gameType = 'classic'; // 'classic' | 'football' | 'heist' | 'bombrun' -- picked on the GAME TYPE menu
   let pendingMode = null;   // which of local/online/ai the player picked, remembered while they choose gameType
 
   // ---- MATCH SIZE (Classic Mode, Local/VS Computer only) ----
@@ -5455,6 +5541,393 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     });
   }
 
+  // ============================================================
+  // BOMB RUN SETTINGS
+  // ============================================================
+  // A single carrier-object mode: one bomb spawns at the exact center of
+  // the map, either player can pick it up by walking into it, the
+  // carrier can move/dash/use non-shooting abilities but can't fire, and
+  // delivering it to the ENEMY's base zone scores a point. Structurally
+  // this mirrors Football (a shared object that follows/gets dropped by
+  // whoever holds it, goal zones, a bot with movement fully overridden)
+  // for possession/positioning, and Heist (server-authoritative state via
+  // a request -> validate -> broadcast handshake) for the parts that MUST
+  // agree between both online clients -- who currently holds the bomb,
+  // and the score -- so a forged pickup or goal claim from a modified
+  // client can't desync or cheat the match.
+  const BOMB_WIN_SCORE = 3;
+  const BOMB_RESPAWN_TIME = 5;
+  const BOMB_RADIUS = 13;
+  const BOMB_PICKUP_RADIUS = 26;
+
+  let bombScore1 = 0;
+  let bombScore2 = 0;
+  let bombState = 'playing'; // 'playing' | 'matchEnd' -- whether the BOMB RUN MATCH is still going
+  let bombMsgTimer = 0;
+  let bombWinnerId = null;
+  // Guards against the same pickup/drop/goal firing twice in one frame
+  // (e.g. handlePickup being checked for both players before the
+  // network round-trip confirms the first claim) -- set the instant a
+  // claim is sent/applied, cleared once the resulting state actually
+  // changes ball.owner/bomb.carrier.
+  let bombPickupLock = false;
+
+  // bomb.carrier is a local 'p1'/'p2' id, exactly like ball.owner in
+  // Football. In online mode this is only ever SET from a server-
+  // confirmed 'bombUpdate' broadcast (see the onmessage handler) -- never
+  // optimistically -- so both clients are guaranteed to agree on who's
+  // holding it.
+  let bomb = { x: 450, y: 270, carrier: null };
+
+  function myBombSide(){
+    return (mode === 'online' && myPlayerID === 2) ? 2 : 1;
+  }
+  function otherBombSide(side){ return side === 1 ? 2 : 1; }
+  // The zone a given local player id needs to reach to SCORE -- their
+  // OPPONENT's base, not their own.
+  function bombTargetZone(playerId){
+    const ownSide = playerId === 'p1' ? myBombSide() : otherBombSide(myBombSide());
+    return ownSide === 1 ? BOMB_BASE_2 : BOMB_BASE_1;
+  }
+
+  function initBombRunMode(){
+    matchCountedToday = false; // a fresh match -- "matches played" can count it again
+    bombScore1 = 0;
+    bombScore2 = 0;
+    bombState = 'playing';
+    bombWinnerId = null;
+    bombPickupLock = false;
+    resetBombRunPositions();
+    state = 'countdown';
+    roundTimer = 1.2;
+    if(mode === 'online' && socket && socket.readyState === WebSocket.OPEN){
+      socket.send(JSON.stringify({ type: 'bombReset' }));
+    }
+  }
+
+  // Resets both players to their normal spawn points and the bomb back
+  // to dead center -- reuses the same resetPositions() every mode uses.
+  function resetBombRunPositions(){
+    resetPositions();
+    bullets = [];
+    decoys = [];
+    bomb.x = W/2; bomb.y = H/2; bomb.carrier = null;
+    bombPickupLock = false;
+  }
+
+  function respawnBombRunPlayer(p){
+    const onlineFlipped = (mode === 'online' && myPlayerID === 2);
+    if(p.id === 'p1'){
+      p.x = onlineFlipped ? W-130 : 130;
+      p.facing = onlineFlipped ? Math.PI : 0;
+    } else {
+      p.x = onlineFlipped ? 130 : W-130;
+      p.facing = onlineFlipped ? 0 : Math.PI;
+    }
+    p.y = H/2;
+    p.health = p.maxHealth;
+    p.shieldCharges = p.maxShieldCharges;
+    p.ammo = p.maxAmmo;
+    p.reloadT = 0;
+    p.alive = true;
+    p.respawnT = 0;
+  }
+
+  // Called locally whenever OUR OWN player dies in Bomb Run (health hit
+  // 0). Never ends the match or resets the score -- just benches the
+  // player for BOMB_RESPAWN_TIME seconds, and if they were carrying the
+  // bomb, drops it exactly where they fell so it stays in play instead
+  // of vanishing or snapping back to center.
+  function handleBombDeath(p){
+    p.alive = false;
+    p.respawnT = BOMB_RESPAWN_TIME;
+    if(bomb.carrier === p.id){
+      bomb.carrier = null;
+      bomb.x = p.x; bomb.y = p.y;
+      bombPickupLock = false;
+      if(mode === 'online' && socket && socket.readyState === WebSocket.OPEN){
+        socket.send(JSON.stringify({ type:'bombDrop', x:bomb.x, y:bomb.y }));
+      }
+    }
+  }
+
+  // Applies a server-confirmed (or, offline, locally-decided) pickup --
+  // never called speculatively in online mode. Mirrors applyHeistDamage.
+  function applyBombPickup(carrierId, x, y){
+    bomb.carrier = carrierId;
+    bomb.x = x; bomb.y = y;
+    bombPickupLock = false;
+    playDecoySpawnSound(); // reuse the shimmering "duplicate" chime as a pickup cue, same as Football's ball
+  }
+
+  // Claims a pickup for player p. Online: sends the request to the
+  // server and waits for the authoritative 'bombUpdate' broadcast rather
+  // than guessing locally -- if the opponent's claim wins the race, our
+  // own gets silently ignored by the server and we just see their
+  // pickup come back instead. Local/VS Computer: no server in the loop,
+  // so this client just is the authority and applies it immediately.
+  function registerBombPickup(p){
+    if(bombPickupLock) return;
+    if(!p || !p.alive || bomb.carrier) return;
+    const dist = Math.hypot(bomb.x-p.x, bomb.y-p.y);
+    if(dist >= BOMB_PICKUP_RADIUS + PLAYER_R) return;
+    // Can't be picked up through a wall/obstacle -- reuses the same LOS
+    // helper Classic Mode's AI already relies on for shot decisions.
+    if(!hasLOS(p.x, p.y, bomb.x, bomb.y)) return;
+
+    bombPickupLock = true;
+    if(mode === 'online'){
+      if(socket && socket.readyState === WebSocket.OPEN){
+        socket.send(JSON.stringify({ type:'bombPickup', by: p.id === 'p1' ? 1 : 2, x: p.x, y: p.y }));
+      }
+    } else {
+      applyBombPickup(p.id, p.x, p.y);
+    }
+  }
+
+  // Claims a goal for player p once they've walked the bomb into the
+  // enemy's delivery zone. Same online/local split as registerBombPickup.
+  function registerBombGoal(p){
+    if(bombState !== 'playing') return;
+    if(mode === 'online'){
+      if(socket && socket.readyState === WebSocket.OPEN){
+        socket.send(JSON.stringify({ type:'bombGoal', scorer: p.id === 'p1' ? 1 : 2 }));
+      }
+    } else {
+      applyBombGoal(p.id);
+    }
+  }
+
+  function applyBombGoal(scorerId){
+    if(bombState !== 'playing') return;
+    if(scorerId === 'p1') bombScore1++; else bombScore2++;
+    playShockwaveSound(); // reuse the boom SFX as a delivery/goal cue
+    bomb.carrier = null;
+    bomb.x = W/2; bomb.y = H/2;
+    bombPickupLock = false;
+    state = 'bombGoal';
+    bombMsgTimer = 1.8;
+
+    if(scorerId === 'p1'){
+      credits += 15;
+      updateCreditsDisplay();
+      saveProgress();
+    }
+
+    if(bombScore1 >= BOMB_WIN_SCORE || bombScore2 >= BOMB_WIN_SCORE){
+      bombWinnerId = bombScore1 > bombScore2 ? 'p1' : 'p2';
+      bombState = 'matchEnd';
+      if(bombWinnerId === 'p1'){
+        credits += 40;
+        stats.wins++;
+        bumpDailyProgress('wins');
+        updateCreditsDisplay();
+        saveProgress();
+      }
+    }
+  }
+
+  function checkBombGoal(p){
+    if(bomb.carrier !== p.id) return;
+    const zone = bombTargetZone(p.id);
+    if(p.x > zone.x && p.x < zone.x+zone.w && p.y > zone.y && p.y < zone.y+zone.h){
+      registerBombGoal(p);
+    }
+  }
+
+  // Basic objective-based Bomb Run bot for VS COMPUTER -- deliberately
+  // simple, exactly three states per the spec: chase/defend when nobody
+  // has the bomb, run it home when the bot has it, and hunt the carrier
+  // when the human has it. Movement here is the ONLY thing driving the
+  // bot's position (see the gameType==='bombrun' branch inside
+  // updatePlayer, which zeroes out the normal combat AI's movement and
+  // leaves only its shoot decision), same pattern as Football's bot.
+  const BOT_BOMB_SPEED = 235;
+
+  function updateBombRunBot(bot, dt){
+    const opp = p1;
+    if(!opp) return;
+    const ownZone = bombTargetZone(opp.id); // opponent's target zone == bot's own base
+    const enemyZone = bombTargetZone(bot.id); // bot's target zone == the zone it must deliver to
+
+    if(bomb.carrier === bot.id){
+      // Run the bomb home to the enemy zone.
+      const goalX = enemyZone.x + enemyZone.w/2, goalY = enemyZone.y + enemyZone.h/2;
+      const moveAng = Math.atan2(goalY-bot.y, goalX-bot.x);
+      bot.x += Math.cos(moveAng) * BOT_BOMB_SPEED * dt;
+      bot.y += Math.sin(moveAng) * BOT_BOMB_SPEED * dt;
+      bot.facing = moveAng;
+      resolvePlayerCover(bot);
+    } else if(bomb.carrier === null){
+      // Nobody has it -- go get it.
+      const moveAng = Math.atan2(bomb.y-bot.y, bomb.x-bot.x);
+      bot.x += Math.cos(moveAng) * BOT_BOMB_SPEED * dt;
+      bot.y += Math.sin(moveAng) * BOT_BOMB_SPEED * dt;
+      bot.facing = moveAng;
+      resolvePlayerCover(bot);
+    } else if(bomb.carrier === opp.id){
+      // The human has it -- chase them down to stop the delivery. Facing
+      // the opponent directly also lines the bot up to actually shoot.
+      const moveAng = Math.atan2(opp.y-bot.y, opp.x-bot.x);
+      bot.x += Math.cos(moveAng) * BOT_BOMB_SPEED * dt;
+      bot.y += Math.sin(moveAng) * BOT_BOMB_SPEED * dt;
+      bot.facing = moveAng;
+      resolvePlayerCover(bot);
+    } else {
+      // Bot itself is the carrier's own case handled above; if somehow
+      // neither branch matched (shouldn't happen), hold position and
+      // defend near its own base.
+      const dx = (ownZone.x+ownZone.w/2)-bot.x, dy = (ownZone.y+ownZone.h/2)-bot.y;
+      if(Math.hypot(dx,dy) > 40){
+        const moveAng = Math.atan2(dy,dx);
+        bot.x += Math.cos(moveAng) * BOT_BOMB_SPEED * dt;
+        bot.y += Math.sin(moveAng) * BOT_BOMB_SPEED * dt;
+        bot.facing = moveAng;
+        resolvePlayerCover(bot);
+      }
+    }
+
+    bot.x = Math.max(PLAYER_R, Math.min(W-PLAYER_R, bot.x));
+    bot.y = Math.max(PLAYER_R, Math.min(H-PLAYER_R, bot.y));
+  }
+
+  // Per-frame Bomb Run update, called from loop() instead of the Classic
+  // movement block whenever gameType==='bombrun'. Same shape as
+  // updateFootball/updateHeist.
+  function updateBombRun(dt){
+    [p1, p2].forEach(p=>{
+      if(!p) return;
+      if(mode === 'online' && p.id === 'p2') return; // opponent's own respawn is their own client's job, signalled via 'bombRespawn'
+      if(!p.alive && p.respawnT > 0){
+        p.respawnT -= dt;
+        if(p.respawnT <= 0){
+          respawnBombRunPlayer(p);
+          if(mode === 'online' && p.id === 'p1' && socket && socket.readyState === WebSocket.OPEN){
+            socket.send(JSON.stringify({ type:'bombRespawn', x:p.x, y:p.y, facing:p.facing }));
+          }
+        }
+      }
+    });
+
+    updatePlayer(p1, dt);
+    if(mode !== 'online'){
+      updatePlayer(p2, dt);
+      if(p2 && p2.isAI && p2.alive) updateBombRunBot(p2, dt);
+    } else if(p2){
+      updateRemotePlayerInterpolation(p2, p2SnapshotBuffer);
+    }
+
+    updateBullets(dt);
+    updateDecoys(dt);
+
+    // The bomb visually follows its carrier, exactly like the football
+    // ball does -- no free-flight physics of its own.
+    if(bomb.carrier){
+      const holder = bomb.carrier === 'p1' ? p1 : p2;
+      if(holder){
+        bomb.x = holder.x + Math.cos(holder.facing)*(PLAYER_R+10);
+        bomb.y = holder.y + Math.sin(holder.facing)*(PLAYER_R+10);
+      }
+    }
+
+    if(p1 && p1.alive) registerBombPickup(p1);
+    if(mode !== 'online' && p2 && p2.alive) registerBombPickup(p2);
+
+    if(p1 && p1.alive) checkBombGoal(p1);
+    if(mode !== 'online' && p2 && p2.alive) checkBombGoal(p2);
+  }
+
+  // Draws both Bomb Run delivery zones -- same futuristic vault language
+  // as Heist's bases, tinted per side, so the mode reads as part of the
+  // same game rather than a bolted-on minigame.
+  function drawBombRunZones(){
+    BOMB_BASES.forEach(base=>{
+      const color = base.bombSide === 1 ? '#3fd0ff' : '#ff5f6d';
+      const cx = base.x + base.w/2;
+
+      ctx.save();
+      ctx.fillStyle = 'rgba(16,21,31,0.92)';
+      ctx.fillRect(base.x, base.y, base.w, base.h);
+
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = 0.3;
+      ctx.lineWidth = 1;
+      for(let i=-3;i<=3;i++){
+        ctx.beginPath();
+        ctx.moveTo(base.x, base.y + base.h/2 + i*15);
+        ctx.lineTo(base.x + base.w, base.y + base.h/2 + i*15 - 12);
+        ctx.stroke();
+      }
+
+      ctx.globalAlpha = 0.95;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.5;
+      ctx.shadowBlur = 16;
+      ctx.shadowColor = color;
+      ctx.strokeRect(base.x+1.5, base.y+1.5, base.w-3, base.h-3);
+      ctx.restore();
+
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#e8edf5';
+      ctx.font = "bold 11px 'Chakra Petch', sans-serif";
+      ctx.fillText('DELIVER', cx, base.y - 8);
+      ctx.restore();
+    });
+  }
+
+  // Futuristic bomb visual -- a pulsing dark-red core with an energy
+  // ring and a warning-glyph "detonator" cap, distinct from Football's
+  // warm gold ball so the two never read as the same object.
+  function drawBomb(){
+    const pulse = 0.5 + 0.5*Math.sin(performance.now()*0.006);
+    ctx.save();
+    ctx.shadowBlur = 18 + pulse*10;
+    ctx.shadowColor = '#ff3355';
+
+    const bodyGrad = ctx.createRadialGradient(
+      bomb.x - BOMB_RADIUS*0.35, bomb.y - BOMB_RADIUS*0.4, BOMB_RADIUS*0.1,
+      bomb.x, bomb.y, BOMB_RADIUS*1.1
+    );
+    bodyGrad.addColorStop(0,    '#3a1016');
+    bodyGrad.addColorStop(0.45, '#5c141d');
+    bodyGrad.addColorStop(0.8,  '#8f1926');
+    bodyGrad.addColorStop(1,    '#2a0d12');
+    ctx.fillStyle = bodyGrad;
+    ctx.beginPath(); ctx.arc(bomb.x, bomb.y, BOMB_RADIUS, 0, Math.PI*2); ctx.fill();
+
+    // Rotating energy ring, brighter with the pulse.
+    ctx.strokeStyle = `rgba(255,60,80,${0.5+pulse*0.4})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(bomb.x, bomb.y, BOMB_RADIUS*0.72, 0, Math.PI*2*0.78); ctx.stroke();
+
+    // Crisp rim.
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(bomb.x, bomb.y, BOMB_RADIUS, 0, Math.PI*2); ctx.stroke();
+
+    // Blinking core light -- the "armed" indicator.
+    ctx.fillStyle = `rgba(255,${Math.floor(80+pulse*100)},${Math.floor(90+pulse*60)},0.95)`;
+    ctx.beginPath(); ctx.arc(bomb.x, bomb.y, BOMB_RADIUS*0.28, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+
+    if(bomb.carrier){
+      const holder = bomb.carrier === 'p1' ? p1 : p2;
+      if(holder){
+        ctx.save();
+        ctx.globalAlpha = 0.85;
+        ctx.strokeStyle = '#ff3355';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([3,4]);
+        ctx.beginPath();
+        ctx.arc(holder.x, holder.y, PLAYER_R+9, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+
   function updateCreditsDisplay(){
     creditsAmountMain.textContent = credits;
     creditsAmountShop.textContent = credits;
@@ -6279,6 +6752,15 @@ else{
         mx = 0; my = 0;
         wantShoot = inp.shoot;
         wantDash = false;
+      } else if(gameType === 'bombrun'){
+        // Same pattern as Football -- updateBombRunBot (called right
+        // after this function returns) fully owns positioning per the
+        // spec's simple three-state objective AI. wantShoot still comes
+        // through so the carrier-cannot-shoot guard below can suppress
+        // it exactly like a human carrier's.
+        mx = 0; my = 0;
+        wantShoot = inp.shoot;
+        wantDash = false;
       } else {
         mx = inp.mx; my = inp.my; wantShoot = inp.shoot; wantDash = inp.dash;
       }
@@ -6404,6 +6886,15 @@ else{
       wantShoot = false;
     }
 
+    // ---- BOMB RUN MODE: carrier cannot shoot ----
+    // No kick-equivalent action -- the shoot button simply does nothing
+    // while this player is holding the bomb, per the spec. Applies
+    // equally to a human carrier and an AI carrier since wantShoot is
+    // already unified into one variable by this point.
+    if(gameType === 'bombrun' && bomb.carrier === p.id){
+      wantShoot = false;
+    }
+
     if(wantShoot && p.ammo>0){
     	p.ammo--;
     	p.reloadT = 0;
@@ -6437,7 +6928,8 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
     // abilities, Time Warp, Decoy, Void Blink) doesn't fire bullets and
     // stays available, the ball just follows its holder through them.
     const footballBlocksTriburst = (gameType === 'football' && ball.owner === p.id && p.abilityId === 'triburst');
-    if(wantAbility && p.abilityCd<=0 && !footballBlocksTriburst){
+    const bombBlocksTriburst = (gameType === 'bombrun' && bomb.carrier === p.id && p.abilityId === 'triburst');
+    if(wantAbility && p.abilityCd<=0 && !footballBlocksTriburst && !bombBlocksTriburst){
       p.abilityCd = p.abilityCooldownMax;
 
       if(p.abilityId === 'triburst'){
@@ -6533,6 +7025,8 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
         handleFootballDeath(p1);
       } else if(gameType === 'heist'){
         handleHeistDeath(p1);
+      } else if(gameType === 'bombrun'){
+        handleBombDeath(p1);
       } else {
         endRound('p2');
       }
@@ -6559,6 +7053,8 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
           handleFootballDeath(p2);
         } else if(gameType === 'heist'){
           handleHeistDeath(p2);
+        } else if(gameType === 'bombrun'){
+          handleBombDeath(p2);
         } else {
           // 15 credits per kill, awarded the instant it happens (endRound
           // only handles the match-win bonus now, see below).
@@ -6589,6 +7085,8 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
           handleFootballDeath(p1);
         } else if(gameType === 'heist'){
           handleHeistDeath(p1);
+        } else if(gameType === 'bombrun'){
+          handleBombDeath(p1);
         } else {
           endRound('p2');
         }
@@ -6980,6 +7478,8 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
       initFootballMode();
     } else if(gameType === 'heist'){
       initHeistMode();
+    } else if(gameType === 'bombrun'){
+      initBombRunMode();
     } else {
       fullReset();
     }
@@ -7027,6 +7527,8 @@ if(gameType === 'football'){
     updateFootball(dt);
 } else if(gameType === 'heist'){
     updateHeist(dt);
+} else if(gameType === 'bombrun'){
+    updateBombRun(dt);
 } else {
 updatePlayer(p1, dt);
 
@@ -7059,6 +7561,18 @@ updateDecoys(dt);
           countMatchPlayed();
         } else {
           resetFootballPositions();
+          state = 'countdown';
+          roundTimer = 1.2;
+        }
+      }
+    } else if(state==='bombGoal'){
+      bombMsgTimer -= dt;
+      if(bombMsgTimer<=0){
+        if(bombState === 'matchEnd'){
+          state = 'matchEnd';
+          countMatchPlayed();
+        } else {
+          resetBombRunPositions();
           state = 'countdown';
           roundTimer = 1.2;
         }
@@ -7380,6 +7894,8 @@ updateDecoys(dt);
       }
       const heistDisplay = document.getElementById('heistScoreDisplay');
       if(heistDisplay) heistDisplay.classList.add('hidden');
+      const bombDisplay = document.getElementById('bombScoreDisplay');
+      if(bombDisplay) bombDisplay.classList.add('hidden');
       scoreP1El.innerHTML = '';
       scoreP2El.innerHTML = '';
     } else if(gameType === 'heist'){
@@ -7391,6 +7907,27 @@ updateDecoys(dt);
         document.getElementById('heistHpLeft').textContent = heistHP[1] + '/' + HEIST_MAX_HP;
         document.getElementById('heistHpRight').textContent = heistHP[2] + '/' + HEIST_MAX_HP;
       }
+      const bombDisplay = document.getElementById('bombScoreDisplay');
+      if(bombDisplay) bombDisplay.classList.add('hidden');
+      scoreP1El.innerHTML = '';
+      scoreP2El.innerHTML = '';
+    } else if(gameType === 'bombrun'){
+      const fbDisplay = document.getElementById('footballScoreDisplay');
+      if(fbDisplay) fbDisplay.classList.add('hidden');
+      const heistDisplay = document.getElementById('heistScoreDisplay');
+      if(heistDisplay) heistDisplay.classList.add('hidden');
+      const bombDisplay = document.getElementById('bombScoreDisplay');
+      if(bombDisplay){
+        bombDisplay.classList.remove('hidden');
+        document.getElementById('bombScoreLeft').textContent = bombScore1;
+        document.getElementById('bombScoreRight').textContent = bombScore2;
+        const carrierLine = document.getElementById('bombCarrierLine');
+        if(carrierLine){
+          if(bomb.carrier === 'p1') carrierLine.textContent = 'BOMB CARRIER: PLAYER 1';
+          else if(bomb.carrier === 'p2') carrierLine.textContent = 'BOMB CARRIER: PLAYER 2';
+          else carrierLine.textContent = 'BOMB: CENTER';
+        }
+      }
       scoreP1El.innerHTML = '';
       scoreP2El.innerHTML = '';
     } else {
@@ -7398,6 +7935,8 @@ updateDecoys(dt);
       if(fbDisplay) fbDisplay.classList.add('hidden');
       const heistDisplay = document.getElementById('heistScoreDisplay');
       if(heistDisplay) heistDisplay.classList.add('hidden');
+      const bombDisplay = document.getElementById('bombScoreDisplay');
+      if(bombDisplay) bombDisplay.classList.add('hidden');
       scoreP1El.innerHTML = ''; scoreP2El.innerHTML = '';
       for(let i=0;i<ROUNDS_TO_WIN;i++){
         const d1 = document.createElement('div');
@@ -7478,9 +8017,17 @@ updateDecoys(dt);
     if(gameType === 'football') drawFootballField();
     drawCovers();
     if(gameType === 'heist') drawHeistBases();
+    if(gameType === 'bombrun') drawBombRunZones();
     drawBullets();
     if(gameType === 'football'){
       drawFootballBall();
+    } else if(gameType === 'bombrun'){
+      // Both the bomb and Decoy can be on-screen at once -- Decoy never
+      // fires bullets, so it isn't blocked by the carrier-cannot-shoot
+      // rule and stays usable while carrying, unlike Football's ball
+      // which is mutually exclusive with Decoy's own render slot.
+      drawBomb();
+      drawDecoys();
     } else {
       drawDecoys();
     }
@@ -7488,7 +8035,7 @@ updateDecoys(dt);
     if(p2) drawPlayer(p2);
     extraBots.forEach(bot => drawPlayer(bot));
     drawEffects();
-    if(gameType === 'football' || gameType === 'heist') drawFootballRespawnCountdown();
+    if(gameType === 'football' || gameType === 'heist' || gameType === 'bombrun') drawFootballRespawnCountdown();
     updateHud();
 
     if(gameType === 'football'){
@@ -7514,6 +8061,20 @@ updateDecoys(dt);
         const color = p1won ? 'var(--p1)' : 'var(--p2)';
         const creditNote = p1won ? '<div class="small" style="color:#ffce54;">+50 BONUS CREDITS</div>' : '';
         centerMsg.innerHTML = `<div class="big" style="color:${color}">HEIST DESTROYED</div><div class="small">${winnerLabel} WINS</div><div class="small">PRESS R TO REMATCH</div>${creditNote}`;
+      } else {
+        centerMsg.innerHTML = '';
+      }
+    } else if(gameType === 'bombrun'){
+      if(state==='countdown'){
+        centerMsg.innerHTML = `<div class="big">${Math.max(1,Math.ceil(roundTimer))}</div>`;
+      } else if(state==='bombGoal'){
+        centerMsg.innerHTML = `<div class="big" style="color:#ff5566;">DELIVERED!</div><div class="small">${bombScore1} - ${bombScore2}</div>`;
+      } else if(state==='matchEnd'){
+        const p1won = bombWinnerId === 'p1';
+        const winner = p1won ? 'PLAYER ONE' : (mode==='ai' ? 'COMPUTER' : 'PLAYER TWO');
+        const color = p1won ? 'var(--p1)' : 'var(--p2)';
+        const creditNote = p1won ? '<div class="small" style="color:#ffce54;">+40 BONUS CREDITS</div>' : '';
+        centerMsg.innerHTML = `<div class="big" style="color:${color}">${winner} WINS</div><div class="small">${bombScore1} - ${bombScore2}</div><div class="small">PRESS R TO REMATCH</div>${creditNote}`;
       } else {
         centerMsg.innerHTML = '';
       }
@@ -7545,10 +8106,10 @@ updateDecoys(dt);
   const p1LegendCol = document.querySelector('.legend .col.p1');
 
   function beginGame(){
-    p2Label.textContent = (mode==='ai' ? 'COMPUTER' : (mode==='online' ? 'OPPONENT (ONLINE)' : 'PLAYER TWO')) + (gameType==='football' ? ' \u26bd' : (gameType==='heist' ? ' \u{1F512}' : ''));
+    p2Label.textContent = (mode==='ai' ? 'COMPUTER' : (mode==='online' ? 'OPPONENT (ONLINE)' : 'PLAYER TWO')) + (gameType==='football' ? ' \u26bd' : (gameType==='heist' ? ' \u{1F512}' : (gameType==='bombrun' ? ' \u{1F4A3}' : '')));
     p2Legend.style.display = mode==='local' ? '' : 'none';
     canvas.style.cursor = (aimMode==='mouse') ? 'crosshair' : 'default';
-    covers = (gameType === 'football') ? FOOTBALL_COVERS : (gameType === 'heist') ? HEIST_COVERS : CLASSIC_COVERS;
+    covers = (gameType === 'football') ? FOOTBALL_COVERS : (gameType === 'heist') ? HEIST_COVERS : (gameType === 'bombrun') ? BOMB_COVERS : CLASSIC_COVERS;
     if(aimMode==='mouse'){
       p1LegendCol.innerHTML = '<b>PLAYER ONE</b>'
         + '<div class="row"><span class="key">W A S D</span>move</div>'
@@ -7581,6 +8142,8 @@ updateDecoys(dt);
       initFootballMode();
     } else if(gameType === 'heist'){
       initHeistMode();
+    } else if(gameType === 'bombrun'){
+      initBombRunMode();
     } else {
       fullReset();
     }
@@ -7653,6 +8216,11 @@ updateDecoys(dt);
     matchPlayerCount = 2; // Heist stays 1v1 -- there's exactly one base per side
     afterGameTypeChosen();
   });
+  document.getElementById('btnModeBombRun').addEventListener('click', ()=>{
+    gameType = 'bombrun';
+    matchPlayerCount = 2; // Bomb Run stays 1v1 -- one bomb, one carrier at a time
+    afterGameTypeChosen();
+  });
   document.getElementById('btnBackGameType').addEventListener('click', ()=>{
     menuGameType.classList.add('hidden');
     menuMain.classList.remove('hidden');
@@ -7721,7 +8289,12 @@ updateDecoys(dt);
     if(fbDisplay) fbDisplay.classList.add('hidden');
     const heistDisplay = document.getElementById('heistScoreDisplay');
     if(heistDisplay) heistDisplay.classList.add('hidden');
+    const bombDisplay = document.getElementById('bombScoreDisplay');
+    if(bombDisplay) bombDisplay.classList.add('hidden');
     resetHeistState();
+    bomb.carrier = null;
+    bomb.x = W/2; bomb.y = H/2;
+    bombPickupLock = false;
     if(isTouchDevice){
       mobileControlsEl.classList.add('hidden');
       touchMoveX = 0; touchMoveY = 0; touchAiming = false; touchFireQueued = false;
