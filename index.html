@@ -148,6 +148,15 @@
     flex-direction:column;
     pointer-events:none;
     font-family:'Chakra Petch', sans-serif;
+    /* MUST sit above canvas#game (z-index:1). Without this the element
+       has z-index:auto and, being an earlier sibling, is painted UNDER
+       the canvas -- which silently hid the 3-2-1 countdown, the ROUND
+       WIN banner and the winner/game-over screen. The state machine was
+       running correctly the whole time; none of it was reaching the
+       screen. Kept below the EXIT/RESTART buttons (5/6) and the mobile
+       controls, and pointer-events stays none so it can never
+       intercept input. */
+    z-index: 4;
   }
   .center-msg .big{
     font-size: 46px; font-weight:700; letter-spacing:4px;
@@ -157,6 +166,12 @@
     margin-top:8px;
     font-family:'Share Tech Mono', monospace;
     font-size:12px; letter-spacing:2px; color: var(--ink-dim);
+  }
+  /* 46px "PLAYER ONE WINS" is wider than a phone screen, so it spilled
+     off both edges once the banner became visible again. */
+  @media (max-width: 700px){
+    .center-msg .big{ font-size: 30px; letter-spacing:2px; }
+    .center-msg .big, .center-msg .small{ text-align:center; padding:0 14px; max-width:100vw; }
   }
 
   .legend{
@@ -620,6 +635,34 @@
     letter-spacing:1px; margin-top:4px;
   }
 
+  /* Match-end restart. Sits under the winner text rather than at the top,
+     so it never overlaps the EXIT button. Touch-sized for mobile. */
+  .restart-btn{
+    /* `top` is set from JS (updateRestartButton) to sit just below the
+       winner text; this is only the fallback before the first measure. */
+    position:absolute; top:58%; left:50%; transform: translateX(-50%);
+    background: rgba(63,208,255,0.14);
+    border: 1px solid var(--p1);
+    color: var(--p1);
+    font-family:'Share Tech Mono', monospace;
+    font-size: 13px; letter-spacing: 3px;
+    padding: 11px 26px; min-height: 40px;
+    border-radius: 4px;
+    cursor:pointer;
+    /* Must beat .mobile-controls (6) and .touch-action-btn (7): the
+       touch aim joystick is a full-height pointer-events:auto zone over
+       the right half of the screen, so at a lower z-index it swallowed
+       every tap on this button and made it unusable on a phone. Safe to
+       sit on top because the button only exists while state==='matchEnd',
+       when nobody is steering. */
+    z-index: 8;
+    transition: all .15s ease;
+  }
+  .restart-btn:hover{ background: rgba(63,208,255,0.26); box-shadow:0 0 16px rgba(63,208,255,.35); }
+  .restart-btn:active{ transform: translateX(-50%) scale(.96); }
+  @media (max-width: 700px){
+    .restart-btn{ font-size: 12px; padding: 12px 22px; min-height: 44px; }
+  }
   .exit-btn{
     position:absolute; top:10px; left:50%; transform: translateX(-50%);
     background: rgba(10,13,20,0.7);
@@ -2575,6 +2618,10 @@
 
   <!-- EXIT BUTTON -->
   <button class="exit-btn hidden" id="exitBtn" title="Exit to menu">EXIT</button>
+  <!-- Shown only while state==='matchEnd' (see updateRestartButton), so it
+       can never be clicked during a live round. Clicking it runs exactly
+       the same restart path as the R key. -->
+  <button class="restart-btn hidden" id="restartBtn" title="Restart match (R)">RESTART</button>
   <button class="mute-btn" id="muteBtn" title="Mute / unmute sound">&#128266;</button>
 
   <div class="mobile-controls hidden" id="mobileControls">
@@ -4017,6 +4064,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   const creditsAmountMain = document.getElementById('creditsAmountMain');
   const creditsAmountShop = document.getElementById('creditsAmountShop');
   const exitBtn = document.getElementById('exitBtn');
+  const restartBtn = document.getElementById('restartBtn');
 
   const ROUNDS_TO_WIN = 3;
   const MAX_AMMO = 6;
@@ -5812,17 +5860,10 @@ let scoreCarry = null;
     }
     if(!keysDown[k]) keysPressed[k] = true;
     keysDown[k] = true;
+    // R only restarts on the game-over screen -- during a live round it
+    // falls through and does nothing, so it can never interrupt play.
     if(k==='r' && state==='matchEnd'){
-      if(mode==='online' && socket && socket.readyState===WebSocket.OPEN){
-        socket.send(JSON.stringify({type:'rematch'}));
-      }
-      if(gameType === 'football'){
-        initFootballMode();
-      } else if(gameType === 'heist'){
-        initHeistMode();
-      } else {
-        fullReset();
-      }
+      restartMatch();
     }
   });
   window.addEventListener('keyup', (e)=>{ keysDown[e.key.toLowerCase()] = false; });
@@ -6922,6 +6963,48 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
     roundTimer = 1.2;
   }
 
+  // The single restart path, shared by the R key and the RESTART button
+  // so the two can never drift apart. This is the logic the R key has
+  // always run -- it is only extracted here, not changed.
+  //
+  // Guarded on matchEnd so neither entry point can reset a live round.
+  // Note it resets ROUND/MATCH state only (via the existing
+  // fullReset/initFootballMode/initHeistMode): credits, kills, wins,
+  // skins, powers, abilities and account progression are untouched.
+  function restartMatch(){
+    if(state !== 'matchEnd') return;
+    if(mode==='online' && socket && socket.readyState===WebSocket.OPEN){
+      socket.send(JSON.stringify({type:'rematch'}));
+    }
+    if(gameType === 'football'){
+      initFootballMode();
+    } else if(gameType === 'heist'){
+      initHeistMode();
+    } else {
+      fullReset();
+    }
+    updateRestartButton();
+  }
+
+  // Keeps the RESTART button's visibility tied to the real game state.
+  // Called from render(), so it tracks every path into and out of
+  // matchEnd (round win, forfeit, rematch, exit) without each of them
+  // having to remember to toggle it.
+  function updateRestartButton(){
+    if(!restartBtn) return;
+    const show = started && state === 'matchEnd';
+    restartBtn.classList.toggle('hidden', !show);
+    if(!show) return;
+    // Sit just under the winner text rather than at a fixed offset: the
+    // banner wraps to two lines on a phone, and a hard percentage would
+    // land the button on top of it.
+    const last = centerMsg.lastElementChild;
+    if(last){
+      const r = last.getBoundingClientRect();
+      if(r.height > 0) restartBtn.style.top = Math.round(r.bottom + 16) + 'px';
+    }
+  }
+
   function fullReset(){
     matchCountedToday = false; // a fresh match -- "matches played" can count it again
     scoreCarry = { p1:0, p2:0 };
@@ -7453,6 +7536,10 @@ updateDecoys(dt);
         centerMsg.innerHTML = '';
       }
     }
+
+    // After centerMsg for THIS frame is in the DOM, so the button
+    // measures the text it is actually positioned under.
+    updateRestartButton();
   }
 
   const p1LegendCol = document.querySelector('.legend .col.p1');
@@ -7623,6 +7710,7 @@ updateDecoys(dt);
     if(typeof syncActivity === 'function') syncActivity();
     stopMusic();
     exitBtn.classList.add('hidden');
+    restartBtn.classList.add('hidden');
     menuOnline.classList.add('hidden');
     menuShop.classList.add('hidden');
     menuLeaderboard.classList.add('hidden');
@@ -7650,6 +7738,7 @@ updateDecoys(dt);
     fetchDailyChallenges();
   }
   exitBtn.addEventListener('click', exitToMenu);
+  restartBtn.addEventListener('click', restartMatch);
   const muteBtn = document.getElementById('muteBtn');
   if(muteBtn) muteBtn.addEventListener('click', toggleMute);
   window.addEventListener('keydown', (e)=>{

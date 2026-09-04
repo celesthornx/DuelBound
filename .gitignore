@@ -4,3 +4,11 @@ node_modules/
 # stays tracked -- it is the migration seed for the persistent store.
 *.tmp-*
 *.corrupt-*
+
+# Test-harness builds. These are generated from index.html / server.js by
+# injecting test-only hooks (a session-minting endpoint, state getters)
+# so the game can be driven headlessly. They are rebuilt from source on
+# every test run and must never be committed -- shipping one would expose
+# an unauthenticated session endpoint.
+*.testonly.html
+*.testonly.js
