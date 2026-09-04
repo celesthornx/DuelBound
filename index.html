@@ -909,6 +909,21 @@
     padding: 2px 6px;
     white-space: nowrap;
   }
+  /* Subtle level pill next to a display name -- reused both in the
+     lobby sidebar (lobbyLevelTag) and inline (see onlineLabelFor's
+     "[N] Name" convention for the in-match HUD, which is plain text
+     rather than this pill to keep the HUD lightweight). */
+  .level-tag{
+    display:inline-block;
+    font-family:'Share Tech Mono', monospace;
+    font-size: 9px; letter-spacing: 1px;
+    color: #ffce54;
+    border: 1px solid rgba(255,206,84,.4);
+    background: rgba(255,206,84,.1);
+    border-radius: 3px;
+    padding: 1px 5px;
+    vertical-align: middle;
+  }
 
   /* “COMING SOON” placeholder body -- deliberate, not broken-looking */
   .soon-block{
@@ -1948,7 +1963,7 @@
   <canvas id="game" width="900" height="540"></canvas>
   <div class="hud">
     <div class="side left">
-      <div class="name p1">PLAYER ONE</div>
+      <div class="name p1" id="p1Label">PLAYER ONE</div>
       <div class="score" id="scoreP1"></div>
       <div class="bars">
         <div class="barlabel">AMMO</div>
@@ -2089,7 +2104,7 @@
               </svg>
             </div>
             <div class="profile-id">
-              <div class="profile-name" id="lobbyName">GUEST</div>
+              <div class="profile-name"><span class="level-tag hidden" id="lobbyLevelTag">LV 1</span> <span id="lobbyName">GUEST</span></div>
               <div class="profile-tag" id="accountStatus">NOT SIGNED IN &mdash; PROGRESS WON'T BE SAVED</div>
               <div class="profile-auth">
                 <div id="googleSignInBtn"></div>
@@ -3042,6 +3057,26 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   let onlineOpponentColor = null;
   let onlineOpponentSkinId = null; // which SKINS entry the opponent's flat `color` corresponds to, if any -- lets fillShipHull render their real skin's gradient/deco instead of just the flat color
 
+  // Server-confirmed {name, level} for each of the two casual SLOTS
+  // (1/2, server numbering -- not local p1/p2, which flip depending on
+  // whether we're slot 1 or 2). Populated only by 'identity' messages
+  // (see socket.onmessage above); never written from anything else, so
+  // there's exactly one place either name can come from.
+  let onlineIdentities = { 1: null, 2: null };
+
+  // Maps a local combatant id ('p1'/'p2') to the online identity that
+  // actually belongs to them, accounting for the same slot-flip every
+  // other online-mode function already handles (myPlayerID===2 means
+  // OUR local 'p1' is really server slot 2). Returns null if that slot
+  // hasn't told us who they are yet (not signed in, or identity hasn't
+  // arrived) -- callers fall back to the existing generic label.
+  function onlineIdentityFor(localId){
+    if(mode !== 'online' || !myPlayerID) return null;
+    const slot = (localId === 'p1') ? myPlayerID : otherIdSlot(myPlayerID);
+    return onlineIdentities[slot] || null;
+  }
+  function otherIdSlot(slot){ return slot === 1 ? 2 : 1; }
+
   // ====================================================================
   // NETWORKING OPTIMIZATION -- decoupled send rate, snapshot-buffer
   // interpolation, and ping. Rendering (requestAnimationFrame, see
@@ -3263,6 +3298,16 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       // A ranked queue join requested before the socket was ready is
       // completed here (see startRankedQueue/rankedOnSocketOpen).
       if(typeof rankedOnSocketOpen === 'function') rankedOnSocketOpen();
+      // Identifies this casual gameplay connection to the server (same
+      // presence_hello the separate presence-only socket already uses,
+      // see connectPresenceSocket() below) so the server can resolve our
+      // REAL account name/level from our sessionToken and broadcast it
+      // to the opponent -- see server.js's presence_hello handler. Only
+      // meaningful when signed in; a guest plays online exactly as
+      // before (falls back to "PLAYER ONE"/"OPPONENT (ONLINE)").
+      if(loggedIn && sessionToken){
+        socket.send(JSON.stringify({ type:'presence_hello', sessionToken: sessionToken }));
+      }
     };
 
     socket.onerror = function(){
@@ -3422,6 +3467,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
             bumpDailyProgress('kills');
             updateCreditsDisplay();
             saveProgress();
+            reportXP('kill', { kills: 1 });
             endRound('p1');
           }
         }
@@ -3488,6 +3534,30 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
 
       // The opponent's chosen skin color, so they don't always render as
       // the default red on your screen.
+      // The server's authoritative identity for one of the two casual
+      // slots (1/2, its own numbering -- see server.js's presence_hello
+      // handler) -- name/level resolved server-side from that
+      // connection's own sessionToken, never trusted from any client-
+      // sent field. Stored keyed by SERVER slot (not local p1/p2, which
+      // flip depending on which slot WE are -- see onlineDisplayName()).
+      if(data.type === "identity"){
+        if(data.slot === 1 || data.slot === 2){
+          onlineIdentities[data.slot] = { name: data.name, level: data.level || 1 };
+          updateOnlineNameLabels();
+        }
+        return;
+      }
+
+      // Server-confirmed XP award (see server.js's awardXPAndNotify) --
+      // arrives instantly for the fully server-authoritative sources
+      // (Heist base destroyed, Bomb Run match won). Queued the same way
+      // client-reported XP is (see queueXPFeedback) so it's combined
+      // with anything else and shown once, back in the lobby.
+      if(data.type === "xpAward"){
+        queueXPFeedback(data);
+        return;
+      }
+
       if(data.type === "skin"){
         onlineOpponentColor = data.color;
         // data.skinId is only ever used to look up SKIN_BY_ID for the
@@ -3704,6 +3774,42 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   let loggedIn = false;
   let isAdmin = false; // UX-only flag; every real admin action is re-verified server-side
   let stats = { kills: 0, wins: 0 };
+  // XP/Level are ALWAYS server-authoritative -- these three are pure
+  // display cache, refreshed from whatever the server last told us
+  // (applyAccount at sign-in, /xp/report's response, or a live
+  // 'xpAward' WS message). Nothing in this file ever increments xp
+  // locally and treats that as real; see queueXPFeedback/reportXP.
+  let myXP = 0, myLevel = 1, myXpIntoLevel = 0, myXpForNextLevel = 100;
+
+  // Pure display math, mirroring server.js's xpRequiredForLevel/
+  // computeLevelFromXP exactly (100, 150, 200, ... per level) -- safe to
+  // duplicate client-side because it's deterministic and non-sensitive:
+  // the account's actual `xp` NUMBER is always server-authoritative
+  // (see applyAccount/reportXP/queueXPFeedback below), this only ever
+  // turns that trusted total into a level + progress-bar split for
+  // display.
+  function xpRequiredForLevel(level){ return 100 + Math.max(0, level-1) * 50; }
+  function computeLevelFromXP(totalXp){
+    let xp = Math.max(0, Math.floor(totalXp) || 0);
+    let level = 1;
+    while(xp >= xpRequiredForLevel(level)){
+      xp -= xpRequiredForLevel(level);
+      level++;
+      if(level > 100000) break;
+    }
+    return { level, xpIntoLevel: xp, xpForNextLevel: xpRequiredForLevel(level) };
+  }
+  // Recomputes the three display fields from a trusted total-XP number
+  // (server-sent) and refreshes any open XP UI.
+  function applyXPTotal(totalXp, level){
+    myXP = Math.max(0, Math.floor(totalXp) || 0);
+    const derived = computeLevelFromXP(myXP);
+    myLevel = level || derived.level;
+    myXpIntoLevel = derived.xpIntoLevel;
+    myXpForNextLevel = derived.xpForNextLevel;
+    if(typeof renderXPBar === 'function') renderXPBar();
+    if(typeof lobbySync === 'function') lobbySync();
+  }
 
   function setAccountStatus(text){
     const el = document.getElementById('accountStatus');
@@ -3863,6 +3969,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     credits = account.credits;
     stats.kills = account.kills;
     stats.wins = account.wins;
+    applyXPTotal(account.xp || 0, account.level || 1);
     if(account.dailyChallenges){
       const today = todayUTC();
       if(account.dailyChallenges.date === today){
@@ -4027,6 +4134,66 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     }).catch(()=>{ /* server unreachable -- keep playing, just not saved */ });
   }
 
+  // ====================================================================
+  // XP / LEVEL PROGRESSION -- client half.
+  //
+  // XP is ALWAYS server-authoritative (see server.js's awardXP/
+  // XP_REWARDS/the big comment above them). This file NEVER adds to
+  // myXP directly -- every number displayed comes from a server
+  // response: applyAccount() at sign-in, this reportXP()'s response, or
+  // a live 'xpAward' WS message for the two fully server-driven sources
+  // (Heist/Bomb Run wins). reportXP() only ever sends a REASON code,
+  // never an amount -- the server looks the amount up itself.
+  // ====================================================================
+
+  // Fire-and-forget report of a client-observed, XP-worthy event (round
+  // win, match win, a goal, a kill count, a Voidbreak clear). Guests
+  // (not signed in) have no account to award XP to, same as credits/
+  // stats already silently no-op for them via saveProgress()'s early
+  // return. `meta` carries the only extra data any reason needs right
+  // now (kills:N for reason:"kill").
+  function reportXP(reason, meta){
+    if(!loggedIn || !sessionToken) return;
+    fetch(ACCOUNT_SERVER_URL + '/xp/report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign({ sessionToken: sessionToken, reason: reason }, meta || {}))
+    }).then(res => res.ok ? res.json() : null)
+      .then(data => { if(data && data.ok) queueXPFeedback(data); })
+      .catch(()=>{ /* server unreachable -- XP simply isn't awarded this time, same as any other dropped request */ });
+  }
+
+  // Accumulates XP results (from reportXP's response OR a live
+  // 'xpAward' WS push) into ONE pending toast instead of firing a
+  // notification per event -- "multiple XP rewards close together
+  // combined into one notification" per the design. Always refreshes
+  // the trusted running total (applyXPTotal) even when there's nothing
+  // to show yet, so the Profile XP bar is never stale.
+  let pendingXPToast = null;
+  function queueXPFeedback(result){
+    if(!result) return;
+    applyXPTotal(result.totalXp, result.level);
+    if(!result.awarded) return;
+    if(!pendingXPToast) pendingXPToast = { amount: 0, leveledUp: false, newLevel: result.level };
+    pendingXPToast.amount += result.awarded;
+    if(result.leveledUp){ pendingXPToast.leveledUp = true; pendingXPToast.newLevel = result.level; }
+    // Only the lobby toast element exists to show this (see
+    // lobbyToast()) -- if we're already back at the lobby (not mid-
+    // match), flush right away instead of waiting for the next
+    // exitToMenu(). During a match it stays queued and shows once,
+    // combined, when the player returns -- see exitToMenu().
+    if(!started) flushXPToast();
+  }
+  function flushXPToast(){
+    if(!pendingXPToast) return;
+    const p = pendingXPToast;
+    pendingXPToast = null;
+    if(typeof lobbyToast !== 'function') return;
+    lobbyToast(p.leveledUp
+      ? ('+' + p.amount + ' XP — LEVEL UP! LEVEL ' + p.newLevel)
+      : ('+' + p.amount + ' XP'));
+  }
+
   let googleInitAttempts = 0;
   function tryInitGoogle(){
     googleInitAttempts++;
@@ -4111,6 +4278,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   const ammoP2El = document.getElementById('ammoP2');
   const dashP1El = document.getElementById('dashP1');
   const dashP2El = document.getElementById('dashP2');
+  const p1Label = document.getElementById('p1Label');
   const p2Label = document.getElementById('p2Label');
   const p2Legend = document.getElementById('p2Legend');
 
@@ -4972,6 +5140,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       credits += 15;
       updateCreditsDisplay();
       saveProgress();
+      reportXP('football_goal');
     }
 
     if(mode === 'online' && footballBallAuthority && socket && socket.readyState === WebSocket.OPEN){
@@ -4987,6 +5156,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         bumpDailyProgress('wins');
         updateCreditsDisplay();
         saveProgress();
+        reportXP('match_win');
       }
     }
   }
@@ -5414,6 +5584,12 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       bumpDailyProgress('wins');
       updateCreditsDisplay();
       saveProgress();
+      // Online: the server already pushed this via 'xpAward' the instant
+      // it confirmed the base's destruction (see server.js's heistHit
+      // handler) -- reporting it again here would just be rejected
+      // ("granted automatically"). Local/VS Computer has no server in
+      // the loop at all, so it's the client's job here, same as credits.
+      if(mode !== 'online') reportXP('heist_win');
     }
   }
 
@@ -5723,6 +5899,11 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         bumpDailyProgress('wins');
         updateCreditsDisplay();
         saveProgress();
+        // applyBombGoal only ever runs in Local/VS Computer (online play
+        // goes through the server's own bombGoal handler + 'xpAward'
+        // push instead -- see registerBombGoal), so no online guard is
+        // needed here, unlike Heist's endHeistMatch.
+        reportXP('bombrun_win');
       }
     }
   }
@@ -6505,8 +6686,8 @@ else{
   }
 
   function combatantLabel(id){
-    if(id === 'p1') return 'PLAYER ONE';
-    if(id === 'p2') return (mode==='ai' ? 'COMPUTER' : 'PLAYER TWO');
+    if(id === 'p1') return onlineLabelFor('p1', 'PLAYER ONE');
+    if(id === 'p2') return onlineLabelFor('p2', mode==='ai' ? 'COMPUTER' : 'PLAYER TWO');
     const idx = extraBots.findIndex(b => b.id === id);
     return 'BOT ' + (idx >= 0 ? idx+3 : '');
   }
@@ -6550,6 +6731,7 @@ else{
         bumpDailyProgress('kills');
         updateCreditsDisplay();
         saveProgress();
+        reportXP('kill', { kills: 1 });
       }
       checkFFARoundEnd();
     }
@@ -7063,6 +7245,7 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
           bumpDailyProgress('kills');
           updateCreditsDisplay();
           saveProgress();
+          reportXP('kill', { kills: 1 });
           endRound('p1');
         }
       }
@@ -7445,12 +7628,16 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
     // applyLocalHitToP2/applyHitToCombatant/the online damage handler) --
     // this only ever hands out the MATCH-win bonus, which scales with
     // how many players/bots were in the match (see matchWinBonus()).
-    if(winnerId==='p1' && winner.score >= ROUNDS_TO_WIN){
-      credits += matchWinBonus();
-      stats.wins++;
-      bumpDailyProgress('wins');
-      updateCreditsDisplay();
-      saveProgress();
+    if(winnerId==='p1'){
+      reportXP('round_win'); // every round win -- same "only our own p1" scope as credits above
+      if(winner.score >= ROUNDS_TO_WIN){
+        credits += matchWinBonus();
+        stats.wins++;
+        bumpDailyProgress('wins');
+        updateCreditsDisplay();
+        saveProgress();
+        reportXP('match_win');
+      }
     }
     if(winner.score >= ROUNDS_TO_WIN){ state = 'matchEnd'; countMatchPlayed(); }
   }
@@ -8045,7 +8232,7 @@ updateDecoys(dt);
         centerMsg.innerHTML = `<div class="big" style="color:#ffce54;">GOAL!</div><div class="small">${footballScore1} - ${footballScore2}</div>`;
       } else if(state==='matchEnd'){
         const p1won = footballWinnerId === 'p1';
-        const winner = p1won ? 'PLAYER ONE' : (mode==='ai' ? 'COMPUTER' : 'PLAYER TWO');
+        const winner = p1won ? combatantLabel('p1') : combatantLabel('p2');
         const color = p1won ? 'var(--p1)' : 'var(--p2)';
         const creditNote = p1won ? '<div class="small" style="color:#ffce54;">+40 BONUS CREDITS</div>' : '';
         centerMsg.innerHTML = `<div class="big" style="color:${color}">${winner} WINS</div><div class="small">${footballScore1} - ${footballScore2}</div><div class="small">PRESS R TO REMATCH</div>${creditNote}`;
@@ -8071,7 +8258,7 @@ updateDecoys(dt);
         centerMsg.innerHTML = `<div class="big" style="color:#ff5566;">DELIVERED!</div><div class="small">${bombScore1} - ${bombScore2}</div>`;
       } else if(state==='matchEnd'){
         const p1won = bombWinnerId === 'p1';
-        const winner = p1won ? 'PLAYER ONE' : (mode==='ai' ? 'COMPUTER' : 'PLAYER TWO');
+        const winner = p1won ? combatantLabel('p1') : combatantLabel('p2');
         const color = p1won ? 'var(--p1)' : 'var(--p2)';
         const creditNote = p1won ? '<div class="small" style="color:#ffce54;">+40 BONUS CREDITS</div>' : '';
         centerMsg.innerHTML = `<div class="big" style="color:${color}">${winner} WINS</div><div class="small">${bombScore1} - ${bombScore2}</div><div class="small">PRESS R TO REMATCH</div>${creditNote}`;
@@ -8105,8 +8292,32 @@ updateDecoys(dt);
 
   const p1LegendCol = document.querySelector('.legend .col.p1');
 
+  // Local/VS Computer naming is completely unchanged ("PLAYER ONE",
+  // "PLAYER TWO"/"COMPUTER") -- only Online Multiplayer ever substitutes
+  // a real username, and only once the server has actually told us one
+  // (see the 'identity' message handler) -- until then it still reads
+  // "PLAYER ONE"/"OPPONENT (ONLINE)" exactly as before, so there's never
+  // a blank or "undefined" label while waiting on the network.
+  function onlineLabelFor(localId, fallback){
+    if(mode !== 'online') return fallback;
+    const idem = onlineIdentityFor(localId);
+    return (idem && idem.name) ? ('[' + (idem.level||1) + '] ' + idem.name) : fallback;
+  }
+
+  // Called once from beginGame() and again every time an 'identity'
+  // message arrives (which can easily be AFTER beginGame() already ran,
+  // since it depends on a network round-trip) -- so the label upgrades
+  // from the generic placeholder to the real username live, mid-match,
+  // with no extra plumbing at either call site.
+  function updateOnlineNameLabels(){
+    if(!p1Label || !p2Label) return;
+    const modeIcon = gameType==='football' ? ' \u26bd' : (gameType==='heist' ? ' \u{1F512}' : (gameType==='bombrun' ? ' \u{1F4A3}' : ''));
+    p1Label.textContent = onlineLabelFor('p1', 'PLAYER ONE');
+    p2Label.textContent = onlineLabelFor('p2', mode==='ai' ? 'COMPUTER' : (mode==='online' ? 'OPPONENT (ONLINE)' : 'PLAYER TWO')) + modeIcon;
+  }
+
   function beginGame(){
-    p2Label.textContent = (mode==='ai' ? 'COMPUTER' : (mode==='online' ? 'OPPONENT (ONLINE)' : 'PLAYER TWO')) + (gameType==='football' ? ' \u26bd' : (gameType==='heist' ? ' \u{1F512}' : (gameType==='bombrun' ? ' \u{1F4A3}' : '')));
+    updateOnlineNameLabels();
     p2Legend.style.display = mode==='local' ? '' : 'none';
     canvas.style.cursor = (aimMode==='mouse') ? 'crosshair' : 'default';
     covers = (gameType === 'football') ? FOOTBALL_COVERS : (gameType === 'heist') ? HEIST_COVERS : (gameType === 'bombrun') ? BOMB_COVERS : CLASSIC_COVERS;
@@ -8274,6 +8485,11 @@ updateDecoys(dt);
     state = 'menu';
     centerMsg.innerHTML = '';
     closeOnlineConnection();
+    // Any XP earned during the match (round wins, kills, a match win,
+    // Heist/Bomb Run's server-pushed awards) was queued rather than
+    // shown immediately -- flush it now as one combined toast, per
+    // "don't spam the player with notifications for every tiny action".
+    flushXPToast();
     // Friends presence: back in the menus.
     if(typeof syncActivity === 'function') syncActivity();
     stopMusic();
@@ -8493,6 +8709,20 @@ updateDecoys(dt);
   }
   btnVoidbreakPlay.addEventListener('click', launchVoidbreak);
   btnVoidbreakExit.addEventListener('click', exitVoidbreak);
+
+  // Voidbreak (running in its own iframe, see launchVoidbreak above)
+  // posts this the first time a level/guardian is beaten -- see the
+  // firstClear check in voidbreak.html's victory(). Only trusted when
+  // it actually came from our own iframe's current window, so an
+  // unrelated postMessage from elsewhere on the page can't trigger a
+  // report (the /xp/report endpoint itself is still the real trust
+  // boundary -- this is just hygiene, not the security layer).
+  window.addEventListener('message', (e)=>{
+    if(!voidbreakFrame || e.source !== voidbreakFrame.contentWindow) return;
+    if(e.data && e.data.type === 'voidbreak_complete'){
+      reportXP('voidbreak_complete');
+    }
+  });
 
   // ============================================================
   // MAIN MENU LOBBY -- presentation layer only.
@@ -8732,6 +8962,11 @@ updateDecoys(dt);
     setTxt('lobbyKills', stats.kills);
     setTxt('lobbyWins', stats.wins);
     setTxt('lobbyName', (loggedIn && accountName) ? accountName : 'GUEST');
+    const levelTag = lobbyEl('lobbyLevelTag');
+    if(levelTag){
+      levelTag.classList.toggle('hidden', !loggedIn);
+      levelTag.textContent = 'LV ' + myLevel;
+    }
 
     const av = lobbyEl('lobbyAvatar');
     if(av && typeof skinColor === 'function'){
@@ -9903,8 +10138,9 @@ updateDecoys(dt);
       if(res.ok) data = await res.json();
     } catch(e){ /* fall through to the offline view below */ }
 
-    let html = '<div class="rr-grid">'
-      + '<div class="rr-row"><span>PLAYER</span><b>' + escapeHtmlRk(accountName || 'PLAYER') + '</b></div>'
+    let html = renderXPBlock()
+      + '<div class="rr-grid">'
+      + renderUsernameRow()
       + '<div class="rr-row"><span>CREDITS</span><b>' + credits + '</b></div>'
       + '<div class="rr-row"><span>KILLS</span><b>' + stats.kills + '</b></div>'
       + '<div class="rr-row"><span>WINS</span><b>' + stats.wins + '</b></div>'
@@ -9913,6 +10149,7 @@ updateDecoys(dt);
     if(!data){
       html += '<div class="rl-empty">RANKED STATS UNAVAILABLE — SERVER OFFLINE</div>';
       lobbyOpenModal('PROFILE', html);
+      wireUsernameEditor();
       return;
     }
 
@@ -9955,6 +10192,101 @@ updateDecoys(dt);
     }
 
     lobbyOpenModal('PROFILE', html);
+    wireUsernameEditor();
+  }
+
+  // ---- USERNAME + XP (Profile modal) ------------------------------
+  // Reuses the ranked placement bar's exact visual language (.rk-pbar)
+  // instead of adding a new progress-bar style.
+  function renderXPBlock(){
+    const pct = myXpForNextLevel > 0 ? Math.min(100, (myXpIntoLevel / myXpForNextLevel) * 100) : 0;
+    return '<div class="rr-placement" style="margin-bottom:14px">'
+      + '<div class="rk-plabel" id="xpLevelLabel">LEVEL ' + myLevel + '</div>'
+      + '<div class="rk-pcount" id="xpCountLabel">' + myXpIntoLevel.toLocaleString() + ' / ' + myXpForNextLevel.toLocaleString() + ' XP</div>'
+      + '<div class="rk-pbar"><i id="xpBarFill" style="width:' + pct + '%"></i></div>'
+      + '</div>';
+  }
+  // Live-refreshes the XP block IN PLACE if the Profile modal happens
+  // to be open when new XP arrives (queueXPFeedback/applyXPTotal call
+  // this) -- if it's not open, these lookups just come back null and
+  // this is a no-op; the modal renders fresh numbers next time it opens
+  // regardless.
+  function renderXPBar(){
+    const levelEl = document.getElementById('xpLevelLabel');
+    const countEl = document.getElementById('xpCountLabel');
+    const fillEl = document.getElementById('xpBarFill');
+    if(!levelEl || !countEl || !fillEl) return;
+    const pct = myXpForNextLevel > 0 ? Math.min(100, (myXpIntoLevel / myXpForNextLevel) * 100) : 0;
+    levelEl.textContent = 'LEVEL ' + myLevel;
+    countEl.textContent = myXpIntoLevel.toLocaleString() + ' / ' + myXpForNextLevel.toLocaleString() + ' XP';
+    fillEl.style.width = pct + '%';
+  }
+  function renderUsernameRow(){
+    return '<div class="rr-row" id="usernameRow">'
+      + '<span>USERNAME</span>'
+      + '<b style="display:flex;gap:8px;align-items:center;">'
+      + '<span id="profileUsernameText">' + escapeHtmlRk(accountName || 'PLAYER') + '</span>'
+      + '<button class="toggle-btn" id="btnChangeUsername" style="padding:3px 10px;font-size:9px;">CHANGE</button>'
+      + '</b></div>';
+  }
+  // Swaps the USERNAME row into an inline editor -- re-wired every time
+  // the row is rebuilt (cancel/save/error all rebuild it via
+  // renderUsernameRow(), so this is always called again right after).
+  function wireUsernameEditor(){
+    const btn = document.getElementById('btnChangeUsername');
+    if(!btn) return;
+    btn.addEventListener('click', ()=>{
+      const row = document.getElementById('usernameRow');
+      if(!row) return;
+      row.innerHTML = '<span>USERNAME</span><b style="display:flex;gap:6px;align-items:center;">'
+        + '<input id="usernameInput" type="text" maxlength="20" value="' + escapeHtmlRk(accountName || '') + '" '
+        + 'style="background:rgba(255,255,255,.06);border:1px solid var(--ink-dim);color:var(--ink);'
+        + 'padding:4px 8px;border-radius:3px;font-family:inherit;font-size:12px;width:150px;">'
+        + '<button class="toggle-btn on" id="btnSaveUsername" style="padding:3px 10px;font-size:9px;">SAVE</button>'
+        + '<button class="toggle-btn" id="btnCancelUsername" style="padding:3px 10px;font-size:9px;">CANCEL</button>'
+        + '</b>';
+      const resetRow = ()=>{ row.outerHTML = renderUsernameRow(); wireUsernameEditor(); };
+      document.getElementById('btnCancelUsername').addEventListener('click', resetRow);
+      document.getElementById('btnSaveUsername').addEventListener('click', submitUsernameChange);
+      const input = document.getElementById('usernameInput');
+      input.addEventListener('keydown', (e)=>{
+        if(e.key === 'Enter') submitUsernameChange();
+        else if(e.key === 'Escape') resetRow();
+      });
+      input.focus();
+      input.select();
+    });
+  }
+  async function submitUsernameChange(){
+    const input = document.getElementById('usernameInput');
+    const saveBtn = document.getElementById('btnSaveUsername');
+    if(!input) return;
+    const value = input.value;
+    if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = 'SAVING...'; }
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/account/username', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionToken: sessionToken, username: value })
+      });
+      const data = await res.json().catch(()=>null);
+      if(res.ok && data && data.ok){
+        // The server is the source of truth for the FINAL stored name
+        // (trimmed/normalized) -- reflect exactly what it saved, not
+        // what was typed.
+        accountName = data.name;
+        lobbySync();
+        const row = document.getElementById('usernameRow');
+        if(row){ row.outerHTML = renderUsernameRow(); wireUsernameEditor(); }
+        lobbyToast('USERNAME UPDATED');
+      } else {
+        lobbyToast(((data && data.error) || 'COULD NOT UPDATE USERNAME').toUpperCase());
+        if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = 'SAVE'; }
+      }
+    } catch(e){
+      lobbyToast('COULD NOT REACH THE SERVER');
+      if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = 'SAVE'; }
+    }
   }
 
   // ---- WIRING ----------------------------------------------------

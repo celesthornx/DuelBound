@@ -66,6 +66,48 @@ async function persistAccount(sub) {
     }
 }
 
+// Reserved display names a player can't take -- blocks exact-match
+// impersonation of system/admin/bot identities that appear elsewhere in
+// the UI (COMPUTER as the VS Computer opponent label, ADMIN/SYSTEM/
+// MODERATOR as plausible authority-sounding names, and the game's own
+// name). Deliberately an EXACT match (after trim + lowercase), not a
+// substring ban -- a substring ban would also block legitimate names
+// like "Administrator Jones" or "System32" for no real reason.
+const RESERVED_USERNAMES = new Set([
+    "admin", "administrator", "moderator", "mod", "system", "server",
+    "computer", "bot", "ai", "gm", "game master", "duel arena", "duelarena",
+    "official", "support", "staff"
+]);
+
+// Server-side username validation -- the ONLY place a display name is
+// accepted from a client. Trims surrounding whitespace, collapses
+// internal runs of whitespace to a single space, enforces a length
+// window, and only allows a conservative character set (letters,
+// numbers, spaces, and a small set of punctuation) so a name can never
+// inject markup, control characters, or otherwise-invisible characters
+// into any UI it's later `.textContent`'d or interpolated into.
+function validateUsername(raw) {
+    if (typeof raw !== "string") return { ok: false, error: "Username must be text" };
+    // Collapse all whitespace runs (tabs, newlines, repeated spaces) to
+    // a single space, then trim -- "trim unnecessary whitespace" plus
+    // closing off a class of near-invisible names ("A    B" vs "A B").
+    const name = raw.replace(/\s+/g, " ").trim();
+    if (name.length < 2) return { ok: false, error: "Username must be at least 2 characters" };
+    if (name.length > 20) return { ok: false, error: "Username must be 20 characters or fewer" };
+    // Letters (incl. common accented ones), digits, spaces, and a small
+    // punctuation set -- excludes anything that reads as markup/control
+    // syntax (<, >, &, backslashes, quotes) or that could be used to
+    // visually spoof another name (zero-width/invisible Unicode, emoji
+    // used as impersonation).
+    if (!/^[A-Za-z0-9À-ſ .\-_']+$/.test(name)) {
+        return { ok: false, error: "Username contains characters that aren't allowed" };
+    }
+    if (RESERVED_USERNAMES.has(name.toLowerCase())) {
+        return { ok: false, error: "That name is reserved" };
+    }
+    return { ok: true, name: name };
+}
+
 function defaultAccount(name, email) {
     return {
         name: name,
@@ -86,6 +128,8 @@ function defaultAccount(name, email) {
         autoAimP2: false,
         aimMode: "movement",
         matchSize: 2,
+        xp: 0,
+        level: 1,
         dailyChallenges: defaultDailyChallenges(),
         ranked: Ranked.defaultRankedRecord(),
         // Friend lists hold stable account ids (Google "sub"), never emails.
@@ -122,6 +166,180 @@ function getAccountForSession(sessionToken) {
     const sub = sessions[sessionToken];
     if (!sub) return null;
     return accounts[sub] || null;
+}
+
+// =====================================================================
+// XP / LEVEL PROGRESSION
+//
+// `xp` on an account is the player's TOTAL lifetime XP (monotonic, never
+// decremented) -- `level` is always a value DERIVED from it, recomputed
+// every time xp changes, never stored independently of what xp implies.
+// That's what makes "excess XP carries over" and "level increases
+// correctly" automatic instead of something that has to be tracked by
+// hand: there's only ever one number that actually matters.
+//
+// XP required to go from `level` to `level+1` scales linearly
+// (100, 150, 200, 200+50*(level-1), ...) -- predictable, and easy to
+// rebalance later by changing this one function.
+// =====================================================================
+function xpRequiredForLevel(level) {
+    return 100 + Math.max(0, level - 1) * 50;
+}
+
+// Derives {level, xpIntoLevel, xpForNextLevel} from a total XP count.
+// Pure function, safe to call with any non-negative number -- never
+// mutates anything, never goes negative, always terminates (each loop
+// iteration consumes at least 100 XP).
+function computeLevelFromXP(totalXp) {
+    let xp = Math.max(0, Math.floor(totalXp) || 0);
+    let level = 1;
+    while (xp >= xpRequiredForLevel(level)) {
+        xp -= xpRequiredForLevel(level);
+        level++;
+        if (level > 100000) break; // pathological input guard, not a real cap
+    }
+    return { level: level, xpIntoLevel: xp, xpForNextLevel: xpRequiredForLevel(level) };
+}
+
+// Same trust boundary as Daily Challenges' reward grant and the ranked
+// pipeline: this is the ONLY function that actually changes an
+// account's xp, it NEVER accepts a client-supplied amount (every call
+// site below passes a fixed, server-decided number for a fixed reason
+// string), and it does the same atomic read-modify-write-then-persist-
+// with-rollback as /challenges/claim. Returns null if the account
+// doesn't exist; otherwise the account's new xp/level plus enough
+// about what changed for a caller to show "+N XP" / "LEVEL UP" feedback.
+async function awardXP(sub, amount, reason) {
+    const account = accounts[sub];
+    if (!account) return null;
+    amount = Math.max(0, Math.floor(amount) || 0);
+    if (amount === 0) {
+        const cur = computeLevelFromXP(account.xp || 0);
+        return { awarded: 0, reason: reason, totalXp: account.xp || 0, level: cur.level, xpIntoLevel: cur.xpIntoLevel, xpForNextLevel: cur.xpForNextLevel, leveledUp: false, levelsGained: 0 };
+    }
+
+    const previousXp = account.xp || 0;
+    const previousLevel = account.level || 1;
+    const newTotal = previousXp + amount;
+    const derived = computeLevelFromXP(newTotal);
+
+    account.xp = newTotal;
+    account.level = derived.level;
+
+    try {
+        await persistAccount(sub);
+    } catch (e) {
+        account.xp = previousXp; // write failed -- undo the in-memory grant
+        account.level = previousLevel;
+        console.log("[xp] failed to persist XP award for " + sub + ":", e.message);
+        return null;
+    }
+
+    return {
+        awarded: amount,
+        reason: reason,
+        totalXp: newTotal,
+        level: derived.level,
+        xpIntoLevel: derived.xpIntoLevel,
+        xpForNextLevel: derived.xpForNextLevel,
+        leveledUp: derived.level > previousLevel,
+        levelsGained: derived.level - previousLevel
+    };
+}
+
+// Convenience wrapper for the fully server-authoritative award sites
+// (Heist base destroyed, Bomb Run match won, Ranked match complete) --
+// awards XP to the account behind a live casual WebSocket connection
+// (identified via conn.authSub, set by presence_hello -- see the
+// "Casual connection identity" section below) and, if that socket is
+// still open, tells its own client right away via a small `xpAward`
+// message so the in-match/lobby toast can show up without a poll.
+// Silently does nothing if the connection was never authenticated
+// (a guest with no account has nothing to award XP to) -- calling code
+// never needs its own "is this player signed in" branch.
+async function awardXPAndNotify(conn, amount, reason) {
+    if (!conn || !conn.authSub) return;
+    const result = await awardXP(conn.authSub, amount, reason);
+    if (result) send(conn, Object.assign({ type: "xpAward" }, result));
+}
+
+// Brings an account up to the current XP shape -- exactly the same
+// lazy, idempotent, never-overwrite-existing-data pattern as
+// ensureAccountRanked() above. An account that predates this feature
+// (or was loaded from an older store snapshot) gets xp=0/level=1 the
+// first time it's touched; an account that already has a numeric xp
+// is left completely alone.
+function ensureAccountXP(sub) {
+    const account = accounts[sub];
+    if (!account) return null;
+    let dirty = false;
+    if (typeof account.xp !== "number" || !isFinite(account.xp) || account.xp < 0) {
+        account.xp = 0;
+        dirty = true;
+    }
+    const derived = computeLevelFromXP(account.xp);
+    if (account.level !== derived.level) {
+        account.level = derived.level;
+        dirty = true;
+    }
+    if (dirty) {
+        persistAccount(sub).catch(e =>
+            console.log("[xp] failed to persist XP migration for " + sub + ":", e.message));
+    }
+    return { level: account.level, xp: account.xp };
+}
+
+// Fixed, server-decided XP amounts. This is the ONE place XP values for
+// each event live, per the "centralized so it's easy to rebalance"
+// requirement -- nothing else in this file hardcodes an XP number.
+const XP_REWARDS = {
+    round_win: 15,
+    match_win: 40,
+    kill: 4,
+    football_goal: 12,
+    heist_win: 50,
+    bombrun_win: 50,
+    ranked_win: 60,
+    ranked_loss: 10,
+    voidbreak_complete: 80
+};
+// A single client report can claim at most this many "kill" units at
+// once (see the /xp/report handler) -- a real match cannot produce an
+// absurd kill count, so this exists purely to cap the blast radius of a
+// forged request, not to model real gameplay.
+const XP_MAX_KILLS_PER_REPORT = 20;
+
+// Client-reported XP events (round/match wins, goals, kill counts,
+// Voidbreak clears) have the SAME trust boundary Daily Challenges
+// progress already has -- see the big comment above DAILY_CHALLENGE_POOL.
+// This app has no server-side simulation of casual matches (only Ranked
+// does), so "a round was won" is inherently a client report, exactly
+// like "10 kills were gotten" already is for /save's kills counter. What
+// this endpoint adds on top of that existing trust level is what the
+// task calls for specifically: the AMOUNT of XP is never client-
+// supplied (always looked up from XP_REWARDS by a fixed reason code),
+// and a minimum-interval-per-reason throttle blunts naive duplicate/
+// replay spam from a single session. Heist, Bomb Run and Ranked wins
+// skip this endpoint entirely and are awarded directly at the exact
+// moment the SERVER's own state machine confirms the win (see
+// registerHeistHit's destroy branch, the bombGoal handler's matchOver
+// branch, and completeRankedMatch) -- those three are fully
+// server-authoritative with no client report involved at all.
+const lastXPReportAt = {}; // sub -> { [reason]: timestampMs }
+const XP_REPORT_MIN_INTERVAL_MS = {
+    round_win: 3000,
+    match_win: 3000,
+    football_goal: 800,
+    kill: 1500,
+    voidbreak_complete: 3000
+};
+function xpReportThrottled(sub, reason) {
+    const now = Date.now();
+    const perSub = lastXPReportAt[sub] || (lastXPReportAt[sub] = {});
+    const minGap = XP_REPORT_MIN_INTERVAL_MS[reason] || 2000;
+    if (perSub[reason] && (now - perSub[reason]) < minGap) return true;
+    perSub[reason] = now;
+    return false;
 }
 
 // The ONLY place that decides "is this request from the admin". Always
@@ -782,7 +1000,31 @@ async function completeRankedMatch(match, winnerSlot, reason) {
 
         account.ranked = result.record;
         summaries[p.slot] = result.summary;
-        applied.push({ sub: p.sub, slot: p.slot, record: result.record, summary: result.summary });
+
+        // Server-authoritative XP -- this loop only ever runs once per
+        // match (see the resultApplied guard above), and `won` is
+        // computed here from the server's own match state, not a client
+        // report. Mutated directly (not via awardXP()) so it lands in
+        // the SAME persistAccount() write as the ranked result just
+        // below, instead of a separate write.
+        const xpAmount = won ? XP_REWARDS.ranked_win : XP_REWARDS.ranked_loss;
+        const previousXp = account.xp || 0;
+        const previousLevel = account.level || 1;
+        const xpDerived = computeLevelFromXP(previousXp + xpAmount);
+        account.xp = previousXp + xpAmount;
+        account.level = xpDerived.level;
+        const xpResult = {
+            awarded: xpAmount,
+            reason: won ? "ranked_win" : "ranked_loss",
+            totalXp: account.xp,
+            level: xpDerived.level,
+            xpIntoLevel: xpDerived.xpIntoLevel,
+            xpForNextLevel: xpDerived.xpForNextLevel,
+            leveledUp: xpDerived.level > previousLevel,
+            levelsGained: xpDerived.level - previousLevel
+        };
+
+        applied.push({ sub: p.sub, slot: p.slot, record: result.record, summary: result.summary, xp: xpResult });
     }
 
     // Persist BOTH accounts before telling anyone they gained RP. If a
@@ -824,6 +1066,9 @@ async function completeRankedMatch(match, winnerSlot, reason) {
 
     // Tell each side their own result (and only the public half of the
     // opponent's).
+    const xpBySlot = {};
+    for (const row of applied) xpBySlot[row.slot] = row.xp;
+
     for (const slot of [1, 2]) {
         const p = match.players[slot];
         const them = match.players[slot === 1 ? 2 : 1];
@@ -839,6 +1084,7 @@ async function completeRankedMatch(match, winnerSlot, reason) {
             saved: !persistError,
             error: persistError ? "Result could not be saved -- it may not have applied" : null,
             result: s || null,
+            xp: xpBySlot[slot] || null,
             opponent: {
                 name: them.name,
                 rank: summaries[them.slot] ? summaries[them.slot].rankAfter : them.rankAtStart,
@@ -1778,6 +2024,11 @@ const httpServer = http.createServer(async (req, res) => {
                 accounts[sub].dailyChallenges = rolledDC;
                 dirty = true;
             }
+            // Lazily migrates a pre-XP-feature (or otherwise malformed)
+            // account to xp:0/level:1 -- never touches an account that
+            // already has valid XP. ensureAccountXP persists on its own
+            // if it changed anything, so it's not folded into `dirty`.
+            ensureAccountXP(sub);
             if (dirty) await persistAccount(sub);
 
             const sessionToken = crypto.randomBytes(24).toString("hex");
@@ -1861,6 +2112,16 @@ const httpServer = http.createServer(async (req, res) => {
                 autoAimP2: typeof body.autoAimP2 === "boolean" ? body.autoAimP2 : (existing.autoAimP2 || false),
                 aimMode: (body.aimMode === "mouse" || body.aimMode === "movement") ? body.aimMode : (existing.aimMode || "movement"),
                 matchSize: [2, 3, 4].includes(body.matchSize) ? body.matchSize : (existing.matchSize || 2),
+                // XP/LEVEL ARE DELIBERATELY NOT READ FROM `body`, for the
+                // exact same reason ranked/friends aren't: this handler
+                // rebuilds the account field-by-field, so xp/level MUST be
+                // carried forward from the stored record or a plain /save
+                // (which every match already triggers, via saveProgress())
+                // would silently wipe them. A client POSTing {xp:999999}
+                // here has no effect whatsoever -- xp only ever changes
+                // inside awardXP(), never here.
+                xp: typeof existing.xp === "number" ? existing.xp : 0,
+                level: typeof existing.level === "number" ? existing.level : 1,
                 dailyChallenges: newDailyChallenges,
                 // RANKED IS DELIBERATELY NOT READ FROM `body`.
                 //
@@ -2017,6 +2278,106 @@ const httpServer = http.createServer(async (req, res) => {
                 newBalance: target.credits,
                 dailyChallenges: target.dailyChallenges
             });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // ---- POST /xp/report ----
+    // body: { sessionToken, reason, kills? }
+    // The client-report half of the XP system -- see the big comment
+    // above XP_REWARDS/lastXPReportAt for the trust model. `reason` must
+    // be one of a fixed whitelist; the XP amount always comes from
+    // XP_REWARDS, never from the request. `kills` (only meaningful for
+    // reason:"kill") is clamped to XP_MAX_KILLS_PER_REPORT so one report
+    // can't claim an arbitrary kill count.
+    if (req.method === "POST" && req.url === "/xp/report") {
+        try {
+            const body = await readJsonBody(req);
+            const sub = sessions[body.sessionToken];
+            if (!sub) {
+                sendJson(res, 401, { error: "Not signed in" });
+                return;
+            }
+            if (!accounts[sub]) {
+                sendJson(res, 409, { error: "Account not loaded -- sign in again" });
+                return;
+            }
+            const reason = body.reason;
+            if (!Object.prototype.hasOwnProperty.call(XP_REWARDS, reason)) {
+                sendJson(res, 400, { error: "Unknown XP reason" });
+                return;
+            }
+            // Heist/Bomb Run/Ranked wins are awarded server-side at the
+            // moment the server itself confirms them -- never via this
+            // client-facing endpoint, so a forged report can't double it.
+            if (reason === "heist_win" || reason === "bombrun_win" || reason === "ranked_win" || reason === "ranked_loss") {
+                sendJson(res, 400, { error: "This reward is granted automatically" });
+                return;
+            }
+            if (xpReportThrottled(sub, reason)) {
+                sendJson(res, 429, { error: "Too soon" });
+                return;
+            }
+
+            let amount = XP_REWARDS[reason];
+            if (reason === "kill") {
+                const n = Math.max(1, Math.min(XP_MAX_KILLS_PER_REPORT, Math.floor(body.kills) || 1));
+                amount = XP_REWARDS.kill * n;
+            }
+
+            const result = await awardXP(sub, amount, reason);
+            if (!result) {
+                sendJson(res, 503, { error: "Could not save XP -- try again" });
+                return;
+            }
+            sendJson(res, 200, Object.assign({ ok: true }, result));
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // ---- POST /account/username ----
+    // body: { sessionToken, username }
+    // Server-side validated username change. Reuses the account's
+    // existing `name` field (the same one shown everywhere the account's
+    // display name already appears) rather than adding a second field --
+    // there's no architectural reason to keep them separate, and doing
+    // so would just create two sources of truth for "what is this
+    // player called".
+    if (req.method === "POST" && req.url === "/account/username") {
+        try {
+            const body = await readJsonBody(req);
+            const sub = sessions[body.sessionToken];
+            if (!sub) {
+                sendJson(res, 401, { error: "Not signed in" });
+                return;
+            }
+            const target = accounts[sub];
+            if (!target) {
+                sendJson(res, 409, { error: "Account not loaded -- sign in again" });
+                return;
+            }
+
+            const validation = validateUsername(body.username);
+            if (!validation.ok) {
+                sendJson(res, 400, { error: validation.error });
+                return;
+            }
+
+            const previousName = target.name;
+            target.name = validation.name;
+            try {
+                await persistAccount(sub);
+            } catch (e) {
+                target.name = previousName;
+                sendJson(res, 503, { error: "Could not save username -- try again" });
+                return;
+            }
+
+            sendJson(res, 200, { ok: true, name: target.name });
         } catch (e) {
             sendJson(res, 400, { error: "Bad request" });
         }
@@ -2800,6 +3161,35 @@ wss.on("connection", (socket, request) => {
                 // Only announce a genuine offline -> online transition,
                 // so opening a second tab doesn't notify everyone again.
                 if (cameOnline) broadcastToFriends(sub, presenceEventFor(sub));
+
+                // ---- Casual online-match identity ----
+                // A connection that ALSO holds one of the two casual
+                // gameplay slots (conn.id, set at connect time -- see
+                // the top of wss.on("connection")) just proved who it
+                // is. index.html's main gameplay socket sends this same
+                // presence_hello once it knows its own sessionToken, so
+                // this is the ONLY way the opponent's client ever learns
+                // a real display name/level -- never from a client-sent
+                // "name" field on any gameplay message. Only the public
+                // {slot, name, level} triple is ever sent to the
+                // OPPONENT; email/sub/admin status never leave this
+                // block. Handles both connection orders: tells the
+                // opponent about ME, and -- if they're already
+                // authenticated -- tells me about THEM too.
+                if (conn.id !== null) {
+                    ensureAccountXP(sub);
+                    const acct = accounts[sub];
+                    const myIdentity = { type: "identity", slot: conn.id, name: acct.name, level: acct.level || 1 };
+                    const opponentConn = slots[otherId(conn.id)];
+                    send(conn, myIdentity); // echo back to self too, so my own client's HUD label updates immediately
+                    if (opponentConn) {
+                        send(opponentConn, myIdentity);
+                        if (opponentConn.authSub && accounts[opponentConn.authSub]) {
+                            const theirAcct = accounts[opponentConn.authSub];
+                            send(conn, { type: "identity", slot: opponentConn.id, name: theirAcct.name, level: theirAcct.level || 1 });
+                        }
+                    }
+                }
                 return;
             }
 
@@ -3061,6 +3451,10 @@ wss.on("connection", (socket, request) => {
                     const payload = { type: "heistUpdate", hp: heistHP, destroyed: heistDestroyed, winner: winner };
                     send(player, payload);
                     send(opponent, payload);
+                    // Server-authoritative XP: this IS the server's own
+                    // confirmation of the win (HP just hit 0 in server
+                    // state), so no client report is needed or accepted.
+                    if (winner) awardXPAndNotify(slots[winner], XP_REWARDS.heist_win, "heist_win");
                 }
             }
         }
@@ -3129,6 +3523,10 @@ wss.on("connection", (socket, request) => {
                 const payload = { type: "bombGoalUpdate", scorer: id, score1: bombScore[1], score2: bombScore[2], matchOver: bombMatchOver, winner: winner };
                 send(player, payload);
                 send(opponent, payload);
+                // Server-authoritative XP -- bombMatchOver just flipped
+                // true in the server's own state, so this can't be forged
+                // or double-claimed via a client report.
+                if (winner) awardXPAndNotify(slots[winner], XP_REWARDS.bombrun_win, "bombrun_win");
             }
         }
 
