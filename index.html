@@ -9546,7 +9546,26 @@ if(tutorialActive) tutorialUpdate(dt);
     { id:'shoot',
       enter(){
         tutorialShotsHit = 0;
-        tutorialSpawnDrones([[p1.x+320,p1.y-120],[p1.x+380,p1.y],[p1.x+320,p1.y+120]]);
+        // Teleport p1 to a fixed spot in the top strip of the arena
+        // (y < 70) before spawning drones there -- every one of the
+        // Classic covers (CLASSIC_COVERS) sits at y>=70, so a straight
+        // shot along this row can never be blocked by a wall no matter
+        // where the move step happened to leave p1. Spawning drones
+        // relative to p1's post-move position (the original approach)
+        // let them land behind the center wall, silently swallowing
+        // every bullet with no way to tell the player why nothing hit.
+        //
+        // All 3 drones sit on the SAME row as p1 (only staggered by
+        // distance), not offset vertically: the default aim mode is
+        // keyboard/movement-aim, which only ever faces in the 8 WASD
+        // directions, so a shallow few-degree vertical offset (as the
+        // original design used) would be literally impossible for a
+        // keyboard-aim player to hit without a repositioning dance the
+        // tutorial never taught. Firing straight ahead three times
+        // teaches "hold fire to hit things" without fighting the aim
+        // system's real constraints.
+        p1.x = 90; p1.y = 40; p1.facing = 0;
+        tutorialSpawnDrones([[p1.x+260,p1.y],[p1.x+350,p1.y],[p1.x+440,p1.y]]);
         tutBubble('SHOOT', {t:'RIGHT STICK AIMS — HOLD TO FIRE', d:'AIM WITH MOUSE — HOLD TO FIRE'}, {count:'0 / 3'});
         if(isTouchDevice){ tutSpotEl(joyAimZone, 4); tutPointerEl(joyAimZone); }
       },
@@ -9561,9 +9580,9 @@ if(tutorialActive) tutorialUpdate(dt);
     },
     { id:'dash',
       enter(){
-        tutBubble('DASH', {t:'TAP THE DASH BUTTON', d:'SPACE OR SHIFT'});
+        tutBubble('DASH', {t:'TAP THE DASH BUTTON', d:'PRESS SHIFT'});
         if(isTouchDevice){ tutSpotEl(touchDashBtn,16); tutPointerEl(touchDashBtn); }
-        else{ tutKeycaps([[{label:'SPACE',wide:true}]]); tutPointerEl(tutE.keys); }
+        else{ tutKeycaps([[{label:'SHIFT',wide:true}]]); tutPointerEl(tutE.keys); }
       },
       onEvent(ev){ if(ev==='dash') tutorialAdvance(); },
       leave(){ tutKeycaps(null); }
