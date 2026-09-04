@@ -2063,6 +2063,207 @@
     .fr-btn-go{ flex:1 1 100%; min-height:38px; }
     .fr-toasts{ right:8px; left:8px; bottom:8px; max-width:none; }
   }
+
+  /* ============================================================
+     TUTORIAL -- overlay-only chrome layered ON TOP OF the real
+     #game canvas / .hud / #mobileControls (see beginGame's
+     gameType==='tutorial' branch). This block owns NO gameplay
+     simulation, no duplicate canvas, and no duplicate joysticks --
+     just the teaching UI: dim/spotlight, instruction bubble,
+     pointer chevrons, keycaps, step progress, toasts, the
+     welcome/complete cards, and the skip-confirm dialog. Palette/
+     fonts/corner-cut language match the game's own .menu-overlay/
+     .shop-panel/.stage corner brackets exactly (same CSS vars).
+     ============================================================ */
+  #tutorialRoot{ position:absolute; inset:0; z-index:60; pointer-events:none; }
+  #tutorialRoot.hidden{ display:none; }
+  #tutorialRoot.tut-out{ animation:tutFadeOut .26s forwards; }
+  @keyframes tutFadeOut{ to{ opacity:0; } }
+  @keyframes tutFadeIn{ from{ opacity:0; } to{ opacity:1; } }
+
+  .tut-progress{ position:absolute; top:14px; left:50%; transform:translateX(-50%); display:flex; gap:7px; z-index:9; }
+  .tut-ppip{ width:9px; height:9px; border:1px solid var(--ink-dim); border-radius:2px; transform:rotate(45deg); transition:border-color .2s, background .2s, box-shadow .2s; }
+  .tut-ppip.done{ background:var(--p1); border-color:var(--p1); box-shadow:0 0 8px var(--p1); }
+  .tut-ppip.cur{ border-color:var(--gold); box-shadow:0 0 8px rgba(255,206,84,.6); animation:tutPipCur 1.2s ease-in-out infinite; }
+  @keyframes tutPipCur{ 0%,100%{ transform:rotate(45deg) scale(1); } 50%{ transform:rotate(45deg) scale(1.35); } }
+
+  .tut-spot{
+    position:absolute; left:0; top:0; z-index:8;
+    border-radius:10px; opacity:0;
+    box-shadow:0 0 0 200vmax rgba(3,5,9,.72);
+    transition:left .35s cubic-bezier(.22,.8,.32,1), top .35s cubic-bezier(.22,.8,.32,1),
+               width .35s cubic-bezier(.22,.8,.32,1), height .35s cubic-bezier(.22,.8,.32,1), opacity .3s;
+  }
+  .tut-spot.on{ opacity:1; }
+  .tut-spot::after{
+    content:''; position:absolute; inset:-4px; border-radius:12px;
+    border:2px solid rgba(63,208,255,.75);
+    box-shadow:0 0 18px rgba(63,208,255,.35), inset 0 0 14px rgba(63,208,255,.18);
+    animation:tutSpotPulse 1.6s ease-in-out infinite;
+  }
+  @keyframes tutSpotPulse{ 0%,100%{ opacity:.55; } 50%{ opacity:1; } }
+  .tut-dim{ position:absolute; inset:0; z-index:7; background:rgba(4,6,10,.6); opacity:0; transition:opacity .3s; }
+  .tut-dim.on{ opacity:1; }
+
+  /* Instruction bubble -- same clip-path corner-cut idiom as .tut-card
+     / the lobby's hex PLAY button, not a plain rounded rectangle. */
+  .tut-bubble{
+    position:absolute; top:78px; left:50%; transform:translateX(-50%); z-index:9;
+    text-align:center; padding:10px 24px 12px; min-width:210px; max-width:min(92vw,460px);
+    background:linear-gradient(180deg, rgba(16,22,34,.92), rgba(10,14,22,.88));
+    border:1px solid rgba(122,158,200,.3);
+    clip-path:polygon(12px 0, calc(100% - 12px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 10px), 0 10px);
+    box-shadow:0 12px 34px rgba(0,0,0,.5);
+    opacity:0; transition:opacity .2s;
+  }
+  .tut-bubble.on{ opacity:1; pointer-events:auto; animation:tutPop .32s cubic-bezier(.34,1.5,.5,1); }
+  @keyframes tutPop{ from{ transform:translateX(-50%) scale(.85); } to{ transform:translateX(-50%) scale(1); } }
+  .tut-verb{ font-family:'Chakra Petch',sans-serif; font-weight:700; font-size:clamp(18px,3.6vw,26px); letter-spacing:5px; color:#fff; text-shadow:0 0 18px rgba(63,208,255,.5); }
+  .tut-sub{ margin-top:4px; font-family:'Share Tech Mono', monospace; font-size:10px; letter-spacing:2px; color:var(--ink-dim); }
+  .tut-count{ display:none; margin-top:6px; font-family:'Share Tech Mono', monospace; font-size:12px; letter-spacing:3px; color:var(--gold); }
+  .tut-count.on{ display:block; }
+
+  .tut-pointer{ position:absolute; left:0; top:0; width:44px; height:15px; z-index:9; opacity:0; transition:opacity .25s; }
+  .tut-pointer.on{ opacity:1; }
+  .tut-pointer svg{ width:100%; height:100%; color:var(--p1); filter:drop-shadow(0 0 6px rgba(63,208,255,.8)); }
+  .tut-ptr-in{ animation:tutBob .8s ease-in-out infinite; }
+  @keyframes tutBob{ 0%,100%{ transform:translateX(0); } 50%{ transform:translateX(8px); } }
+
+  .tut-keys{
+    position:absolute; top:140px; left:50%; transform:translateX(-50%); z-index:9;
+    display:none; flex-direction:column; align-items:center; gap:6px;
+    padding:12px 18px; background:rgba(10,14,22,.6); border:1px solid rgba(122,158,200,.18); border-radius:6px;
+  }
+  .tut-keys.on{ display:flex; }
+  .tut-krow{ display:flex; gap:6px; }
+  .tut-key{
+    width:38px; height:38px; display:flex; align-items:center; justify-content:center;
+    font-family:'Share Tech Mono', monospace; font-size:11px; letter-spacing:1px; color:var(--ink);
+    background:linear-gradient(180deg, rgba(30,40,58,.9), rgba(16,22,34,.9));
+    border:1px solid rgba(122,158,200,.4); border-radius:5px;
+    box-shadow:0 3px 0 rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.07);
+    animation:tutKeyTap 1.9s ease-in-out infinite;
+  }
+  .tut-key-wide{ width:118px; }
+  .tut-key-gold{ color:var(--gold); border-color:rgba(255,206,84,.55); }
+  @keyframes tutKeyTap{
+    0%,100%{ transform:translateY(0); border-color:rgba(122,158,200,.4); }
+    12%{ transform:translateY(2px); border-color:var(--p1); box-shadow:0 1px 0 rgba(0,0,0,.4), 0 0 14px rgba(63,208,255,.45); }
+    24%{ transform:translateY(0); }
+  }
+
+  .tut-toasts{ position:absolute; bottom:30%; left:50%; transform:translateX(-50%); z-index:9; display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .tut-toast{
+    font-family:'Share Tech Mono', monospace; font-size:10px; letter-spacing:2px; color:var(--ink);
+    background:rgba(10,14,22,.85); border:1px solid rgba(122,158,200,.3);
+    padding:6px 14px; border-radius:3px; white-space:nowrap; max-width:92vw; overflow:hidden; text-overflow:ellipsis;
+    animation:tutToast 2.4s ease forwards;
+  }
+  @keyframes tutToast{ 0%{ opacity:0; transform:translateY(10px); } 10%{ opacity:1; transform:translateY(0); } 80%{ opacity:1; } 100%{ opacity:0; } }
+
+  /* Reuses the exit-btn's own look (top-center pill) rather than a
+     new button style; skip sits opposite it, top-right, out of the
+     way of both the HUD panels and the joysticks. */
+  .tut-skip-btn{
+    position:absolute; top:calc(10px + env(safe-area-inset-top,0px)); right:calc(10px + env(safe-area-inset-right,0px)); z-index:9;
+    pointer-events:auto;
+    background:rgba(10,13,20,.7); border:1px solid var(--ink-dim); color:var(--ink-dim);
+    font-family:'Share Tech Mono', monospace; font-size:10px; letter-spacing:2px;
+    padding:8px 14px; border-radius:3px; cursor:pointer; transition:all .15s;
+    min-height:32px;
+  }
+  .tut-skip-btn:hover{ border-color:var(--p2); color:var(--p2); background:rgba(255,95,109,.08); }
+
+  /* Skip confirmation -- small variant of .menu-overlay/.shop-panel. */
+  .tut-confirm{
+    position:absolute; inset:0; z-index:11; display:none;
+    align-items:center; justify-content:center;
+    background:rgba(4,6,10,.72); backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px);
+    pointer-events:auto;
+  }
+  .tut-confirm.on{ display:flex; animation:tutFadeIn .2s; }
+  .tut-confirm-card{
+    display:flex; flex-direction:column; align-items:center; gap:12px;
+    padding:26px 32px; text-align:center; max-width:min(90vw,360px);
+    background:linear-gradient(180deg, rgba(17,23,36,.97), rgba(9,12,20,.98));
+    border:1px solid rgba(255,95,109,.3);
+    box-shadow:0 20px 50px rgba(0,0,0,.6);
+    clip-path:polygon(16px 0, calc(100% - 16px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 16px) 100%, 16px 100%, 0 calc(100% - 10px), 0 10px);
+  }
+  .tut-confirm-title{ font-family:'Chakra Petch',sans-serif; font-weight:700; font-size:16px; letter-spacing:3px; color:var(--p2); }
+  .tut-confirm-sub{ font-family:'Share Tech Mono', monospace; font-size:11px; letter-spacing:1px; color:var(--ink-dim); line-height:1.6; }
+  .tut-confirm-row{ display:flex; gap:10px; margin-top:4px; }
+  .tut-confirm-row .toggle-btn{ min-height:40px; padding:8px 18px; }
+
+  /* Big cards: welcome offer + completion. Same corner-bracket
+     language as .stage::after (cyan top-left / magenta bottom-right). */
+  .tut-cardwrap{
+    position:absolute; inset:0; z-index:10; display:none; align-items:center; justify-content:center;
+    background:rgba(4,6,10,.55); pointer-events:auto;
+  }
+  .tut-cardwrap.on{ display:flex; animation:tutFadeIn .35s; }
+  .tut-card{
+    position:relative; display:flex; flex-direction:column; align-items:center; gap:14px;
+    padding:34px 42px 30px; text-align:center; max-width:min(92vw,520px);
+    background:linear-gradient(180deg, rgba(17,23,36,.96), rgba(9,12,20,.97));
+    border:1px solid rgba(122,158,200,.25);
+    box-shadow:0 24px 70px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.05);
+    clip-path:polygon(22px 0, calc(100% - 22px) 0, 100% 14px, 100% calc(100% - 14px), calc(100% - 22px) 100%, 22px 100%, 0 calc(100% - 14px), 0 14px);
+  }
+  .tut-card::before,.tut-card::after{ content:''; position:absolute; width:12px; height:12px; border-style:solid; border-width:0; }
+  .tut-card::before{ top:-1px; left:-1px; border-top-width:2px; border-left-width:2px; border-color:var(--p1); }
+  .tut-card::after{ bottom:-1px; right:-1px; border-bottom-width:2px; border-right-width:2px; border-color:var(--p2); }
+  .tut-wm{
+    font-family:'Chakra Petch',sans-serif; font-weight:700; font-size:clamp(26px,5.4vw,38px); letter-spacing:5px;
+    background:linear-gradient(90deg, var(--p1), #b9d9ff 45%, var(--p2));
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+    filter:drop-shadow(0 0 18px rgba(63,208,255,.35));
+  }
+  .tut-wm.gold{ background:linear-gradient(90deg, #ffd76e, #fff3c4 45%, #ffb347); filter:drop-shadow(0 0 18px rgba(255,206,84,.4)); }
+  .tut-plate{
+    font-family:'Share Tech Mono', monospace; font-size:10px; letter-spacing:5px; color:rgba(220,235,255,.8);
+    padding:6px 22px; border:1px solid rgba(122,158,200,.3);
+    background:linear-gradient(180deg, rgba(63,208,255,.10), rgba(255,95,160,.07));
+    clip-path:polygon(10px 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 10px 100%, 0 50%);
+  }
+  .tut-wline{ font-family:'Share Tech Mono', monospace; font-size:11px; letter-spacing:2px; color:var(--ink); }
+  .tut-wline.dim{ color:var(--ink-dim); }
+  .tut-chip{
+    font-family:'Share Tech Mono', monospace; font-size:10px; letter-spacing:2px; color:var(--gold);
+    border:1px solid rgba(255,206,84,.35); background:rgba(255,206,84,.06); padding:5px 14px; border-radius:3px;
+  }
+  .tut-card-btns{ display:flex; gap:12px; margin-top:6px; flex-wrap:wrap; justify-content:center; }
+  /* CTA reuses the lobby PLAY button's hex/gradient language exactly. */
+  .tut-cta{
+    position:relative; border:none; cursor:pointer; padding:2px;
+    background:linear-gradient(90deg, var(--p1), #d8ecff 46%, var(--p2));
+    clip-path:polygon(16px 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 16px 100%, 0 50%);
+    filter:drop-shadow(0 0 12px rgba(63,208,255,.35));
+    transition:transform .15s cubic-bezier(.22,.8,.32,1), filter .2s;
+  }
+  .tut-cta:hover{ transform:translateY(-2px) scale(1.03); filter:drop-shadow(0 0 20px rgba(63,208,255,.6)); }
+  .tut-cta:active{ transform:scale(.97); }
+  .tut-cta span{
+    display:flex; align-items:center; justify-content:center; min-width:210px; padding:12px 30px;
+    background:linear-gradient(180deg, rgba(19,25,38,.97), rgba(8,11,18,.98));
+    clip-path:polygon(15px 0, calc(100% - 15px) 0, 100% 50%, calc(100% - 15px) 100%, 15px 100%, 0 50%);
+    font-family:'Chakra Petch',sans-serif; font-weight:700; font-size:14px; letter-spacing:3px; color:#fff;
+    text-shadow:0 0 12px rgba(150,205,255,.6);
+  }
+  .tut-cta.ghost{ background:rgba(122,158,200,.35); filter:none; }
+  .tut-cta.ghost span{ color:var(--ink-dim); font-size:11px; letter-spacing:2px; min-width:150px; padding:10px 22px; }
+
+  /* practice-drone target sprites -- tutorial-only decorative teaching
+     props, not a duplicate of any real entity (players/bullets/covers
+     are the real mechanics; these are just what the real bullets hit). */
+  .tut-drone-label{ display:none; } /* drones are canvas-drawn (drawTutorialOverlay), this class is unused -- kept for CSS-namespace symmetry */
+
+  @media (max-width:720px), (max-height:560px){
+    .tut-bubble{ top:74px; padding:8px 16px 10px; }
+    .tut-keys{ top:122px; }
+    .tut-card{ padding:24px 20px 20px; gap:10px; }
+    .tut-skip-btn{ font-size:9px; padding:6px 10px; }
+  }
 </style>
 </head>
 <body>
@@ -2423,6 +2624,14 @@
   <div class="menu-overlay hidden" id="menuSettings">
     <div class="shop-panel">
       <div class="menu-title">PLAYER SETTINGS</div>
+      <div class="settings-row">
+        <span class="settings-label p1">TUTORIAL</span>
+        <button class="toggle-btn" id="btnPlayTutorial">PLAY TUTORIAL</button>
+      </div>
+      <div class="settings-note">
+        Replays the interactive tutorial at any time -- it never resets
+        your credits, XP, stats, or anything else about your account.
+      </div>
       <div class="settings-note">
         Device Compatibility controls which layout and controls the game
         uses. AUTO detects your device automatically (touch capability,
@@ -2785,6 +2994,50 @@
     </div>
     <button class="touch-action-btn" id="touchDashBtn">DASH</button>
     <button class="touch-action-btn hidden" id="touchAbilityBtn">ABILITY</button>
+  </div>
+
+  <!-- TUTORIAL -- overlay only. Sits on top of the real canvas/HUD/
+       mobile controls above (see the "TUTORIAL" script section) --
+       gameplay itself (movement, shooting, aiming, dash, ability,
+       ammo, combat) is the exact same code path as every other
+       Classic Mode match; this div only ever adds spotlight/bubble/
+       pointer/progress/skip/cards on top of it. -->
+  <div class="hidden" id="tutorialRoot">
+    <div class="tut-progress" id="tutProgress"></div>
+    <div class="tut-spot" id="tutSpot"></div>
+    <div class="tut-dim" id="tutDim"></div>
+
+    <div class="tut-bubble" id="tutBubble">
+      <div class="tut-verb" id="tutVerb"></div>
+      <div class="tut-sub" id="tutSub"></div>
+      <div class="tut-count" id="tutCount"></div>
+    </div>
+
+    <div class="tut-pointer" id="tutPointer"><div class="tut-ptr-in">
+      <svg viewBox="0 0 46 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 2l8 6-8 6"  stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M19 2l8 6-8 6" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M34 2l8 6-8 6" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div></div>
+
+    <div class="tut-keys" id="tutKeys"></div>
+    <div class="tut-toasts" id="tutToasts"></div>
+
+    <button class="tut-skip-btn" id="tutSkipBtn">SKIP TUTORIAL</button>
+
+    <div class="tut-confirm" id="tutConfirm">
+      <div class="tut-confirm-card">
+        <div class="tut-confirm-title">SKIP TUTORIAL?</div>
+        <div class="tut-confirm-sub">You can replay it later from Settings.</div>
+        <div class="tut-confirm-row">
+          <button class="toggle-btn" id="tutConfirmSkip" style="border-color:var(--p2);color:var(--p2);">SKIP</button>
+          <button class="toggle-btn on" id="tutConfirmCancel">CANCEL</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="tut-cardwrap" id="tutCardWrap"><div class="tut-card" id="tutCard"></div></div>
   </div>
 </div>
 
@@ -4152,6 +4405,14 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       saveDeviceModeLocally();
       if(typeof applyDeviceLayout === 'function') applyDeviceLayout();
     }
+    // The account's own stored value always wins over whatever the
+    // guest-scoped localStorage fallback had (a different browser/
+    // device might disagree) -- and if this signed-in account turns
+    // out to genuinely be new, offer the tutorial now that we know for
+    // sure, rather than the boot-time guest guess.
+    tutorialCompleteFlag = !!account.tutorialComplete;
+    saveTutorialCompleteLocally();
+    if(typeof tutorialMaybeOfferOnBoot === 'function') tutorialMaybeOfferOnBoot();
     updateCreditsDisplay();
   }
 
@@ -4250,6 +4511,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         aimMode: aimMode,
         matchSize: savedMatchPlayerCount,
         deviceMode: deviceMode,
+        tutorialComplete: tutorialCompleteFlag,
         dailyChallengeProgress: {
           date: dailyProgress.date || todayUTC(),
           kills: dailyProgress.kills || 0,
@@ -4612,6 +4874,21 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   try{
     const storedDeviceMode = localStorage.getItem(DEVICE_MODE_KEY);
     if(['auto','iphone','ipad','computer'].includes(storedDeviceMode)) deviceMode = storedDeviceMode;
+  } catch(e){}
+
+  // Whether this player has finished OR skipped the tutorial -- either
+  // one sets this, so it never auto-launches again either way (see
+  // tutorialMaybeOfferOnBoot). Signed-in players get it from their
+  // account (applyAccount/saveProgress, same field added server-side);
+  // this localStorage key is what makes it survive a reload for
+  // signed-out/guest players too, exactly like deviceMode above.
+  let tutorialCompleteFlag = false;
+  const TUTORIAL_COMPLETE_KEY = 'duelarena.tutorialComplete';
+  function saveTutorialCompleteLocally(){
+    try{ localStorage.setItem(TUTORIAL_COMPLETE_KEY, tutorialCompleteFlag ? '1' : '0'); } catch(e){}
+  }
+  try{
+    tutorialCompleteFlag = localStorage.getItem(TUTORIAL_COMPLETE_KEY) === '1';
   } catch(e){}
 
   let gameType = 'classic'; // 'classic' | 'football' | 'heist' | 'bombrun' -- picked on the GAME TYPE menu
@@ -7436,6 +7713,7 @@ else{
       p.dashing = true;
       p.dashT = p.dashDuration;
       p.dashCd = p.dashCooldownMax;
+      if(tutorialActive && p.id==='p1') tutorialNotify('dash');
     }
 
     const slowMult = (p.slowT > 0) ? TIME_WARP_SLOW_MULT : 1;
@@ -7472,7 +7750,10 @@ else{
 
     if(p.ammo < p.maxAmmo){
       p.reloadT += dt;
-      if(p.reloadT >= p.reloadTime){ p.reloadT = 0; p.ammo++; }
+      if(p.reloadT >= p.reloadTime){
+        p.reloadT = 0; p.ammo++;
+        if(tutorialActive && p.id==='p1' && p.ammo>=p.maxAmmo) tutorialNotify('reloadDone');
+      }
     }
 
     // ---- FOOTBALL MODE: shooting-button interception ----
@@ -7516,6 +7797,10 @@ else{
 
 bullets.push(bullet);
 playShootSound();
+if(tutorialActive && p.id==='p1'){
+  tutorialNotify('shoot');
+  if(p.ammo<=0) tutorialNotify('ammoEmpty');
+}
 
 if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
 
@@ -7532,6 +7817,7 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
     const bombBlocksTriburst = (gameType === 'bombrun' && bomb.carrier === p.id && p.abilityId === 'triburst');
     if(wantAbility && p.abilityCd<=0 && !footballBlocksTriburst && !bombBlocksTriburst){
       p.abilityCd = p.abilityCooldownMax;
+      if(tutorialActive && p.id==='p1') tutorialNotify('ability');
 
       if(p.abilityId === 'triburst'){
         const mid = Math.floor(ABILITY_BULLET_COUNT/2);
@@ -8036,6 +8322,14 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
 }
 
   function endRound(winnerId){
+    // The tutorial's PRACTICE DUEL step reuses this exact function (real
+    // elimination detection, real round-end call) but needs its own,
+    // much shorter win condition (1 round, no fail state) instead of
+    // ROUNDS_TO_WIN/credits/XP -- see tutorialHandleRoundEnd. Every
+    // other caller of endRound (Classic Mode's real matches) is
+    // completely unaffected since tutorialActive is only ever true
+    // while the tutorial itself is running.
+    if(tutorialActive){ tutorialHandleRoundEnd(winnerId); return; }
     const winner = getCombatantById(winnerId);
     if(!winner) return;
     winner.score = (winner.score || 0) + 1;
@@ -8139,7 +8433,12 @@ if(gameType === 'football'){
 updatePlayer(p1, dt);
 
 if(mode !== "online"){
-    updatePlayer(p2, dt);
+    // During the tutorial's early steps the trainer (p2) stays asleep
+    // (not simulated/drawn) until the PRACTICE DUEL step actually
+    // activates it -- see tutorialAllowsP2()/startTutorialDuel().
+    // Every other Classic Mode match is completely unaffected since
+    // tutorialActive is only ever true while the tutorial itself runs.
+    if(!tutorialActive || tutorialAllowsP2()) updatePlayer(p2, dt);
 } else if(p2){
     // Interpolated from the received-snapshot buffer (~100ms behind
     // real time, see updateRemotePlayerInterpolation) instead of a
@@ -8155,6 +8454,7 @@ if(mode !== "online" && extraBots.length){
 
 updateBullets(dt);
 updateDecoys(dt);
+if(tutorialActive) tutorialUpdate(dt);
 }
     } else if(state==='roundEnd'){
       msgTimer -= dt;
@@ -8638,9 +8938,10 @@ updateDecoys(dt);
       drawDecoys();
     }
     if(p1) drawPlayer(p1);
-    if(p2) drawPlayer(p2);
+    if(p2 && (!tutorialActive || tutorialAllowsP2())) drawPlayer(p2);
     extraBots.forEach(bot => drawPlayer(bot));
     drawEffects();
+    if(tutorialActive) drawTutorialOverlay();
     if(gameType === 'football' || gameType === 'heist' || gameType === 'bombrun') drawFootballRespawnCountdown();
     updateHud();
 
@@ -8732,7 +9033,7 @@ updateDecoys(dt);
     if(!p1Label || !p2Label) return;
     const modeIcon = gameType==='football' ? ' \u26bd' : (gameType==='heist' ? ' \u{1F512}' : (gameType==='bombrun' ? ' \u{1F4A3}' : ''));
     p1Label.textContent = onlineLabelFor('p1', 'PLAYER ONE');
-    p2Label.textContent = onlineLabelFor('p2', mode==='ai' ? 'COMPUTER' : (mode==='online' ? 'OPPONENT (ONLINE)' : 'PLAYER TWO')) + modeIcon;
+    p2Label.textContent = onlineLabelFor('p2', mode==='ai' ? 'COMPUTER' : (mode==='tutorial' ? 'TRAINER' : (mode==='online' ? 'OPPONENT (ONLINE)' : 'PLAYER TWO'))) + modeIcon;
   }
 
   function beginGame(){
@@ -8899,6 +9200,11 @@ updateDecoys(dt);
   btnOnlineStart.addEventListener('click', ()=>{ beginGame(); });
 
   function exitToMenu(){
+    // Tears down every tutorial-only timer/overlay/entity BEFORE the
+    // normal exit flow below runs -- so a tutorial exit (finish, skip,
+    // or the EXIT button) always leaves normal gameplay state exactly
+    // as clean as any other match leaving through this same function.
+    if(tutorialActive) tutorialCleanup();
     started = false;
     bullets = [];
     state = 'menu';
@@ -8946,6 +9252,480 @@ updateDecoys(dt);
     fetchDailyChallenges();
   }
   exitBtn.addEventListener('click', exitToMenu);
+
+  // ============================================================
+  // TUTORIAL -- an interactive, step-by-step first-match teaching
+  // flow, based on ZCode's standalone tutorial module. Rebuilt here
+  // to run AS a real Classic Mode match instead of its own sandbox:
+  // gameType stays 'classic', p1 is a real makePlayer() with the
+  // player's real equipped loadout, p2 is the real bot AI (aiThink/
+  // updatePlayer's isAI branch, unmodified) once the duel step wakes
+  // it up, movement/aim/dash/ability/ammo/shooting/collision/HUD are
+  // all the exact same code every other match uses. This module only
+  // adds: step-detection hooks at existing trigger points (search
+  // "tutorialActive" elsewhere in this file), a small set of
+  // decorative practice-target "drones" real bullets can hit, and the
+  // teaching overlay itself (spotlight/bubble/pointer/keycaps/
+  // progress/cards/skip -- see the #tutorialRoot CSS).
+  // ============================================================
+
+  const tutorialRootEl = document.getElementById('tutorialRoot');
+  const tutE = {
+    progress: document.getElementById('tutProgress'),
+    spot: document.getElementById('tutSpot'),
+    dim: document.getElementById('tutDim'),
+    bubble: document.getElementById('tutBubble'),
+    verb: document.getElementById('tutVerb'),
+    sub: document.getElementById('tutSub'),
+    count: document.getElementById('tutCount'),
+    pointer: document.getElementById('tutPointer'),
+    keys: document.getElementById('tutKeys'),
+    toasts: document.getElementById('tutToasts'),
+    skipBtn: document.getElementById('tutSkipBtn'),
+    confirm: document.getElementById('tutConfirm'),
+    confirmSkip: document.getElementById('tutConfirmSkip'),
+    confirmCancel: document.getElementById('tutConfirmCancel'),
+    cardWrap: document.getElementById('tutCardWrap'),
+    card: document.getElementById('tutCard'),
+  };
+  let tutPpips = [];
+
+  let tutorialActive = false;
+  let tutorialStepIndex = -1;
+  let tutorialLocked = false;
+  let tutorialAwaitInput = false;
+  let tutorialCardOpen = false;
+  let tutorialStepTimers = [];
+  let tutorialStartedAt = 0;
+  let tutorialMoveDist = 0;
+  let tutorialShotsHit = 0;
+  let tutorialDrones = [];
+  let tutorialOfferedThisSession = false;
+  const TUTORIAL_DUEL_STEP = 7; // index into TUT_STEPS -- p2/the trainer only wakes up here
+
+  function tutStepTimeout(fn, ms){ const id = setTimeout(fn, ms); tutorialStepTimers.push(id); return id; }
+  function tutClearStepTimers(){ tutorialStepTimers.forEach(clearTimeout); tutorialStepTimers = []; }
+
+  function tutorialAllowsP2(){ return tutorialActive && tutorialStepIndex >= TUTORIAL_DUEL_STEP; }
+
+  // ---- overlay UI helpers ------------------------------------------
+  function tutSpot(rect){
+    if(!rect){ tutE.spot.classList.remove('on'); return; }
+    tutE.spot.style.left = rect.x+'px'; tutE.spot.style.top = rect.y+'px';
+    tutE.spot.style.width = rect.w+'px'; tutE.spot.style.height = rect.h+'px';
+    tutE.spot.classList.add('on');
+  }
+  function tutSpotEl(elm, pad){
+    if(!elm) return tutSpot(null);
+    pad = pad==null ? 12 : pad;
+    const r = elm.getBoundingClientRect();
+    const rect = { x:r.left-pad, y:r.top-pad, w:r.width+pad*2, h:r.height+pad*2 };
+    tutSpot(rect); return rect;
+  }
+  // Spotlights a rect in WORLD (game canvas) coordinates -- used to
+  // point at the player/drones themselves, converted through the real
+  // canvas's own on-screen size exactly like the mouse-aim math does.
+  function tutSpotWorld(wx, wy, ww, wh, pad){
+    pad = pad==null ? 16 : pad;
+    const cr = canvas.getBoundingClientRect();
+    const sx = cr.width/W, sy = cr.height/H;
+    const rect = { x:cr.left+wx*sx-pad, y:cr.top+wy*sy-pad, w:ww*sx+pad*2, h:wh*sy+pad*2 };
+    tutSpot(rect); return rect;
+  }
+  function tutPointerAt(rect){
+    if(!rect){ tutE.pointer.classList.remove('on'); return; }
+    const bx = innerWidth/2, by = 100;
+    const px = clamp(bx, rect.x-18, rect.x+rect.w+18);
+    const py = clamp(by, rect.y-18, rect.y+rect.h+18);
+    const rot = Math.atan2((rect.y+rect.h/2)-py, (rect.x+rect.w/2)-px) * 180/Math.PI;
+    tutE.pointer.style.transform = 'translate('+(px-22)+'px,'+(py-7)+'px) rotate('+rot+'deg)';
+    tutE.pointer.classList.add('on');
+  }
+  function tutPointerEl(elm){ tutPointerAt(elm ? elm.getBoundingClientRect() : null); }
+  function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+
+  function tutBubble(verb, sub, opts){
+    tutE.verb.textContent = verb;
+    tutE.sub.textContent = typeof sub === 'string' ? sub : (isTouchDevice ? sub.t : sub.d);
+    if(opts && opts.count){ tutE.count.textContent = opts.count; tutE.count.classList.add('on'); }
+    else tutE.count.classList.remove('on');
+    tutE.bubble.classList.remove('on'); void tutE.bubble.offsetWidth; tutE.bubble.classList.add('on');
+  }
+  function tutBubbleCount(txt){ tutE.count.textContent = txt; }
+  function tutBubbleHide(){ tutE.bubble.classList.remove('on'); }
+
+  function tutKeycaps(rows){
+    tutE.keys.innerHTML = '';
+    if(!rows){ tutE.keys.classList.remove('on'); return; }
+    rows.forEach((row,ri)=>{
+      const r = document.createElement('div'); r.className = 'tut-krow';
+      row.forEach((cell,ci)=>{
+        const c = typeof cell === 'string' ? {label:cell} : cell;
+        const k = document.createElement('div');
+        k.className = 'tut-key' + (c.wide?' tut-key-wide':'') + (c.gold?' tut-key-gold':'');
+        k.textContent = c.label;
+        k.style.animationDelay = (ri*.35+ci*.18)+'s';
+        r.appendChild(k);
+      });
+      tutE.keys.appendChild(r);
+    });
+    tutE.keys.classList.add('on');
+  }
+
+  function tutProgressBuild(n){
+    tutE.progress.innerHTML = ''; tutPpips = [];
+    for(let i=0;i<n;i++){
+      const p = document.createElement('div'); p.className = 'tut-ppip';
+      tutE.progress.appendChild(p); tutPpips.push(p);
+    }
+  }
+  function tutProgressCur(i){ tutPpips.forEach((p,j)=>p.classList.toggle('cur', j===i)); }
+  function tutProgressFill(stepIndex){
+    const i = stepIndex - 1; // step 0 is the welcome card, not a pip
+    if(i>=0 && i<tutPpips.length){ tutPpips[i].classList.add('done'); tutPpips[i].classList.remove('cur'); }
+  }
+
+  function tutToast(msg){
+    const t = document.createElement('div'); t.className = 'tut-toast'; t.textContent = msg;
+    tutE.toasts.appendChild(t);
+    if(tutE.toasts.children.length>2) tutE.toasts.firstChild.remove();
+    setTimeout(()=>t.remove(), 2500);
+  }
+
+  function tutCardShow(html){
+    tutE.card.innerHTML = html;
+    tutE.cardWrap.classList.add('on');
+    tutorialCardOpen = true;
+  }
+  function tutCardHide(){ tutE.cardWrap.classList.remove('on'); tutorialCardOpen = false; }
+
+  function tutFmtTime(s){ const m=Math.floor(s/60), r=s%60; return m+':'+String(r).padStart(2,'0'); }
+
+  function tutCardWelcome(){
+    tutCardShow(
+      '<div class="tut-wm">DUEL ARENA</div>'
+      + '<div class="tut-plate">TRAINING PROTOCOL</div>'
+      + '<div class="tut-wline">TOP-DOWN ARENA DUELS</div>'
+      + '<div class="tut-wline dim">LEARN THE BASICS IN ABOUT A MINUTE</div>'
+      + '<div class="tut-card-btns">'
+      + '<button class="tut-cta" id="tutStartBtn"><span>' + (isTouchDevice?'TAP TO BEGIN':'PRESS ANY KEY TO BEGIN') + '</span></button>'
+      + '</div>'
+    );
+    const beginBtn = document.getElementById('tutStartBtn');
+    if(beginBtn) beginBtn.addEventListener('click', tutBeginFromInput);
+    tutorialAwaitInput = true;
+  }
+  function tutCardComplete(){
+    const secs = Math.max(1, Math.round((performance.now()-tutorialStartedAt)/1000));
+    tutCardShow(
+      '<div class="tut-wm gold">TUTORIAL COMPLETE</div>'
+      + '<div class="tut-wline">You\'re ready for the arena.</div>'
+      + '<div class="tut-chip">CLEARED IN ' + tutFmtTime(secs) + '</div>'
+      + '<div class="tut-card-btns">'
+      + '<button class="tut-cta" id="tutFinishBtn"><span>ENTER THE ARENA</span></button>'
+      + '</div>'
+    );
+    document.getElementById('tutFinishBtn').addEventListener('click', ()=>tutorialFinish());
+  }
+
+  function tutBeginFromInput(){
+    if(!tutorialAwaitInput) return;
+    tutorialAwaitInput = false;
+    tutorialAdvance(true);
+  }
+
+  // ---- practice-target drones (decorative teaching props -- the
+  // shooting/hit itself is done entirely with real bullets/damage) ---
+  function tutorialSpawnDrones(positions){
+    tutorialDrones = positions.map(([x,y])=>({x,y,r:13,t:Math.random()*6}));
+  }
+  function tutorialClearDrones(){ tutorialDrones = []; }
+  function tutorialCheckDroneHits(){
+    if(!tutorialDrones.length) return;
+    for(let i=bullets.length-1;i>=0;i--){
+      const b = bullets[i];
+      if(b.owner !== 'p1') continue;
+      for(let j=tutorialDrones.length-1;j>=0;j--){
+        const d = tutorialDrones[j];
+        if(Math.hypot(b.x-d.x, b.y-d.y) < d.r+BULLET_R+2){
+          tutorialDrones.splice(j,1);
+          bullets.splice(i,1);
+          spawnHitFlash(d.x, d.y, '#ff5f6d');
+          tutorialNotify('droneHit');
+          break;
+        }
+      }
+    }
+  }
+  function drawTutorialOverlay(){
+    for(const d of tutorialDrones){
+      d.t += 1/60;
+      const yy = d.y + Math.sin(d.t*2)*4;
+      const ang = p1 ? Math.atan2(p1.y-yy, p1.x-d.x) : -Math.PI/2;
+      ctx.save();
+      ctx.translate(d.x, yy); ctx.rotate(ang);
+      ctx.shadowColor = 'rgba(255,95,109,.9)'; ctx.shadowBlur = 10;
+      const g = ctx.createRadialGradient(-3,-3,2,0,0,d.r*1.2);
+      g.addColorStop(0,'#ffd7da'); g.addColorStop(.55,'#ff5f6d'); g.addColorStop(1,'#8f1e2c');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(d.r*1.18,0); ctx.lineTo(-d.r*0.82,d.r*0.8); ctx.lineTo(-d.r*0.5,0); ctx.lineTo(-d.r*0.82,-d.r*0.8);
+      ctx.closePath(); ctx.fill();
+      ctx.shadowBlur = 0; ctx.strokeStyle = 'rgba(255,95,109,.9)'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // ---- persistent state (see saveTutorialCompleteLocally / the
+  // applyAccount + saveProgress hooks near the account system) -------
+  function tutorialSetComplete(done){
+    tutorialCompleteFlag = done !== false;
+    saveTutorialCompleteLocally();
+    if(loggedIn && sessionToken) saveProgress();
+  }
+
+  // ---- event notifications from real gameplay hook points ----------
+  function tutorialNotify(ev, data){
+    if(!tutorialActive) return;
+    const st = TUT_STEPS[tutorialStepIndex];
+    if(st && st.onEvent) st.onEvent(ev, data);
+  }
+
+  // Called every frame (from loop()'s Classic branch) while active.
+  function tutorialUpdate(dt){
+    tutorialCheckDroneHits();
+    const st = TUT_STEPS[tutorialStepIndex];
+    if(st && st.onTick) st.onTick(dt);
+  }
+
+  // The tutorial's own, much shorter win condition for the PRACTICE
+  // DUEL step -- see endRound()'s tutorialActive guard at the very top
+  // of that function. No credits, no XP, no round/match counters: this
+  // is not a real match result.
+  function tutorialHandleRoundEnd(winnerId){
+    if(winnerId === 'p1'){
+      tutorialNotify('trainerDefeated');
+    } else {
+      // "No fail state" -- losing to the trainer just means try again.
+      bullets = []; decoys = [];
+      resetPositions();
+      p2.isAI = true; p2.alive = true;
+      tutToast('NO FAIL STATE — TRY AGAIN');
+    }
+  }
+
+  // ---- step definitions ---------------------------------------------
+  // Text differs slightly for touch vs desktop (bubble()'s {t,d} form);
+  // every step's completion condition is real gameplay, not a fake timer
+  // -- see the "Do not invent mechanics" requirement.
+  const TUT_STEPS = [
+    { id:'welcome',
+      enter(){ tutE.dim.classList.add('on'); tutCardWelcome(); },
+      leave(){ tutorialAwaitInput = false; tutCardHide(); tutE.dim.classList.remove('on'); }
+    },
+    { id:'move',
+      enter(){
+        tutorialMoveDist = 0;
+        tutBubble('MOVE', {t:'LEFT SIDE — DRAG TO MOVE', d:'WASD OR ARROW KEYS'});
+        if(isTouchDevice){
+          const r = tutSpotEl(joyMoveZone, 4); tutPointerAt(r);
+        } else {
+          tutKeycaps([['W'],['A','S','D']]);
+          const r = tutSpotEl(tutE.keys, 18); tutPointerAt(r);
+        }
+      },
+      onTick(dt){
+        if(!p1) return;
+        const d = Math.hypot(p1.x-this._lx, p1.y-this._ly);
+        if(this._lx!==undefined) tutorialMoveDist += d;
+        this._lx = p1.x; this._ly = p1.y;
+        if(tutorialMoveDist >= 150) tutorialAdvance();
+      },
+      leave(){ tutKeycaps(null); }
+    },
+    { id:'shoot',
+      enter(){
+        tutorialShotsHit = 0;
+        tutorialSpawnDrones([[p1.x+320,p1.y-120],[p1.x+380,p1.y],[p1.x+320,p1.y+120]]);
+        tutBubble('SHOOT', {t:'RIGHT STICK AIMS — HOLD TO FIRE', d:'AIM WITH MOUSE — HOLD TO FIRE'}, {count:'0 / 3'});
+        if(isTouchDevice){ tutSpotEl(joyAimZone, 4); tutPointerEl(joyAimZone); }
+      },
+      onEvent(ev){
+        if(ev==='droneHit'){
+          tutorialShotsHit++;
+          tutBubbleCount(tutorialShotsHit+' / 3');
+          if(tutorialShotsHit>=3) tutorialAdvance();
+        }
+      },
+      leave(){ tutorialClearDrones(); }
+    },
+    { id:'dash',
+      enter(){
+        tutBubble('DASH', {t:'TAP THE DASH BUTTON', d:'SPACE OR SHIFT'});
+        if(isTouchDevice){ tutSpotEl(touchDashBtn,16); tutPointerEl(touchDashBtn); }
+        else{ tutKeycaps([[{label:'SPACE',wide:true}]]); tutPointerEl(tutE.keys); }
+      },
+      onEvent(ev){ if(ev==='dash') tutorialAdvance(); },
+      leave(){ tutKeycaps(null); }
+    },
+    { id:'ability',
+      enter(){
+        if(!p1.hasAbility){
+          tutToast('NO ABILITY EQUIPPED — EQUIP ONE IN THE SHOP LATER');
+          tutStepTimeout(()=>tutorialAdvance(true), 900);
+          return;
+        }
+        const def = ABILITIES.find(a=>a.id===p1.abilityId);
+        const name = (def && def.name ? def.name : 'ABILITY').toUpperCase();
+        tutBubble(name, {t:'GOLD BUTTON — USE YOUR ABILITY', d:'PRESS Q'});
+        if(isTouchDevice){ tutSpotEl(touchAbilityBtn,16); tutPointerEl(touchAbilityBtn); }
+        else{ tutKeycaps([[{label:'Q',gold:true}]]); tutPointerEl(tutE.keys); }
+      },
+      onEvent(ev){ if(ev==='ability') tutorialAdvance(); },
+      leave(){ tutKeycaps(null); }
+    },
+    { id:'ammo',
+      enter(){
+        p1.ammo = p1.maxAmmo; p1.reloadT = 0;
+        tutBubble('AMMO', 'FIRE UNTIL EMPTY');
+        tutSpotEl(ammoP1El, 12); tutPointerEl(ammoP1El);
+      },
+      onEvent(ev){
+        if(ev==='ammoEmpty') tutBubble('OUT OF AMMO', 'AUTO-RELOADING…');
+        else if(ev==='reloadDone') tutorialAdvance();
+      }
+    },
+    { id:'objective',
+      enter(){
+        tutBubble('WIN THE MATCH', 'FIRST TO ' + ROUNDS_TO_WIN + ' ROUNDS');
+        const a = scoreP1El.getBoundingClientRect(), b = scoreP2El.getBoundingClientRect();
+        tutSpot({ x:Math.min(a.left,b.left)-10, y:Math.min(a.top,b.top)-10,
+                  w:Math.max(a.right,b.right)-Math.min(a.left,b.left)+20,
+                  h:Math.max(a.bottom,b.bottom)-Math.min(a.top,b.top)+20 });
+        tutStepTimeout(()=>tutorialAdvance(true), 3200);
+      }
+    },
+    { id:'duel',
+      enter(){
+        bullets = []; decoys = [];
+        resetPositions();
+        p2.isAI = true; p2.alive = true;
+        tutBubble('PRACTICE DUEL', 'DEFEAT THE OPPONENT');
+      },
+      onTick(){
+        if(p2 && p2.alive) tutSpotWorld(p2.x-30, p2.y-30, 60, 60, 10);
+        else tutSpot(null);
+      },
+      onEvent(ev){ if(ev==='trainerDefeated') tutorialAdvance(); },
+      leave(){ if(p2) p2.isAI = false; }
+    },
+    { id:'complete',
+      enter(){ tutE.dim.classList.add('on'); tutCardComplete(); }
+    }
+  ];
+
+  // ---- FSM ------------------------------------------------------
+  function tutorialGoto(i){
+    if(!tutorialActive || i<0 || i>=TUT_STEPS.length) return;
+    const prev = TUT_STEPS[tutorialStepIndex];
+    if(prev && prev.leave){ try{ prev.leave(); }catch(e){ console.warn('[tutorial]',e); } }
+    tutClearStepTimers();
+    tutSpot(null); tutPointerAt(null); tutKeycaps(null); tutBubbleHide();
+    tutorialStepIndex = i;
+    const st = TUT_STEPS[i];
+    if(i>=1 && i<=TUTORIAL_DUEL_STEP) tutProgressCur(i-1);
+    try{ st.enter(); }catch(e){ console.warn('[tutorial]',e); }
+  }
+  function tutorialAdvance(silent){
+    if(!tutorialActive || tutorialLocked) return;
+    tutorialLocked = true;
+    tutClearStepTimers();
+    if(!silent) tutToast('NICE');
+    tutProgressFill(tutorialStepIndex);
+    tutBubbleHide(); tutSpot(null); tutPointerAt(null); tutKeycaps(null);
+    const next = tutorialStepIndex+1;
+    setTimeout(()=>{ tutorialLocked=false; if(tutorialActive) tutorialGoto(next); }, silent?220:520);
+  }
+
+  // ---- lifecycle --------------------------------------------------
+  function startTutorial(){
+    if(tutorialActive) return;
+    if(started) exitToMenu(); // leaves any match currently in progress cleanly first
+    gameType = 'classic';
+    mode = 'tutorial';
+    matchPlayerCount = 2;
+    tutorialActive = true;
+    tutorialStepIndex = -1;
+    tutorialLocked = false;
+    tutorialStartedAt = performance.now();
+    tutorialDrones = [];
+    tutProgressBuild(TUTORIAL_DUEL_STEP); // pips for steps 1..7
+    tutProgressCur(-1);
+    tutorialRootEl.classList.remove('hidden');
+    beginGame();
+    // p2 stays fully inert (not updated, not drawn, and now also not
+    // hittable) until the PRACTICE DUEL step -- see tutorialAllowsP2()
+    // and the guards added to loop()/render()/updateBullets' target
+    // selection (target.alive is already checked there for every mode).
+    if(p2){ p2.isAI = false; p2.alive = false; }
+    tutorialGoto(0);
+  }
+  function tutorialCleanup(){
+    tutClearStepTimers();
+    tutorialActive = false;
+    tutorialStepIndex = -1;
+    tutorialLocked = false;
+    tutorialAwaitInput = false;
+    tutorialDrones = [];
+    tutSpot(null); tutPointerAt(null); tutKeycaps(null); tutBubbleHide();
+    tutCardHide();
+    tutE.dim.classList.remove('on');
+    tutE.confirm.classList.remove('on');
+    tutorialRootEl.classList.add('hidden');
+    if(p2) p2.isAI = false;
+    mode = 'local';
+  }
+  function tutorialFinish(){
+    tutorialSetComplete(true);
+    exitToMenu();
+  }
+  function tutorialRequestSkip(){
+    if(!tutorialActive) return;
+    tutE.confirm.classList.add('on');
+  }
+
+  tutE.skipBtn.addEventListener('click', tutorialRequestSkip);
+  tutE.confirmCancel.addEventListener('click', ()=>tutE.confirm.classList.remove('on'));
+  tutE.confirmSkip.addEventListener('click', ()=>{
+    tutE.confirm.classList.remove('on');
+    tutorialSetComplete(true);
+    exitToMenu();
+  });
+
+  // Any real key/click/tap during the welcome card's "press to begin"
+  // wait also starts step 1 -- mirrors the ZCode module's own input-gate.
+  window.addEventListener('keydown', (e)=>{ if(tutorialAwaitInput && !e.repeat) tutBeginFromInput(); });
+  document.addEventListener('pointerdown', ()=>{ if(tutorialAwaitInput) tutBeginFromInput(); });
+
+  document.getElementById('btnPlayTutorial').addEventListener('click', ()=>{
+    menuSettings.classList.add('hidden');
+    startTutorial();
+  });
+
+  // ---- first-login offer -------------------------------------------
+  // A brand-new player (guest or freshly signed-in) sees the tutorial's
+  // own welcome card automatically -- which already puts SKIP TUTORIAL
+  // one tap/click away, satisfying "offer to start" without a second,
+  // redundant "do you want to see the tutorial?" modal in front of it.
+  // Never fires again once tutorialCompleteFlag is true (set by either
+  // finishing OR skipping), and never interrupts a match already in
+  // progress or another modal/menu already open.
+  function tutorialMaybeOfferOnBoot(){
+    if(tutorialOfferedThisSession || tutorialCompleteFlag || started || tutorialActive) return;
+    if(!menuMain || menuMain.classList.contains('hidden')) return; // some other screen is already open (e.g. deep-linked)
+    tutorialOfferedThisSession = true;
+    startTutorial();
+  }
   restartBtn.addEventListener('click', restartMatch);
   const muteBtn = document.getElementById('muteBtn');
   if(muteBtn) muteBtn.addEventListener('click', toggleMute);
@@ -10766,6 +11546,12 @@ updateDecoys(dt);
   tryInitGoogle();
   updateCreditsDisplay();
   requestAnimationFrame(loop);
+  // Brief delay so a returning player's silent Google sign-in (if any)
+  // has a chance to resolve and call applyAccount() first -- otherwise
+  // a returning player would flash the tutorial for a moment before
+  // their real account's tutorialComplete:true arrives. A guest who
+  // never signs in still gets the offer shortly after landing in the lobby.
+  setTimeout(()=>{ if(typeof tutorialMaybeOfferOnBoot === 'function') tutorialMaybeOfferOnBoot(); }, 1200);
 })();
 </script>
 
