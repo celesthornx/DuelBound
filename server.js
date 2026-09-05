@@ -857,7 +857,12 @@ const ABILITY_DEFAULTS = {
     decoy:       { duration: 6.0, moveSpeed: 221, cooldown: 16.0 },
     ricochet:    { maxBounces: 3 },
     voidblink:   { cooldown: 13.0 },
-    quickreload: { reloadSpeedPercent: 40, ammoPenalty: 2 }
+    quickreload: { reloadSpeedPercent: 40, ammoPenalty: 2 },
+    gravitytrap: { pullRadius: 130, pullStrength: 90, slowPercent: 50, duration: 3.0, cooldown: 9.0 },
+    phaseshift:  { duration: 1.0, cooldown: 14.0 },
+    huntersmark: { homingTurnRate: 70, range: 260, cooldown: 6.0 },
+    portal:      { duration: 6.0, cooldown: 18.0 },
+    overcharge:  { damage: 2, speed: 780, hitboxPercent: 130, reloadPenaltyPercent: 130, duration: 3.0, cooldown: 15.0 }
 };
 
 // Server-side validation ranges -- the browser's own min/max on the
@@ -877,7 +882,12 @@ const FIELD_LIMITS = {
     moveSpeed:           [0, 1000],
     maxBounces:          [0, 10],
     reloadSpeedPercent:  [5, 100],
-    ammoPenalty:         [0, 5]
+    ammoPenalty:         [0, 5],
+    pullRadius:          [0, 500],
+    pullStrength:        [0, 500],
+    homingTurnRate:      [0, 360],
+    hitboxPercent:       [100, 300],
+    reloadPenaltyPercent:[100, 300]
 };
 
 // Ability balance is admin-editable at runtime, so it has exactly the
@@ -4872,6 +4882,21 @@ wss.on("connection", (socket, request) => {
                 return;
             }
 
+            // Ability activation for the 5 newer abilities (Gravity Trap,
+            // Phase Shift, Hunter's Mark, Portal, Overcharge) -- the only
+            // place their cooldown and consumable state actually lives.
+            // The client already applied its own optimistic local effect
+            // before sending this (same prediction pattern as every
+            // other ability); this only decides whether the SERVER's own
+            // copy of that state (phaseUntil/overchargeShotsRemaining/
+            // huntersMarkReady, consulted by claimHit/trackBullet above)
+            // gets to update. No response is sent either way -- same
+            // fire-and-forget shape as timewarp/decoy.
+            if (data.type === "abilityActivate") {
+                match.combat.activateAbility(conn.rankedSlot, data.ability, Date.now());
+                return;
+            }
+
             // Everything else is a straight relay to the room opponent.
             send(foe.conn, data);
             return;
@@ -4945,7 +4970,10 @@ wss.on("connection", (socket, request) => {
                 color: data.color,
                 range: data.range,
                 bounces: data.bounces,
-                damage: data.damage
+                damage: data.damage,
+                hitRadius: data.hitRadius,
+                overcharged: data.overcharged,
+                homing: data.homing
             });
         }
 
@@ -5038,6 +5066,48 @@ wss.on("connection", (socket, request) => {
                 facing: data.facing,
                 life: data.life
             });
+        }
+
+        // Ability activation for the 5 newer abilities. The client
+        // already applied its own optimistic local effect before this
+        // arrives (same prediction pattern as every other ability); this
+        // is only what lets the server's own copy of the resulting state
+        // (phaseUntil / overchargeShotsRemaining / huntersMarkReady,
+        // consulted by claimHit/trackBullet above) update, subject to
+        // this ability's own server-side cooldown. No response either
+        // way, same fire-and-forget shape as timewarp/decoy.
+        else if (data.type === "abilityActivate") {
+
+            casualCombat.activateAbility(id, data.ability, Date.now());
+        }
+
+        // Gravity Trap / Portal: static field/anchor markers, relayed
+        // once at creation exactly like Decoy's spawn message -- neither
+        // ever moves again, so unlike Decoy there is no continuous
+        // re-broadcast to relay here. Deals no damage and moves nobody
+        // by itself; the receiving client applies the pull/slow (Gravity
+        // Trap) or performs the actual teleport (Portal, on a LATER
+        // 'portalClear' from its own owner) to its own real position.
+        else if (data.type === "gravitytrap") {
+
+            send(opponent, { type: "gravitytrap", x: data.x, y: data.y, life: data.life });
+        }
+        else if (data.type === "portal") {
+
+            send(opponent, { type: "portal", x: data.x, y: data.y, life: data.life });
+        }
+        else if (data.type === "portalClear") {
+
+            send(opponent, { type: "portalClear" });
+        }
+
+        // Phase Shift: relayed purely so the opponent's client can render
+        // the translucent effect on their view of us -- the real
+        // invulnerability is enforced server-side (see claimHit/
+        // activateAbility above), not by anything in this message.
+        else if (data.type === "phaseshift") {
+
+            send(opponent, { type: "phaseshift", duration: data.duration });
         }
 
         // ---- HEIST MODE: match start / rematch -- both bases reset to
