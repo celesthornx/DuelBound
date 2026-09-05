@@ -3942,43 +3942,23 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         return;
       }
 
-      // The player who actually got hit is the one with ground-truth
-      // knowledge of their own position, so THEY decide every hit --
-      // chip damage or a round-ending elimination -- on their own client
-      // (see updateBullets) and report the result here. This is what
-      // keeps the opponent's health bar accurate and the hit sound tied
-      // to real damage instead of firing on every bullet that merely
-      // LOOKS like it connected on a network-delayed position.
+      // AUTHORITATIVE HEALTH.
+      //
+      // Health, damage amounts and eliminations are decided by the
+      // server (see combat.js) and arrive here as the single source of
+      // truth for BOTH players. The client that was hit only ever told
+      // the server "something connected on me" -- it never states how
+      // much health it has left, and it no longer ends a round itself.
+      if(data.type === "health"){
+        applyServerHealth(data);
+        return;
+      }
+
+      // The pre-authoritative message this replaced. An updated server
+      // never sends it, so it is ignored rather than applied -- acting
+      // on it too would double-count every hit during a redeploy, when
+      // one side may briefly still be running the older build.
       if(data.type === "damage"){
-        if(p2){
-          const wasShieldBlock = data.shieldCharges < p2.shieldCharges;
-          p2.health = data.health;
-          p2.shieldCharges = data.shieldCharges;
-          if(wasShieldBlock){
-            playShieldSound();
-            spawnHitFlash(p2.x, p2.y, '#ffce54');
-          } else {
-            playHitSound();
-            spawnHitFlash(p2.x, p2.y, '#ffffff');
-          }
-        }
-        if(data.eliminated && mode==='online' && state==='playing'){
-          if(gameType === 'football' || gameType === 'heist' || gameType === 'bombrun'){
-            // Our local view of the opponent just needs to reflect
-            // "not alive" so rendering/collision stop until THEIR own
-            // client finishes its respawn countdown and tells us via
-            // a 'footballRespawn'/'heistRespawn' message (see below).
-            if(p2) p2.alive = false;
-          } else {
-            credits += 15;
-            stats.kills++;
-            bumpDailyProgress('kills');
-            updateCreditsDisplay();
-            saveProgress();
-            reportXP('kill', { kills: 1 });
-            endRound('p1');
-          }
-        }
         return;
       }
 
@@ -8003,40 +7983,95 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
   // position is ground truth). Applies real damage to p1, reports the
   // result to the opponent so their view stays in sync, and ends the
   // round if this was the killing blow. Shared by bullets and Shockwave.
+  // Online only: our own position is the only view of a hit on us that
+  // isn't network-delayed, so this client still DETECTS the hit -- but
+  // that is all it does. It reports the bare fact ("something connected
+  // on me") and the SERVER decides the damage, the resulting health and
+  // whether that was an elimination (see combat.js). Nothing here tells
+  // the server a health number, and nothing here ends a round.
+  //
+  // The local shield/health change below is prediction only, so the hit
+  // flash, sound and health bar are instant instead of waiting a round
+  // trip. applyServerHealth() overwrites both with the authoritative
+  // numbers the moment they arrive, so a mispredicted hit self-corrects.
   function applyRealHitToP1(dmg){
     dmg = dmg || 1;
-    let eliminated = false;
     if(p1.shieldCharges > 0){
       p1.shieldCharges--;
       playShieldSound();
       spawnHitFlash(p1.x, p1.y, '#ffce54');
     } else {
-      p1.health -= dmg;
+      p1.health = Math.max(0, p1.health - dmg);
       playHitSound();
       spawnHitFlash(p1.x, p1.y, '#ffffff');
-      if(p1.health <= 0){
-        p1.alive = false;
-        eliminated = true;
-      }
     }
     if(socket && socket.readyState === WebSocket.OPEN){
-      socket.send(JSON.stringify({
-        type: "damage",
-        health: p1.health,
-        shieldCharges: p1.shieldCharges,
-        eliminated: eliminated
-      }));
+      socket.send(JSON.stringify({ type: "hitClaim" }));
     }
-    if(eliminated){
-      if(gameType === 'football'){
-        handleFootballDeath(p1);
-      } else if(gameType === 'heist'){
-        handleHeistDeath(p1);
-      } else if(gameType === 'bombrun'){
-        handleBombDeath(p1);
+  }
+
+  // Applies one authoritative health line from the server to whichever
+  // player it refers to, and runs the death consequences if the server
+  // says someone died. This is the ONLY thing that ends an online round:
+  // neither client decides it any more.
+  function applyServerHealth(data){
+    if(mode !== 'online') return;
+    const mySlot = (window.__ranked && window.__ranked.active && window.__ranked.slot)
+      ? window.__ranked.slot
+      : myPlayerID;
+    const isMe = (data.slot === mySlot);
+    const target = isMe ? p1 : p2;
+    if(!target) return;
+
+    // Feedback is only played for the opponent here -- our own was
+    // already predicted in applyRealHitToP1, and replaying it would
+    // double up the sound.
+    if(!isMe){
+      if(data.blocked){
+        playShieldSound();
+        spawnHitFlash(target.x, target.y, '#ffce54');
       } else {
-        endRound('p2');
+        playHitSound();
+        spawnHitFlash(target.x, target.y, '#ffffff');
       }
+    }
+
+    target.health = data.health;
+    target.shieldCharges = data.shields;
+
+    if(!data.eliminated || state !== 'playing') return;
+
+    target.alive = false;
+
+    // In the modes where death is a respawn rather than a round loss,
+    // only the player who actually died runs the death handler. Running
+    // it for the OPPONENT too would start a second respawn countdown for
+    // them here, and -- if they were carrying the ball/bomb -- would make
+    // this client drop it and claim authority over it at the same moment
+    // their own client does. Our copy of them just stops being alive
+    // until their own client sends its respawn message, exactly as
+    // before this became server-authoritative.
+    if(gameType === 'football' || gameType === 'heist' || gameType === 'bombrun'){
+      if(isMe){
+        if(gameType === 'football') handleFootballDeath(target);
+        else if(gameType === 'heist') handleHeistDeath(target);
+        else handleBombDeath(target);
+      }
+      return;
+    }
+
+    if(isMe){
+      endRound('p2');
+    } else {
+      // Our kill: credits/stats are ours to keep, exactly as before --
+      // the only change is that the SERVER decided the kill happened.
+      credits += 15;
+      stats.kills++;
+      bumpDailyProgress('kills');
+      updateCreditsDisplay();
+      saveProgress();
+      reportXP('kill', { kills: 1 });
+      endRound('p1');
     }
   }
 
@@ -8414,13 +8449,15 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
             dead = true;
 
             if(mode === "online"){
-              // Online: only the player who actually got hit is allowed to
-              // decide the round result. A bullet owned by 'p2' here means
-              // "the opponent's shot, hitting MY real p1" -- a genuine,
-              // authoritative hit. My own bullets ('p1') vs. my copy of the
-              // opponent just disappear visually with no sound and no
-              // damage; their client decides whether THEY got hit the same
-              // way, on their end, and tells me via the same message type.
+              // Online: only the player who actually got hit detects it,
+              // because their own position is the only view of it that
+              // isn't network-delayed. A bullet owned by 'p2' here means
+              // "the opponent's shot, hitting MY real p1", so we report
+              // it -- and the SERVER decides the damage, the health and
+              // whether it was fatal (see applyRealHitToP1/combat.js).
+              // My own bullets ('p1') vs. my copy of the opponent just
+              // disappear visually; their client reports its own hits
+              // the same way.
               if(b.owner === 'p2'){
                 applyRealHitToP1(b.damage);
               }
@@ -10229,6 +10266,11 @@ if(tutorialActive) tutorialUpdate(dt);
   // number. Categories: NEW / IMPROVEMENTS / BALANCE / BUG FIXES --
   // include only the ones an entry actually has.
   const PATCH_NOTES = [
+    { version: 'v0.13', title: 'Anti-Cheat: Server-Side Health',
+      IMPROVEMENTS: [
+        'Health, damage and eliminations in online matches are now decided by the server instead of by each player\u2019s own game.',
+        'A modified client can no longer give itself extra health, survive a lethal hit, or refuse to lose a round.'
+      ] },
     { version: 'v0.12', title: 'Online Performance',
       IMPROVEMENTS: [
         'Online matches now stutter far less — saving your progress no longer stalls the server mid-match.',

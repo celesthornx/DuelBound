@@ -42,6 +42,7 @@ const store = require("./storage");
 // the match rooms and persistence all live in this file (see the RANKED
 // section further down).
 const Ranked = require("./ranked");
+const Combat = require("./combat");
 
 // Friends data shape, validation and public views. Pure functions only;
 // persistence, presence and the WebSocket wiring live in this file (see
@@ -894,6 +895,17 @@ function createRankedMatch(entryA, entryB) {
 
     setup(1, entryA, entryB);
     setup(2, entryB, entryA);
+
+    // Each ranked room owns its combat state, so health/damage in one
+    // match can never be affected by another. Shields are read from each
+    // player's own account, never from anything they send.
+    match.combat = Combat.createCombatMatch(abilityConfig);
+    for (const slot of [1, 2]) {
+        const acct = accounts[match.players[slot].sub];
+        const kevlar = acct && Array.isArray(acct.equippedPowers) &&
+            acct.equippedPowers.indexOf("kevlar") >= 0;
+        match.combat.setShields(slot, kevlar ? 1 : 0);
+    }
 
     rankedMatches.set(matchId, match);
 
@@ -3034,6 +3046,52 @@ const wss = new WebSocket.Server({ server: httpServer });
 
 const slots = { 1: null, 2: null };
 
+// ---------------------------------------------------------------------
+// SERVER-AUTHORITATIVE COMBAT
+//
+// Health, shields, damage amounts and eliminations are decided here, not
+// by the clients -- see combat.js for the full rationale and for what
+// deliberately stays client-side. Casual play has one shared match (it
+// has one shared pair of slots); every ranked room gets its own.
+// ---------------------------------------------------------------------
+let casualCombat = Combat.createCombatMatch(abilityConfig);
+
+// Shield charges come from the account's own equipped powers, looked up
+// server-side. A client never gets to say how many free hits it has.
+function shieldsForConnection(conn) {
+    if (!conn || !conn.authSub) return 0;
+    const account = accounts[conn.authSub];
+    if (!account || !Array.isArray(account.equippedPowers)) return 0;
+    return account.equippedPowers.indexOf("kevlar") >= 0 ? 1 : 0;
+}
+
+// Re-reads both sides' loadouts and starts the match's combat state
+// fresh. Called when a casual pairing forms and whenever a match or
+// round restarts.
+function resetCasualCombat() {
+    casualCombat.resetMatch();
+    for (const slot of [1, 2]) {
+        if (slots[slot]) casualCombat.setShields(slot, shieldsForConnection(slots[slot]));
+    }
+}
+
+// Sends one authoritative health line to both sides of a match. Both
+// clients render exactly this -- neither computes its own.
+function broadcastHealth(a, b, result) {
+    const payload = {
+        type: "health",
+        slot: result.slot,
+        by: result.by,
+        health: result.health,
+        shields: result.shields,
+        blocked: result.blocked,
+        eliminated: result.eliminated,
+        kind: result.kind
+    };
+    send(a, payload);
+    send(b, payload);
+}
+
 // =====================================================================
 // HEIST MODE -- server-authoritative base health.
 // Unlike position/damage/shockwave (which are relayed and trusted to
@@ -3237,6 +3295,9 @@ wss.on("connection", (socket, request) => {
 
         const opponent = slots[otherId(id)];
         if (opponent) {
+            // A fresh pairing starts from full health, with each side's
+            // shields read from its own account (see resetCasualCombat).
+            resetCasualCombat();
             send(conn, { type: "opponentJoined" });
             send(opponent, { type: "opponentJoined" });
         }
@@ -3414,18 +3475,28 @@ wss.on("connection", (socket, request) => {
 
             if (data.type === "position" && typeof data.seq === "number") conn.lastSeq = data.seq;
 
-            // The elimination report. `data.eliminated` on a `damage`
-            // message means "MY player just died" -- so the round goes
-            // to the opponent. This is the server's own count; the
-            // clients are never asked, and never believed, about who won.
-            if (data.type === "damage" && data.eliminated) {
-                send(foe.conn, {
-                    type: "damage",
-                    health: data.health,
-                    shieldCharges: data.shieldCharges,
-                    eliminated: true
-                });
-                registerRankedElimination(match, conn.rankedSlot);
+            // Projectiles are registered so a hit claim can be checked
+            // against something that was really fired.
+            if (data.type === "bullet") match.combat.trackBullet(conn.rankedSlot, data, Date.now());
+            else if (data.type === "shockwave") match.combat.trackShockwave(conn.rankedSlot, Date.now());
+
+            // A hit claim. Previously the round went to the opponent
+            // because the losing client SAID "eliminated: true" -- so a
+            // client that simply never sent it could not lose a round.
+            // Now the server applies the damage itself and decides when
+            // someone is dead, which is what actually decides the round.
+            // ("damage" is the pre-authoritative name for the same
+            // event, still accepted across a redeploy; its health and
+            // eliminated fields are ignored.)
+            if (data.type === "hitClaim" || data.type === "damage") {
+                const result = match.combat.claimHit(conn.rankedSlot, Date.now());
+                if (result.accepted) {
+                    broadcastHealth(conn, foe.conn, result);
+                    if (result.eliminated) {
+                        match.combat.resetRound();
+                        registerRankedElimination(match, conn.rankedSlot);
+                    }
+                }
                 return;
             }
 
@@ -3481,6 +3552,12 @@ wss.on("connection", (socket, request) => {
 
         else if (data.type === "bullet") {
 
+            // Every projectile is registered as a damage source so a hit
+            // claim can be checked against something that was really
+            // fired (see combat.js). The damage VALUE is taken from the
+            // server's own config there, never from this message.
+            casualCombat.trackBullet(id, data, Date.now());
+
             send(opponent, {
                 type: "bullet",
                 x: data.x,
@@ -3494,18 +3571,38 @@ wss.on("connection", (socket, request) => {
             });
         }
 
-        // The player who actually got hit reports every real hit here --
-        // chip damage or a round-ending elimination -- so the opponent's
-        // health bar and hit sound both stay in sync with what truly
-        // happened, not just what looked like it happened on their screen.
-        else if (data.type === "damage") {
+        // A hit claim. The player who was hit is still the one who
+        // DETECTS it (their own position is the only view of it that
+        // isn't network-delayed), but that is all they get to say: this
+        // message carries no health, no damage and no "I died". The
+        // server checks the claim against shots the opponent really
+        // fired, decides the damage from its own config, applies it, and
+        // tells BOTH clients the resulting numbers.
+        //
+        // "damage" is the pre-authoritative name for the same event and
+        // is still accepted so a client left open across a redeploy
+        // keeps working; its health/eliminated fields are ignored.
+        else if (data.type === "hitClaim" || data.type === "damage") {
 
-            send(opponent, {
-                type: "damage",
-                health: data.health,
-                shieldCharges: data.shieldCharges,
-                eliminated: data.eliminated
-            });
+            const result = casualCombat.claimHit(id, Date.now());
+            if (result.accepted) {
+                broadcastHealth(player, opponent, result);
+                // The round is over the moment the server says someone
+                // died, so the next round starts from full health. Any
+                // shot still tracked from the old round is dropped with
+                // it, so it cannot land after the reset.
+                if (result.eliminated) casualCombat.resetRound();
+            }
+        }
+
+        // A respawn in the modes where death is not the end of a round
+        // (Football / Heist / Bomb Run) restores that player's health
+        // server-side, so the authoritative numbers match what their
+        // client is about to draw.
+        else if (data.type === "footballRespawn" || data.type === "heistRespawn" || data.type === "bombRespawn") {
+
+            casualCombat.resetRound();
+            send(opponent, data);
         }
 
         // Tells the opponent which skin color to render you as, instead
@@ -3523,6 +3620,8 @@ wss.on("connection", (socket, request) => {
         // position) whether it actually hit them -- same trust model as
         // bullets and damage.
         else if (data.type === "shockwave") {
+
+            casualCombat.trackShockwave(id, Date.now());
 
             send(opponent, {
                 type: "shockwave",
@@ -3562,6 +3661,7 @@ wss.on("connection", (socket, request) => {
         // relay below), so it gets its own branch ahead of it.
         else if (data.type === "heistReset") {
 
+            resetCasualCombat();
             resetHeistState();
             const payload = { type: "heistUpdate", hp: heistHP, destroyed: false, winner: null };
             send(player, payload);
@@ -3601,6 +3701,7 @@ wss.on("connection", (socket, request) => {
         // score reset to 0/0. Mirrors heistReset above exactly.
         else if (data.type === "bombReset") {
 
+            resetCasualCombat();
             resetBombState();
             const payload = { type: "bombUpdate", carrier: null, x: null, y: null };
             send(player, payload);
@@ -3689,6 +3790,7 @@ wss.on("connection", (socket, request) => {
 
         else if (data.type === "rematch") {
 
+            resetCasualCombat();
             send(opponent, { type: "rematch" });
         }
 
