@@ -4407,7 +4407,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       if(data.type === "shockwave"){
         spawnHitFlash(data.x, data.y, '#ff6b35');
         playShockwaveSound();
-        if(p1 && p1.alive && !p1.dashing && mode==='online' && state==='playing'){
+        if(p1 && p1.alive && !p1.dashing && !(p1.phaseT > 0) && mode==='online' && state==='playing'){
           const dist = Math.hypot(data.x - p1.x, data.y - p1.y);
           if(dist <= (data.radius || SHOCKWAVE_RADIUS)){
             applyRealHitToP1(SHOCKWAVE_DAMAGE);
@@ -4454,6 +4454,54 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
           theirs.facing = data.facing;
           theirs.life = data.life;
           if(theirs.buffer) pushSnapshot(theirs.buffer, data.x, data.y, data.facing);
+        }
+        return;
+      }
+
+      // The opponent's Gravity Trap. Static once placed (unlike Decoy),
+      // so this is the only message ever needed for it -- both clients
+      // then run the exact same pull/slow logic against it every frame
+      // (see updatePlayer), using the SAME server-configured radius/
+      // strength/slow% either side would use for their own trap.
+      if(data.type === "gravitytrap"){
+        if(mode !== 'online') return;
+        gravityTraps = gravityTraps.filter(t => t.ownerId !== 'p2');
+        gravityTraps.push({
+          x: data.x, y: data.y,
+          life: data.life, maxLife: data.life,
+          ownerId: 'p2',
+          color: (p2 ? p2.color : '#ff5f6d')
+        });
+        return;
+      }
+
+      // The opponent's Portal anchor. Also static -- one message at
+      // creation, and a separate 'portalClear' when they recall/expire.
+      if(data.type === "portal"){
+        if(mode !== 'online') return;
+        portalAnchors = portalAnchors.filter(a => a.ownerId !== 'p2');
+        portalAnchors.push({
+          x: data.x, y: data.y,
+          life: data.life, maxLife: data.life,
+          ownerId: 'p2',
+          color: (p2 ? p2.color : '#ff5f6d')
+        });
+        return;
+      }
+      if(data.type === "portalClear"){
+        portalAnchors = portalAnchors.filter(a => a.ownerId !== 'p2');
+        return;
+      }
+
+      // The opponent used Phase Shift. Purely a rendering cue on our
+      // local view of them (their real invulnerability is enforced
+      // server-side, not by anything this client does with this
+      // message) -- sets phaseT on our p2 puppet so drawPlayer's
+      // translucency effect shows for the same ~1s window on our screen
+      // too.
+      if(data.type === "phaseshift"){
+        if(p2 && mode==='online' && state==='playing'){
+          p2.phaseT = data.duration || PHASE_SHIFT_DURATION;
         }
         return;
       }
@@ -5961,11 +6009,16 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   const ABILITIES = [
     { id:'quickreload', name:'QUICK RELOAD', rarity:'common',    qTriggered:false, desc:'Reload significantly faster, but magazine capacity is reduced (4 instead of 6).', price:90, currency:'coins' },
     { id:'triburst',    name:'TRIBURST',     rarity:'rare',      qTriggered:true,  cooldown:4.0,  desc:'Fire 3 bullets in a narrow cone (Q or right-click). Shorter range than a normal shot. Doesn\'t use ammo.', price:150, currency:'coins' },
+    { id:'huntersmark', name:'HUNTER\'S MARK', rarity:'rare',    qTriggered:true,  cooldown:6.0,  desc:'Your next shot gently curves toward a nearby enemy (Q or right-click). Subtle, skill-based -- it corrects a close shot, it doesn\'t aim for you. Consumed the moment you fire.', price:170, currency:'coins' },
     { id:'shockwave',   name:'SHOCKWAVE',    rarity:'epic',      qTriggered:false, desc:'Your dash detonates a damaging blast where you land, but the dash covers less distance.', price:200, currency:'coins' },
+    { id:'gravitytrap', name:'GRAVITY TRAP', rarity:'epic',      qTriggered:true,  cooldown:9.0,  desc:'Place a gravity field at your aim (Q or right-click). Enemies inside are pulled toward the center and slowed for 3s. Deals no damage.', price:230, currency:'coins' },
     { id:'timewarp',    name:'TIME WARP',    rarity:'legendary', qTriggered:true,  cooldown:11.0, desc:'Temporarily slows your opponent (Q or right-click), but has a long cooldown.', price:280, currency:'coins' },
+    { id:'phaseshift',  name:'PHASE SHIFT',  rarity:'legendary', qTriggered:true,  cooldown:14.0, desc:'Become briefly invulnerable (Q or right-click). You can still move, but cannot shoot or use another ability for the ~1s it lasts.', price:300, currency:'coins' },
     { id:'decoy',       name:'DECOY',        rarity:'mythic',    qTriggered:true,  cooldown:16.0, desc:'Spawn a fake copy of yourself that wanders on its own and never shoots (Q or right-click). Looks identical to your opponent -- but faded on your own screen, so you always know it\'s fake. Lasts 6s.', price:350, currency:'coins' },
     { id:'ricochet',    name:'RICOCHET',     rarity:'mythic',    qTriggered:false, desc:'Your bullets bounce off cover and the arena border instead of disappearing -- up to 3 bounces before they finally fade out. Always on, no cooldown.', price:320, currency:'coins' },
+    { id:'overcharge',  name:'OVERCHARGE',   rarity:'mythic',    qTriggered:true,  cooldown:15.0, desc:'Your next 2 shots fly faster, hit harder and are slightly bigger (Q or right-click). Reload is a little slower for a few seconds afterward.', price:360, currency:'coins' },
     { id:'voidblink',   name:'VOID BLINK',   rarity:'ascendant', qTriggered:true,  cooldown:13.0, desc:'Instantly teleport. Movement Aim: Q blinks to a random spot. Mouse Aim: Q blinks randomly, or right-click blinks to your crosshair.', price:420, currency:'coins' },
+    { id:'portal',      name:'PORTAL',       rarity:'ascendant', qTriggered:true,  cooldown:18.0, desc:'Place a return anchor at your position (Q or right-click). Activate again within 5-7s to teleport back to it. Only one anchor at a time.', price:450, currency:'coins' },
   ];
   const ownedAbilities = new Set();
   const equippedAbilities = new Set();     // Player One's equipped ability
@@ -5993,6 +6046,21 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   let DECOY_MOVE_SPEED = MOVE_SPEED * 0.85;
   let RICOCHET_MAX_BOUNCES = 3;
 
+  // ---- new abilities' tunable numbers (see applyAbilityConfig below) ----
+  let GRAVITY_TRAP_PULL_RADIUS = 130;
+  let GRAVITY_TRAP_PULL_STRENGTH = 90; // px/s, pulled toward the trap center at max
+  let GRAVITY_TRAP_SLOW_MULT = 0.50;
+  let GRAVITY_TRAP_DURATION = 3.0;
+  let PHASE_SHIFT_DURATION = 1.0;
+  let HUNTERS_MARK_TURN_RATE = 70; // degrees/sec the marked bullet can curve
+  let HUNTERS_MARK_RANGE = 260; // how far it looks for a target to curve toward
+  let PORTAL_DURATION = 6.0;
+  let OVERCHARGE_DAMAGE = 2;
+  let OVERCHARGE_SPEED = 780;
+  let OVERCHARGE_HITBOX_MULT = 1.30;
+  let OVERCHARGE_RELOAD_PENALTY_MULT = 1.30;
+  let OVERCHARGE_RELOAD_PENALTY_DURATION = 3.0;
+
   // Frozen copies of the values above, exactly as first initialized --
   // used to build the defaults the server falls back to and what the
   // admin "Reset" buttons restore. This must stay in sync with the
@@ -6004,7 +6072,12 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     decoy: { duration:6.0, moveSpeed: Math.round(MOVE_SPEED*0.85), cooldown:16.0 },
     ricochet: { maxBounces:3 },
     voidblink: { cooldown:13.0 },
-    quickreload: { reloadSpeedPercent:40, ammoPenalty:2 }
+    quickreload: { reloadSpeedPercent:40, ammoPenalty:2 },
+    gravitytrap: { pullRadius:130, pullStrength:90, slowPercent:50, duration:3.0, cooldown:9.0 },
+    phaseshift: { duration:1.0, cooldown:14.0 },
+    huntersmark: { homingTurnRate:70, range:260, cooldown:6.0 },
+    portal: { duration:6.0, cooldown:18.0 },
+    overcharge: { damage:2, speed:780, hitboxPercent:130, reloadPenaltyPercent:130, duration:3.0, cooldown:15.0 }
   };
 
   // Applies a fetched (or reset-to-default) config object onto the live
@@ -6046,6 +6119,34 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       QUICK_RELOAD_TIME_MULT = cfg.quickreload.reloadSpeedPercent/100;
       QUICK_RELOAD_AMMO_PENALTY = cfg.quickreload.ammoPenalty;
     }
+    if(cfg.gravitytrap){
+      GRAVITY_TRAP_PULL_RADIUS = cfg.gravitytrap.pullRadius;
+      GRAVITY_TRAP_PULL_STRENGTH = cfg.gravitytrap.pullStrength;
+      GRAVITY_TRAP_SLOW_MULT = cfg.gravitytrap.slowPercent/100;
+      GRAVITY_TRAP_DURATION = cfg.gravitytrap.duration;
+      const a = ABILITIES.find(x=>x.id==='gravitytrap'); if(a) a.cooldown = cfg.gravitytrap.cooldown;
+    }
+    if(cfg.phaseshift){
+      PHASE_SHIFT_DURATION = cfg.phaseshift.duration;
+      const a = ABILITIES.find(x=>x.id==='phaseshift'); if(a) a.cooldown = cfg.phaseshift.cooldown;
+    }
+    if(cfg.huntersmark){
+      HUNTERS_MARK_TURN_RATE = cfg.huntersmark.homingTurnRate;
+      HUNTERS_MARK_RANGE = cfg.huntersmark.range;
+      const a = ABILITIES.find(x=>x.id==='huntersmark'); if(a) a.cooldown = cfg.huntersmark.cooldown;
+    }
+    if(cfg.portal){
+      PORTAL_DURATION = cfg.portal.duration;
+      const a = ABILITIES.find(x=>x.id==='portal'); if(a) a.cooldown = cfg.portal.cooldown;
+    }
+    if(cfg.overcharge){
+      OVERCHARGE_DAMAGE = cfg.overcharge.damage;
+      OVERCHARGE_SPEED = cfg.overcharge.speed;
+      OVERCHARGE_HITBOX_MULT = cfg.overcharge.hitboxPercent/100;
+      OVERCHARGE_RELOAD_PENALTY_MULT = cfg.overcharge.reloadPenaltyPercent/100;
+      OVERCHARGE_RELOAD_PENALTY_DURATION = cfg.overcharge.duration;
+      const a = ABILITIES.find(x=>x.id==='overcharge'); if(a) a.cooldown = cfg.overcharge.cooldown;
+    }
   }
 
   // Every player (signed in or not) fetches the current live balance
@@ -6081,7 +6182,12 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     moveSpeed:           { label: 'Move Speed',           min: 0,  max: 1000, step: 10 },
     maxBounces:          { label: 'Max Bounces',          min: 0,  max: 10,   step: 1 },
     reloadSpeedPercent:  { label: 'Reload Speed (%)',     min: 5,  max: 100,  step: 5 },
-    ammoPenalty:         { label: 'Ammo Penalty',         min: 0,  max: 5,    step: 1 }
+    ammoPenalty:         { label: 'Ammo Penalty',         min: 0,  max: 5,    step: 1 },
+    pullRadius:          { label: 'Pull Radius',          min: 0,  max: 500,  step: 5 },
+    pullStrength:        { label: 'Pull Strength',        min: 0,  max: 500,  step: 5 },
+    homingTurnRate:      { label: 'Homing Turn Rate (deg/s)', min: 0, max: 360, step: 5 },
+    hitboxPercent:       { label: 'Hitbox Size (%)',      min: 100, max: 300, step: 5 },
+    reloadPenaltyPercent:{ label: 'Reload Penalty (%)',   min: 100, max: 300, step: 5 }
   };
   // Which fields apply to each ability, and the order to show them in.
   // Only fields the ability actually uses appear -- e.g. Void Blink gets
@@ -6093,7 +6199,15 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     decoy:       ['duration','moveSpeed','cooldown'],
     ricochet:    ['maxBounces'],
     voidblink:   ['cooldown'],
-    quickreload: ['reloadSpeedPercent','ammoPenalty']
+    quickreload: ['reloadSpeedPercent','ammoPenalty'],
+    gravitytrap: ['pullRadius','pullStrength','slowPercent','duration','cooldown'],
+    phaseshift:  ['duration','cooldown'],
+    huntersmark: ['homingTurnRate','range','cooldown'],
+    portal:      ['duration','cooldown'],
+    // "duration" here is the reload-penalty duration that follows the
+    // two empowered shots -- Overcharge itself has no time-based expiry
+    // (it's consumed by shot count, see the Q-trigger dispatch).
+    overcharge:  ['damage','speed','hitboxPercent','reloadPenaltyPercent','duration','cooldown']
   };
 
   let adminSelectedAbility = 'triburst';
@@ -6576,6 +6690,20 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   // identical to a real player" -- see triggerDecoy/updateDecoys.
   let decoys = [];
 
+  // Gravity Trap entities, same "array not a single slot" shape as
+  // decoys above (both players could equip and cast it, mine +
+  // opponent's up to two live at once). Every combatant except the
+  // trap's own owner is pulled while inside pullRadius -- see
+  // updatePlayer's gravity-pull block below.
+  let gravityTraps = [];
+
+  // Portal anchors -- at most ONE per owner (enforced in
+  // triggerPortal/receivePortalAnchor, not just by convention), so this
+  // stays a small array rather than a per-player field purely to reuse
+  // the exact same "mine vs. received over the network" rendering split
+  // every other ability marker here already uses.
+  let portalAnchors = [];
+
   function skinColor(id){ const s = SKINS.find(s=>s.id===id); return s ? s.color : '#3fd0ff'; }
 
   // ============================================================
@@ -6636,6 +6764,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     resetPositions();
     bullets = [];
     decoys = [];
+    gravityTraps = [];
+    portalAnchors = [];
     ball.x = W/2; ball.y = H/2; ball.vx = 0; ball.vy = 0; ball.owner = null;
     ball.netX = ball.x; ball.netY = ball.y; ball.trail = [];
     // Deterministic default so exactly one client is authoritative for a
@@ -7147,6 +7277,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     resetPositions();
     bullets = [];
     decoys = [];
+    gravityTraps = [];
+    portalAnchors = [];
     state = 'countdown';
     roundTimer = 1.2;
     if(mode === 'online' && socket && socket.readyState === WebSocket.OPEN){
@@ -7270,6 +7402,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
 
     updateBullets(dt);
     updateDecoys(dt);
+    updateGravityTraps(dt);
+    updatePortalAnchors(dt);
   }
 
   // Draws both Heist bases -- a futuristic vault look built from the
@@ -7403,6 +7537,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     resetPositions();
     bullets = [];
     decoys = [];
+    gravityTraps = [];
+    portalAnchors = [];
     bomb.x = W/2; bomb.y = H/2; bomb.carrier = null;
     bombPickupLock = false;
   }
@@ -7617,6 +7753,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
 
     updateBullets(dt);
     updateDecoys(dt);
+    updateGravityTraps(dt);
+    updatePortalAnchors(dt);
 
     // The bomb visually follows its carrier, exactly like the football
     // ball does -- no free-flight physics of its own.
@@ -8447,6 +8585,10 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       hasRicochet: opts.hasRicochet || false,
       abilityCd: 0,
       slowT: 0, // remaining Time Warp slow duration, if any
+      phaseT: 0, // remaining Phase Shift invulnerability, if any
+      huntersMarkReady: false, // next shot fired gets a slight homing curve
+      overchargeShotsRemaining: 0, // counts down 2 -> 1 -> 0, not time-based
+      reloadPenaltyT: 0, // Overcharge's post-consumption slower-reload window
       ammo: maxAmmo, reloadT: 0,
       shootCd: 0,
       dashCd: 0, dashT: 0,
@@ -8624,6 +8766,8 @@ else{
     }
     bullets = [];
     decoys = [];
+    gravityTraps = [];
+    portalAnchors = [];
   }
 
   // Fixed, cover-free spawn spots for the 3rd/4th combatant, plus the
@@ -9012,7 +9156,24 @@ else{
       if(tutorialActive && p.id==='p1') tutorialNotify('dash');
     }
 
-    const slowMult = (p.slowT > 0) ? TIME_WARP_SLOW_MULT : 1;
+    // Gravity Trap: find the closest field this player is standing in
+    // that ISN'T their own (a trap never affects its own owner). Only
+    // consulted while not dashing -- a dash's own movement branch below
+    // completely bypasses this block, which is what gives dashing out a
+    // real chance to break free, per the ability's own design.
+    let gravityPull = null;
+    if(!p.dashing){
+      let bestDist = Infinity;
+      for(const t of gravityTraps){
+        if(t.ownerId === p.id) continue;
+        const d = Math.hypot(p.x - t.x, p.y - t.y);
+        if(d < GRAVITY_TRAP_PULL_RADIUS && d < bestDist){
+          bestDist = d; gravityPull = { trap: t, dist: d };
+        }
+      }
+    }
+
+    const slowMult = (p.slowT > 0 ? TIME_WARP_SLOW_MULT : 1) * (gravityPull ? GRAVITY_TRAP_SLOW_MULT : 1);
     let speed = MOVE_SPEED * slowMult;
     if(p.dashing){
       speed = DASH_SPEED * slowMult;
@@ -9030,6 +9191,22 @@ else{
       p.x += mx*speed*dt;
       p.y += my*speed*dt;
     }
+
+    // The pull itself: a fixed speed toward the trap's center, tapering
+    // to nothing right at the field's edge so it doesn't feel like a
+    // hard snap the instant someone steps in. Applied ADDITIVELY on top
+    // of whatever the player's own input just did above (or nothing, if
+    // they didn't move) -- "cannot instantly escape by simply walking
+    // away" means the field still pulls even while trying to walk out of
+    // it, not that walking is disabled outright.
+    if(gravityPull && gravityPull.dist > 1){
+      const t = gravityPull.trap;
+      const pullFrac = 1 - (gravityPull.dist / GRAVITY_TRAP_PULL_RADIUS);
+      const pullSpeed = GRAVITY_TRAP_PULL_STRENGTH * Math.max(0.25, pullFrac);
+      const nx = (t.x - p.x) / gravityPull.dist, ny = (t.y - p.y) / gravityPull.dist;
+      p.x += nx * pullSpeed * dt;
+      p.y += ny * pullSpeed * dt;
+    }
     // NOTE: position used to be sent to the server right here, every
     // single rendered frame (up to 60+/sec). That's now handled by the
     // decoupled sendNetworkPosition() loop (see NETWORKING OPTIMIZATION
@@ -9044,9 +9221,14 @@ else{
     p.trail.forEach(t=>t.life -= dt);
     p.trail = p.trail.filter(t=>t.life>0);
 
+    // Overcharge's drawback: once both empowered shots are gone, reload
+    // is slightly slower for a short window. Purely a multiplier on the
+    // existing reload timer -- nothing else about reloading changes.
+    if(p.reloadPenaltyT > 0) p.reloadPenaltyT -= dt;
+    const effectiveReloadTime = p.reloadTime * (p.reloadPenaltyT > 0 ? OVERCHARGE_RELOAD_PENALTY_MULT : 1);
     if(p.ammo < p.maxAmmo){
       p.reloadT += dt;
-      if(p.reloadT >= p.reloadTime){
+      if(p.reloadT >= effectiveReloadTime){
         p.reloadT = 0; p.ammo++;
         if(tutorialActive && p.id==='p1' && p.ammo>=p.maxAmmo) tutorialNotify('reloadDone');
       }
@@ -9073,21 +9255,58 @@ else{
       wantShoot = false;
     }
 
+    // ---- PHASE SHIFT: cannot shoot while phased ----
+    // Ticked down here (once per frame, exactly like slowT/dashCd) --
+    // reaching 0 simply ends the effect, nothing else to clean up.
+    if(p.phaseT > 0){
+      p.phaseT -= dt;
+      wantShoot = false;
+    }
+
     if(wantShoot && p.ammo>0){
     	p.ammo--;
     	p.reloadT = 0;
     	p.shootCd = 0.35;
       const bx = p.x + Math.cos(p.facing)*(PLAYER_R+6);
       const by = p.y + Math.sin(p.facing)*(PLAYER_R+6);
+
+      // Overcharge: the next TWO shots (counted, not timed) fly faster,
+      // hit harder and have a slightly larger hitbox. Consumed here, one
+      // per shot, regardless of whether this shot actually lands --
+      // matching the spec's "count shots, not time" rule exactly.
+      const isOvercharged = (p.overchargeShotsRemaining || 0) > 0;
+      if(isOvercharged){
+        p.overchargeShotsRemaining--;
+        if(p.overchargeShotsRemaining <= 0){
+          // Small drawback once both empowered shots are gone: reload
+          // takes a little longer for a short window afterward.
+          p.reloadPenaltyT = OVERCHARGE_RELOAD_PENALTY_DURATION;
+        }
+      }
+      const shotSpeed = isOvercharged ? OVERCHARGE_SPEED : BULLET_SPEED;
+      const shotDamage = isOvercharged ? OVERCHARGE_DAMAGE : 1;
+      const shotHitRadius = isOvercharged ? BULLET_R*OVERCHARGE_HITBOX_MULT : BULLET_R;
+
+      // Hunter's Mark: the very next shot only, consumed here whether or
+      // not it ends up close enough to actually curve toward anything
+      // (see updateBullets' homing block) -- activating it and then
+      // never finding a nearby target still uses it up, matching "next
+      // shot" literally rather than "next shot that happens to connect".
+      const isMarked = !!p.huntersMarkReady;
+      if(isMarked) p.huntersMarkReady = false;
+
       let bullet = {
     type:"bullet",
     x:bx,
     y:by,
-    vx:Math.cos(p.facing)*BULLET_SPEED,
-    vy:Math.sin(p.facing)*BULLET_SPEED,
+    vx:Math.cos(p.facing)*shotSpeed,
+    vy:Math.sin(p.facing)*shotSpeed,
     owner:p.id,
     color:p.color,
-    damage:1,
+    damage:shotDamage,
+    hitRadius:shotHitRadius,
+    overcharged:isOvercharged,
+    homing:isMarked,
     bounces: p.hasRicochet ? RICOCHET_MAX_BOUNCES : 0
 };
 
@@ -9111,7 +9330,16 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
     // stays available, the ball just follows its holder through them.
     const footballBlocksTriburst = (gameType === 'football' && ball.owner === p.id && p.abilityId === 'triburst');
     const bombBlocksTriburst = (gameType === 'bombrun' && bomb.carrier === p.id && p.abilityId === 'triburst');
-    if(wantAbility && p.abilityCd<=0 && !footballBlocksTriburst && !bombBlocksTriburst){
+
+    // Portal's SECOND press (recalling to an already-placed anchor) is
+    // deliberately not gated by the normal cooldown -- the cooldown only
+    // ever governs placing a brand-new anchor. This has to be checked
+    // ahead of the generic gate below, which would otherwise block the
+    // recall for as long as the ability is on cooldown from placement.
+    const hasOwnPortalAnchor = p.abilityId === 'portal' && portalAnchors.some(a => a.ownerId === p.id);
+    if(wantAbility && hasOwnPortalAnchor && !phaseShiftBlocksAbility(p)){
+      triggerPortalRecall(p);
+    } else if(wantAbility && p.abilityCd<=0 && !footballBlocksTriburst && !bombBlocksTriburst && !phaseShiftBlocksAbility(p)){
       p.abilityCd = p.abilityCooldownMax;
       if(tutorialActive && p.id==='p1') tutorialNotify('ability');
 
@@ -9152,8 +9380,57 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
           const spot = getRandomArenaPosition();
           triggerVoidBlink(p, spot.x, spot.y);
         }
+      } else if(p.abilityId === 'gravitytrap'){
+        triggerGravityTrap(p, resolveAbilityAimSpot(p, abilityFromRightClick, GRAVITY_TRAP_PULL_RADIUS*1.4));
+      } else if(p.abilityId === 'phaseshift'){
+        triggerPhaseShift(p);
+      } else if(p.abilityId === 'huntersmark'){
+        triggerHuntersMark(p);
+      } else if(p.abilityId === 'portal'){
+        triggerPortalPlace(p);
+      } else if(p.abilityId === 'overcharge'){
+        triggerOvercharge(p);
       }
     }
+  }
+
+  // Shared "where did this Q/right-click aim at" resolver for abilities
+  // that throw/place something rather than firing a bullet (Gravity
+  // Trap, and Portal's placement). Mirrors Void Blink's own dual-input
+  // precedent: right-click with Mouse Aim targets the exact cursor
+  // (capped at maxDist from the player so it can't be thrown across the
+  // whole arena), everything else throws it a fixed distance along the
+  // player's current facing. Always clamped inside the arena bounds.
+  function resolveAbilityAimSpot(p, fromRightClick, maxDist){
+    let tx, ty;
+    if(aimMode === 'mouse' && fromRightClick){
+      const dx = mouseX - p.x, dy = mouseY - p.y;
+      const dist = Math.hypot(dx, dy);
+      if(dist > maxDist && dist > 0){
+        tx = p.x + (dx/dist)*maxDist;
+        ty = p.y + (dy/dist)*maxDist;
+      } else {
+        tx = mouseX; ty = mouseY;
+      }
+    } else {
+      const throwDist = Math.min(maxDist, 160);
+      tx = p.x + Math.cos(p.facing)*throwDist;
+      ty = p.y + Math.sin(p.facing)*throwDist;
+    }
+    return {
+      x: Math.max(PLAYER_R, Math.min(W-PLAYER_R, tx)),
+      y: Math.max(PLAYER_R, Math.min(H-PLAYER_R, ty))
+    };
+  }
+
+  // While Phase Shift is active, its own player cannot fire the SAME
+  // ability again (relevant if an admin ever tunes cooldown shorter than
+  // duration) and, per the spec, cannot activate a DIFFERENT one either
+  // -- moot today since only one ability can ever be equipped at once
+  // (MAX_EQUIPPED_ABILITIES), but kept explicit so that constraint isn't
+  // silently relied on to keep this rule true.
+  function phaseShiftBlocksAbility(p){
+    return p.phaseT > 0;
   }
 
   // Time Warp: a targeted debuff, not a positional hit, so there's no
@@ -9353,7 +9630,7 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
       // FFA: the blast is an AoE, so check it against every OTHER
       // combatant still standing instead of one fixed opponent.
       getAllCombatants().forEach(c=>{
-        if(c === p || !c.alive || c.dashing) return;
+        if(c === p || !c.alive || c.dashing || c.phaseT > 0) return;
         const dist = Math.hypot(p.x-c.x, p.y-c.y);
         if(dist <= SHOCKWAVE_RADIUS){
           applyHitToCombatant(c, p.id, SHOCKWAVE_DAMAGE);
@@ -9361,7 +9638,7 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
       });
     } else {
       const target = (p.id === 'p1') ? p2 : p1;
-      if(target && target.alive && !target.dashing){
+      if(target && target.alive && !target.dashing && !(target.phaseT > 0)){
         const dist = Math.hypot(p.x-target.x, p.y-target.y);
         if(dist <= SHOCKWAVE_RADIUS){
           if(p.id === 'p1') applyLocalHitToP2(SHOCKWAVE_DAMAGE); else applyLocalHitToP1(SHOCKWAVE_DAMAGE);
@@ -9404,6 +9681,174 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
     resolvePlayerCover(p);
     spawnHitFlash(p.x, p.y, '#ffffff');
     playVoidBlinkSound();
+  }
+
+  // ---------------------------------------------------------------------
+  // GRAVITY TRAP -- places a static field marker (same "array of markers,
+  // isMine distinguishes rendering" shape as Decoy, but the marker never
+  // moves once placed, so unlike Decoy this only ever needs ONE message
+  // at creation time, never a per-frame re-broadcast). The pull/slow
+  // itself is applied by whichever client is actually simulating the
+  // affected player -- see updatePlayer's gravity-pull block -- using
+  // server-configured numbers (radius/strength/slow%), the same trust
+  // boundary Time Warp's slowT already relies on for a targeted debuff.
+  // Deals no damage; nothing here ever calls applyHitToCombatant.
+  // ---------------------------------------------------------------------
+  function triggerGravityTrap(p, spot){
+    playAbilitySound();
+    gravityTraps = gravityTraps.filter(t => t.ownerId !== p.id);
+    gravityTraps.push({
+      x: spot.x, y: spot.y,
+      life: GRAVITY_TRAP_DURATION, maxLife: GRAVITY_TRAP_DURATION,
+      ownerId: p.id,
+      color: p.color
+    });
+    if(mode === "online" && p.id === 'p1' && socket && socket.readyState === WebSocket.OPEN){
+      socket.send(JSON.stringify({ type:'abilityActivate', ability:'gravitytrap' }));
+      socket.send(JSON.stringify({ type:'gravitytrap', x:spot.x, y:spot.y, life:GRAVITY_TRAP_DURATION }));
+    }
+  }
+
+  function updateGravityTraps(dt){
+    for(let i=gravityTraps.length-1; i>=0; i--){
+      const t = gravityTraps[i];
+      t.life -= dt;
+      if(t.life <= 0) gravityTraps.splice(i,1);
+    }
+  }
+
+  function drawGravityTraps(){
+    for(const t of gravityTraps){
+      const fade = Math.max(0, Math.min(1, t.life / 0.4)); // fades out in its last ~0.4s
+      const pulse = 0.75 + 0.25*Math.sin(t.life*8);
+      ctx.save();
+      ctx.globalAlpha = 0.55 * fade;
+      const grad = ctx.createRadialGradient(t.x, t.y, 0, t.x, t.y, GRAVITY_TRAP_PULL_RADIUS);
+      grad.addColorStop(0, 'rgba(160,90,255,0.5)');
+      grad.addColorStop(0.7, 'rgba(120,50,220,0.22)');
+      grad.addColorStop(1, 'rgba(120,50,220,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(t.x, t.y, GRAVITY_TRAP_PULL_RADIUS*pulse, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 0.85 * fade;
+      ctx.strokeStyle = '#b06bff';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(t.x, t.y, GRAVITY_TRAP_PULL_RADIUS*pulse, 0, Math.PI*2); ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // PHASE SHIFT -- a short self-buff, not a targeted effect, so unlike
+  // Time Warp there's no "target" to resolve: it always applies to the
+  // caster's own player object. The network message exists purely so
+  // the OPPONENT's client can render the translucent effect on their
+  // view of us (see the 'phaseshift' message handler) -- the actual
+  // damage immunity is enforced locally (bullet-vs-player checks below
+  // skip a phased target exactly like a dashing one already is) AND,
+  // for online play, independently re-enforced server-side in
+  // combat.js's claimHit() against the server's own phaseUntil clock,
+  // so a hit can never land on a genuinely-phased player regardless of
+  // what any client claims or how messages happen to arrive.
+  // ---------------------------------------------------------------------
+  function triggerPhaseShift(p){
+    p.phaseT = PHASE_SHIFT_DURATION;
+    spawnHitFlash(p.x, p.y, '#ffffff');
+    playVoidBlinkSound();
+    if(mode === "online" && p.id === 'p1' && socket && socket.readyState === WebSocket.OPEN){
+      socket.send(JSON.stringify({ type:'abilityActivate', ability:'phaseshift' }));
+      socket.send(JSON.stringify({ type:'phaseshift', duration:PHASE_SHIFT_DURATION }));
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // PORTAL -- a return-point anchor, same static-marker shape as Gravity
+  // Trap above (one message at creation, no re-broadcast needed since it
+  // never moves). Only ever one anchor per owner: placing a new one (or
+  // the cooldown-free recall press) always clears any existing one of
+  // theirs first. The teleport itself reuses Void Blink's exact position
+  // resolution (clamped inside the arena, snapped out of any cover) --
+  // positions are client-owned everywhere else in this game, and a
+  // portal recall is not a new exception to that.
+  // ---------------------------------------------------------------------
+  function triggerPortalPlace(p){
+    playAbilitySound();
+    portalAnchors = portalAnchors.filter(a => a.ownerId !== p.id);
+    portalAnchors.push({
+      x: p.x, y: p.y,
+      life: PORTAL_DURATION, maxLife: PORTAL_DURATION,
+      ownerId: p.id,
+      color: p.color
+    });
+    if(mode === "online" && p.id === 'p1' && socket && socket.readyState === WebSocket.OPEN){
+      socket.send(JSON.stringify({ type:'abilityActivate', ability:'portal' }));
+      socket.send(JSON.stringify({ type:'portal', x:p.x, y:p.y, life:PORTAL_DURATION }));
+    }
+  }
+
+  function triggerPortalRecall(p){
+    const anchor = portalAnchors.find(a => a.ownerId === p.id);
+    if(!anchor) return;
+    portalAnchors = portalAnchors.filter(a => a.ownerId !== p.id);
+    triggerVoidBlink(p, anchor.x, anchor.y);
+    if(mode === "online" && p.id === 'p1' && socket && socket.readyState === WebSocket.OPEN){
+      socket.send(JSON.stringify({ type:'portalClear' }));
+    }
+  }
+
+  function updatePortalAnchors(dt){
+    for(let i=portalAnchors.length-1; i>=0; i--){
+      const a = portalAnchors[i];
+      a.life -= dt;
+      if(a.life <= 0) portalAnchors.splice(i,1);
+    }
+  }
+
+  function drawPortalAnchors(){
+    for(const a of portalAnchors){
+      const pulse = 0.8 + 0.2*Math.sin(a.life*6);
+      const fade = Math.max(0.35, Math.min(1, a.life / a.maxLife * 2));
+      ctx.save();
+      ctx.globalAlpha = fade;
+      ctx.strokeStyle = '#3fd0ff';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(a.x, a.y, (PLAYER_R+8)*pulse, 0, Math.PI*2); ctx.stroke();
+      ctx.globalAlpha = fade*0.5;
+      ctx.beginPath(); ctx.arc(a.x, a.y, (PLAYER_R+14)*pulse, 0, Math.PI*2); ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // OVERCHARGE -- purely a counter on the player, consumed by the next
+  // TWO shots fired (see the shoot block in updatePlayer, which reads
+  // p.overchargeShotsRemaining directly rather than a duration timer --
+  // matching the spec's "count shots, not time"). No network message of
+  // its own: the empowered bullets it produces are relayed exactly like
+  // any other bullet, and the receiving side never needs to know WHY a
+  // given shot happened to be faster/bigger.
+  // ---------------------------------------------------------------------
+  function triggerOvercharge(p){
+    p.overchargeShotsRemaining = 2;
+    playAbilitySound();
+    if(mode === "online" && p.id === 'p1' && socket && socket.readyState === WebSocket.OPEN){
+      socket.send(JSON.stringify({ type:'abilityActivate', ability:'overcharge' }));
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // HUNTER'S MARK -- also just a flag on the player, consumed by the
+  // very next bullet THIS player fires (see the shoot block, which reads
+  // p.huntersMarkReady the same way Overcharge reads its shot counter --
+  // "remains active until used", never a timer). The actual curve is
+  // applied to that one bullet in updateBullets (see the homing block
+  // there); this only decides WHETHER a shot is allowed to be marked.
+  // ---------------------------------------------------------------------
+  function triggerHuntersMark(p){
+    p.huntersMarkReady = true;
+    playAbilitySound();
+    if(mode === "online" && p.id === 'p1' && socket && socket.readyState === WebSocket.OPEN){
+      socket.send(JSON.stringify({ type:'abilityActivate', ability:'huntersmark' }));
+    }
   }
 
   // Decoy: spawns a bot-driven fake copy of the caster. isMine=true marks
@@ -9503,9 +9948,40 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
     }
   }
 
+  // Hunter's Mark: gently rotates a marked bullet's velocity toward the
+  // nearest valid enemy within HUNTERS_MARK_RANGE, at most
+  // HUNTERS_MARK_TURN_RATE degrees per second -- deliberately re-picked
+  // every frame (not locked to one target at fire time) rather than a
+  // full lock-on, so it reads as "gently nudged toward whoever's close"
+  // instead of a guided missile, and naturally does nothing at all once
+  // nothing valid is left in range. Speed is untouched -- only heading.
+  function applyHuntersMarkHoming(b, dt){
+    let target = null, bestDist = HUNTERS_MARK_RANGE;
+    for(const c of getAllCombatants()){
+      if(!c || c.id === b.owner || !c.alive || c.phaseT > 0) continue;
+      const d = Math.hypot(b.x-c.x, b.y-c.y);
+      if(d < bestDist){ bestDist = d; target = c; }
+    }
+    if(!target) return;
+
+    const curAngle = Math.atan2(b.vy, b.vx);
+    const wantAngle = Math.atan2(target.y-b.y, target.x-b.x);
+    let diff = wantAngle - curAngle;
+    while(diff > Math.PI) diff -= Math.PI*2;
+    while(diff < -Math.PI) diff += Math.PI*2;
+    const maxTurn = (HUNTERS_MARK_TURN_RATE * Math.PI/180) * dt;
+    const turn = Math.max(-maxTurn, Math.min(maxTurn, diff));
+    const speed = Math.hypot(b.vx, b.vy);
+    const newAngle = curAngle + turn;
+    b.vx = Math.cos(newAngle) * speed;
+    b.vy = Math.sin(newAngle) * speed;
+  }
+
   function updateBullets(dt){
   for(let i = bullets.length - 1; i >= 0; i--){
     const b = bullets[i];
+
+    if(b.homing) applyHuntersMarkHoming(b, dt);
 
     b.x += b.vx * dt;
     b.y += b.vy * dt;
@@ -9622,9 +10098,9 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
         // never in this branch (matchPlayerCount is forced to 2 there),
         // so this is always fully local/authoritative.
         for(const target of getAllCombatants()){
-          if(!target || target.id === b.owner || !target.alive || target.dashing) continue;
+          if(!target || target.id === b.owner || !target.alive || target.dashing || target.phaseT > 0) continue;
           const dist = Math.hypot(b.x-target.x, b.y-target.y);
-          if(dist < BULLET_R+PLAYER_R){
+          if(dist < (b.hitRadius||BULLET_R)+PLAYER_R){
             dead = true;
             applyHitToCombatant(target, b.owner, b.damage);
             break;
@@ -9636,11 +10112,11 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
         // check against the actual player position, never an automatic hit.
         const target = b.owner === 'p1' ? p2 : p1;
 
-        if(target && target.alive && !target.dashing){
+        if(target && target.alive && !target.dashing && !(target.phaseT > 0)){
 
           const dist = Math.hypot(b.x-target.x, b.y-target.y);
 
-          if(dist < BULLET_R+PLAYER_R){
+          if(dist < (b.hitRadius||BULLET_R)+PLAYER_R){
 
             dead = true;
 
@@ -9813,6 +10289,8 @@ if(mode !== "online" && extraBots.length){
 
 updateBullets(dt);
 updateDecoys(dt);
+updateGravityTraps(dt);
+updatePortalAnchors(dt);
 if(tutorialActive) tutorialUpdate(dt);
 }
     } else if(state==='roundEnd'){
@@ -10109,8 +10587,43 @@ if(tutorialActive) tutorialUpdate(dt);
       ctx.stroke();
       ctx.restore();
     }
+    // Hunter's Mark: a short indicator that the NEXT shot is empowered,
+    // not the player themselves -- a small ring that pulses faster than
+    // Time Warp's, since this is a brief "ready" cue, not an ongoing
+    // status effect with a real duration.
+    if(p.huntersMarkReady){
+      ctx.save();
+      const pulse = 0.5 + 0.5*Math.sin(performance.now()/120);
+      ctx.strokeStyle = '#ff6fb0';
+      ctx.globalAlpha = 0.4 + 0.4*pulse;
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = '#ff6fb0';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, PLAYER_R+8, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    // Phase Shift: translucent/ghostlike, plus a brief energy ring while
+    // it's active -- matches Time Warp/Hunter's Mark's own "ring around
+    // the ship" idiom rather than inventing a new visual language.
+    const phased = p.phaseT > 0;
+    if(phased){
+      ctx.save();
+      const pulse = 0.5 + 0.5*Math.sin(p.phaseT*16);
+      ctx.strokeStyle = '#ffffff';
+      ctx.globalAlpha = 0.4 + 0.35*pulse;
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 16;
+      ctx.shadowColor = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, PLAYER_R+14, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.restore();
+    }
     ctx.translate(p.x, p.y);
     ctx.rotate(p.facing);
+    if(phased) ctx.globalAlpha = 0.4;
     fillShipHull(ctx, p.skinId && SKIN_BY_ID[p.skinId], p.color);
     ctx.restore();
 
@@ -10140,10 +10653,23 @@ if(tutorialActive) tutorialUpdate(dt);
   function drawBullets(){
     for(const b of bullets){
       ctx.save();
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = b.color;
-      ctx.fillStyle = b.color;
-      ctx.beginPath(); ctx.arc(b.x,b.y,BULLET_R,0,Math.PI*2); ctx.fill();
+      if(b.overcharged){
+        // Obvious energy-charged look: bigger glow, a bright white-hot
+        // core inside the player's own color, using its real (slightly
+        // larger) hit radius rather than the base bullet size.
+        ctx.shadowBlur = 22;
+        ctx.shadowColor = b.color;
+        ctx.fillStyle = b.color;
+        ctx.beginPath(); ctx.arc(b.x,b.y,b.hitRadius||BULLET_R,0,Math.PI*2); ctx.fill();
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.arc(b.x,b.y,(b.hitRadius||BULLET_R)*0.45,0,Math.PI*2); ctx.fill();
+      } else {
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = b.color;
+        ctx.fillStyle = b.color;
+        ctx.beginPath(); ctx.arc(b.x,b.y,BULLET_R,0,Math.PI*2); ctx.fill();
+      }
       ctx.restore();
     }
   }
@@ -10284,6 +10810,8 @@ if(tutorialActive) tutorialUpdate(dt);
     if(gameType === 'heist') drawHeistBases();
     if(gameType === 'bombrun') drawBombRunZones();
     drawBullets();
+    drawGravityTraps();
+    drawPortalAnchors();
     if(gameType === 'football'){
       drawFootballBall();
     } else if(gameType === 'bombrun'){
@@ -10865,7 +11393,7 @@ if(tutorialActive) tutorialUpdate(dt);
       tutorialNotify('trainerDefeated');
     } else {
       // "No fail state" -- losing to the trainer just means try again.
-      bullets = []; decoys = [];
+      bullets = []; decoys = []; gravityTraps = []; portalAnchors = [];
       resetPositions();
       p2.isAI = true; p2.alive = true;
       tutToast('NO FAIL STATE — TRY AGAIN');
@@ -10984,7 +11512,7 @@ if(tutorialActive) tutorialUpdate(dt);
     },
     { id:'duel',
       enter(){
-        bullets = []; decoys = [];
+        bullets = []; decoys = []; gravityTraps = []; portalAnchors = [];
         resetPositions();
         p2.isAI = true; p2.alive = true;
         tutBubble('PRACTICE DUEL', 'DEFEAT THE OPPONENT');
