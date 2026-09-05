@@ -388,6 +388,15 @@
     padding: 8px 10px;
   }
   .admin-field input:focus{ outline: none; border-color: #ff5f6d; }
+  .admin-field textarea{
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--grid);
+    color: var(--ink);
+    font-family:'Share Tech Mono', monospace;
+    font-size: 12px; line-height:1.5;
+    padding: 8px 10px; resize: vertical;
+  }
+  .admin-field textarea:focus{ outline: none; border-color: #ff5f6d; }
   .admin-status-msg{
     font-family:'Share Tech Mono', monospace;
     font-size: 10px; letter-spacing: 1px;
@@ -415,6 +424,30 @@
   }
   .admin-log .log-row{ border-bottom: 1px solid var(--grid); padding: 4px 0; }
   .admin-log .log-time{ color: #ff5f6d; margin-right: 8px; }
+
+  /* ---- News & Events management (reuses admin-field/shop-tabs above) ---- */
+  .news-event-tab.selected{ border-color:#ff6fb0; color:#ff6fb0; background: rgba(255,111,176,.1); }
+  .admin-news-list{
+    width:100%; max-height: 180px; overflow-y:auto;
+    display:flex; flex-direction:column; gap:6px;
+    margin-bottom: 4px;
+  }
+  .admin-news-item{
+    display:flex; align-items:center; gap:8px;
+    border:1px solid var(--grid); border-radius:2px;
+    padding: 7px 9px;
+    font-family:'Share Tech Mono', monospace; font-size:11px;
+  }
+  .admin-news-item .ani-tag{
+    font-size: 8px; letter-spacing: 1.4px; font-weight:700;
+    border-radius:2px; padding: 2px 5px; flex:0 0 auto;
+  }
+  .admin-news-item .ani-title{ flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink); }
+  .admin-news-item .ani-del{
+    flex:0 0 auto; background:none; border:1px solid var(--ink-dim); color:var(--ink-dim);
+    font-size:10px; letter-spacing:1px; padding:3px 8px; cursor:pointer; border-radius:2px;
+  }
+  .admin-news-item .ani-del:hover{ border-color:#ff5f6d; color:#ff5f6d; }
 
   /* ---- Currency Management -- Coins AND Crystals (reuses
      admin-field/admin-btn-row/etc. above; cyan (Player One) accent to
@@ -1605,6 +1638,51 @@
     text-shadow: 0 2px 12px rgba(0,0,0,.8);
   }
   .news-art svg{ position:absolute; inset:0; width:100%; height:100%; opacity:.75; }
+
+  /* The single most-recent post, shown in the lobby side panel --
+     replaces the .news-art placeholder once at least one exists. */
+  .news-latest{
+    display:flex; flex-direction:column; gap:6px; width:100%;
+    text-align:left; background: rgba(122,158,200,.06);
+    border:1px solid rgba(122,158,200,.18); border-radius:3px;
+    padding: 10px 11px; cursor:pointer;
+    font-family:'Share Tech Mono', monospace;
+  }
+  .news-latest:hover{ border-color: rgba(255,111,176,.4); background: rgba(255,111,176,.06); }
+  .news-latest-title{
+    font-family:'Chakra Petch', sans-serif; font-weight:600;
+    font-size: 12px; letter-spacing: .5px; color: rgba(232,242,255,.92);
+    line-height:1.4;
+  }
+  .news-latest-tag{
+    align-self:flex-start;
+    font-size: 8px; letter-spacing: 1.6px; font-weight:700;
+    border-radius:2px; padding: 2px 6px;
+  }
+  .news-tag-event{ color:#ff6fb0; background: rgba(255,111,176,.12); border:1px solid rgba(255,111,176,.35); }
+  .news-tag-update{ color: var(--p1); background: rgba(63,208,255,.12); border:1px solid rgba(63,208,255,.35); }
+  .news-tag-news{ color:#ffce54; background: rgba(255,206,84,.12); border:1px solid rgba(255,206,84,.35); }
+
+  /* Full list, shown in the NEWS & EVENTS modal (lobbyNewsModal). */
+  .news-entry{
+    padding: 12px 0; border-bottom: 1px solid rgba(122,158,200,.14);
+  }
+  .news-entry:last-child{ border-bottom:none; }
+  .news-entry-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+  .news-entry-time{
+    font-family:'Share Tech Mono', monospace; font-size:9px;
+    letter-spacing:1.4px; color: var(--ink-dim);
+  }
+  .news-entry-title{
+    font-family:'Chakra Petch', sans-serif; font-weight:700;
+    font-size: 14px; letter-spacing: .5px; color: rgba(232,242,255,.95);
+    margin-bottom: 5px;
+  }
+  .news-entry-body{
+    font-family:'Share Tech Mono', monospace; font-size: 11px;
+    letter-spacing: .3px; line-height:1.6; color: rgba(206,220,238,.82);
+    white-space: pre-wrap;
+  }
 
   .premium-strip{
     display:flex; align-items:center; gap:11px;
@@ -2814,12 +2892,18 @@
           </div>
         </div>
 
-        <div class="lp">
+        <!-- Real, admin-posted announcements (see GET /news / POST
+             /admin/news in server.js) -- renderNewsWidget() keeps this
+             in sync at boot and after every fetch, same pattern as the
+             Friends panel above it. The art/tag chrome below is only
+             shown as a fallback when no posts exist yet, so an unposted
+             server still reads as deliberate rather than broken. -->
+        <div class="lp" id="lobbyNewsPanel">
           <div class="lp-head">
             <span class="lp-title magenta">NEWS &amp; EVENTS</span>
-            <span class="soon-tag">COMING SOON</span>
+            <span class="soon-tag" id="lobbyNewsTag">&mdash;</span>
           </div>
-          <div class="lp-body">
+          <div class="lp-body" id="lobbyNewsBody">
             <div class="news-art">
               <svg viewBox="0 0 240 110" preserveAspectRatio="none" fill="none" aria-hidden="true">
                 <path d="M30 70 L96 46 L84 62 L110 56 L44 84 L58 68 Z" fill="#3fd0ff" opacity=".75"/>
@@ -2828,7 +2912,7 @@
               </svg>
               <span class="na-cap">ARENA UPDATES</span>
             </div>
-            <div class="micro" style="text-align:center; margin-top:9px;">NO EVENT SYSTEM YET</div>
+            <div class="micro" style="text-align:center; margin-top:9px;">SYNCING&hellip;</div>
           </div>
         </div>
 
@@ -3084,6 +3168,28 @@
 
         <div class="admin-status-msg" id="adminCreditStatusMsg"></div>
       </div>
+
+      <div class="admin-section-label admin-section-label-p1">NEWS &amp; EVENTS MANAGEMENT</div>
+
+      <div class="admin-credit-form">
+        <div class="admin-field admin-field-full">
+          <label>TITLE</label>
+          <input type="text" id="adminNewsTitle" maxlength="80" placeholder="e.g. Weekend Double XP">
+        </div>
+        <div class="shop-tabs" id="adminNewsTagTabs">
+          <button type="button" class="shop-tab selected" data-tag="NEWS">NEWS</button>
+          <button type="button" class="shop-tab" data-tag="UPDATE">UPDATE</button>
+          <button type="button" class="shop-tab news-event-tab" data-tag="EVENT">EVENT</button>
+        </div>
+        <div class="admin-field admin-field-full">
+          <label>BODY</label>
+          <textarea id="adminNewsBody" maxlength="2000" rows="3" placeholder="What's happening, and until when."></textarea>
+        </div>
+        <button class="menu-btn admin-save-btn" id="btnAdminNewsPost">POST</button>
+      </div>
+      <div class="admin-status-msg" id="adminNewsStatusMsg"></div>
+
+      <div class="admin-news-list" id="adminNewsList"></div>
 
       <div class="admin-section-label">ADMIN LOG</div>
       <div class="admin-log" id="adminLogBody"></div>
@@ -6144,6 +6250,10 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
           desc = 'Coin grant \u2014 ' + escapeHtml(entry.targetPlayer) + ': +' + entry.amount.toLocaleString()
             + ' (' + entry.previousBalance.toLocaleString() + ' \u2192 ' + entry.newBalance.toLocaleString() + ')'
             + ' by ' + escapeHtml(entry.admin);
+        } else if(entry.type === 'newsCreate'){
+          desc = 'News posted [' + escapeHtml(entry.tag) + '] \u2014 "' + escapeHtml(entry.title) + '" by ' + escapeHtml(entry.admin);
+        } else if(entry.type === 'newsDelete'){
+          desc = 'News removed \u2014 "' + escapeHtml(entry.title) + '" by ' + escapeHtml(entry.admin);
         } else {
           const abilityDef = ABILITIES.find(a=>a.id===entry.abilityId);
           const abilityName = abilityDef ? abilityDef.name : entry.abilityId;
@@ -6167,6 +6277,93 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
 
   function escapeHtml(str){
     return String(str).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  }
+
+  // ==========================================================
+  // ADMIN NEWS & EVENTS MANAGEMENT -- post/remove announcements
+  // (see POST /admin/news, GET /news in server.js). Every write is
+  // independently re-verified admin-side server-side; this panel only
+  // ever reflects what the server actually stored.
+  // ==========================================================
+  let adminNewsTag = 'NEWS';
+
+  function setAdminNewsStatus(text, isError){
+    const el = document.getElementById('adminNewsStatusMsg');
+    if(!el) return;
+    el.textContent = text;
+    el.classList.toggle('error', !!isError);
+  }
+
+  async function fetchAdminNewsList(){
+    const list = document.getElementById('adminNewsList');
+    if(!list || !sessionToken) return;
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/news');
+      const data = await res.json();
+      const items = Array.isArray(data.items) ? data.items : [];
+      if(!items.length){
+        list.innerHTML = '<div class="admin-news-item">No posts yet.</div>';
+        return;
+      }
+      list.innerHTML = items.map(item =>
+        '<div class="admin-news-item">'
+        + '<span class="ani-tag news-tag-' + item.tag.toLowerCase() + '">' + escapeHtml(item.tag) + '</span>'
+        + '<span class="ani-title">' + escapeHtml(item.title) + '</span>'
+        + '<button type="button" class="ani-del" data-id="' + escapeHtml(item.id) + '">DELETE</button>'
+        + '</div>'
+      ).join('');
+      list.querySelectorAll('.ani-del').forEach(btn=>{
+        btn.addEventListener('click', ()=> adminNewsDelete(btn.dataset.id));
+      });
+    } catch(e){
+      list.innerHTML = '<div class="admin-news-item">Could not load posts.</div>';
+    }
+  }
+
+  async function adminNewsCreate(){
+    const titleEl = document.getElementById('adminNewsTitle');
+    const bodyEl = document.getElementById('adminNewsBody');
+    const title = titleEl.value.trim();
+    const text = bodyEl.value.trim();
+    if(title.length < 3){ setAdminNewsStatus('Title needs at least 3 characters', true); return; }
+    if(text.length < 3){ setAdminNewsStatus('Body needs at least 3 characters', true); return; }
+    setAdminNewsStatus('Posting...');
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/admin/news', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionToken: sessionToken, action: 'create', title: title, body: text, tag: adminNewsTag })
+      });
+      const data = await res.json();
+      if(!res.ok){ setAdminNewsStatus(data.error || 'Could not post', true); return; }
+      titleEl.value = '';
+      bodyEl.value = '';
+      setAdminNewsStatus('Posted.');
+      fetchAdminNewsList();
+      renderAdminLog();
+      fetchNews(); // refresh the lobby widget too, in case it's still open behind the admin panel
+    } catch(e){
+      setAdminNewsStatus('Could not reach the server', true);
+    }
+  }
+
+  async function adminNewsDelete(id){
+    setAdminNewsStatus('Removing...');
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/admin/news', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionToken: sessionToken, action: 'delete', id: id })
+      });
+      const data = await res.json();
+      if(!res.ok){ setAdminNewsStatus(data.error || 'Could not remove', true); return; }
+      setAdminNewsStatus('Removed.');
+      fetchAdminNewsList();
+      renderAdminLog();
+      fetchNews();
+    } catch(e){
+      setAdminNewsStatus('Could not reach the server', true);
+    }
   }
 
   // ==========================================================
@@ -11113,6 +11310,15 @@ if(tutorialActive) tutorialUpdate(dt);
   const btnAdminReset = document.getElementById('btnAdminReset');
   const btnAdminResetAll = document.getElementById('btnAdminResetAll');
 
+  const btnAdminNewsPost = document.getElementById('btnAdminNewsPost');
+  if(btnAdminNewsPost) btnAdminNewsPost.addEventListener('click', adminNewsCreate);
+  document.querySelectorAll('#adminNewsTagTabs [data-tag]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      adminNewsTag = btn.dataset.tag;
+      document.querySelectorAll('#adminNewsTagTabs [data-tag]').forEach(b=>b.classList.toggle('selected', b === btn));
+    });
+  });
+
   btnAdmin.addEventListener('click', async ()=>{
     // The button itself is only ever visible if the server already told
     // us isAdmin=true at sign-in -- but opening the panel doesn't grant
@@ -11124,6 +11330,7 @@ if(tutorialActive) tutorialUpdate(dt);
     setAdminStatus('');
     resetAdminCreditPanel();
     renderAdminLog();
+    fetchAdminNewsList();
     menuAdmin.classList.remove('hidden');
   });
   btnBackAdmin.addEventListener('click', ()=>{
@@ -11508,6 +11715,89 @@ if(tutorialActive) tutorialUpdate(dt);
     lobbyOpenModal('PATCH NOTES', renderPatchNotes());
   }
 
+  // ---------------------------------------------------------------------
+  // NEWS & EVENTS -- admin-posted announcements (see GET /news in
+  // server.js). Read-only from the client's side: nothing here ever
+  // writes a post, that's the admin panel's job (adminNewsCreate /
+  // adminNewsDelete further down). A guest sees exactly the same feed
+  // as a signed-in player -- there is no per-account state involved.
+  // ---------------------------------------------------------------------
+  let newsItems = [];
+  let newsFetched = false;
+
+  async function fetchNews(){
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/news');
+      if(!res.ok) throw new Error('news fetch failed');
+      const data = await res.json();
+      newsItems = Array.isArray(data.items) ? data.items : [];
+    }catch(e){
+      // Server unreachable -- leave whatever was last rendered (or the
+      // loading placeholder) rather than showing a broken panel.
+      return;
+    }
+    newsFetched = true;
+    renderNewsWidget();
+  }
+
+  function newsRelativeTime(ts){
+    const mins = Math.floor((Date.now() - ts) / 60000);
+    if(mins < 1) return 'JUST NOW';
+    if(mins < 60) return mins + 'M AGO';
+    const hours = Math.floor(mins / 60);
+    if(hours < 24) return hours + 'H AGO';
+    return Math.floor(hours / 24) + 'D AGO';
+  }
+
+  const NEWS_PLACEHOLDER_ART =
+    '<div class="news-art">'
+    + '<svg viewBox="0 0 240 110" preserveAspectRatio="none" fill="none" aria-hidden="true">'
+    + '<path d="M30 70 L96 46 L84 62 L110 56 L44 84 L58 68 Z" fill="#3fd0ff" opacity=".75"/>'
+    + '<path d="M210 70 L144 46 L156 62 L130 56 L196 84 L182 68 Z" fill="#ff5f9e" opacity=".75"/>'
+    + '<path d="M0 96 H240" stroke="rgba(160,200,255,.35)" stroke-width="1"/>'
+    + '</svg><span class="na-cap">ARENA UPDATES</span></div>';
+
+  function renderNewsWidget(){
+    const tag = document.getElementById('lobbyNewsTag');
+    const body = document.getElementById('lobbyNewsBody');
+    if(!body) return;
+    if(!newsFetched) return; // keep the SYNCING... placeholder already in the markup
+    if(!newsItems.length){
+      if(tag) tag.textContent = 'NO POSTS YET';
+      body.innerHTML = NEWS_PLACEHOLDER_ART
+        + '<div class="micro" style="text-align:center; margin-top:9px;">NOTHING POSTED YET</div>';
+      return;
+    }
+    const latest = newsItems[0];
+    if(tag) tag.textContent = newsRelativeTime(latest.createdAt);
+    body.innerHTML = '<button type="button" class="news-latest" id="lobbyNewsOpen">'
+      + '<span class="news-latest-tag news-tag-' + latest.tag.toLowerCase() + '">' + escapeHtml(latest.tag) + '</span>'
+      + '<span class="news-latest-title">' + escapeHtml(latest.title) + '</span>'
+      + '</button>'
+      + '<div class="micro" style="text-align:center; margin-top:9px;">'
+      + newsItems.length + ' POST' + (newsItems.length === 1 ? '' : 'S') + ' — TAP TO VIEW ALL</div>';
+    const openBtn = document.getElementById('lobbyNewsOpen');
+    if(openBtn) openBtn.addEventListener('click', lobbyNewsModal);
+  }
+
+  function renderNewsList(){
+    if(!newsItems.length) return '<div class="rl-empty">NOTHING POSTED YET.</div>';
+    return newsItems.map(item =>
+      '<div class="news-entry">'
+      + '<div class="news-entry-head">'
+      + '<span class="news-latest-tag news-tag-' + item.tag.toLowerCase() + '">' + escapeHtml(item.tag) + '</span>'
+      + '<span class="news-entry-time">' + newsRelativeTime(item.createdAt) + '</span>'
+      + '</div>'
+      + '<div class="news-entry-title">' + escapeHtml(item.title) + '</div>'
+      + '<div class="news-entry-body">' + escapeHtml(item.body) + '</div>'
+      + '</div>'
+    ).join('');
+  }
+
+  function lobbyNewsModal(){
+    lobbyOpenModal('NEWS & EVENTS', renderNewsList());
+  }
+
   function renderLobbyModes(){
     const wrap = lobbyEl('lobbyModeCards');
     const dots = lobbyEl('lobbyModeDots');
@@ -11586,6 +11876,7 @@ if(tutorialActive) tutorialUpdate(dt);
     refreshLobbyRank();
     renderLobbyFriends();
     fetchDailyChallenges();
+    fetchNews();
 
     const prev = lobbyEl('lobbyModePrev');
     const next = lobbyEl('lobbyModeNext');

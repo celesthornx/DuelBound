@@ -2427,6 +2427,33 @@ function logAdminAction(account, abilityId, changes, actionType) {
 }
 
 // =====================================================================
+// NEWS & EVENTS -- admin-posted announcements shown in the lobby.
+//
+// Deliberately just a flat, admin-authored list (title/body/tag),
+// newest first, capped at 50 -- the same "no gameplay effect" shape as
+// patch notes, except these are postable at runtime by an admin instead
+// of requiring a code change/deploy. Nothing here reads or writes an
+// account, so it can never touch currency, ownership, or stats.
+// =====================================================================
+let newsItems = []; // replaced in startServer()
+
+async function loadNewsItems() {
+    const stored = await store.loadDoc("news", null);
+    return Array.isArray(stored) ? stored : [];
+}
+
+function persistNewsItems() {
+    store.saveDoc("news", newsItems)
+        .catch(e => console.log("[storage] failed to save news:", e.message));
+}
+
+const NEWS_TAGS = ["EVENT", "UPDATE", "NEWS"];
+
+function publicNewsItem(item) {
+    return { id: item.id, title: item.title, body: item.body, tag: item.tag, createdAt: item.createdAt };
+}
+
+// =====================================================================
 // ADMIN CURRENCY ADJUSTMENTS -- Coins and Crystals, both.
 // =====================================================================
 // Sanity ceiling on a single manual adjustment -- not a game-balance
@@ -3545,6 +3572,90 @@ const httpServer = http.createServer(async (req, res) => {
             .slice(0, 20);
 
         sendJson(res, 200, { sort: sortKey, entries: entries });
+        return;
+    }
+
+    // ---- GET /news ----
+    // Public, read-only. No account/session involved -- every player
+    // (including a guest) sees the same admin-posted list.
+    if (req.method === "GET" && req.url === "/news") {
+        sendJson(res, 200, { items: newsItems.slice(0, 20).map(publicNewsItem) });
+        return;
+    }
+
+    // ---- POST /admin/news ----
+    // body: { sessionToken, action: "create"|"delete", ... }
+    // Admin-only, audited through the same pushAdminLog trail as every
+    // other admin action. Posting/removing news never touches an
+    // account -- no currency, ownership, or stat is readable or
+    // writable from this endpoint.
+    if (req.method === "POST" && req.url === "/admin/news") {
+        try {
+            const body = await readJsonBody(req);
+            if (!isAdminSession(body.sessionToken)) {
+                sendJson(res, 403, { error: "Forbidden -- admin access required" });
+                return;
+            }
+            const adminAccount = getAccountForSession(body.sessionToken);
+
+            if (body.action === "create") {
+                const title = String(body.title || "").trim();
+                const text = String(body.body || "").trim();
+                const tag = NEWS_TAGS.includes(body.tag) ? body.tag : "NEWS";
+                if (title.length < 3 || title.length > 80) {
+                    sendJson(res, 400, { error: "Title must be 3-80 characters" });
+                    return;
+                }
+                if (text.length < 3 || text.length > 2000) {
+                    sendJson(res, 400, { error: "Body must be 3-2000 characters" });
+                    return;
+                }
+                const item = {
+                    id: crypto.randomUUID(),
+                    title: title,
+                    body: text,
+                    tag: tag,
+                    createdAt: Date.now(),
+                    author: adminAccount ? adminAccount.name : "unknown"
+                };
+                newsItems.unshift(item);
+                if (newsItems.length > 50) newsItems.length = 50;
+                persistNewsItems();
+                pushAdminLog({
+                    admin: adminAccount ? adminAccount.name : "unknown",
+                    type: "newsCreate",
+                    newsId: item.id,
+                    title: item.title,
+                    tag: item.tag
+                });
+                sendJson(res, 200, { ok: true, item: publicNewsItem(item) });
+                return;
+            }
+
+            if (body.action === "delete") {
+                const id = String(body.id || "");
+                const idx = newsItems.findIndex(n => n.id === id);
+                if (idx === -1) {
+                    sendJson(res, 404, { error: "Post not found" });
+                    return;
+                }
+                const removed = newsItems[idx];
+                newsItems.splice(idx, 1);
+                persistNewsItems();
+                pushAdminLog({
+                    admin: adminAccount ? adminAccount.name : "unknown",
+                    type: "newsDelete",
+                    newsId: removed.id,
+                    title: removed.title
+                });
+                sendJson(res, 200, { ok: true });
+                return;
+            }
+
+            sendJson(res, 400, { error: "Unknown action" });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
         return;
     }
 
@@ -5136,6 +5247,7 @@ async function startServer() {
         buildUsernameIndex();
         abilityConfig = await loadAbilityConfig();
         adminLog = await loadAdminLog();
+        newsItems = await loadNewsItems();
 
         // Ranked: match history, plus the live season/config, which are
         // admin-editable at runtime and so must survive a restart rather
