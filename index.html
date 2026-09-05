@@ -795,6 +795,18 @@
     color: var(--p2); min-height:13px; text-align:center;
   }
   .auth-actions{ display:flex; flex-direction:column; gap:8px; margin-top:2px; }
+  /* A recovery code is copied off the screen by hand, so it is set big,
+     wide-tracked and monospaced, and allowed to wrap on a narrow phone
+     rather than being clipped. */
+  .recovery-code{
+    font-family:'Share Tech Mono', monospace;
+    font-size:17px; letter-spacing:3px; text-align:center;
+    color: var(--p1); user-select:all; word-break:break-all;
+    background: rgba(63,208,255,.07);
+    border:1px solid rgba(63,208,255,.35);
+    border-radius:6px; padding:12px 8px; line-height:1.6;
+  }
+  @media (max-width: 560px){ .recovery-code{ font-size:14px; letter-spacing:2px; } }
   .auth-switch{
     background:none; border:none; cursor:pointer;
     font-family:'Share Tech Mono', monospace; font-size:9px; letter-spacing:1.4px;
@@ -814,6 +826,11 @@
     .auth-field{ gap:2px; }
     .auth-input{ padding:7px 10px; font-size:12px; }
     .auth-hint{ font-size:8px; }
+    /* The recovery form is taller still (four fields plus an
+       explanation). On a short landscape phone the explanatory lines
+       are what gets dropped, so the RESET PASSWORD button stays on
+       screen instead of below the fold. */
+    .recover-trim{ display:none; }
   }
   .ping-badge{
     position:absolute; top: calc(42px + env(safe-area-inset-top, 0px)); left:50%; transform: translateX(-50%);
@@ -2511,6 +2528,7 @@
               <div class="profile-auth">
                 <div id="googleSignInBtn"></div>
                 <button class="auth-alt-btn" id="btnPasswordAuth">USE USERNAME &amp; PASSWORD</button>
+                <button class="auth-alt-btn hidden" id="btnRecoveryCode">NEW RECOVERY CODE</button>
                 <button class="menu-back hidden" id="signOutBtn">log out</button>
               </div>
             </div>
@@ -4645,6 +4663,13 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     if(gBtn) gBtn.classList.add('hidden');
     if(pBtn) pBtn.classList.add('hidden');
     if(oBtn) oBtn.classList.remove('hidden');
+    // Only a password account has anything to recover -- a Google
+    // account is recovered by Google. The server enforces this too
+    // (/auth/recovery/new refuses an account with no password hash);
+    // hiding the button is only so it isn't offered pointlessly.
+    const rBtn = document.getElementById('btnRecoveryCode');
+    const methods = (data.account && data.account.authMethods) || [];
+    if(rBtn) rBtn.classList.toggle('hidden', methods.indexOf('password') === -1);
     // The button's visibility is just UX -- every actual admin request
     // is independently re-verified server-side regardless of this flag.
     isAdmin = !!data.isAdmin;
@@ -4679,7 +4704,105 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   // ====================================================================
   let authMode = 'login'; // 'login' | 'register'
 
+  // The recovery form. Deliberately a THIRD mode of the same modal
+  // rather than a new screen: a player who needs it is already staring
+  // at the login form, and this is one link away from it.
+  function recoverFormHtml(){
+    return ''
+      + '<div class="auth-form">'
+      +   '<div class="auth-hint recover-trim" style="line-height:1.6">'
+      +     'ENTER THE RECOVERY CODE YOU SAVED WHEN YOU CREATED THE ACCOUNT. '
+      +     'IT WORKS ONCE \u2014 A NEW ONE IS ISSUED AFTERWARDS.'
+      +   '</div>'
+      +   '<div class="auth-field">'
+      +     '<span class="auth-label">USERNAME</span>'
+      +     '<input class="auth-input" id="authUser" type="text" autocomplete="username" '
+      +       'autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="16">'
+      +   '</div>'
+      +   '<div class="auth-field">'
+      +     '<span class="auth-label">RECOVERY CODE</span>'
+      +     '<input class="auth-input" id="authCode" type="text" autocomplete="one-time-code" '
+      +       'autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="40" '
+      +       'placeholder="XXXXX-XXXXX-XXXXX-XXXXX">'
+      +     '<span class="auth-hint recover-trim">DASHES AND CAPITALS DO NOT MATTER</span>'
+      +   '</div>'
+      +   '<div class="auth-field">'
+      +     '<span class="auth-label">NEW PASSWORD</span>'
+      +     '<div class="auth-pw-wrap">'
+      +       '<input class="auth-input" id="authPass" type="password" maxlength="200" autocomplete="new-password">'
+      +       '<button class="auth-show" id="authShow" type="button">SHOW</button>'
+      +     '</div>'
+      +     '<span class="auth-hint recover-trim">AT LEAST 8 CHARACTERS</span>'
+      +   '</div>'
+      +   '<div class="auth-field">'
+      +     '<span class="auth-label">CONFIRM NEW PASSWORD</span>'
+      +     '<input class="auth-input" id="authConfirm" type="password" maxlength="200" autocomplete="new-password">'
+      +   '</div>'
+      +   '<div class="auth-error" id="authError"></div>'
+      +   '<div class="auth-actions">'
+      +     '<button class="menu-btn accent-2" id="authSubmit">RESET PASSWORD</button>'
+      +     '<button class="auth-switch" id="authSwitch">\u2190 BACK TO LOG IN</button>'
+      +   '</div>'
+      + '</div>';
+  }
+
+  // Shows a freshly issued recovery code. This is the ONLY time the
+  // code exists anywhere outside the player's own hands -- the server
+  // keeps a hash of it, never the code -- so the panel says so plainly
+  // and offers a one-tap copy. It is not written to storage here.
+  function showRecoveryCodeModal(code, opts){
+    const o = opts || {};
+    lobbyOpenModal(o.title || 'SAVE YOUR RECOVERY CODE',
+      '<div class="auth-form">'
+      + '<div class="auth-hint" style="line-height:1.6">' + (o.intro ||
+          'THIS CODE IS THE ONLY WAY BACK INTO YOUR ACCOUNT IF YOU FORGET YOUR PASSWORD. '
+        + 'WE CANNOT SHOW IT AGAIN, AND WE CANNOT RECOVER IT FOR YOU. WRITE IT DOWN NOW.') + '</div>'
+      + '<div class="recovery-code" id="recoveryCodeText"></div>'
+      + '<div class="auth-error" id="recoveryCopyNote" style="color:#5dffa0"></div>'
+      + '<div class="auth-actions">'
+      +   '<button class="ghost-btn" id="recoveryCopy">COPY CODE</button>'
+      +   '<button class="menu-btn accent-2" id="recoveryDone">' + (o.doneLabel || 'I HAVE SAVED IT') + '</button>'
+      + '</div>'
+      + '</div>');
+    // textContent, never innerHTML -- the code is server-generated, but
+    // it goes in as text on principle.
+    const codeEl = document.getElementById('recoveryCodeText');
+    if(codeEl) codeEl.textContent = code;
+    const note = document.getElementById('recoveryCopyNote');
+    const copy = document.getElementById('recoveryCopy');
+    if(copy){
+      copy.addEventListener('click', async ()=>{
+        try{
+          await navigator.clipboard.writeText(code);
+          if(note) note.textContent = 'COPIED TO CLIPBOARD';
+        }catch(e){
+          if(note) note.textContent = 'COULD NOT COPY \u2014 WRITE IT DOWN INSTEAD';
+        }
+      });
+    }
+    // onDone runs however the panel is dismissed -- including the
+    // modal's own CLOSE button -- because for a fresh registration it
+    // carries the sign-in itself, and closing the panel must never
+    // leave the player registered but not signed in.
+    let doneRan = false;
+    const finish = ()=>{
+      if(doneRan) return;
+      doneRan = true;
+      // Take the code back out of the DOM as the panel closes. The
+      // modal keeps its last body until something else opens it, and
+      // there is no reason for the code to sit there afterwards.
+      if(codeEl) codeEl.textContent = '';
+      lobbyCloseModal();
+      if(typeof o.onDone === 'function') o.onDone();
+    };
+    const done = document.getElementById('recoveryDone');
+    if(done) done.addEventListener('click', finish);
+    const closeBtn = document.getElementById('lobbyModalClose');
+    if(closeBtn) closeBtn.addEventListener('click', finish);
+  }
+
   function authFormHtml(){
+    if(authMode === 'recover') return recoverFormHtml();
     const isReg = authMode === 'register';
     return ''
       + '<div class="auth-form">'
@@ -4710,6 +4833,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       +     '<button class="auth-switch" id="authSwitch">'
       +       (isReg ? '\u2190 BACK TO LOG IN' : 'NO ACCOUNT? CREATE ONE')
       +     '</button>'
+      +     (isReg ? '' : '<button class="auth-switch" id="authForgot">FORGOT PASSWORD?</button>')
       +   '</div>'
       +   '<div class="auth-hint" style="text-align:center;margin-top:2px">'
       +     'YOUR PROGRESS SAVES TO THIS ACCOUNT. YOU WILL BE LOGGED OUT WHEN THE PAGE RELOADS.'
@@ -4719,7 +4843,10 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
 
   function openAuthModal(mode){
     authMode = mode || 'login';
-    lobbyOpenModal(authMode === 'register' ? 'CREATE ACCOUNT' : 'LOG IN', authFormHtml());
+    lobbyOpenModal(
+      authMode === 'register' ? 'CREATE ACCOUNT'
+      : authMode === 'recover' ? 'RECOVER ACCOUNT'
+      : 'LOG IN', authFormHtml());
     wireAuthForm();
   }
 
@@ -4727,6 +4854,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     const userEl = document.getElementById('authUser');
     const passEl = document.getElementById('authPass');
     const confirmEl = document.getElementById('authConfirm');
+    const codeEl = document.getElementById('authCode');
     const errEl = document.getElementById('authError');
     const submit = document.getElementById('authSubmit');
     const showBtn = document.getElementById('authShow');
@@ -4744,8 +4872,10 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       });
     }
     if(switchBtn){
-      switchBtn.addEventListener('click', ()=> openAuthModal(authMode === 'register' ? 'login' : 'register'));
+      switchBtn.addEventListener('click', ()=> openAuthModal(authMode === 'login' ? 'register' : 'login'));
     }
+    const forgotBtn = document.getElementById('authForgot');
+    if(forgotBtn) forgotBtn.addEventListener('click', ()=> openAuthModal('recover'));
 
     let busy = false;
     async function go(){
@@ -4753,46 +4883,81 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       const username = userEl.value.trim();
       const password = passEl.value;
       const isReg = authMode === 'register';
+      const isRecover = authMode === 'recover';
 
       // Mirrors the server's rules so the player hears about a problem
       // without a round trip. The server re-checks all of it regardless.
       if(username.length < 3 || username.length > 16){ return fail('Username must be 3\u201316 characters.'); }
       if(!/^[A-Za-z0-9_]+$/.test(username)){ return fail('Username can only use letters, numbers and underscores.'); }
       if(password.length < 8){ return fail('Password must be at least 8 characters.'); }
-      if(isReg && confirmEl && confirmEl.value !== password){ return fail('Passwords do not match.'); }
+      if((isReg || isRecover) && confirmEl && confirmEl.value !== password){ return fail('Passwords do not match.'); }
+      // 20 symbols, however the player typed the dashes.
+      if(isRecover && (codeEl.value.toUpperCase().replace(/[^A-Z0-9]/g, '').length !== 20)){
+        return fail('That recovery code is not the right length.');
+      }
 
       busy = true;
       fail('');
-      submit.textContent = isReg ? 'CREATING...' : 'LOGGING IN...';
+      const idleLabel = isReg ? 'CREATE ACCOUNT' : isRecover ? 'RESET PASSWORD' : 'LOG IN';
+      submit.textContent = isReg ? 'CREATING...' : isRecover ? 'RESETTING...' : 'LOGGING IN...';
       try{
-        const res = await fetch(ACCOUNT_SERVER_URL + (isReg ? '/auth/register' : '/auth/login'), {
+        const url = isReg ? '/auth/register' : isRecover ? '/auth/recover' : '/auth/login';
+        const res = await fetch(ACCOUNT_SERVER_URL + url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(isReg
-            ? { username: username, password: password, confirm: confirmEl ? confirmEl.value : password }
-            : { username: username, password: password })
+          body: JSON.stringify(
+            isRecover
+              ? { username: username, recoveryCode: codeEl.value,
+                  newPassword: password, confirm: confirmEl ? confirmEl.value : password }
+            : isReg
+              ? { username: username, password: password, confirm: confirmEl ? confirmEl.value : password }
+              : { username: username, password: password })
         });
         const data = await res.json().catch(()=>({}));
         if(!res.ok){
           busy = false;
-          submit.textContent = isReg ? 'CREATE ACCOUNT' : 'LOG IN';
+          submit.textContent = idleLabel;
           return fail(data.error || 'Something went wrong. Please try again.');
         }
         // Clear the typed password out of the DOM before the modal
         // closes, so it isn't sitting in a detached input.
         passEl.value = '';
         if(confirmEl) confirmEl.value = '';
+        if(codeEl) codeEl.value = '';
+
+        if(isRecover){
+          // A reset does NOT sign the player in: every session for the
+          // account was just invalidated server-side, which is the
+          // point of the reset. They log in with the new password.
+          showRecoveryCodeModal(data.recoveryCode, {
+            title: 'PASSWORD RESET',
+            intro: 'YOUR PASSWORD IS CHANGED AND YOU WERE SIGNED OUT EVERYWHERE. '
+                 + 'THE OLD RECOVERY CODE IS USED UP \u2014 HERE IS ITS REPLACEMENT. SAVE IT.',
+            doneLabel: 'SAVED \u2014 LOG IN',
+            onDone: ()=> openAuthModal('login')
+          });
+          return;
+        }
+
+        // Registration issues a recovery code once. It is shown BEFORE
+        // onAuthenticated() runs: signing in a brand-new account offers
+        // the tutorial, which leaves the lobby -- and the code panel
+        // with it. The sign-in happens when the panel is dismissed.
+        if(isReg && data.recoveryCode){
+          showRecoveryCodeModal(data.recoveryCode, { onDone: ()=> onAuthenticated(data) });
+          return;
+        }
         lobbyCloseModal();
         onAuthenticated(data);
       } catch(e){
         busy = false;
-        submit.textContent = isReg ? 'CREATE ACCOUNT' : 'LOG IN';
+        submit.textContent = idleLabel;
         fail('Something went wrong. Please try again.');
       }
     }
 
     submit.addEventListener('click', go);
-    for(const el of [userEl, passEl, confirmEl]){
+    for(const el of [userEl, codeEl, passEl, confirmEl]){
       if(el) el.addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); go(); } });
     }
     setTimeout(()=>{ try{ userEl.focus(); }catch(e){} }, 50);
@@ -4833,6 +4998,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     if(gBtn) gBtn.classList.remove('hidden');
     if(pBtn) pBtn.classList.remove('hidden');
     if(oBtn) oBtn.classList.add('hidden');
+    const rBtn = document.getElementById('btnRecoveryCode');
+    if(rBtn) rBtn.classList.add('hidden');
     const adminBtn = document.getElementById('btnAdmin');
     if(adminBtn) adminBtn.classList.add('hidden');
     lobbySync();
@@ -4897,6 +5064,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         const oBtn = document.getElementById('signOutBtn');
         if(gBtn) gBtn.classList.remove('hidden');
         if(oBtn) oBtn.classList.add('hidden');
+        const rBtn = document.getElementById('btnRecoveryCode');
+        if(rBtn) rBtn.classList.add('hidden');
       } else {
         setAccountStatus('COULD NOT SAVE PROGRESS — RETRYING');
       }
@@ -10179,6 +10348,66 @@ if(tutorialActive) tutorialUpdate(dt);
   const btnPasswordAuth = document.getElementById('btnPasswordAuth');
   if(btnPasswordAuth) btnPasswordAuth.addEventListener('click', ()=> openAuthModal('login'));
 
+  // Issue a replacement recovery code. Requires the CURRENT password
+  // (the server checks it), so a borrowed unlocked browser cannot mint
+  // itself a permanent way back into the account.
+  const btnRecoveryCode = document.getElementById('btnRecoveryCode');
+  if(btnRecoveryCode) btnRecoveryCode.addEventListener('click', ()=>{
+    lobbyOpenModal('NEW RECOVERY CODE',
+      '<div class="auth-form">'
+      + '<div class="auth-hint" style="line-height:1.6">'
+      +   'ISSUING A NEW CODE IMMEDIATELY CANCELS YOUR OLD ONE. '
+      +   'CONFIRM YOUR PASSWORD TO CONTINUE.'
+      + '</div>'
+      + '<div class="auth-field">'
+      +   '<span class="auth-label">CURRENT PASSWORD</span>'
+      +   '<input class="auth-input" id="rcPass" type="password" maxlength="200" autocomplete="current-password">'
+      + '</div>'
+      + '<div class="auth-error" id="rcError"></div>'
+      + '<div class="auth-actions">'
+      +   '<button class="menu-btn accent-2" id="rcSubmit">ISSUE NEW CODE</button>'
+      + '</div>'
+      + '</div>');
+    const passEl = document.getElementById('rcPass');
+    const errEl = document.getElementById('rcError');
+    const submit = document.getElementById('rcSubmit');
+    if(!passEl || !submit) return;
+    let busy = false;
+    async function go(){
+      if(busy || !passEl.value) return;
+      busy = true;
+      errEl.textContent = '';
+      submit.textContent = 'WORKING...';
+      try{
+        const res = await fetch(ACCOUNT_SERVER_URL + '/auth/recovery/new', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionToken: sessionToken, password: passEl.value })
+        });
+        const data = await res.json().catch(()=>({}));
+        passEl.value = '';
+        if(!res.ok){
+          busy = false;
+          submit.textContent = 'ISSUE NEW CODE';
+          errEl.textContent = data.error || 'Something went wrong. Please try again.';
+          return;
+        }
+        showRecoveryCodeModal(data.recoveryCode, {
+          title: 'NEW RECOVERY CODE',
+          intro: 'YOUR PREVIOUS CODE NO LONGER WORKS. THIS ONE REPLACES IT, '
+               + 'AND IT WILL NOT BE SHOWN AGAIN.'
+        });
+      }catch(e){
+        busy = false;
+        submit.textContent = 'ISSUE NEW CODE';
+        errEl.textContent = 'Something went wrong. Please try again.';
+      }
+    }
+    submit.addEventListener('click', go);
+    passEl.addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); go(); } });
+    setTimeout(()=>{ try{ passEl.focus(); }catch(e){} }, 50);
+  });
+
   // Best-effort: tell the server to drop the session as the page goes
   // away, so a closed tab doesn't leave one behind. This is a TIDY-UP
   // layer, not the security mechanism -- a beacon can be dropped by the
@@ -10545,6 +10774,16 @@ if(tutorialActive) tutorialUpdate(dt);
   // number. Categories: NEW / IMPROVEMENTS / BALANCE / BUG FIXES --
   // include only the ones an entry actually has.
   const PATCH_NOTES = [
+    { version: 'v0.16', title: 'Account Recovery',
+      NEW: [
+        'Forgot your password? The log-in screen now has a FORGOT PASSWORD? link that resets it with your recovery code.',
+        'New username accounts are given a one-time recovery code the moment they are created \u2014 write it down, it is the only way back in.',
+        'Signed-in username accounts can issue a fresh recovery code from the account panel, which is also how older accounts get their first one.'
+      ],
+      IMPROVEMENTS: [
+        'A password reset signs the account out everywhere, so anyone who had your old password is kicked out too.',
+        'A recovery code works exactly once; a replacement is issued as soon as you use it.'
+      ] },
     { version: 'v0.15', title: 'Username & Password Accounts',
       NEW: [
         'You can now create a DuelBound account with a username and password \u2014 no Google account needed.',

@@ -224,7 +224,69 @@ function createLoginThrottle(config) {
     };
 }
 
+// ---------------------------------------------------------------------
+// ACCOUNT RECOVERY CODES
+//
+// Why a code and not a "forgot password" email
+// --------------------------------------------
+// A password account here has no email, and nothing about it is
+// verified. Any recovery flow built on something a stranger can also
+// see or guess -- a username, a display name, a security question --
+// is not a way back in for the owner, it is a way in for everyone else.
+// So recovery is a bearer secret instead: a code generated once, shown
+// to the player once, and stored only as a hash, exactly like the
+// password. Whoever holds it can reset the password; nobody else can,
+// including us.
+//
+// The alphabet drops characters that get misread when copied off a
+// screen by hand (0/O, 1/I/L, 5/S, 8/B), because these are typed back
+// in by a person who is already locked out.
+// ---------------------------------------------------------------------
+const RECOVERY_ALPHABET = "ACDEFHJKMNPQRTUVWXY2346789";
+const RECOVERY_GROUPS = 4;
+const RECOVERY_GROUP_LEN = 5;
+
+function generateRecoveryCode() {
+    const groups = [];
+    for (let g = 0; g < RECOVERY_GROUPS; g++) {
+        let out = "";
+        // rejection-free: 27 symbols from a byte, taken modulo, is a
+        // negligible bias for this purpose but randomInt avoids it
+        // entirely and is just as cheap here.
+        for (let i = 0; i < RECOVERY_GROUP_LEN; i++) {
+            out += RECOVERY_ALPHABET[crypto.randomInt(RECOVERY_ALPHABET.length)];
+        }
+        groups.push(out);
+    }
+    return groups.join("-");
+}
+
+// Accepts what a locked-out player actually types: any case, with or
+// without the dashes, with stray spaces.
+function normalizeRecoveryCode(raw) {
+    if (typeof raw !== "string") return "";
+    return raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function isPlausibleRecoveryCode(raw) {
+    return normalizeRecoveryCode(raw).length === RECOVERY_GROUPS * RECOVERY_GROUP_LEN;
+}
+
+// Hashed with the same scrypt as a password -- it IS a password, so it
+// gets the same treatment and never touches disk in the clear.
+function hashRecoveryCode(code) {
+    return hashPassword(normalizeRecoveryCode(code));
+}
+function verifyRecoveryCode(code, stored) {
+    return verifyPassword(normalizeRecoveryCode(code), stored);
+}
+
 module.exports = {
+    generateRecoveryCode,
+    normalizeRecoveryCode,
+    isPlausibleRecoveryCode,
+    hashRecoveryCode,
+    verifyRecoveryCode,
     validateLoginUsername,
     validatePassword,
     hashPassword,

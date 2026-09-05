@@ -219,6 +219,7 @@ function publicAccount(account) {
     const out = {};
     for (const key of Object.keys(account)) {
         if (key === "passwordHash") continue; // never leaves the server
+        if (key === "recoveryHash") continue; // ditto -- it is a second password
         if (key === "email") continue;        // not needed by the client, and admin checks key off it
         out[key] = account[key];
     }
@@ -233,6 +234,15 @@ const loginThrottle = Auth.createLoginThrottle();
 // numbers would be wrong here: several people on ONE shared address --
 // a household, a school, a cafe -- legitimately create accounts in a
 // burst, and locking that out would be worse than the abuse it stops.
+// Recovery is the highest-value target on the server -- one correct
+// guess takes an account over outright -- so it gets a much tighter
+// budget than login.
+const recoverThrottle = Auth.createLoginThrottle({
+    maxFailures: 5,
+    windowMs: 30 * 60 * 1000,
+    lockoutMs: 15 * 60 * 1000
+});
+
 const registerThrottle = Auth.createLoginThrottle({
     maxFailures: 20,               // signups per window, per address
     windowMs: 60 * 60 * 1000,      // one hour
@@ -2211,6 +2221,12 @@ const httpServer = http.createServer(async (req, res) => {
 
             const passwordHash = await Auth.hashPassword(body.password);
 
+            // Issued once, shown once, and stored only as a hash -- this
+            // is the ONLY way back into a password account, because
+            // there is no verified email to send a reset link to.
+            const recoveryCode = Auth.generateRecoveryCode();
+            const recoveryHash = await Auth.hashRecoveryCode(recoveryCode);
+
             // A brand new, stable internal id. Never derived from the
             // username, so the username stays changeable later.
             const accountId = newLocalAccountId();
@@ -2224,6 +2240,7 @@ const httpServer = http.createServer(async (req, res) => {
             account.username = u.username;
             account.usernameLower = u.key;
             account.passwordHash = passwordHash;
+            account.recoveryHash = recoveryHash;
             // A password account has no email, and admin is decided by
             // email (see isAdminSession) -- so registering any username,
             // "admin" included, can never confer admin rights.
@@ -2239,7 +2256,12 @@ const httpServer = http.createServer(async (req, res) => {
             sendJson(res, 200, {
                 sessionToken: sessionToken,
                 account: publicAccount(account),
-                isAdmin: false
+                isAdmin: false,
+                // The one and only time this leaves the server. It is
+                // not stored anywhere in the clear, so if the player
+                // loses it the account cannot be recovered -- which is
+                // exactly the property that makes it safe.
+                recoveryCode: recoveryCode
             });
         } catch (e) {
             console.log("[auth] register failed:", e.message);
@@ -2312,6 +2334,119 @@ const httpServer = http.createServer(async (req, res) => {
             });
         } catch (e) {
             console.log("[auth] login failed:", e.message);
+            sendJson(res, 500, { error: "Something went wrong. Please try again." });
+        }
+        return;
+    }
+
+    // ---- POST /auth/recover ----
+    // body: { username, recoveryCode, newPassword, confirm }
+    //
+    // The whole "forgot password" flow. There is no email to send a
+    // link to, so possession of the recovery code IS the proof of
+    // ownership -- see the note above generateRecoveryCode in auth.js.
+    if (req.method === "POST" && req.url === "/auth/recover") {
+        try {
+            const body = await readJsonBody(req);
+            const ip = clientIpOf(req);
+
+            // One message for every failure, exactly like /auth/login:
+            // a distinct "no such user" would turn this into an account
+            // finder, and a distinct "wrong code" would confirm a
+            // username exists.
+            const GENERIC = "Incorrect username or recovery code.";
+
+            const rawUsername = typeof body.username === "string" ? body.username.trim() : "";
+            const key = rawUsername.toLowerCase();
+
+            // Recovery is a far more attractive brute-force target than
+            // login (one success takes the account over completely), so
+            // it gets its own, tighter budget.
+            const throttleKeys = ["rec-ip:" + ip, "rec-user:" + key];
+            const gate = recoverThrottle.check(throttleKeys);
+            if (gate.blocked) {
+                sendJson(res, 429, { error: "Too many attempts. Try again in " + gate.retryAfterSec + "s." });
+                return;
+            }
+
+            const p = Auth.validatePassword(body.newPassword);
+            if (!p.ok) { sendJson(res, 400, { error: p.error }); return; }
+            if (typeof body.confirm === "string" && body.confirm !== body.newPassword) {
+                sendJson(res, 400, { error: "Passwords do not match." });
+                return;
+            }
+
+            const accountId = usernameIndex.get(key);
+            const account = accountId ? accounts[accountId] : null;
+
+            // Same constant-work shape as login: an account with no
+            // recovery code on file, or no account at all, still costs a
+            // full verification against a dummy hash.
+            const storedHash = (account && typeof account.recoveryHash === "string")
+                ? account.recoveryHash
+                : DUMMY_PASSWORD_HASH;
+            const okCode = await Auth.verifyRecoveryCode(
+                typeof body.recoveryCode === "string" ? body.recoveryCode : "", storedHash);
+
+            if (!account || !account.recoveryHash || !okCode) {
+                recoverThrottle.recordFailure(throttleKeys);
+                sendJson(res, 401, { error: GENERIC });
+                return;
+            }
+
+            // The code is single-use: it is consumed here and a fresh
+            // one is issued, so a code seen over someone's shoulder (or
+            // left in a screenshot) cannot be used twice.
+            const newCode = Auth.generateRecoveryCode();
+            account.passwordHash = await Auth.hashPassword(body.newPassword);
+            account.recoveryHash = await Auth.hashRecoveryCode(newCode);
+            await persistAccount(accountId);
+
+            // Anyone already signed in as this account is signed out --
+            // if the password was reset because someone else had it,
+            // leaving their session alive would defeat the reset.
+            let killed = 0;
+            for (const token of Object.keys(sessions)) {
+                if (sessions[token] === accountId) { await destroySession(token); killed++; }
+            }
+
+            recoverThrottle.recordSuccess(throttleKeys);
+            console.log("[auth] password recovered for " + account.username +
+                        " (" + killed + " session(s) invalidated)");
+            sendJson(res, 200, { ok: true, recoveryCode: newCode });
+        } catch (e) {
+            console.log("[auth] recover failed:", e.message);
+            sendJson(res, 500, { error: "Something went wrong. Please try again." });
+        }
+        return;
+    }
+
+    // ---- POST /auth/recovery/new ----  body: { sessionToken, password }
+    // Issues a fresh recovery code to someone who is already signed in.
+    // This is how an account created before recovery codes existed gets
+    // one, and how a player replaces a code they think is compromised.
+    // The current password is required, so a borrowed unlocked browser
+    // cannot silently mint itself a permanent way back in.
+    if (req.method === "POST" && req.url === "/auth/recovery/new") {
+        try {
+            const body = await readJsonBody(req);
+            const sub = sessions[body.sessionToken];
+            const account = sub ? accounts[sub] : null;
+            if (!account) { sendJson(res, 401, { error: "Not signed in" }); return; }
+            if (typeof account.passwordHash !== "string") {
+                sendJson(res, 400, { error: "This account signs in with Google and has no password to recover." });
+                return;
+            }
+            const ok = await Auth.verifyPassword(
+                typeof body.password === "string" ? body.password : "", account.passwordHash);
+            if (!ok) { sendJson(res, 401, { error: "Incorrect password." }); return; }
+
+            const newCode = Auth.generateRecoveryCode();
+            account.recoveryHash = await Auth.hashRecoveryCode(newCode);
+            await persistAccount(sub);
+            sendJson(res, 200, { ok: true, recoveryCode: newCode });
+        } catch (e) {
+            console.log("[auth] recovery code issue failed:", e.message);
             sendJson(res, 500, { error: "Something went wrong. Please try again." });
         }
         return;
@@ -2483,6 +2618,7 @@ const httpServer = http.createServer(async (req, res) => {
                 username: existing.username,
                 usernameLower: existing.usernameLower,
                 passwordHash: existing.passwordHash,
+                recoveryHash: existing.recoveryHash,
                 // Non-sensitive UX state (no credits/XP/rank riding on
                 // it), same trust tier as aimMode/matchSize/deviceMode
                 // above -- client-reported is fine here, unlike xp/level.
