@@ -4688,6 +4688,78 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     }
   }
 
+  // ====================================================================
+  // SHOP PURCHASES (client)
+  //
+  // Signed in: the server is the only thing that decides whether this
+  // purchase is real. It re-checks the price against its own catalog
+  // (catalog.js) and its own stored credit balance -- nothing this
+  // client sends about price or affordability is trusted -- and only a
+  // 200 response actually grants the item. `applyPurchase` below is
+  // what makes that authoritative response the new truth on this
+  // client, instead of the click handler assuming its own optimism was
+  // correct.
+  //
+  // Guest (no account to protect): buying still works exactly as it
+  // always has -- a local credits/owned-items mutation with nothing to
+  // verify and nothing that reaches a server, since a guest's progress
+  // was never going anywhere anyway.
+  //
+  // itemType is 'skin' | 'power' | 'ability'; ownedSet is that catalog's
+  // local owned-items Set (ownedSkins/ownedPowers/ownedAbilities);
+  // onOwned(id) is called once ownership is confirmed (whichever caller
+  // supplies it: add to the Set, then equip/select as that caller sees
+  // fit) so guest and signed-in paths converge on the exact same
+  // follow-up instead of duplicating it three times.
+  let shopPurchaseInFlight = false;
+  async function buyShopItem(itemType, itemId, price, ownedSet, onOwned){
+    if(shopPurchaseInFlight) return; // one purchase at a time -- a double click can't double-charge
+    if(!loggedIn || !sessionToken){
+      credits -= price;
+      ownedSet.add(itemId);
+      onOwned(itemId);
+      updateCreditsDisplay();
+      renderShop();
+      return;
+    }
+    shopPurchaseInFlight = true;
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/shop/buy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionToken: sessionToken, itemType: itemType, itemId: itemId })
+      });
+      const data = await res.json().catch(()=>({}));
+      if(!res.ok){
+        // Most likely stale local state (another tab already bought it,
+        // or a reward changed the balance since this panel was drawn) --
+        // re-render from what's actually true rather than leaving a
+        // card that looks buyable but isn't.
+        lobbyToast(data.error || 'PURCHASE FAILED');
+        renderShop();
+        return;
+      }
+      // The server just moved credits and ownership server-side -- sync
+      // the local, client-reported `credits`/owned Sets used elsewhere
+      // (saveProgress(), the shop UI) to match, exactly like
+      // claimDailyChallenge does for a challenge reward. Reading
+      // data.owned back (rather than just adding itemId locally) means
+      // this client's view of ownership can never drift from the
+      // account record the server actually persisted.
+      credits = data.newBalance;
+      ownedSet.clear();
+      (data.owned || []).forEach(id => ownedSet.add(id));
+      onOwned(itemId);
+      updateCreditsDisplay();
+      renderShop();
+      saveProgress(); // persists the equip/select choice onOwned just made
+    }catch(e){
+      lobbyToast('COULD NOT REACH THE SERVER');
+    }finally{
+      shopPurchaseInFlight = false;
+    }
+  }
+
   function applyAccount(account){
     accountName = account.name;
     credits = account.credits;
@@ -7323,12 +7395,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
           renderShop();
           saveProgress();
         } else if(affordable){
-          credits -= skin.price;
-          ownedSkins.add(skin.id);
-          onEquip(skin.id);
-          updateCreditsDisplay();
-          renderShop();
-          saveProgress();
+          buyShopItem('skin', skin.id, skin.price, ownedSkins, onEquip);
         }
       });
       grid.appendChild(card);
@@ -7371,12 +7438,9 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
           renderShop();
           saveProgress();
         } else if(affordable){
-          credits -= pw.price;
-          ownedPowers.add(pw.id);
-          if(equippedSet.size < MAX_EQUIPPED_POWERS) equippedSet.add(pw.id);
-          updateCreditsDisplay();
-          renderShop();
-          saveProgress();
+          buyShopItem('power', pw.id, pw.price, ownedPowers, (id)=>{
+            if(equippedSet.size < MAX_EQUIPPED_POWERS) equippedSet.add(id);
+          });
         }
       });
       grid.appendChild(card);
@@ -7416,12 +7480,9 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
           renderShop();
           saveProgress();
         } else if(affordable){
-          credits -= ab.price;
-          ownedAbilities.add(ab.id);
-          if(equippedSet.size < MAX_EQUIPPED_ABILITIES) equippedSet.add(ab.id);
-          updateCreditsDisplay();
-          renderShop();
-          saveProgress();
+          buyShopItem('ability', ab.id, ab.price, ownedAbilities, (id)=>{
+            if(equippedSet.size < MAX_EQUIPPED_ABILITIES) equippedSet.add(id);
+          });
         }
       });
       grid.appendChild(card);
@@ -10898,6 +10959,11 @@ if(tutorialActive) tutorialUpdate(dt);
   // number. Categories: NEW / IMPROVEMENTS / BALANCE / BUG FIXES --
   // include only the ones an entry actually has.
   const PATCH_NOTES = [
+    { version: 'v0.18', title: 'Anti-Cheat: Server-Side Shop',
+      IMPROVEMENTS: [
+        'Credits and every item you own (skins, powers, abilities) are now tracked by the server instead of trusted from your own game -- exactly like health/hits already are.',
+        'Nothing changes about how buying or equipping something feels; this closes off a way an account could previously give itself unearned credits or items.'
+      ] },
     { version: 'v0.17', title: 'Lobby Chat',
       NEW: [
         'Lobby chat is live \u2014 the LOBBY CHAT button in the bottom bar opens a real, real-time room for everyone sitting in the lobby.',
