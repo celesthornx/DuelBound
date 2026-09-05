@@ -10229,6 +10229,12 @@ if(tutorialActive) tutorialUpdate(dt);
   // number. Categories: NEW / IMPROVEMENTS / BALANCE / BUG FIXES --
   // include only the ones an entry actually has.
   const PATCH_NOTES = [
+    { version: 'v0.12', title: 'Online Performance',
+      IMPROVEMENTS: [
+        'Online matches now stutter far less — saving your progress no longer stalls the server mid-match.',
+        'Opponents are drawn 25ms closer to real time, so their movement and shots land sooner on your screen.',
+        'Server stays responsive as more players are online instead of slowing down as the player base grows.'
+      ] },
     { version: 'v0.11', title: 'Friends Preview in Lobby',
       IMPROVEMENTS: [
         'The FRIENDS card in the lobby now shows your actual friends and who’s online, instead of a "Coming Soon" placeholder.'
