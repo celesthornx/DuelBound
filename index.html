@@ -249,8 +249,11 @@
   .menu-btn.diff.selected{ border-color: var(--p1); color:#000; background: var(--p1); }
   .menu-back{
     background:none; border:none; color:var(--ink-dim);
-    font-family:'Share Tech Mono', monospace; font-size:10px; letter-spacing:2px;
+    font-family:'Share Tech Mono', monospace; font-size:15px; letter-spacing:2px;
     cursor:pointer; text-decoration:underline; margin-top: 4px;
+    /* Bigger hit area, not just bigger text -- this is a real tap
+       target on the touch layouts, not only a desktop link. */
+    padding: 8px 6px;
   }
   .hidden{ display:none !important; }
   canvas.mouse-aim{ cursor: none; }
@@ -1290,7 +1293,11 @@
      aimed at a sign-in button -- that overlap predates the
      username/password option and affected the Google button too. */
   .profile-auth{ margin-top:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-  .profile-auth .menu-back{ margin-top:0; }
+  /* "log out" reuses .menu-back's look but sits inline with the
+     sign-in buttons, not as a page-level back link -- kept at its
+     original size so enlarging the real back buttons above doesn't
+     also blow out this row. */
+  .profile-auth .menu-back{ margin-top:0; font-size:10px; padding:4px 2px; }
 
   .rank-strip{
     display:flex; align-items:center; gap:11px;
