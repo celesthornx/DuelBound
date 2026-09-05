@@ -131,6 +131,7 @@ function defaultAccount(name, email) {
         deviceMode: "auto",
         xp: 0,
         level: 1,
+        tutorialComplete: false,
         dailyChallenges: defaultDailyChallenges(),
         ranked: Ranked.defaultRankedRecord(),
         // Friend lists hold stable account ids (Google "sub"), never emails.
@@ -2030,6 +2031,16 @@ const httpServer = http.createServer(async (req, res) => {
             // already has valid XP. ensureAccountXP persists on its own
             // if it changed anything, so it's not folded into `dirty`.
             ensureAccountXP(sub);
+            // Same lazy migration for a pre-tutorial-feature account --
+            // an EXISTING player who predates this field must never be
+            // treated as "not yet completed" by omission (that would
+            // just re-offer them a tutorial they never needed); explicit
+            // false is only ever set once, here, and only if the field
+            // is genuinely missing.
+            if (typeof accounts[sub].tutorialComplete !== "boolean") {
+                accounts[sub].tutorialComplete = true;
+                dirty = true;
+            }
             if (dirty) await persistAccount(sub);
 
             const sessionToken = crypto.randomBytes(24).toString("hex");
@@ -2124,6 +2135,10 @@ const httpServer = http.createServer(async (req, res) => {
                 // inside awardXP(), never here.
                 xp: typeof existing.xp === "number" ? existing.xp : 0,
                 level: typeof existing.level === "number" ? existing.level : 1,
+                // Non-sensitive UX state (no credits/XP/rank riding on
+                // it), same trust tier as aimMode/matchSize/deviceMode
+                // above -- client-reported is fine here, unlike xp/level.
+                tutorialComplete: typeof body.tutorialComplete === "boolean" ? body.tutorialComplete : (existing.tutorialComplete || false),
                 dailyChallenges: newDailyChallenges,
                 // RANKED IS DELIBERATELY NOT READ FROM `body`.
                 //
