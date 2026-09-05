@@ -863,9 +863,9 @@ function createRankedMatch(entryA, entryB) {
             // Snapshot the rating at match START. Using the live record
             // at result time would let a player's other concurrent match
             // change the maths of this one.
-            rpAtStart: entry.record.placementComplete ? entry.record.rp : null,
+            rpAtStart: entry.record.rp,
             rankAtStart: Ranked.getRankForRecord(entry.record),
-            placementCompleteAtStart: !!entry.record.placementComplete,
+            placementCompleteAtStart: true,
             connected: true
         };
         rankedPlayerMatch.set(entry.sub, matchId);
@@ -1231,10 +1231,11 @@ function getRankedLeaderboard() {
     for (const sub of Object.keys(accounts)) {
         const account = accounts[sub];
         const record = account && account.ranked;
-        // Only ranked (placement-complete) players appear on the ladder.
+        // Every account is ranked from its first match -- only having
+        // actually played one is what keeps an untouched account off
+        // the ladder.
         if (!record || typeof record !== "object") continue;
         if (record.season !== RANKED_CONFIG.season) continue;
-        if (!record.placementComplete) continue;
         if ((record.games || 0) <= 0) continue;
         rows.push({
             sub: sub,

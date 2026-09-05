@@ -1772,7 +1772,6 @@
     background: linear-gradient(90deg, var(--p1), #7ee8ff);
     transition: width .35s ease;
   }
-  .rk-phint{ font-size:9px; letter-spacing:1.2px; color: var(--ink-dim); margin-top:6px; }
   .rk-stats{ display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:6px; }
   .rk-stat{ text-align:center; min-width:0; }
   .rk-stat b{ display:block; font-size:16px; color: var(--ink); }
@@ -1851,16 +1850,6 @@
     text-align:center; margin-bottom:14px; padding:10px;
     border:1px solid var(--panel-edge); border-radius:10px;
   }
-  .rr-reveal{
-    text-align:center; margin-bottom:14px; padding:16px 10px;
-    border:1px solid rgba(255,206,84,.4); border-radius:10px;
-    background: rgba(255,206,84,.07);
-    animation: rrPop .5s cubic-bezier(.2,1.4,.4,1);
-  }
-  @keyframes rrPop{ from{ transform: scale(.86); opacity:0; } to{ transform: scale(1); opacity:1; } }
-  .rr-reveal-tag{ font-size:11px; letter-spacing:3px; color: var(--gold); }
-  .rr-reveal-rank{ font-size:26px; font-weight:900; letter-spacing:2px; color: var(--ink); margin:4px 0 2px; }
-  .rr-reveal-rp{ font-size:13px; letter-spacing:1.5px; color: var(--p1); }
   .rr-grid{ margin-bottom:14px; }
   .rr-row{
     display:flex; justify-content:space-between; align-items:center; gap:10px;
@@ -2325,7 +2314,7 @@
   <div class="ranked-banner hidden" id="rankedBanner">
     <div class="rb-side">
       <div class="rb-name" id="rbYouName">YOU</div>
-      <div class="rb-rank" id="rbYouRank">UNRANKED</div>
+      <div class="rb-rank" id="rbYouRank">BRONZE III</div>
     </div>
     <div class="rb-mid">
       <div class="rb-tag">RANKED</div>
@@ -2333,7 +2322,7 @@
     </div>
     <div class="rb-side rb-right">
       <div class="rb-name" id="rbFoeName">OPPONENT</div>
-      <div class="rb-rank" id="rbFoeRank">UNRANKED</div>
+      <div class="rb-rank" id="rbFoeRank">BRONZE III</div>
     </div>
   </div>
 
@@ -2425,17 +2414,20 @@
             </div>
           </div>
 
-          <!-- Ranked progression isn't part of the game yet -- reserved, not faked. -->
-          <div class="rank-strip">
+          <!-- Mirrors the player's real Ranked standing (see the RANKED
+               hub / ranked.js) -- refreshLobbyRank() below keeps this in
+               sync at boot and sign-in so it's visible without having to
+               open the Ranked hub first. -->
+          <div class="rank-strip" id="lobbyRankStrip">
             <svg viewBox="0 0 30 30" fill="none" aria-hidden="true">
               <path d="M15 2 L27 8 L27 17 C27 23 21 27 15 28 C9 27 3 23 3 17 L3 8 Z" stroke="rgba(160,190,225,.7)" stroke-width="1.3" fill="rgba(122,158,200,.10)"/>
               <path d="M15 9 L20 15 L15 21 L10 15 Z" fill="rgba(190,215,245,.55)"/>
             </svg>
             <div class="rk">
               <div class="micro">RANK</div>
-              <div class="rank-name">UNRANKED</div>
+              <div class="rank-name" id="lobbyRankName">&mdash;</div>
             </div>
-            <span class="soon-tag">COMING SOON</span>
+            <span class="soon-tag" id="lobbyRankTag">SIGN IN</span>
           </div>
 
           <div class="stat-list">
@@ -2509,18 +2501,22 @@
 
       <!-- ===== RIGHT: reserved space for future systems ===== -->
       <aside class="lobby-col lobby-right">
+        <!-- Mirrors the real Friends system (see the FRIENDS menu / FRIENDS
+             object below) -- renderLobbyFriends() keeps this in sync at
+             boot, sign-in/out, and every real friends-list update, same
+             pattern as the rank strip above it. -->
         <div class="lp">
           <div class="lp-head">
             <span class="lp-title">FRIENDS</span>
-            <span class="soon-tag">COMING SOON</span>
+            <span class="soon-tag" id="lobbyFriendsTag">&mdash;</span>
           </div>
-          <div class="lp-body">
+          <div class="lp-body" id="lobbyFriendsBody">
             <div class="ghost-stack">
               <div class="ghost-row"><div class="ghost-av"></div><div class="ghost-lines"><span></span><span></span></div></div>
               <div class="ghost-row"><div class="ghost-av"></div><div class="ghost-lines"><span></span><span></span></div></div>
               <div class="ghost-row"><div class="ghost-av"></div><div class="ghost-lines"><span></span><span></span></div></div>
             </div>
-            <div class="micro" style="text-align:center; margin-top:6px;">FRIENDS LIST NOT AVAILABLE YET</div>
+            <div class="micro" style="text-align:center; margin-top:6px;">SIGN IN TO ADD FRIENDS</div>
           </div>
         </div>
 
@@ -2840,16 +2836,10 @@
 
       <div class="rk-card" id="rkCard">
         <div class="rk-badge" id="rkBadge">
-          <div class="rk-badge-tier" id="rkBadgeTier">UNRANKED</div>
+          <div class="rk-badge-tier" id="rkBadgeTier">BRONZE III</div>
           <div class="rk-badge-rp" id="rkBadgeRP">&mdash;</div>
         </div>
         <div class="rk-info">
-          <div class="rk-placement hidden" id="rkPlacementWrap">
-            <div class="rk-plabel">PLACEMENT MATCHES</div>
-            <div class="rk-pcount" id="rkPlacementCount">0 / 10</div>
-            <div class="rk-pbar"><i id="rkPlacementBar" style="width:0%"></i></div>
-            <div class="rk-phint">COMPLETE YOUR PLACEMENTS TO EARN A RANK</div>
-          </div>
           <div class="rk-stats hidden" id="rkStatsWrap">
             <div class="rk-stat"><b id="rkWins">0</b><span>WINS</span></div>
             <div class="rk-stat"><b id="rkLosses">0</b><span>LOSSES</span></div>
@@ -2884,13 +2874,13 @@
       <div class="rq-found hidden" id="rqFound">
         <div class="rqf-side">
           <div class="rqf-name" id="rqfYouName">YOU</div>
-          <div class="rqf-rank" id="rqfYouRank">UNRANKED</div>
+          <div class="rqf-rank" id="rqfYouRank">BRONZE III</div>
           <div class="rqf-rp" id="rqfYouRP"></div>
         </div>
         <div class="rqf-vs">VS</div>
         <div class="rqf-side">
           <div class="rqf-name" id="rqfFoeName">OPPONENT</div>
-          <div class="rqf-rank" id="rqfFoeRank">UNRANKED</div>
+          <div class="rqf-rank" id="rqfFoeRank">BRONZE III</div>
           <div class="rqf-rp" id="rqfFoeRP"></div>
         </div>
       </div>
@@ -2909,18 +2899,6 @@
       <div class="rr-promo hidden" id="rrPromo">
         <div class="rr-promo-tag" id="rrPromoTag">RANK UP!</div>
         <div class="rr-promo-move" id="rrPromoMove"></div>
-      </div>
-
-      <div class="rr-placement hidden" id="rrPlacement">
-        <div class="rk-plabel">PLACEMENT PROGRESS</div>
-        <div class="rk-pcount" id="rrPlacementCount">1 / 10</div>
-        <div class="rk-pbar"><i id="rrPlacementBar" style="width:0%"></i></div>
-      </div>
-
-      <div class="rr-reveal hidden" id="rrReveal">
-        <div class="rr-reveal-tag">RANKED!</div>
-        <div class="rr-reveal-rank" id="rrRevealRank">GOLD III</div>
-        <div class="rr-reveal-rp" id="rrRevealRP">1,425 RP</div>
       </div>
 
       <div class="rr-grid">
@@ -4440,6 +4418,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       const adminBtn = document.getElementById('btnAdmin');
       if(adminBtn) adminBtn.classList.toggle('hidden', !isAdmin);
       lobbySync();
+      refreshLobbyRank();
+      renderLobbyFriends();
       // Re-fetch now that sessionToken is set, so the panel switches from
       // the anonymous/guest view to this account's real persisted
       // progress and claimed state right away.
@@ -4476,6 +4456,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     const adminBtn = document.getElementById('btnAdmin');
     if(adminBtn) adminBtn.classList.add('hidden');
     lobbySync();
+    refreshLobbyRank();
+    renderLobbyFriends();
     // Drop back to the anonymous view -- same challenge list, but no
     // personal (persisted) progress or claimed state attached to it.
     dailyClaimed = {};
@@ -10108,6 +10090,43 @@ if(tutorialActive) tutorialUpdate(dt);
   // number. Categories: NEW / IMPROVEMENTS / BALANCE / BUG FIXES --
   // include only the ones an entry actually has.
   const PATCH_NOTES = [
+    { version: 'v0.11', title: 'Friends Preview in Lobby',
+      IMPROVEMENTS: [
+        'The FRIENDS card in the lobby now shows your actual friends and who’s online, instead of a "Coming Soon" placeholder.'
+      ] },
+    { version: 'v0.10', title: 'Ranked Start Changes',
+      IMPROVEMENTS: [
+        'Removed placement matches and the Unranked state — every player is now ranked from their very first match.',
+        'New players now start at the bottom of Bronze instead of grinding 10 placement games to reveal a rank.',
+        'Your real rank now shows right in the lobby, not just inside the RANKED hub.'
+      ] },
+    { version: 'v0.9', title: 'Interactive Tutorial',
+      NEW: [
+        'Added an interactive tutorial for new players, covering movement, shooting, dashing, abilities, ammo, and the match objective with a practice duel at the end.',
+        'Added a PLAY TUTORIAL option in Settings to replay it any time.'
+      ],
+      IMPROVEMENTS: [
+        'You can skip the tutorial at any point — your progress and account are never affected either way.'
+      ] },
+    { version: 'v0.8', title: 'Usernames & XP Progression',
+      NEW: [
+        'Added the ability to change your username from Settings.',
+        'Added XP and Levels — earn XP from match wins, kills, and objectives across every mode.',
+        'Online opponents and teammates now show real usernames and levels instead of placeholder labels.'
+      ] },
+    { version: 'v0.7', title: 'Mobile & iPad Improvements',
+      IMPROVEMENTS: [
+        'Rebuilt the mobile and iPad layout so controls and the HUD scale correctly on every device.',
+        'Added a DEVICE COMPATIBILITY setting (Auto / iPhone / iPad / Computer) in Settings.',
+        'Added a "rotate your device" prompt when playing in portrait.'
+      ],
+      'BUG FIXES': [
+        'Fixed a missing viewport tag that caused mobile scaling issues on many devices.'
+      ] },
+    { version: 'v0.6', title: 'Bomb Run',
+      NEW: [
+        'Added Bomb Run — a new game mode where you grab the bomb and deliver it to the enemy base to score.'
+      ] },
     { version: 'v0.5', title: 'Patch Notes',
       NEW: [
         'Added this Patch Notes screen so you can see what’s new.'
@@ -10232,6 +10251,8 @@ if(tutorialActive) tutorialUpdate(dt);
   function initLobby(){
     renderLobbyModes();
     lobbySync();
+    refreshLobbyRank();
+    renderLobbyFriends();
     fetchDailyChallenges();
 
     const prev = lobbyEl('lobbyModePrev');
@@ -10357,8 +10378,10 @@ if(tutorialActive) tutorialUpdate(dt);
     return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0');
   };
   // A rank descriptor from the server -> display string. Falls back to
-  // UNRANKED rather than rendering "undefined" if anything is missing.
-  const rkRankName = r => (r && r.name ? String(r.name).toUpperCase() : 'UNRANKED');
+  // an em dash rather than rendering "undefined" if anything is missing
+  // (e.g. a network error left the field empty) -- there is no more
+  // "unranked" state to fall back to, everyone has a real rank.
+  const rkRankName = r => (r && r.name ? String(r.name).toUpperCase() : '—');
 
   function rkHideAll(){
     [menuRanked, menuRankedQueue, menuRankedResult, menuRankedLadder].forEach(el=>{
@@ -10404,6 +10427,40 @@ if(tutorialActive) tutorialUpdate(dt);
     }
   }
 
+  // Mirrors the player's real rank into the lobby sidebar (lobbyRankStrip)
+  // so it's visible without opening the RANKED hub. Every account is
+  // ranked from its first match (see ranked.js), so a guest is the only
+  // case with nothing to show yet.
+  async function refreshLobbyRank(){
+    const nameEl = lobbyEl('lobbyRankName');
+    const tagEl  = lobbyEl('lobbyRankTag');
+    if(!nameEl || !tagEl) return;
+
+    if(!loggedIn || !sessionToken){
+      nameEl.textContent = '—';
+      nameEl.style.color = '';
+      tagEl.textContent = 'SIGN IN';
+      tagEl.classList.remove('hidden');
+      return;
+    }
+
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/ranked/me?sessionToken=' + encodeURIComponent(sessionToken));
+      if(!res.ok) throw new Error('http ' + res.status);
+      const data = await res.json();
+      RANKED.profile = data;
+      const r = data.ranked;
+      nameEl.textContent = rkRankName(r.rank);
+      nameEl.style.color = (r.rank && r.rank.color) || '';
+      tagEl.textContent = rkFmt(r.rp) + ' RP';
+      tagEl.classList.remove('hidden');
+    } catch(e){
+      nameEl.textContent = '—';
+      nameEl.style.color = '';
+      tagEl.classList.add('hidden');
+    }
+  }
+
   function renderRankedProfile(data){
     const r = data.ranked;
     rkEl('rkSeason').textContent = (data.config && data.config.seasonName
@@ -10411,27 +10468,15 @@ if(tutorialActive) tutorialUpdate(dt);
 
     rkEl('rkBadgeTier').textContent = rkRankName(r.rank);
     if(r.rank && r.rank.color) rkEl('rkBadgeTier').style.color = r.rank.color;
-    rkEl('rkBadgeRP').textContent = r.placementComplete ? rkFmt(r.rp) + ' RP' : 'NO RANK YET';
+    rkEl('rkBadgeRP').textContent = rkFmt(r.rp) + ' RP';
 
-    const placementWrap = rkEl('rkPlacementWrap');
-    const statsWrap     = rkEl('rkStatsWrap');
+    rkEl('rkStatsWrap').classList.remove('hidden');
+    rkEl('rkWins').textContent    = r.wins;
+    rkEl('rkLosses').textContent  = r.losses;
+    rkEl('rkWinRate').textContent = r.winRate + '%';
+    rkEl('rkGames').textContent   = r.games;
 
-    if(!r.placementComplete){
-      placementWrap.classList.remove('hidden');
-      statsWrap.classList.add('hidden');
-      rkEl('rkPlacementCount').textContent = r.placementGames + ' / ' + r.placementTotal;
-      rkEl('rkPlacementBar').style.width =
-        Math.min(100, (r.placementGames / r.placementTotal) * 100) + '%';
-    } else {
-      placementWrap.classList.add('hidden');
-      statsWrap.classList.remove('hidden');
-      rkEl('rkWins').textContent    = r.wins;
-      rkEl('rkLosses').textContent  = r.losses;
-      rkEl('rkWinRate').textContent = r.winRate + '%';
-      rkEl('rkGames').textContent   = r.games;
-    }
-
-    rkEl('rkPeak').textContent = (r.placementComplete && r.highestRank)
+    rkEl('rkPeak').textContent = r.highestRank
       ? 'SEASON HIGH: ' + rkRankName(r.highestRank) + ' · ' + rkFmt(r.highestRP) + ' RP'
       : '';
     rkEl('rkPosition').textContent = (typeof data.position === 'number')
@@ -10627,21 +10672,19 @@ if(tutorialActive) tutorialUpdate(dt);
 
     rkEl('rqfYouName').textContent = data.you.name || 'YOU';
     rkEl('rqfYouRank').textContent = rkRankName(data.you.rank);
-    rkEl('rqfYouRP').textContent   = data.you.placementComplete ? rkFmt(data.you.rp) + ' RP' : 'IN PLACEMENTS';
+    rkEl('rqfYouRP').textContent   = rkFmt(data.you.rp) + ' RP';
     rkEl('rqfFoeName').textContent = data.opponent.name || 'OPPONENT';
     rkEl('rqfFoeRank').textContent = rkRankName(data.opponent.rank);
-    rkEl('rqfFoeRP').textContent   = data.opponent.placementComplete ? rkFmt(data.opponent.rp) + ' RP' : 'IN PLACEMENTS';
+    rkEl('rqfFoeRP').textContent   = rkFmt(data.opponent.rp) + ' RP';
   }
 
   // ---- IN-MATCH BANNER -------------------------------------------
   function showRankedBanner(){
     if(!RANKED.you || !RANKED.opponent) return;
     rkEl('rbYouName').textContent = RANKED.you.name || 'YOU';
-    rkEl('rbYouRank').textContent = RANKED.you.placementComplete
-      ? rkRankName(RANKED.you.rank) + ' · ' + rkFmt(RANKED.you.rp) + ' RP' : 'UNRANKED';
+    rkEl('rbYouRank').textContent = rkRankName(RANKED.you.rank) + ' · ' + rkFmt(RANKED.you.rp) + ' RP';
     rkEl('rbFoeName').textContent = RANKED.opponent.name || 'OPPONENT';
-    rkEl('rbFoeRank').textContent = RANKED.opponent.placementComplete
-      ? rkRankName(RANKED.opponent.rank) + ' · ' + rkFmt(RANKED.opponent.rp) + ' RP' : 'UNRANKED';
+    rkEl('rbFoeRank').textContent = rkRankName(RANKED.opponent.rank) + ' · ' + rkFmt(RANKED.opponent.rp) + ' RP';
     updateRankedBanner();
     rankedBanner.classList.remove('hidden');
   }
@@ -10672,12 +10715,7 @@ if(tutorialActive) tutorialUpdate(dt);
 
     const delta = rkEl('rrDelta');
     const change = r.rpChange || 0;
-    if(!r.placementComplete){
-      // No RP is shown during placements -- there is no rating yet.
-      delta.textContent = data.won ? 'PLACEMENT WIN' : 'PLACEMENT LOSS';
-      delta.className = 'rr-delta ' + (data.won ? 'up' : 'down');
-      rkEl('rrTrack').textContent = '';
-    } else if(change === 0){
+    if(change === 0){
       delta.textContent = data.rated ? '±0 RP' : 'UNRATED';
       delta.className = 'rr-delta flat';
       rkEl('rrTrack').textContent = data.rated ? '' : 'REPEATED OPPONENT — NO RP AWARDED';
@@ -10686,22 +10724,6 @@ if(tutorialActive) tutorialUpdate(dt);
       delta.className = 'rr-delta ' + (change > 0 ? 'up' : 'down');
       rkEl('rrTrack').textContent = (r.rpBefore !== null && r.rpBefore !== undefined)
         ? rkFmt(r.rpBefore) + ' → ' + rkFmt(r.rpAfter) + ' RP' : '';
-    }
-
-    // Placement progress / rank reveal
-    const pl = rkEl('rrPlacement');
-    const rev = rkEl('rrReveal');
-    pl.classList.add('hidden');
-    rev.classList.add('hidden');
-    if(r.placementJustCompleted){
-      rev.classList.remove('hidden');
-      rkEl('rrRevealRank').textContent = rkRankName(r.rankAfter);
-      rkEl('rrRevealRP').textContent = rkFmt(r.rpAfter) + ' RP';
-    } else if(!r.placementComplete && typeof r.placementGames === 'number'){
-      pl.classList.remove('hidden');
-      rkEl('rrPlacementCount').textContent = r.placementGames + ' / ' + r.placementTotal;
-      rkEl('rrPlacementBar').style.width =
-        Math.min(100, (r.placementGames / r.placementTotal) * 100) + '%';
     }
 
     // Promotion / demotion
@@ -10758,7 +10780,7 @@ if(tutorialActive) tutorialUpdate(dt);
 
       if(!data.entries.length){
         body.innerHTML = '<div class="rl-empty">NO RANKED PLAYERS YET.<br>'
-          + 'COMPLETE 10 PLACEMENT MATCHES TO APPEAR HERE.</div>';
+          + 'PLAY A RANKED MATCH TO APPEAR HERE.</div>';
         return;
       }
 
@@ -10781,7 +10803,7 @@ if(tutorialActive) tutorialUpdate(dt);
           + '<b>' + rkFmt(data.you.rp) + ' RP · ' + rkRankName(data.you.rank) + '</b>';
       } else if(loggedIn){
         you.classList.remove('hidden');
-        you.innerHTML = '<span>YOU ARE NOT RANKED YET</span><b>FINISH PLACEMENTS</b>';
+        you.innerHTML = '<span>NOT ON THE LADDER YET</span><b>PLAY A RANKED MATCH</b>';
       }
     } catch(e){
       body.innerHTML = '<div class="rl-empty">LEADERBOARD UNAVAILABLE</div>';
@@ -10963,6 +10985,7 @@ if(tutorialActive) tutorialUpdate(dt);
     if(p.counts) FRIENDS.counts = p.counts;
     updateFriendsBadge();
     if(menuFriends && !menuFriends.classList.contains('hidden')) renderFriends();
+    renderLobbyFriends();
   }
 
   // A presence delta for one friend -- patched in place so the list
@@ -10983,6 +11006,7 @@ if(tutorialActive) tutorialUpdate(dt);
       }
     });
     if(changed && menuFriends && !menuFriends.classList.contains('hidden')) renderFriends();
+    if(changed) renderLobbyFriends();
     if(changed && menuFriendProfile && !menuFriendProfile.classList.contains('hidden')
        && FRIENDS.profile && FRIENDS.profile.id === evt.id){
       FRIENDS.profile.presence = evt.presence;
@@ -11095,6 +11119,57 @@ if(tutorialActive) tutorialUpdate(dt);
     const n = FRIENDS.counts.incoming || 0;
     btn.classList.toggle('has-badge', n > 0);
     btn.setAttribute('title', n > 0 ? ('Friends (' + n + ' request' + (n === 1 ? '' : 's') + ')') : 'Friends');
+  }
+
+  // Compact preview of the real friends list in the lobby sidebar (see
+  // renderFriends() for the full menu this mirrors) -- so a player can
+  // see who's online without leaving the lobby.
+  function renderLobbyFriends(){
+    const body = lobbyEl('lobbyFriendsBody');
+    const tag  = lobbyEl('lobbyFriendsTag');
+    if(!body || !tag) return;
+
+    if(!loggedIn || !sessionToken){
+      tag.textContent = '—';
+      body.innerHTML = '<div class="ghost-stack">'
+        + '<div class="ghost-row"><div class="ghost-av"></div><div class="ghost-lines"><span></span><span></span></div></div>'
+        + '<div class="ghost-row"><div class="ghost-av"></div><div class="ghost-lines"><span></span><span></span></div></div>'
+        + '<div class="ghost-row"><div class="ghost-av"></div><div class="ghost-lines"><span></span><span></span></div></div>'
+        + '</div><div class="micro" style="text-align:center; margin-top:6px;">SIGN IN TO ADD FRIENDS</div>';
+      return;
+    }
+
+    const online = FRIENDS.friends.filter(f => f.presence !== 'offline').length;
+    tag.textContent = online > 0
+      ? (online + ' ONLINE')
+      : (FRIENDS.counts.friends + ' FRIEND' + (FRIENDS.counts.friends === 1 ? '' : 'S'));
+
+    if(!FRIENDS.friends.length){
+      body.innerHTML = '<div class="micro" style="text-align:center; margin:10px 0;">NO FRIENDS YET</div>'
+        + '<button class="menu-btn" style="width:100%" id="lobbyFriendsAdd">ADD FRIENDS</button>';
+      const addBtn = lobbyEl('lobbyFriendsAdd');
+      if(addBtn) addBtn.addEventListener('click', ()=> openFriends());
+      return;
+    }
+
+    // Online friends first, then alphabetical, capped to a short preview
+    // -- the full sorted/searchable list still lives in the real menu.
+    const sorted = FRIENDS.friends.slice().sort((a, b)=>{
+      const aOn = a.presence !== 'offline', bOn = b.presence !== 'offline';
+      if(aOn !== bOn) return aOn ? -1 : 1;
+      return String(a.name).localeCompare(String(b.name));
+    }).slice(0, 4);
+
+    body.innerHTML = sorted.map(p =>
+      '<div class="fr-row" data-lobby-fr="' + frEscape(p.id) + '" style="cursor:pointer">' + presenceRowHtml(p) + '</div>'
+    ).join('') + '<button class="menu-btn" style="width:100%; margin-top:4px" id="lobbyFriendsViewAll">VIEW ALL</button>';
+
+    body.querySelectorAll('[data-lobby-fr]').forEach(el => el.addEventListener('click', ()=>{
+      menuMain.classList.add('hidden');
+      openFriendProfile(el.dataset.lobbyFr);
+    }));
+    const viewAll = lobbyEl('lobbyFriendsViewAll');
+    if(viewAll) viewAll.addEventListener('click', ()=> openFriends());
   }
 
   // ---- UI --------------------------------------------------------
@@ -11329,13 +11404,11 @@ if(tutorialActive) tutorialUpdate(dt);
 
     const row = (k, v) => '<div class="rr-row"><span>' + k + '</span><b>' + v + '</b></div>';
     let stats = row('WINS', data.wins) + row('KILLS', data.kills);
-    if(data.ranked && data.ranked.placementComplete){
+    if(data.ranked){
       stats += row('RANK', frEscape(data.ranked.rank.name.toUpperCase()))
         + row('RP', (data.ranked.rp || 0).toLocaleString())
         + row('RANKED RECORD', data.ranked.wins + 'W · ' + data.ranked.losses + 'L')
         + row('WIN RATE', data.ranked.winRate + '%');
-    } else {
-      stats += row('RANKED', 'UNRANKED');
     }
     stats += row('FRIENDS', data.friendCount);
     frEl('fpStats').innerHTML = stats;
@@ -11409,31 +11482,22 @@ if(tutorialActive) tutorialUpdate(dt);
     html += '<div class="rk-season" style="margin:14px 0 8px">'
       + ((data.config && data.config.seasonName) || 'SEASON').toUpperCase() + ' · RANKED</div>';
 
-    if(!r.placementComplete){
-      html += '<div class="rr-placement" style="margin-bottom:0">'
-        + '<div class="rk-plabel">UNRANKED — PLACEMENT MATCHES</div>'
-        + '<div class="rk-pcount">' + r.placementGames + ' / ' + r.placementTotal + '</div>'
-        + '<div class="rk-pbar"><i style="width:'
-        + Math.min(100, (r.placementGames / r.placementTotal) * 100) + '%"></i></div>'
-        + '</div>';
-    } else {
-      html += '<div style="text-align:center;margin-bottom:10px">'
-        + '<div style="font-size:22px;font-weight:900;letter-spacing:2px;color:'
-        + (r.rank.color || '#e8edf5') + '">' + rkRankName(r.rank) + '</div>'
-        + '<div style="font-size:13px;color:var(--p1);letter-spacing:1.5px">'
-        + rkFmt(r.rp) + ' RP</div></div>'
-        + '<div class="rr-grid">'
-        + '<div class="rr-row"><span>RANKED WINS</span><b>' + r.wins + '</b></div>'
-        + '<div class="rr-row"><span>RANKED LOSSES</span><b>' + r.losses + '</b></div>'
-        + '<div class="rr-row"><span>TOTAL RANKED GAMES</span><b>' + r.games + '</b></div>'
-        + '<div class="rr-row"><span>WIN RATE</span><b>' + r.winRate + '%</b></div>'
-        + '<div class="rr-row"><span>HIGHEST RP</span><b>' + rkFmt(r.highestRP) + '</b></div>'
-        + '<div class="rr-row"><span>SEASON HIGH</span><b>'
-        + (r.highestRank ? rkRankName(r.highestRank) : '—') + '</b></div>'
-        + (typeof data.position === 'number'
-            ? '<div class="rr-row"><span>LEADERBOARD</span><b>#' + data.position + '</b></div>' : '')
-        + '</div>';
-    }
+    html += '<div style="text-align:center;margin-bottom:10px">'
+      + '<div style="font-size:22px;font-weight:900;letter-spacing:2px;color:'
+      + (r.rank.color || '#e8edf5') + '">' + rkRankName(r.rank) + '</div>'
+      + '<div style="font-size:13px;color:var(--p1);letter-spacing:1.5px">'
+      + rkFmt(r.rp) + ' RP</div></div>'
+      + '<div class="rr-grid">'
+      + '<div class="rr-row"><span>RANKED WINS</span><b>' + r.wins + '</b></div>'
+      + '<div class="rr-row"><span>RANKED LOSSES</span><b>' + r.losses + '</b></div>'
+      + '<div class="rr-row"><span>TOTAL RANKED GAMES</span><b>' + r.games + '</b></div>'
+      + '<div class="rr-row"><span>WIN RATE</span><b>' + r.winRate + '%</b></div>'
+      + '<div class="rr-row"><span>HIGHEST RP</span><b>' + rkFmt(r.highestRP) + '</b></div>'
+      + '<div class="rr-row"><span>SEASON HIGH</span><b>'
+      + (r.highestRank ? rkRankName(r.highestRank) : '—') + '</b></div>'
+      + (typeof data.position === 'number'
+          ? '<div class="rr-row"><span>LEADERBOARD</span><b>#' + data.position + '</b></div>' : '')
+      + '</div>';
 
     if(r.history && r.history.length){
       html += '<div class="rk-season" style="margin:12px 0 6px">PAST SEASONS</div><div class="rr-grid">'

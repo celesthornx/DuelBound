@@ -41,7 +41,12 @@ const RANKED_CONFIG = {
     minRPLoss: 8,
     maxRPLoss: 32,
 
-    // Placements
+    // Placements. No longer gate anything live -- every player is
+    // ranked from their first match, starting at the bottom of Bronze
+    // (see defaultRankedRecord/ensureRankedRecord below) -- but the
+    // curve stays here so a pre-existing account still mid-placement
+    // when this shipped can be promoted fairly instead of reset to
+    // zero (see ensureRankedRecord's migration).
     placementGames: 10,
     placementBaseRP: 900,     // RP for a 0-win placement run
     placementPerWinRP: 55,    // added per placement win (10 wins -> 1450)
@@ -54,7 +59,6 @@ const RANKED_CONFIG = {
         expandStep: 100,      // widen by this much...
         expandEverySec: 10,   // ...every this many seconds
         maxRange: 5000,       // effectively "anyone" once it gets here
-        unrankedRange: 5000,  // placement players match anyone (no rating yet)
         maxQueueSec: 300      // give up and tell the client after 5 min
     },
 
@@ -116,16 +120,6 @@ const RANK_TIERS = [
     { id: "master",      name: "Master",      min: 3000, max: 3499,     divisions: 1, color: "#c07bff" },
     { id: "grandmaster", name: "Grandmaster", min: 3500, max: Infinity, divisions: 1, color: "#ff5c7a" }
 ];
-
-const UNRANKED = {
-    tier: "unranked",
-    tierName: "Unranked",
-    division: 0,
-    name: "Unranked",
-    short: "UNR",
-    color: "#7d8b9c",
-    index: -1
-};
 
 const ROMAN = ["", "I", "II", "III"];
 
@@ -213,12 +207,12 @@ function getRankFromRP(rp) {
     };
 }
 
-// Rank descriptor for a whole ranked record -- the only difference from
-// getRankFromRP is that a player still in placements has no rank at all
-// yet, however much RP they've accumulated behind the scenes.
+// Rank descriptor for a whole ranked record. Every account is ranked
+// from its first match (see defaultRankedRecord/ensureRankedRecord), so
+// this is just getRankFromRP guarded against a record that doesn't
+// exist yet -- there is no more "unranked" descriptor to fall back to.
 function getRankForRecord(record) {
-    if (!record || !record.placementComplete) return Object.assign({}, UNRANKED);
-    return getRankFromRP(record.rp);
+    return getRankFromRP(record ? record.rp : 0);
 }
 
 // ---------------------------------------------------------------------
@@ -277,14 +271,14 @@ function defaultRankedRecord(config) {
     const cfg = config || RANKED_CONFIG;
     return {
         season: cfg.season,
-        rp: 0,                      // meaningless until placementComplete
+        rp: 0,                      // bottom of Bronze -- every account starts ranked, no placements
         wins: 0,
         losses: 0,
         games: 0,
         placementGames: 0,
         placementWins: 0,
         placementLosses: 0,
-        placementComplete: false,
+        placementComplete: true,
         highestRP: 0,
         highestRankIndex: -1,       // ladder index; -1 = never ranked
         lastMatchAt: 0,
@@ -325,8 +319,20 @@ function ensureRankedRecord(account, config) {
         else { out[k] = base[k]; changed = true; }
     }
 
-    out.placementComplete = typeof existing.placementComplete === "boolean"
-        ? existing.placementComplete : (changed = true, base.placementComplete);
+    // Placements were removed -- every account is ranked from its first
+    // match. A record that was still mid-placement when this shipped is
+    // promoted right here, crediting whatever partial placement
+    // performance it already has (rather than just resetting it to
+    // zero) so nobody's progress is thrown away.
+    if (existing.placementComplete !== true) {
+        out.placementComplete = true;
+        out.rp = out.placementGames > 0
+            ? computePlacementRP(out.placementWins, out.placementLosses, cfg)
+            : base.rp;
+        changed = true;
+    } else {
+        out.placementComplete = true;
+    }
 
     out.season = typeof existing.season === "string" && existing.season
         ? existing.season : (changed = true, base.season);
@@ -378,10 +384,8 @@ function rolloverToSeason(record, config) {
     }
 
     // Soft reset: keep relative standing, pull everyone toward the middle.
-    const softRP = record.placementComplete
-        ? Math.max(cfg.minRP, Math.round(
-            cfg.startingRP + (record.rp - cfg.startingRP) * cfg.seasonSoftResetFactor))
-        : 0;
+    const softRP = Math.max(cfg.minRP, Math.round(
+        cfg.startingRP + (record.rp - cfg.startingRP) * cfg.seasonSoftResetFactor));
 
     out.season = cfg.season;
     out.history = history;
@@ -389,19 +393,16 @@ function rolloverToSeason(record, config) {
     out.wins = 0;
     out.losses = 0;
     out.games = 0;
-    // A new season means fresh placements.
     out.placementGames = 0;
     out.placementWins = 0;
     out.placementLosses = 0;
-    out.placementComplete = false;
+    // A new season never leaves anyone unranked -- they land on their
+    // soft-reset rank immediately, same as the very first match.
+    out.placementComplete = true;
     out.highestRP = 0;
     out.highestRankIndex = -1;
     out.rewards = [];
     out.recentOpponents = [];
-    // `seedRP` remembers where the soft reset put them, so placements in
-    // the new season can start from their real standing rather than from
-    // scratch. Zero for a player who never finished placements.
-    out.seedRP = softRP;
 
     return out;
 }
@@ -432,30 +433,11 @@ function applyMatchResult(record, opts, config) {
     else out.losses = (out.losses || 0) + 1;
     out.lastMatchAt = Date.now();
 
+    // Every account is ranked from its first match (see
+    // defaultRankedRecord/ensureRankedRecord) -- there is no separate
+    // placement phase any more, so every match moves RP the same way.
     let rpChange = 0;
-    let placementJustCompleted = false;
-
-    if (!out.placementComplete) {
-        // ---- PLACEMENT MATCH ----
-        out.placementGames = (out.placementGames || 0) + 1;
-        if (won) out.placementWins = (out.placementWins || 0) + 1;
-        else out.placementLosses = (out.placementLosses || 0) + 1;
-
-        if (out.placementGames >= cfg.placementGames) {
-            out.placementComplete = true;
-            placementJustCompleted = true;
-            // A returning player who had a rank last season starts from
-            // their soft-reset seed, nudged by how placements went,
-            // rather than from the generic base.
-            const fromPlacements = computePlacementRP(out.placementWins, out.placementLosses, cfg);
-            const seed = Number(out.seedRP) || 0;
-            out.rp = seed > 0 ? Math.round((fromPlacements + seed) / 2) : fromPlacements;
-            out.rp = Math.max(cfg.minRP, out.rp);
-        }
-        // RP does not move DURING placements -- the placement result is
-        // the rank reveal, so there's nothing to show a delta against.
-    } else if (rated) {
-        // ---- RATED MATCH ----
+    if (rated) {
         rpChange = calculateRPChange(out.rp, opponentRP, won, cfg);
         out.rp = Math.max(cfg.minRP, out.rp + rpChange);
         // The floor can absorb part of a loss (e.g. -20 at 5 RP only
@@ -464,26 +446,22 @@ function applyMatchResult(record, opts, config) {
     }
 
     // Highest-ever tracking, current season.
-    if (out.placementComplete) {
-        if (out.rp > (out.highestRP || 0)) out.highestRP = out.rp;
-        const nowRank = getRankFromRP(out.rp);
-        if (nowRank.index > (typeof out.highestRankIndex === "number" ? out.highestRankIndex : -1)) {
-            out.highestRankIndex = nowRank.index;
-        }
+    if (out.rp > (out.highestRP || 0)) out.highestRP = out.rp;
+    const nowRank = getRankFromRP(out.rp);
+    if (nowRank.index > (typeof out.highestRankIndex === "number" ? out.highestRankIndex : -1)) {
+        out.highestRankIndex = nowRank.index;
     }
 
     // Cosmetic season rewards are granted on reaching a tier and never
     // taken back if the player later drops below it.
-    if (out.placementComplete) {
-        const earned = new Set(out.rewards || []);
-        const reachedIndex = out.highestRankIndex;
-        for (const reward of cfg.rewards) {
-            const tierFirstIndex = ladderIndexOf(reward.minTier,
-                (RANK_TIERS.find(t => t.id === reward.minTier) || {}).divisions > 1 ? 3 : 0);
-            if (tierFirstIndex >= 0 && reachedIndex >= tierFirstIndex) earned.add(reward.id);
-        }
-        out.rewards = Array.from(earned);
+    const earned = new Set(out.rewards || []);
+    const reachedIndex = out.highestRankIndex;
+    for (const reward of cfg.rewards) {
+        const tierFirstIndex = ladderIndexOf(reward.minTier,
+            (RANK_TIERS.find(t => t.id === reward.minTier) || {}).divisions > 1 ? 3 : 0);
+        if (tierFirstIndex >= 0 && reachedIndex >= tierFirstIndex) earned.add(reward.id);
     }
+    out.rewards = Array.from(earned);
 
     const rankAfter = getRankForRecord(out);
 
@@ -493,14 +471,14 @@ function applyMatchResult(record, opts, config) {
             won: won,
             rated: rated,
             rpChange: rpChange,
-            rpBefore: before.placementComplete ? rpBefore : null,
-            rpAfter: out.placementComplete ? out.rp : null,
+            rpBefore: rpBefore,
+            rpAfter: out.rp,
             rankBefore: rankBefore,
             rankAfter: rankAfter,
             promoted: rankAfter.index > rankBefore.index && rankBefore.index >= 0,
             demoted: rankAfter.index < rankBefore.index && rankAfter.index >= 0,
-            placementComplete: out.placementComplete,
-            placementJustCompleted: placementJustCompleted,
+            placementComplete: true,
+            placementJustCompleted: false,
             placementGames: out.placementGames,
             placementWins: out.placementWins,
             placementLosses: out.placementLosses,
@@ -546,8 +524,6 @@ function recordPairing(record, opponentSub, config) {
 // ---------------------------------------------------------------------
 function matchmakingRange(record, waitedSec, config) {
     const cfg = (config || RANKED_CONFIG).matchmaking;
-    // No rating yet -> no meaningful band to search in.
-    if (!record.placementComplete) return cfg.unrankedRange;
     const steps = Math.floor(Math.max(0, waitedSec) / cfg.expandEverySec);
     return Math.min(cfg.maxRange, cfg.baseRange + steps * cfg.expandStep);
 }
@@ -557,8 +533,6 @@ function matchmakingRange(record, waitedSec, config) {
 // blowout just because the other player has been waiting 4 minutes.
 function isAcceptableMatch(a, b, aWaitedSec, bWaitedSec, config) {
     const cfg = config || RANKED_CONFIG;
-    // An unranked player has no rating to compare, so any pairing is fine.
-    if (!a.record.placementComplete || !b.record.placementComplete) return true;
     const gap = Math.abs(a.record.rp - b.record.rp);
     return gap <= matchmakingRange(a.record, aWaitedSec, cfg)
         && gap <= matchmakingRange(b.record, bWaitedSec, cfg);
@@ -581,7 +555,7 @@ function publicRankedView(account, config) {
     return {
         season: record.season,
         seasonName: cfg.seasonName,
-        rp: record.placementComplete ? record.rp : null,
+        rp: record.rp,
         rank: rank,
         wins: record.wins || 0,
         losses: record.losses || 0,
@@ -614,9 +588,11 @@ function publicRankedView(account, config) {
 // ever", which is stored as an index rather than an RP value).
 function rankDescriptorFromLadder(index) {
     const row = RANK_LADDER[index];
-    if (!row) return Object.assign({}, UNRANKED);
+    // An invalid index (never-ranked history, or corrupt data) falls
+    // back to the bottom of Bronze rather than an "unranked" descriptor.
+    if (!row) return getRankFromRP(0);
     const tier = RANK_TIERS.find(t => t.id === row.tier);
-    if (!tier) return Object.assign({}, UNRANKED);
+    if (!tier) return getRankFromRP(0);
     const name = row.division > 0 ? tier.name + " " + ROMAN[row.division] : tier.name;
     return {
         tier: tier.id,
@@ -633,7 +609,6 @@ module.exports = {
     RANKED_CONFIG,
     RANK_TIERS,
     RANK_LADDER,
-    UNRANKED,
     getRankFromRP,
     getRankForRecord,
     rankDescriptorFromLadder,
