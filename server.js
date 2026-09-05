@@ -43,6 +43,7 @@ const store = require("./storage");
 // section further down).
 const Ranked = require("./ranked");
 const Combat = require("./combat");
+const Shadow = require("./shadow");
 
 // Friends data shape, validation and public views. Pure functions only;
 // persistence, presence and the WebSocket wiring live in this file (see
@@ -900,6 +901,7 @@ function createRankedMatch(entryA, entryB) {
     // match can never be affected by another. Shields are read from each
     // player's own account, never from anything they send.
     match.combat = Combat.createCombatMatch(abilityConfig);
+    match.shadow = SHADOW_HIT_DETECTION ? Shadow.createShadowDetector() : null;
     for (const slot of [1, 2]) {
         const acct = accounts[match.players[slot].sub];
         const kevlar = acct && Array.isArray(acct.equippedPowers) &&
@@ -3056,6 +3058,67 @@ const slots = { 1: null, 2: null };
 // ---------------------------------------------------------------------
 let casualCombat = Combat.createCombatMatch(abilityConfig);
 
+// ---------------------------------------------------------------------
+// SHADOW HIT DETECTION (off by default)
+//
+// Runs the server's OWN hit detection alongside the client's, without
+// acting on it, purely to measure whether the two agree -- see shadow.js
+// for why that measurement has to come before this can be promoted to
+// authoritative. Set SHADOW_HIT_DETECTION=1 to enable, then read the
+// agreement counters from GET /__net/stats (which additionally needs
+// DEBUG_NETWORKING=1).
+//
+// When the flag is off, no detector is ever created, the tick below is
+// never started, and every call site short-circuits on a null check.
+// ---------------------------------------------------------------------
+const SHADOW_HIT_DETECTION = process.env.SHADOW_HIT_DETECTION === "1";
+const SHADOW_TICK_MS = 16;
+
+let casualShadow = SHADOW_HIT_DETECTION ? Shadow.createShadowDetector() : null;
+
+// Every live detector, stepped from ONE timer rather than one timer per
+// match -- a few hundred microseconds of work for a handful of bullets.
+function shadowDetectors() {
+    const out = [];
+    if (casualShadow) out.push({ shadow: casualShadow, combat: casualCombat });
+    for (const match of rankedMatches.values()) {
+        if (match.shadow && !match.finished) out.push({ shadow: match.shadow, combat: match.combat });
+    }
+    return out;
+}
+
+if (SHADOW_HIT_DETECTION) {
+    console.log("[shadow] hit-detection shadow mode ENABLED (measuring only -- no damage is applied from it)");
+    setInterval(() => {
+        const now = Date.now();
+        for (const d of shadowDetectors()) {
+            d.shadow.step(now, slot => d.combat.isAlive(slot));
+        }
+    }, SHADOW_TICK_MS).unref();
+}
+
+// Aggregated agreement numbers across every live match.
+function shadowSnapshot() {
+    if (!SHADOW_HIT_DETECTION) return { enabled: false };
+    const totals = { enabled: true, agreed: 0, serverOnly: 0, clientOnly: 0,
+                     projectilesSimulated: 0, liveProjectiles: 0, unsettled: 0, closestMissPx: null };
+    for (const d of shadowDetectors()) {
+        const s = d.shadow.snapshot();
+        totals.agreed += s.agreed;
+        totals.serverOnly += s.serverOnly;
+        totals.clientOnly += s.clientOnly;
+        totals.projectilesSimulated += s.projectilesSimulated;
+        totals.liveProjectiles += s.liveProjectiles;
+        totals.unsettled += s.unsettled;
+        if (s.closestMissPx !== null && (totals.closestMissPx === null || s.closestMissPx < totals.closestMissPx)) {
+            totals.closestMissPx = s.closestMissPx;
+        }
+    }
+    const decided = totals.agreed + totals.serverOnly + totals.clientOnly;
+    totals.agreementPct = decided ? Math.round(totals.agreed / decided * 1000) / 10 : null;
+    return totals;
+}
+
 // Shield charges come from the account's own equipped powers, looked up
 // server-side. A client never gets to say how many free hits it has.
 function shieldsForConnection(conn) {
@@ -3070,6 +3133,7 @@ function shieldsForConnection(conn) {
 // round restarts.
 function resetCasualCombat() {
     casualCombat.resetMatch();
+    if (casualShadow) casualShadow.reset();
     for (const slot of [1, 2]) {
         if (slots[slot]) casualCombat.setShields(slot, shieldsForConnection(slots[slot]));
     }
@@ -3192,7 +3256,10 @@ function netSnapshot() {
         maxPacketIn: netStats.maxPacketIn,
         maxPacketOut: netStats.maxPacketOut,
         relayHandleMs: { p50: q(.5), p95: q(.95), p99: q(.99), max: s.length ? +s[s.length - 1].toFixed(3) : 0 },
-        byType: netStats.byType
+        byType: netStats.byType,
+        // Shadow hit detection: how often this server's own verdict
+        // matched what the client reported. See shadow.js.
+        shadowHitDetection: shadowSnapshot()
     };
 }
 
@@ -3475,6 +3542,14 @@ wss.on("connection", (socket, request) => {
 
             if (data.type === "position" && typeof data.seq === "number") conn.lastSeq = data.seq;
 
+            if (match.shadow) {
+                const now = Date.now();
+                if (data.type === "position") match.shadow.onPosition(conn.rankedSlot, data.x, data.y, data.d === 1, now);
+                else if (data.type === "bullet") match.shadow.onBullet(conn.rankedSlot, data, now);
+                else if (data.type === "decoy") match.shadow.onDecoy(conn.rankedSlot, data.x, data.y, data.life, now);
+                else if (data.type === "hitClaim" || data.type === "damage") match.shadow.onClaim(conn.rankedSlot, now);
+            }
+
             // Projectiles are registered so a hit claim can be checked
             // against something that was really fired.
             if (data.type === "bullet") match.combat.trackBullet(conn.rankedSlot, data, Date.now());
@@ -3494,6 +3569,7 @@ wss.on("connection", (socket, request) => {
                     broadcastHealth(conn, foe.conn, result);
                     if (result.eliminated) {
                         match.combat.resetRound();
+                        if (match.shadow) match.shadow.reset();
                         registerRankedElimination(match, conn.rankedSlot);
                     }
                 }
@@ -3539,6 +3615,11 @@ wss.on("connection", (socket, request) => {
             player.y = data.y;
             player.facing = data.facing;
             if (typeof data.seq === "number") player.lastSeq = data.seq;
+            // `d` is the dash flag (see index.html's send loop). A dashing
+            // player is immune to bullets on the client, so shadow
+            // detection has to know about it or every shot that passed
+            // through a dash would look like a suppressed hit.
+            if (casualShadow) casualShadow.onPosition(id, data.x, data.y, data.d === 1, Date.now());
 
             send(opponent, {
                 type: "position",
@@ -3557,6 +3638,7 @@ wss.on("connection", (socket, request) => {
             // fired (see combat.js). The damage VALUE is taken from the
             // server's own config there, never from this message.
             casualCombat.trackBullet(id, data, Date.now());
+            if (casualShadow) casualShadow.onBullet(id, data, Date.now());
 
             send(opponent, {
                 type: "bullet",
@@ -3584,6 +3666,7 @@ wss.on("connection", (socket, request) => {
         // keeps working; its health/eliminated fields are ignored.
         else if (data.type === "hitClaim" || data.type === "damage") {
 
+            if (casualShadow) casualShadow.onClaim(id, Date.now());
             const result = casualCombat.claimHit(id, Date.now());
             if (result.accepted) {
                 broadcastHealth(player, opponent, result);
@@ -3591,7 +3674,10 @@ wss.on("connection", (socket, request) => {
                 // died, so the next round starts from full health. Any
                 // shot still tracked from the old round is dropped with
                 // it, so it cannot land after the reset.
-                if (result.eliminated) casualCombat.resetRound();
+                if (result.eliminated) {
+                    casualCombat.resetRound();
+                    if (casualShadow) casualShadow.reset();
+                }
             }
         }
 
@@ -3647,6 +3733,8 @@ wss.on("connection", (socket, request) => {
         // this server has no opinion on "real" vs "fake".
         else if (data.type === "decoy") {
 
+            if (casualShadow) casualShadow.onDecoy(id, data.x, data.y, data.life, Date.now());
+
             send(opponent, {
                 type: "decoy",
                 x: data.x,
@@ -3661,6 +3749,7 @@ wss.on("connection", (socket, request) => {
         // relay below), so it gets its own branch ahead of it.
         else if (data.type === "heistReset") {
 
+            if (casualShadow) { casualShadow.setArena("heist"); casualShadow.reset(); }
             resetCasualCombat();
             resetHeistState();
             const payload = { type: "heistUpdate", hp: heistHP, destroyed: false, winner: null };
@@ -3701,6 +3790,7 @@ wss.on("connection", (socket, request) => {
         // score reset to 0/0. Mirrors heistReset above exactly.
         else if (data.type === "bombReset") {
 
+            if (casualShadow) { casualShadow.setArena("bombrun"); casualShadow.reset(); }
             resetCasualCombat();
             resetBombState();
             const payload = { type: "bombUpdate", carrier: null, x: null, y: null };
@@ -3784,6 +3874,10 @@ wss.on("connection", (socket, request) => {
         // mode can be added on the client later without ever touching
         // server.js again.
         else if (typeof data.type === "string" && (data.type.indexOf("football") === 0 || data.type.indexOf("heist") === 0 || data.type.indexOf("bomb") === 0)) {
+
+            // Football has no reset message of its own, so its first
+            // relayed message is what identifies the arena.
+            if (casualShadow && data.type.indexOf("football") === 0) casualShadow.setArena("football");
 
             send(opponent, data);
         }

@@ -3521,22 +3521,33 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     const moved = !prev
       || Math.abs(p1.x - prev.x) > 0.4
       || Math.abs(p1.y - prev.y) > 0.4
-      || Math.abs(angleDelta(prev.facing, p1.facing)) > 0.01;
+      || Math.abs(angleDelta(prev.facing, p1.facing)) > 0.01
+      // A dash starting or ending is a state change worth sending even
+      // if the position barely moved, because the server uses it to
+      // decide whether a shot could have hit (see the `d` flag below).
+      || !!p1.dashing !== !!prev.dashing;
     const IDLE_HEARTBEAT_MS = 350; // keep the opponent's buffer fed even if we're standing still
     if(!moved && (now - lastSentNetAt) < IDLE_HEARTBEAT_MS) return;
 
     inputSeq++;
-    lastSentNetState = { x: p1.x, y: p1.y, facing: p1.facing };
+    lastSentNetState = { x: p1.x, y: p1.y, facing: p1.facing, dashing: !!p1.dashing };
     lastSentNetAt = now;
 
-    socket.send(JSON.stringify({
+    // `d` is the dash flag, and is only present WHILE dashing so the
+    // packet stays the same size the rest of the time. A dashing player
+    // is immune to bullets (see updateBullets), so the server needs it
+    // to reason about hits at all -- without it, every shot that passed
+    // through a dash looks like a hit the client failed to report.
+    const packet = {
       type: "position",
       id: myPlayerID,
       x: p1.x,
       y: p1.y,
       facing: p1.facing,
       seq: inputSeq
-    }));
+    };
+    if(p1.dashing) packet.d = 1;
+    socket.send(JSON.stringify(packet));
   }
 
   function startNetworkSendLoop(){
@@ -10266,6 +10277,10 @@ if(tutorialActive) tutorialUpdate(dt);
   // number. Categories: NEW / IMPROVEMENTS / BALANCE / BUG FIXES --
   // include only the ones an entry actually has.
   const PATCH_NOTES = [
+    { version: 'v0.14', title: 'Anti-Cheat Groundwork',
+      IMPROVEMENTS: [
+        'The server now double-checks hit detection in the background to measure how well it agrees with each player\u2019s game. Nothing about how hits work has changed yet \u2014 this is the measurement step before it can safely take over.'
+      ] },
     { version: 'v0.13', title: 'Anti-Cheat: Server-Side Health',
       IMPROVEMENTS: [
         'Health, damage and eliminations in online matches are now decided by the server instead of by each player\u2019s own game.',
