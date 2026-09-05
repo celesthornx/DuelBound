@@ -258,14 +258,8 @@
   .hidden{ display:none !important; }
   canvas.mouse-aim{ cursor: none; }
 
-  /* ---- Currency (Coins/Crystals) & shop ----
-     .currency-box is a generic bigger balance pill -- also reused
-     as-is by the online-status message (a connection banner, nothing
-     to do with currency) purely for its visual style. .currency-box.
-     crystal is the one addition: same box, a violet/premium palette
-     instead of gold, so Crystals reads as the rarer currency without
-     a second, different-shaped display. */
-  .currency-box{
+  /* ---- Credits & shop ---- */
+  .credits-display{
     font-family:'Share Tech Mono', monospace;
     font-size: 13px; letter-spacing: 2px;
     color: #ffce54;
@@ -273,11 +267,6 @@
     background: rgba(255,206,84,0.06);
     padding: 6px 14px;
     border-radius: 3px;
-  }
-  .currency-box.crystal{
-    color: #e6d4ff;
-    border-color: rgba(176,107,255,0.45);
-    background: rgba(176,107,255,0.08);
   }
   .menu-btn.shop-entry{ border-color:#ffce54; color:#ffce54; }
   .menu-btn.shop-entry:hover{ background: rgba(255,206,84,0.1); box-shadow:0 0 16px rgba(255,206,84,0.3); border-color:#ffce54; }
@@ -416,13 +405,10 @@
   .admin-log .log-row{ border-bottom: 1px solid var(--grid); padding: 4px 0; }
   .admin-log .log-time{ color: #ff5f6d; margin-right: 8px; }
 
-  /* ---- Currency Management -- Coins AND Crystals (reuses
-     admin-field/admin-btn-row/etc. above; cyan (Player One) accent to
-     distinguish it from the red Ability Balance section, gold for the
-     confirm step -- same palette the rest of the game already uses for
-     those roles. Class names below still say "credit" in a few purely
-     internal/cosmetic spots (a CSS hook, not player-facing text) --
-     left alone rather than churning selectors with no visible effect. ---- */
+  /* ---- Credit Management (reuses admin-field/admin-btn-row/etc. above;
+     cyan (Player One) accent to distinguish it from the red Ability
+     Balance section, gold for the confirm step -- same palette the rest
+     of the game already uses for those roles. ---- */
   .admin-section-label-p1{ color: var(--p1); border-bottom-color: rgba(63,208,255,0.3); }
   .admin-section-label-gold{ color: #ffce54; border-bottom-color: rgba(255,206,84,0.3); margin-top:0; }
   .admin-credit-search{ display:flex; gap:8px; width:100%; }
@@ -462,11 +448,10 @@
     background: rgba(63,208,255,0.04);
     padding: 12px 14px;
   }
-  .admin-credit-player{ display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap; }
+  .admin-credit-player{ display:flex; justify-content:space-between; align-items:baseline; }
   .admin-credit-player-name{ font-family:'Chakra Petch', sans-serif; font-weight:700; font-size:14px; letter-spacing:1px; color: var(--p1); }
   .admin-credit-player-balance{ font-family:'Share Tech Mono', monospace; font-size:10px; letter-spacing:1px; color: var(--ink-dim); }
   .admin-credit-player-balance b{ color: #ffce54; font-size:13px; margin-left:4px; }
-  .admin-credit-player-balance.crystal b{ color:#b06bff; }
   .admin-credit-form{ display:flex; flex-direction:column; gap:10px; }
   .admin-field-full{ width:100%; }
   .admin-quick-amounts{ display:flex; gap:8px; }
@@ -541,11 +526,6 @@
   }
   .shop-tab.selected{ border-color:#ffce54; color:#ffce54; background: rgba(255,206,84,0.08); }
   .shop-tab:hover{ color: var(--ink); }
-  /* Crystals reads as the premium tab even unselected -- a violet
-     accent instead of the gold every Coins tab uses. */
-  .shop-tab.crystal-tab{ border-color: rgba(176,107,255,.4); color:#c9a6ff; }
-  .shop-tab.crystal-tab.selected{ border-color:#b06bff; color:#e6d4ff; background: rgba(176,107,255,0.12); }
-  .shop-tab.crystal-tab:hover{ color:#e6d4ff; }
 
   .shop-body{
     width:100%; max-height: 300px; overflow-y:auto;
@@ -595,30 +575,6 @@
   }
   .skin-card.locked, .power-card.locked{ opacity: 0.55; }
   .skin-card.unaffordable, .power-card.unaffordable{ opacity: 0.4; cursor:not-allowed; }
-
-  /* ---- Crystal Shop (packages bought with real money via Stripe
-     Checkout) -- same grid/card shape as skins/powers so the fourth
-     shop tab doesn't feel like a different screen, just a violet
-     palette instead of gold to read as the premium currency. ---- */
-  .crystal-package-grid{
-    display:grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
-    margin-bottom: 6px;
-  }
-  .crystal-package-card{
-    border: 1px solid rgba(176,107,255,.35);
-    background: linear-gradient(180deg, rgba(176,107,255,.08), rgba(176,107,255,.02));
-    padding: 16px 8px; text-align:center; transition: all .12s ease;
-  }
-  .crystal-package-card:hover{ border-color:#b06bff; background: rgba(176,107,255,.12); }
-  .cpk-gem{ color:#b06bff; font-size:22px; text-shadow:0 0 8px rgba(176,107,255,.6); margin-bottom:4px; }
-  .cpk-amount{
-    font-family:'Chakra Petch', sans-serif; font-weight:700;
-    font-size:18px; color:#e6d4ff; letter-spacing:.5px;
-  }
-  .cpk-label{ font-size:9px; letter-spacing:1.5px; color:#c9a6ff; margin-bottom:10px; }
-  .cpk-buy{ width:100%; border-color:#b06bff; color:#e6d4ff; }
-  .cpk-buy:hover{ background: rgba(176,107,255,.18); box-shadow:0 0 16px rgba(176,107,255,.3); border-color:#b06bff; }
-  @media (max-width: 560px){ .crystal-package-grid{ grid-template-columns: repeat(2, 1fr); } }
 
   .rarity-badge{
     display:inline-block; margin-bottom:6px;
@@ -1246,15 +1202,7 @@
   .nav-item.nav-admin::after{ background: var(--p2); box-shadow:0 0 10px var(--p2); }
 
   .lobby-top-right{ display:flex; align-items:center; gap:9px; flex:0 0 auto; }
-  /* .currency-pill is the shared shape for BOTH the Coins pill and the
-     Crystals pill sitting next to it in the top bar -- same size, same
-     "+" button, so adding Crystals here never reflows anything else in
-     .lobby-top-right. .currency-pill.crystal is the only difference:
-     a violet/rare palette (this game already uses violet for "rare" --
-     see .rarity-skin-rare/.rarity-legendary) instead of gold, which is
-     what makes Crystals visually read as the premium currency without
-     inventing a whole second widget shape. */
-  .currency-pill{
+  .credit-pill{
     display:flex; align-items:center; gap:8px;
     border:1px solid rgba(255,206,84,.45);
     background: linear-gradient(180deg, rgba(255,206,84,.10), rgba(255,206,84,.03));
@@ -1262,7 +1210,7 @@
     box-shadow: 0 0 16px rgba(255,206,84,.10), inset 0 1px 0 rgba(255,255,255,.06);
   }
   .cp-gem{ color: var(--gold); font-size: 13px; line-height:1; }
-  .currency-pill .cp-val{
+  .credit-pill .cp-val{
     font-family:'Chakra Petch', sans-serif; font-weight:700;
     font-size: 16px; letter-spacing: 1px; color:#ffe7a8; min-width: 26px; text-align:center;
   }
@@ -1275,18 +1223,6 @@
     transition: all .15s ease;
   }
   .cp-plus:hover{ background: var(--gold); color:#12130c; box-shadow:0 0 14px rgba(255,206,84,.55); }
-
-  .currency-pill.crystal{
-    border-color: rgba(176,107,255,.5);
-    background: linear-gradient(180deg, rgba(176,107,255,.14), rgba(176,107,255,.04));
-    box-shadow: 0 0 16px rgba(176,107,255,.16), inset 0 1px 0 rgba(255,255,255,.06);
-  }
-  .currency-pill.crystal .cp-gem{ color:#b06bff; text-shadow: 0 0 6px rgba(176,107,255,.65); }
-  .currency-pill.crystal .cp-val{ color:#e6d4ff; }
-  .currency-pill.crystal .cp-plus{
-    border-color: rgba(176,107,255,.5); background: rgba(176,107,255,.14); color:#b06bff;
-  }
-  .currency-pill.crystal .cp-plus:hover{ background:#b06bff; color:#12130c; box-shadow:0 0 14px rgba(176,107,255,.55); }
 
   .icon-btn{
     width:38px; height:38px; border-radius:3px; cursor:pointer;
@@ -2648,15 +2584,10 @@
       </nav>
 
       <div class="lobby-top-right">
-        <div class="currency-pill" title="Coins">
+        <div class="credit-pill" title="Credits">
           <span class="cp-gem">&#9670;</span>
-          <span class="cp-val" id="lobbyCoins">0</span>
-          <button class="cp-plus" data-act="shop" title="Spend Coins in the shop">+</button>
-        </div>
-        <div class="currency-pill crystal" title="Crystals">
-          <span class="cp-gem">&#9670;</span>
-          <span class="cp-val" id="lobbyCrystals">0</span>
-          <button class="cp-plus" data-act="crystalshop" title="Buy Crystals">+</button>
+          <span class="cp-val" id="lobbyCredits">0</span>
+          <button class="cp-plus" data-act="shop" title="Spend credits in the shop">+</button>
         </div>
         <button class="icon-btn muted" data-act="friends" title="Friends">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
@@ -2735,13 +2666,7 @@
               <svg viewBox="0 0 16 16" fill="none" stroke="#ffce54" stroke-width="1.4" stroke-linejoin="round">
                 <path d="M8 1.6 L13.6 8 L8 14.4 L2.4 8 Z"/>
               </svg>
-              <span class="k">COINS</span><span class="v" id="lobbyCoinsStat">0</span>
-            </div>
-            <div class="stat-row" style="color:#e6d4ff;">
-              <svg viewBox="0 0 16 16" fill="none" stroke="#b06bff" stroke-width="1.4" stroke-linejoin="round">
-                <path d="M8 1.6 L13.6 8 L8 14.4 L2.4 8 Z"/>
-              </svg>
-              <span class="k">CRYSTALS</span><span class="v" id="lobbyCrystalsStat">0</span>
+              <span class="k">CREDITS</span><span class="v" id="lobbyCreditsStat">0</span>
             </div>
           </div>
         </div>
@@ -2902,12 +2827,11 @@
          ORIGINAL MENU CONTROLS -- hidden, but still the real ones.
          The lobby above forwards clicks to these, so every existing
          listener (mode flow, shop, leaderboards, settings, admin) and
-         every existing element lookup (coinsAmountMain, statsLineMain)
+         every existing element lookup (creditsAmountMain, statsLineMain)
          keeps working exactly as before.
          ============================================================ -->
     <div id="legacyControls" aria-hidden="true">
-      <div class="currency-box" id="coinsDisplayMain">&#9672; <span id="coinsAmountMain">0</span> COINS</div>
-      <div class="currency-box crystal" id="crystalsDisplayMain">&#9670; <span id="crystalsAmountMain">0</span> CRYSTALS</div>
+      <div class="credits-display" id="creditsDisplayMain">&#9672; <span id="creditsAmountMain">0</span> CREDITS</div>
       <div class="stats-line" id="statsLineMain">0 KILLS &middot; 0 WINS</div>
       <div class="menu-group">
         <button class="menu-btn" id="btnLocal">LOCAL 2 PLAYER</button>
@@ -2943,7 +2867,7 @@
       </div>
       <div class="settings-note">
         Replays the interactive tutorial at any time -- it never resets
-        your Coins, Crystals, XP, stats, or anything else about your account.
+        your credits, XP, stats, or anything else about your account.
       </div>
       <div class="settings-note">
         Device Compatibility controls which layout and controls the game
@@ -3024,7 +2948,7 @@
       </div>
       <button class="menu-btn admin-reset-all-btn" id="btnAdminResetAll">RESET ALL ABILITIES</button>
 
-      <div class="admin-section-label admin-section-label-p1">CURRENCY MANAGEMENT</div>
+      <div class="admin-section-label admin-section-label-p1">CREDIT MANAGEMENT</div>
 
       <div class="admin-credit-search">
         <input type="text" id="adminPlayerSearch" placeholder="SEARCH USERNAME OR PLAYER ID" autocomplete="off">
@@ -3035,47 +2959,29 @@
       <div class="admin-credit-grant hidden" id="adminCreditGrant">
         <div class="admin-credit-player">
           <span class="admin-credit-player-name" id="adminSelectedPlayerName">&mdash;</span>
-          <span class="admin-credit-player-balance">COINS <b id="adminSelectedPlayerCoins">0</b></span>
-          <span class="admin-credit-player-balance crystal">CRYSTALS <b id="adminSelectedPlayerCrystals">0</b></span>
-        </div>
-
-        <!-- Which balance the form below acts on. Mirrors the shop's
-             own tab pattern (.shop-tab/.crystal-tab) so this reads as
-             the same "pick a currency" idiom as everywhere else. -->
-        <div class="shop-tabs" id="adminCurrencyTabs">
-          <button type="button" class="shop-tab selected" id="adminTabCoins" data-currency="coins">COINS</button>
-          <button type="button" class="shop-tab crystal-tab" id="adminTabCrystals" data-currency="crystals">CRYSTALS</button>
+          <span class="admin-credit-player-balance">CURRENT CREDITS <b id="adminSelectedPlayerCredits">0</b></span>
         </div>
 
         <div class="admin-credit-form" id="adminCreditForm">
           <div class="admin-field admin-field-full">
-            <label>AMOUNT</label>
+            <label>CREDITS TO ADD</label>
             <input type="number" id="adminCreditAmount" min="1" step="1" placeholder="e.g. 500">
           </div>
           <div class="admin-quick-amounts">
-            <button type="button" class="admin-quick-btn" data-amount="100">100</button>
-            <button type="button" class="admin-quick-btn" data-amount="500">500</button>
-            <button type="button" class="admin-quick-btn" data-amount="1000">1,000</button>
-            <button type="button" class="admin-quick-btn" data-amount="5000">5,000</button>
+            <button type="button" class="admin-quick-btn" data-amount="100">+100</button>
+            <button type="button" class="admin-quick-btn" data-amount="500">+500</button>
+            <button type="button" class="admin-quick-btn" data-amount="1000">+1,000</button>
+            <button type="button" class="admin-quick-btn" data-amount="5000">+5,000</button>
           </div>
-          <div class="admin-field admin-field-full">
-            <label>REASON (REQUIRED -- LOGGED WITH THIS ADJUSTMENT)</label>
-            <input type="text" id="adminCreditReason" maxlength="200" placeholder="e.g. compensation for a bug">
-          </div>
-          <div class="admin-btn-row">
-            <button class="menu-btn admin-save-btn admin-give-credits-btn" id="btnAdminGiveCredits">ADD</button>
-            <button class="menu-btn admin-reset-btn admin-give-credits-btn" id="btnAdminRemoveCredits">REMOVE</button>
-          </div>
+          <button class="menu-btn admin-save-btn admin-give-credits-btn" id="btnAdminGiveCredits">GIVE CREDITS</button>
         </div>
 
         <div class="admin-credit-confirm hidden" id="adminCreditConfirm">
-          <div class="admin-section-label admin-section-label-gold">CONFIRM ADJUSTMENT</div>
+          <div class="admin-section-label admin-section-label-gold">CONFIRM CREDIT GRANT</div>
           <div class="admin-confirm-row"><span>Player</span><b id="confirmPlayerName"></b></div>
-          <div class="admin-confirm-row"><span>Currency</span><b id="confirmCurrency"></b></div>
           <div class="admin-confirm-row"><span>Current balance</span><b id="confirmCurrentBalance"></b></div>
-          <div class="admin-confirm-row"><span>Change</span><b class="admin-confirm-amount" id="confirmAmount"></b></div>
+          <div class="admin-confirm-row"><span>Amount to add</span><b class="admin-confirm-amount" id="confirmAmount"></b></div>
           <div class="admin-confirm-row"><span>New balance</span><b id="confirmNewBalance"></b></div>
-          <div class="admin-confirm-row"><span>Reason</span><b id="confirmReason"></b></div>
           <div class="admin-btn-row">
             <button class="menu-btn admin-reset-btn" id="btnAdminConfirmCancel">CANCEL</button>
             <button class="menu-btn admin-save-btn" id="btnAdminConfirmGive">CONFIRM</button>
@@ -3097,7 +3003,7 @@
     <div class="shop-panel">
       <div class="menu-title">LEADERBOARDS</div>
       <div class="shop-tabs">
-        <button class="shop-tab selected" id="lbTabCoins" data-sort="coins">COINS</button>
+        <button class="shop-tab selected" id="lbTabCredits" data-sort="credits">CREDITS</button>
         <button class="shop-tab" id="lbTabKills" data-sort="kills">KILLS</button>
         <button class="shop-tab" id="lbTabWins" data-sort="wins">WINS</button>
       </div>
@@ -3263,7 +3169,7 @@
   <div class="menu-overlay hidden" id="menuOnline">
     <div class="menu-title">ONLINE MATCH</div>
     <div id="onlineStatusWrap">
-      <div class="currency-box" id="onlineStatusMsg" style="color:var(--p1); border-color:rgba(63,208,255,0.35); background:rgba(63,208,255,0.06);">CONNECTING...</div>
+      <div class="credits-display" id="onlineStatusMsg" style="color:var(--p1); border-color:rgba(63,208,255,0.35); background:rgba(63,208,255,0.06);">CONNECTING...</div>
     </div>
     <div class="menu-group hidden" id="onlineStartGroup">
       <button class="menu-btn accent-2" id="btnOnlineStart">START MATCH</button>
@@ -3276,14 +3182,12 @@
     <div class="shop-panel">
       <div class="shop-header">
         <div class="menu-title">SHOP</div>
-        <div class="currency-box" id="coinsDisplayShop">◈ <span id="coinsAmountShop">0</span> COINS</div>
-        <div class="currency-box crystal" id="crystalsDisplayShop">&#9670; <span id="crystalsAmountShop">0</span> CRYSTALS</div>
+        <div class="credits-display" id="creditsDisplayShop">◈ <span id="creditsAmountShop">0</span> CREDITS</div>
       </div>
       <div class="shop-tabs">
         <button class="shop-tab selected" id="tabSkins" data-tab="skins">SKINS SHOP</button>
         <button class="shop-tab" id="tabPowers" data-tab="powers">POWERS SHOP</button>
         <button class="shop-tab" id="tabAbilities" data-tab="abilities">ABILITIES SHOP</button>
-        <button class="shop-tab crystal-tab" id="tabCrystals" data-tab="crystals">CRYSTALS</button>
       </div>
       <div class="shop-body" id="shopBody"></div>
       <button class="menu-back" id="btnBackShop">&larr; back</button>
@@ -4588,7 +4492,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   // Progress is stored server-side (accounts.json, keyed by your Google
   // account) instead of in the browser, so it follows you between devices
   // and survives page reloads. Playing without signing in still works --
-  // coins/crystals/skins/powers just stay session-only, exactly as before.
+  // credits/skins/powers just stay session-only, exactly as before.
   let sessionToken = null;
   let accountName = null;
   let loggedIn = false;
@@ -4761,19 +4665,20 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         lobbyToast(data.error || 'COULD NOT CLAIM REWARD');
         return;
       }
-      // The server just changed coins server-side -- sync the local,
-      // client-reported `coins` used by the rest of the UI to match, so
-      // the display never shows a stale (pre-claim) number.
-      coins = data.newBalance;
+      // The server just changed credits server-side -- sync the local,
+      // client-authoritative `credits` used by saveProgress()/the rest of
+      // the UI to match, so the NEXT save doesn't push a stale (pre-claim)
+      // number back and silently erase the reward.
+      credits = data.newBalance;
       if(data.dailyChallenges){
         dailyProgress = Object.assign({ date: data.dailyChallenges.date }, data.dailyChallenges.progress || {});
         dailyClaimed = data.dailyChallenges.claimed || {};
       } else {
         dailyClaimed[challengeId] = true;
       }
-      updateCurrencyDisplay();
+      updateCreditsDisplay();
       renderDailyChallenges();
-      if(typeof lobbyToast === 'function') lobbyToast('CHALLENGE COMPLETE — +' + data.reward + ' COINS');
+      if(typeof lobbyToast === 'function') lobbyToast('CHALLENGE COMPLETE — +' + data.reward + ' CREDITS');
       // Subtle, single-shot feedback on the row that was just claimed --
       // no confetti, no repeating animation.
       const row = document.querySelector('.dc-row[data-id="' + CSS.escape(challengeId) + '"]');
@@ -4783,87 +4688,9 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     }
   }
 
-  // ====================================================================
-  // SHOP PURCHASES (client)
-  //
-  // Signed in: the server is the only thing that decides whether this
-  // purchase is real. It re-checks the price AND CURRENCY against its
-  // own catalog (catalog.js) and its own stored Coins/Crystals balance
-  // -- nothing this client sends about price/affordability/currency is
-  // trusted -- and only a 200 response actually grants the item. The
-  // response's `currency` field says which local balance (coins or
-  // crystals) to update; every item today costs coins, but nothing
-  // here assumes that.
-  //
-  // Guest (no account to protect): buying still works exactly as it
-  // always has -- a local coins/owned-items mutation with nothing to
-  // verify and nothing that reaches a server, since a guest's progress
-  // was never going anywhere anyway.
-  //
-  // itemType is 'skin' | 'power' | 'ability'; ownedSet is that catalog's
-  // local owned-items Set (ownedSkins/ownedPowers/ownedAbilities);
-  // onOwned(id) is called once ownership is confirmed (whichever caller
-  // supplies it: add to the Set, then equip/select as that caller sees
-  // fit) so guest and signed-in paths converge on the exact same
-  // follow-up instead of duplicating it three times.
-  let shopPurchaseInFlight = false;
-  async function buyShopItem(itemType, itemId, price, ownedSet, onOwned){
-    if(shopPurchaseInFlight) return; // one purchase at a time -- a double click can't double-charge
-    if(!loggedIn || !sessionToken){
-      // Guests have no account, so no currency field on the server to
-      // check -- every catalog item today costs coins, so that's the
-      // local balance a guest's purchase spends.
-      coins -= price;
-      ownedSet.add(itemId);
-      onOwned(itemId);
-      updateCurrencyDisplay();
-      renderShop();
-      return;
-    }
-    shopPurchaseInFlight = true;
-    try{
-      const res = await fetch(ACCOUNT_SERVER_URL + '/shop/buy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionToken: sessionToken, itemType: itemType, itemId: itemId })
-      });
-      const data = await res.json().catch(()=>({}));
-      if(!res.ok){
-        // Most likely stale local state (another tab already bought it,
-        // or a reward changed the balance since this panel was drawn) --
-        // re-render from what's actually true rather than leaving a
-        // card that looks buyable but isn't.
-        lobbyToast(data.error || 'PURCHASE FAILED');
-        renderShop();
-        return;
-      }
-      // The server just moved currency and ownership server-side --
-      // sync the local, client-reported balance/owned Sets used
-      // elsewhere (saveProgress(), the shop UI) to match, exactly like
-      // claimDailyChallenge does for a challenge reward. Which local
-      // variable to update comes from data.currency (never assumed) --
-      // reading data.owned back (rather than just adding itemId
-      // locally) means this client's view of ownership can never drift
-      // from the account record the server actually persisted.
-      if(data.currency === 'crystals') crystals = data.newBalance;
-      else coins = data.newBalance;
-      ownedSet.clear();
-      (data.owned || []).forEach(id => ownedSet.add(id));
-      onOwned(itemId);
-      updateCurrencyDisplay();
-      renderShop();
-      saveProgress(); // persists the equip/select choice onOwned just made
-    }catch(e){
-      lobbyToast('COULD NOT REACH THE SERVER');
-    }finally{
-      shopPurchaseInFlight = false;
-    }
-  }
-
   function applyAccount(account){
     accountName = account.name;
-    coins = account.coins;
-    crystals = account.crystals || 0;
+    credits = account.credits;
     stats.kills = account.kills;
     stats.wins = account.wins;
     applyXPTotal(account.xp || 0, account.level || 1);
@@ -4918,7 +4745,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     tutorialCompleteFlag = !!account.tutorialComplete;
     saveTutorialCompleteLocally();
     if(typeof tutorialMaybeOfferOnBoot === 'function') tutorialMaybeOfferOnBoot();
-    updateCurrencyDisplay();
+    updateCreditsDisplay();
   }
 
   async function handleGoogleCredential(response){
@@ -5320,12 +5147,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         sessionToken: sessionToken,
-        // coins/crystals are deliberately NOT sent here any more -- the
-        // server stopped reading them from /save entirely (see
-        // server.js's /save handler); they only ever change through
-        // /shop/buy, /admin/currency, /challenges/claim, /xp/report and
-        // the Stripe webhook now. Sending them would just be ignored,
-        // so this body doesn't pretend they're part of the contract.
+        credits: credits,
         kills: stats.kills,
         wins: stats.wins,
         ownedSkins: Array.from(ownedSkins),
@@ -5386,14 +5208,12 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   // never an amount -- the server looks the amount up itself.
   // ====================================================================
 
-  // Fire-and-forget report of a client-observed, XP-AND-COIN-worthy
-  // event (round win, match win, a goal, a kill count, a Voidbreak
-  // clear) -- see server.js's COIN_REWARDS for why Coins ride along on
-  // the exact same report rather than a second endpoint. Guests (not
-  // signed in) have no account to award anything to, same as
+  // Fire-and-forget report of a client-observed, XP-worthy event (round
+  // win, match win, a goal, a kill count, a Voidbreak clear). Guests
+  // (not signed in) have no account to award XP to, same as credits/
   // stats already silently no-op for them via saveProgress()'s early
   // return. `meta` carries the only extra data any reason needs right
-  // now (kills:N for reason:"kill", players:N for reason:"match_win").
+  // now (kills:N for reason:"kill").
   function reportXP(reason, meta){
     if(!loggedIn || !sessionToken) return;
     fetch(ACCOUNT_SERVER_URL + '/xp/report', {
@@ -5409,21 +5229,12 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   // 'xpAward' WS push) into ONE pending toast instead of firing a
   // notification per event -- "multiple XP rewards close together
   // combined into one notification" per the design. Always refreshes
-  // the trusted running totals (applyXPTotal AND coins) even when
-  // there's nothing to show yet, so the Profile XP bar and the Coins
-  // HUD are never stale. The coin amount here is the SAME server
-  // response as the XP -- this is what turns the instant local
-  // `coins += 15` at the kill/goal/win site (pure UX responsiveness)
-  // into something actually persisted: whatever the server says the
-  // real total is always wins, correcting any drift a moment later.
+  // the trusted running total (applyXPTotal) even when there's nothing
+  // to show yet, so the Profile XP bar is never stale.
   let pendingXPToast = null;
   function queueXPFeedback(result){
     if(!result) return;
     applyXPTotal(result.totalXp, result.level);
-    if(typeof result.totalCoins === 'number'){
-      coins = result.totalCoins;
-      updateCurrencyDisplay();
-    }
     if(!result.awarded) return;
     if(!pendingXPToast) pendingXPToast = { amount: 0, leveledUp: false, newLevel: result.level };
     pendingXPToast.amount += result.awarded;
@@ -5469,7 +5280,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   }
 
   // ---- Leaderboards ----
-  let leaderboardSort = 'coins';
+  let leaderboardSort = 'credits';
 
   async function renderLeaderboard(){
     const body = document.getElementById('leaderboardBody');
@@ -5608,12 +5419,9 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   const tabSkins = document.getElementById('tabSkins');
   const tabPowers = document.getElementById('tabPowers');
   const tabAbilities = document.getElementById('tabAbilities');
-  const tabCrystals = document.getElementById('tabCrystals');
   const shopBody = document.getElementById('shopBody');
-  const coinsAmountMain = document.getElementById('coinsAmountMain');
-  const coinsAmountShop = document.getElementById('coinsAmountShop');
-  const crystalsAmountMain = document.getElementById('crystalsAmountMain');
-  const crystalsAmountShop = document.getElementById('crystalsAmountShop');
+  const creditsAmountMain = document.getElementById('creditsAmountMain');
+  const creditsAmountShop = document.getElementById('creditsAmountShop');
   const exitBtn = document.getElementById('exitBtn');
   const restartBtn = document.getElementById('restartBtn');
 
@@ -5770,25 +5578,18 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   let autoAimP2 = false;
 
   // ---- Shop / progression (session-only, resets on page reload) ----
-  // COINS -- the free, earned-by-playing currency (was "credits").
-  // CRYSTALS -- the premium currency, bought in packages via the
-  // Crystal Shop (Stripe Checkout). A brand-new/guest session starts
-  // at the same defaults the server gives a fresh account; a signed-in
-  // player's real numbers overwrite these the moment applyAccount()
-  // runs, exactly as before.
-  let coins = 100;
-  let crystals = 0;
+  let credits = 100;
   let shopTab = 'skins';
 
   const SKINS = [
-    { id:'cyan',   name:'CYAN CLASSIC',   color:'#3fd0ff', price:0, currency:'coins' },
-    { id:'red',    name:'CRIMSON CLASSIC',color:'#ff5f6d', price:0, currency:'coins' },
-    { id:'violet', name:'VIOLET SURGE',   color:'#b06bff', price:50, currency:'coins' },
-    { id:'gold',   name:'GOLD RUSH',      color:'#ffce54', price:75, currency:'coins' },
-    { id:'green',  name:'TOXIC GREEN',    color:'#5dffa0', price:75, currency:'coins' },
-    { id:'white',  name:'GHOST WHITE',    color:'#f5f5f5', price:100, currency:'coins' },
-    { id:'pink',   name:'HOT PINK',       color:'#ff5fc4', price:100, currency:'coins' },
-    { id:'orange', name:'BLAZE ORANGE',   color:'#ff9142', price:60, currency:'coins' },
+    { id:'cyan',   name:'CYAN CLASSIC',   color:'#3fd0ff', price:0 },
+    { id:'red',    name:'CRIMSON CLASSIC',color:'#ff5f6d', price:0 },
+    { id:'violet', name:'VIOLET SURGE',   color:'#b06bff', price:50 },
+    { id:'gold',   name:'GOLD RUSH',      color:'#ffce54', price:75 },
+    { id:'green',  name:'TOXIC GREEN',    color:'#5dffa0', price:75 },
+    { id:'white',  name:'GHOST WHITE',    color:'#f5f5f5', price:100 },
+    { id:'pink',   name:'HOT PINK',       color:'#ff5fc4', price:100 },
+    { id:'orange', name:'BLAZE ORANGE',   color:'#ff9142', price:60 },
 
     // ---- Skin Collection: 16 skins across four rarity tiers, each with
     // its own hull gradient/accent/"deco" flourish (see drawSkinDeco)
@@ -5799,40 +5600,40 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     // everything that already keys off skinColor() -- bullets, trail,
     // decoys, minimap/leaderboard avatars, the online 'skin' network
     // message's base color -- keeps working with zero changes.
-    { id:'neonrunner',   name:'NEON RUNNER',    price:120, currency:'coins', rarity:'common',    rarityClass:'rarity-skin-common',
+    { id:'neonrunner',   name:'NEON RUNNER',    price:120, rarity:'common',    rarityClass:'rarity-skin-common',
       color:'#3fd0ff', grad:['#3a4258','#12151f'], accent:'#3fd0ff', deco:'stripe' },
-    { id:'arcticarrow',  name:'ARCTIC ARROW',   price:120, currency:'coins', rarity:'common',    rarityClass:'rarity-skin-common',
+    { id:'arcticarrow',  name:'ARCTIC ARROW',   price:120, rarity:'common',    rarityClass:'rarity-skin-common',
       color:'#bfe8ff', grad:['#eaf6ff','#a9cbe8'], accent:'#7ecbff', deco:'frost' },
-    { id:'crimsonfang',  name:'CRIMSON FANG',   price:120, currency:'coins', rarity:'common',    rarityClass:'rarity-skin-common',
+    { id:'crimsonfang',  name:'CRIMSON FANG',   price:120, rarity:'common',    rarityClass:'rarity-skin-common',
       color:'#ff3b3b', grad:['#3a0a0a','#120303'], accent:'#ff3b3b', deco:'fang' },
-    { id:'toxicskin',    name:'TOXIC',          price:120, currency:'coins', rarity:'common',    rarityClass:'rarity-skin-common',
+    { id:'toxicskin',    name:'TOXIC',          price:120, rarity:'common',    rarityClass:'rarity-skin-common',
       color:'#aaff00', grad:['#232f14','#0d1108'], accent:'#aaff00', deco:'toxic' },
 
-    { id:'cybersamurai', name:'CYBER SAMURAI',  price:260, currency:'coins', rarity:'rare',      rarityClass:'rarity-skin-rare',
+    { id:'cybersamurai', name:'CYBER SAMURAI',  price:260, rarity:'rare',      rarityClass:'rarity-skin-rare',
       color:'#3fd0ff', grad:['#123a5c','#041018'], accent:'#ffce54', deco:'armor' },
-    { id:'galaxy',       name:'GALAXY',         price:260, currency:'coins', rarity:'rare',      rarityClass:'rarity-skin-rare',
+    { id:'galaxy',       name:'GALAXY',         price:260, rarity:'rare',      rarityClass:'rarity-skin-rare',
       color:'#8b6bff', grad:['#241547','#07030f'], accent:'#bcd4ff', deco:'stars' },
-    { id:'plasmacore',   name:'PLASMA CORE',    price:260, currency:'coins', rarity:'rare',      rarityClass:'rarity-skin-rare',
+    { id:'plasmacore',   name:'PLASMA CORE',    price:260, rarity:'rare',      rarityClass:'rarity-skin-rare',
       color:'#8b6bff', grad:['#22283a','#0a0d14'], accent:'#8b6bff', deco:'core' },
-    { id:'storm',        name:'STORM',          price:260, currency:'coins', rarity:'rare',      rarityClass:'rarity-skin-rare',
+    { id:'storm',        name:'STORM',          price:260, rarity:'rare',      rarityClass:'rarity-skin-rare',
       color:'#7ecbff', grad:['#153348','#04121d'], accent:'#c9f2ff', deco:'bolt' },
 
-    { id:'eclipse',      name:'ECLIPSE',        price:520, currency:'coins', rarity:'legendary', rarityClass:'rarity-legendary',
+    { id:'eclipse',      name:'ECLIPSE',        price:520, rarity:'legendary', rarityClass:'rarity-legendary',
       color:'#ffe89a', grad:['#1a1a1a','#000000'], accent:'#ffe89a', deco:'eclipse' },
-    { id:'celestial',    name:'CELESTIAL',      price:520, currency:'coins', rarity:'legendary', rarityClass:'rarity-legendary',
+    { id:'celestial',    name:'CELESTIAL',      price:520, rarity:'legendary', rarityClass:'rarity-legendary',
       color:'#ffe89a', grad:['#fff8e8','#ffce87'], accent:'#ffe89a', deco:'radiant' },
-    { id:'riftwalker',   name:'RIFTWALKER',     price:520, currency:'coins', rarity:'legendary', rarityClass:'rarity-legendary',
+    { id:'riftwalker',   name:'RIFTWALKER',     price:520, rarity:'legendary', rarityClass:'rarity-legendary',
       color:'#b06bff', grad:['#26123f','#08040f'], accent:'#b06bff', deco:'rift' },
-    { id:'overlord',     name:'OVERLORD',       price:520, currency:'coins', rarity:'legendary', rarityClass:'rarity-legendary',
+    { id:'overlord',     name:'OVERLORD',       price:520, rarity:'legendary', rarityClass:'rarity-legendary',
       color:'#ff3b3b', grad:['#240808','#080202'], accent:'#ff3b3b', deco:'spikes' },
 
-    { id:'cardboardbox', name:'CARDBOARD BOX',  price:150, currency:'coins', rarity:'meme',      rarityClass:'rarity-meme',
+    { id:'cardboardbox', name:'CARDBOARD BOX',  price:150, rarity:'meme',      rarityClass:'rarity-meme',
       color:'#c9a876', grad:['#c9a876','#8a6d4a'], accent:'#fff1cf', deco:'box' },
-    { id:'rubberduck',   name:'RUBBER DUCK',    price:150, currency:'coins', rarity:'meme',      rarityClass:'rarity-meme',
+    { id:'rubberduck',   name:'RUBBER DUCK',    price:150, rarity:'meme',      rarityClass:'rarity-meme',
       color:'#ffe066', grad:['#ffe066','#ffb300'], accent:'#ff8c1a', deco:'duck' },
-    { id:'toaster',      name:'TOASTER',        price:150, currency:'coins', rarity:'meme',      rarityClass:'rarity-meme',
+    { id:'toaster',      name:'TOASTER',        price:150, rarity:'meme',      rarityClass:'rarity-meme',
       color:'#d8d8d8', grad:['#e8e8e8','#8a8a8a'], accent:'#ff5f2a', deco:'toast' },
-    { id:'carrot',       name:'CARROT',         price:150, currency:'coins', rarity:'meme',      rarityClass:'rarity-meme',
+    { id:'carrot',       name:'CARROT',         price:150, rarity:'meme',      rarityClass:'rarity-meme',
       color:'#ff8c1a', grad:['#ff8c1a','#e05a00'], accent:'#3fae3f', deco:'carrot' },
   ];
   const SKIN_BY_ID = {};
@@ -5842,10 +5643,10 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   let p2SkinId = 'red';
 
   const POWERS = [
-    { id:'extramag',    name:'EXTRA MAG',     desc:'+2 max ammo (8 total)',              price:60, currency:'coins' },
-    { id:'rapidreload', name:'RAPID RELOAD',  desc:'35% faster ammo regen',              price:70, currency:'coins' },
-    { id:'quickdash',   name:'QUICK DASH',    desc:'40% shorter dash cooldown',          price:80, currency:'coins' },
-    { id:'kevlar',      name:'KEVLAR VEST',   desc:'Absorb your first hit each round',   price:120, currency:'coins' },
+    { id:'extramag',    name:'EXTRA MAG',     desc:'+2 max ammo (8 total)',              price:60 },
+    { id:'rapidreload', name:'RAPID RELOAD',  desc:'35% faster ammo regen',              price:70 },
+    { id:'quickdash',   name:'QUICK DASH',    desc:'40% shorter dash cooldown',          price:80 },
+    { id:'kevlar',      name:'KEVLAR VEST',   desc:'Absorb your first hit each round',   price:120 },
   ];
   const ownedPowers = new Set();
   const equippedPowers = new Set();       // Player One's equipped loadout
@@ -5853,13 +5654,13 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   const MAX_EQUIPPED_POWERS = 2;
 
   const ABILITIES = [
-    { id:'quickreload', name:'QUICK RELOAD', rarity:'common',    qTriggered:false, desc:'Reload significantly faster, but magazine capacity is reduced (4 instead of 6).', price:90, currency:'coins' },
-    { id:'triburst',    name:'TRIBURST',     rarity:'rare',      qTriggered:true,  cooldown:4.0,  desc:'Fire 3 bullets in a narrow cone (Q or right-click). Shorter range than a normal shot. Doesn\'t use ammo.', price:150, currency:'coins' },
-    { id:'shockwave',   name:'SHOCKWAVE',    rarity:'epic',      qTriggered:false, desc:'Your dash detonates a damaging blast where you land, but the dash covers less distance.', price:200, currency:'coins' },
-    { id:'timewarp',    name:'TIME WARP',    rarity:'legendary', qTriggered:true,  cooldown:11.0, desc:'Temporarily slows your opponent (Q or right-click), but has a long cooldown.', price:280, currency:'coins' },
-    { id:'decoy',       name:'DECOY',        rarity:'mythic',    qTriggered:true,  cooldown:16.0, desc:'Spawn a fake copy of yourself that wanders on its own and never shoots (Q or right-click). Looks identical to your opponent -- but faded on your own screen, so you always know it\'s fake. Lasts 6s.', price:350, currency:'coins' },
-    { id:'ricochet',    name:'RICOCHET',     rarity:'mythic',    qTriggered:false, desc:'Your bullets bounce off cover and the arena border instead of disappearing -- up to 3 bounces before they finally fade out. Always on, no cooldown.', price:320, currency:'coins' },
-    { id:'voidblink',   name:'VOID BLINK',   rarity:'ascendant', qTriggered:true,  cooldown:13.0, desc:'Instantly teleport. Movement Aim: Q blinks to a random spot. Mouse Aim: Q blinks randomly, or right-click blinks to your crosshair.', price:420, currency:'coins' },
+    { id:'quickreload', name:'QUICK RELOAD', rarity:'common',    qTriggered:false, desc:'Reload significantly faster, but magazine capacity is reduced (4 instead of 6).', price:90 },
+    { id:'triburst',    name:'TRIBURST',     rarity:'rare',      qTriggered:true,  cooldown:4.0,  desc:'Fire 3 bullets in a narrow cone (Q or right-click). Shorter range than a normal shot. Doesn\'t use ammo.', price:150 },
+    { id:'shockwave',   name:'SHOCKWAVE',    rarity:'epic',      qTriggered:false, desc:'Your dash detonates a damaging blast where you land, but the dash covers less distance.', price:200 },
+    { id:'timewarp',    name:'TIME WARP',    rarity:'legendary', qTriggered:true,  cooldown:11.0, desc:'Temporarily slows your opponent (Q or right-click), but has a long cooldown.', price:280 },
+    { id:'decoy',       name:'DECOY',        rarity:'mythic',    qTriggered:true,  cooldown:16.0, desc:'Spawn a fake copy of yourself that wanders on its own and never shoots (Q or right-click). Looks identical to your opponent -- but faded on your own screen, so you always know it\'s fake. Lasts 6s.', price:350 },
+    { id:'ricochet',    name:'RICOCHET',     rarity:'mythic',    qTriggered:false, desc:'Your bullets bounce off cover and the arena border instead of disappearing -- up to 3 bounces before they finally fade out. Always on, no cooldown.', price:320 },
+    { id:'voidblink',   name:'VOID BLINK',   rarity:'ascendant', qTriggered:true,  cooldown:13.0, desc:'Instantly teleport. Movement Aim: Q blinks to a random spot. Mouse Aim: Q blinks randomly, or right-click blinks to your crosshair.', price:420 },
   ];
   const ownedAbilities = new Set();
   const equippedAbilities = new Set();     // Player One's equipped ability
@@ -6131,17 +5932,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       body.innerHTML = data.log.map(entry=>{
         const time = formatAdminLogTime(entry.time);
         let desc;
-        if(entry.type === 'currencyAdjust'){
-          const currencyLabel = entry.currency === 'crystals' ? 'Crystal' : 'Coin';
-          const signed = (entry.amount > 0 ? '+' : '') + entry.amount.toLocaleString();
-          desc = currencyLabel + ' adjustment \u2014 ' + escapeHtml(entry.targetPlayer) + ': ' + signed
-            + ' (' + entry.previousBalance.toLocaleString() + ' \u2192 ' + entry.newBalance.toLocaleString() + ')'
-            + ' by ' + escapeHtml(entry.admin)
-            + (entry.reason ? ' \u2014 "' + escapeHtml(entry.reason) + '"' : '');
-        } else if(entry.type === 'creditGrant'){
-          // Historical entries from before the Coins/Crystals rename --
-          // shown as-is (never rewritten), just described in today's words.
-          desc = 'Coin grant \u2014 ' + escapeHtml(entry.targetPlayer) + ': +' + entry.amount.toLocaleString()
+        if(entry.type === 'creditGrant'){
+          desc = 'Credit grant \u2014 ' + escapeHtml(entry.targetPlayer) + ': +' + entry.amount.toLocaleString()
             + ' (' + entry.previousBalance.toLocaleString() + ' \u2192 ' + entry.newBalance.toLocaleString() + ')'
             + ' by ' + escapeHtml(entry.admin);
         } else {
@@ -6170,21 +5962,14 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   }
 
   // ==========================================================
-  // ADMIN CURRENCY MANAGEMENT -- search a player, view their real
-  // Coins/Crystals balances, then request a server-authoritative
-  // adjustment to whichever one is selected, with a required reason.
-  // The server (see /admin/search-players and /admin/currency in
-  // server.js) independently re-verifies admin access and
-  // re-reads/re-validates everything -- including that a signed-in
-  // account is ACTUALLY the one whose email matches ADMIN_EMAIL; this
-  // UI only ever displays what it comes back with, never a
-  // locally-computed balance, and getting here at all already required
-  // passing that same server-side check (see btnAdmin/lobbyNavAdmin's
-  // hidden-unless-isAdmin wiring) -- a username containing "admin"
-  // grants nothing on its own.
+  // ADMIN CREDIT MANAGEMENT -- search a player, view their real
+  // balance, then request a server-authoritative credit grant. The
+  // server (see /admin/search-players and /admin/credits in server.js)
+  // independently re-verifies admin access and re-reads/re-validates
+  // everything; this UI only ever displays what it comes back with,
+  // never a locally-computed balance.
   // ==========================================================
-  let adminCurrencySelectedPlayer = null; // { id, name, coins, crystals } from the last server response
-  let adminCurrencyTab = 'coins'; // which balance the form below acts on
+  let adminCreditSelectedPlayer = null; // { id, name, credits } from the last server response
 
   function setAdminCreditStatus(text, isError){
     const el = document.getElementById('adminCreditStatusMsg');
@@ -6194,7 +5979,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   }
 
   function resetAdminCreditPanel(){
-    adminCurrencySelectedPlayer = null;
+    adminCreditSelectedPlayer = null;
     document.getElementById('adminCreditGrant').classList.add('hidden');
     document.getElementById('adminSearchResults').innerHTML = '';
     document.getElementById('adminPlayerSearch').value = '';
@@ -6225,43 +6010,32 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     }
     el.innerHTML = results.map(r =>
       `<button type="button" class="admin-search-result" data-id="${escapeHtml(r.id)}">`
-      + `<span>${escapeHtml(r.name)}</span><span class="admin-search-result-credits">◈ ${Number(r.coins).toLocaleString()}</span>`
+      + `<span>${escapeHtml(r.name)}</span><span class="admin-search-result-credits">◈ ${Number(r.credits).toLocaleString()}</span>`
       + `</button>`
     ).join('');
     el.querySelectorAll('.admin-search-result').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const match = results.find(r => r.id === btn.dataset.id);
-        if(match) selectAdminCurrencyPlayer(match);
+        if(match) selectAdminCreditPlayer(match);
       });
     });
   }
 
-  function selectAdminCurrencyPlayer(player){
-    adminCurrencySelectedPlayer = player;
-    // Always starts on Coins for a newly-selected player, regardless of
-    // which tab a PREVIOUS player was left on.
-    adminCurrencyTab = 'coins';
-    const coinsTab = document.getElementById('adminTabCoins');
-    const crystalsTab = document.getElementById('adminTabCrystals');
-    if(coinsTab) coinsTab.classList.add('selected');
-    if(crystalsTab) crystalsTab.classList.remove('selected');
+  function selectAdminCreditPlayer(player){
+    adminCreditSelectedPlayer = player;
     document.getElementById('adminSelectedPlayerName').textContent = player.name;
-    document.getElementById('adminSelectedPlayerCoins').textContent = Number(player.coins).toLocaleString();
-    document.getElementById('adminSelectedPlayerCrystals').textContent = Number(player.crystals || 0).toLocaleString();
+    document.getElementById('adminSelectedPlayerCredits').textContent = Number(player.credits).toLocaleString();
     document.getElementById('adminCreditForm').classList.remove('hidden');
     document.getElementById('adminCreditConfirm').classList.add('hidden');
     document.getElementById('adminCreditAmount').value = '';
-    document.getElementById('adminCreditReason').value = '';
     setAdminCreditStatus('');
     document.getElementById('adminCreditGrant').classList.remove('hidden');
   }
 
   // Whole positive integers only, capped well above anything a real
-  // adjustment would need -- rejects empty input, negatives, zero,
-  // decimals, and non-numeric characters (the browser's own
-  // number-input validation is just UX, this is what actually gates
-  // the request). The SIGN (add vs remove) comes from which button was
-  // clicked, not from this field -- a player never types a minus sign.
+  // grant would need -- rejects empty input, negatives, zero, decimals,
+  // and non-numeric characters (the browser's own number-input
+  // validation is just UX, this is what actually gates the request).
   function readAdminCreditAmount(){
     const raw = document.getElementById('adminCreditAmount').value.trim();
     if(!/^[0-9]+$/.test(raw)) return null;
@@ -6270,55 +6044,22 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     return n;
   }
 
-  function readAdminCreditReason(){
-    const raw = document.getElementById('adminCreditReason').value.trim();
-    if(raw.length < 3 || raw.length > 200) return null;
-    return raw;
-  }
-
-  function currentAdminBalance(){
-    return adminCurrencyTab === 'crystals'
-      ? Number(adminCurrencySelectedPlayer.crystals || 0)
-      : Number(adminCurrencySelectedPlayer.coins || 0);
-  }
-
-  // sign is +1 (ADD) or -1 (REMOVE) -- the only two buttons that call this.
-  function openAdminCreditConfirm(sign){
-    if(!adminCurrencySelectedPlayer) return;
+  function openAdminCreditConfirm(){
+    if(!adminCreditSelectedPlayer) return;
     const amount = readAdminCreditAmount();
     if(amount === null){
-      setAdminCreditStatus('ENTER A VALID AMOUNT', true);
-      return;
-    }
-    const reason = readAdminCreditReason();
-    if(reason === null){
-      setAdminCreditStatus('ENTER A REASON (3-200 CHARACTERS)', true);
-      return;
-    }
-    const signedAmount = sign * amount;
-    const current = currentAdminBalance();
-    const next = current + signedAmount;
-    if(next < 0){
-      setAdminCreditStatus('THAT WOULD TAKE THE BALANCE BELOW ZERO', true);
+      setAdminCreditStatus('ENTER A VALID CREDIT AMOUNT', true);
       return;
     }
     setAdminCreditStatus('');
-    document.getElementById('confirmPlayerName').textContent = adminCurrencySelectedPlayer.name;
-    document.getElementById('confirmCurrency').textContent = adminCurrencyTab.toUpperCase();
-    document.getElementById('confirmCurrentBalance').textContent = current.toLocaleString();
-    document.getElementById('confirmAmount').textContent = (signedAmount > 0 ? '+' : '') + signedAmount.toLocaleString();
-    document.getElementById('confirmNewBalance').textContent = next.toLocaleString();
-    document.getElementById('confirmReason').textContent = reason;
+    const current = adminCreditSelectedPlayer.credits;
+    document.getElementById('confirmPlayerName').textContent = adminCreditSelectedPlayer.name;
+    document.getElementById('confirmCurrentBalance').textContent = Number(current).toLocaleString();
+    document.getElementById('confirmAmount').textContent = '+' + amount.toLocaleString();
+    document.getElementById('confirmNewBalance').textContent = Number(current + amount).toLocaleString();
     document.getElementById('adminCreditForm').classList.add('hidden');
     document.getElementById('adminCreditConfirm').classList.remove('hidden');
-    // Stashed on the (module-level) selection rather than re-read from
-    // the form on confirm -- the CONFIRM screen shows exactly the
-    // numbers being sent, so what gets sent must be exactly what was
-    // just shown, not whatever happens to still be in the inputs.
-    pendingAdminAdjustment = { currency: adminCurrencyTab, amount: signedAmount, reason: reason };
   }
-
-  let pendingAdminAdjustment = null;
 
   function cancelAdminCreditConfirm(){
     document.getElementById('adminCreditConfirm').classList.add('hidden');
@@ -6327,15 +6068,16 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
 
   async function confirmAdminGiveCredits(){
     if(!sessionToken){ setAdminCreditStatus('NOT SIGNED IN', true); return; }
-    if(!adminCurrencySelectedPlayer || !pendingAdminAdjustment) return;
-    const { currency, amount, reason } = pendingAdminAdjustment;
+    if(!adminCreditSelectedPlayer) return;
+    const amount = readAdminCreditAmount();
+    if(amount === null){ setAdminCreditStatus('ENTER A VALID CREDIT AMOUNT', true); return; }
 
-    setAdminCreditStatus(amount > 0 ? 'ADDING...' : 'REMOVING...');
+    setAdminCreditStatus('GRANTING...');
     try{
-      const res = await fetch(ACCOUNT_SERVER_URL + '/admin/currency', {
+      const res = await fetch(ACCOUNT_SERVER_URL + '/admin/credits', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionToken, playerId: adminCurrencySelectedPlayer.id, currency, amount, reason })
+        body: JSON.stringify({ sessionToken, playerId: adminCreditSelectedPlayer.id, amount })
       });
       if(res.status === 403){
         setAdminCreditStatus('UNAUTHORIZED — YOU DO NOT HAVE PERMISSION TO PERFORM THIS ACTION', true);
@@ -6347,28 +6089,24 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         return;
       }
       if(res.status === 400){
-        const data = await res.json().catch(()=>({}));
-        setAdminCreditStatus((data.error || 'INVALID ADJUSTMENT').toUpperCase(), true);
+        setAdminCreditStatus('ENTER A VALID CREDIT AMOUNT', true);
         cancelAdminCreditConfirm();
         return;
       }
       if(!res.ok){
-        setAdminCreditStatus('ADJUSTMENT FAILED — NOTHING WAS CHANGED', true);
+        setAdminCreditStatus('CREDIT GRANT FAILED — NO CREDITS WERE ADDED', true);
         return;
       }
       const data = await res.json();
-      if(currency === 'crystals') adminCurrencySelectedPlayer.crystals = data.newBalance;
-      else adminCurrencySelectedPlayer.coins = data.newBalance;
-      document.getElementById('adminSelectedPlayerCoins').textContent = Number(adminCurrencySelectedPlayer.coins).toLocaleString();
-      document.getElementById('adminSelectedPlayerCrystals').textContent = Number(adminCurrencySelectedPlayer.crystals || 0).toLocaleString();
+      adminCreditSelectedPlayer.credits = data.newBalance;
+      document.getElementById('adminSelectedPlayerCredits').textContent = Number(data.newBalance).toLocaleString();
       cancelAdminCreditConfirm();
       document.getElementById('adminCreditAmount').value = '';
-      document.getElementById('adminCreditReason').value = '';
-      setAdminCreditStatus('✓ ' + (amount > 0 ? 'ADDED ' : 'REMOVED ') + Math.abs(amount).toLocaleString() + ' ' + currency.toUpperCase() + ' — '
+      setAdminCreditStatus('✓ CREDIT GRANT SUCCESSFUL — +' + amount.toLocaleString() + ' credits — '
         + data.name + ' — new balance: ' + Number(data.newBalance).toLocaleString());
       renderAdminLog();
     } catch(e){
-      setAdminCreditStatus('ADJUSTMENT FAILED — NOTHING WAS CHANGED', true);
+      setAdminCreditStatus('CREDIT GRANT FAILED — NO CREDITS WERE ADDED', true);
     }
   }
 
@@ -6556,8 +6294,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     footballMsgTimer = 1.8;
 
     if(scorerId === 'p1'){
-      coins += 15;
-      updateCurrencyDisplay();
+      credits += 15;
+      updateCreditsDisplay();
       saveProgress();
       reportXP('football_goal');
     }
@@ -6570,10 +6308,10 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       footballWinnerId = footballScore1 > footballScore2 ? 'p1' : 'p2';
       footballState = 'matchEnd';
       if(footballWinnerId === 'p1'){
-        coins += 40;
+        credits += 40;
         stats.wins++;
         bumpDailyProgress('wins');
-        updateCurrencyDisplay();
+        updateCreditsDisplay();
         saveProgress();
         reportXP('match_win');
       }
@@ -6998,16 +6736,16 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     msgTimer = 0;
     const localSide = myBaseSide();
     if(heistWinnerSide === localSide){
-      coins += 50;
+      credits += 50;
       stats.wins++;
       bumpDailyProgress('wins');
-      updateCurrencyDisplay();
+      updateCreditsDisplay();
       saveProgress();
       // Online: the server already pushed this via 'xpAward' the instant
       // it confirmed the base's destruction (see server.js's heistHit
       // handler) -- reporting it again here would just be rejected
       // ("granted automatically"). Local/VS Computer has no server in
-      // the loop at all, so it's the client's job here, same as coins.
+      // the loop at all, so it's the client's job here, same as credits.
       if(mode !== 'online') reportXP('heist_win');
     }
   }
@@ -7304,20 +7042,19 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     bombMsgTimer = 1.8;
 
     if(scorerId === 'p1'){
-      coins += 15;
-      updateCurrencyDisplay();
+      credits += 15;
+      updateCreditsDisplay();
       saveProgress();
-      reportXP('bombrun_goal');
     }
 
     if(bombScore1 >= BOMB_WIN_SCORE || bombScore2 >= BOMB_WIN_SCORE){
       bombWinnerId = bombScore1 > bombScore2 ? 'p1' : 'p2';
       bombState = 'matchEnd';
       if(bombWinnerId === 'p1'){
-        coins += 40;
+        credits += 40;
         stats.wins++;
         bumpDailyProgress('wins');
-        updateCurrencyDisplay();
+        updateCreditsDisplay();
         saveProgress();
         // applyBombGoal only ever runs in Local/VS Computer (online play
         // goes through the server's own bombGoal handler + 'xpAward'
@@ -7529,11 +7266,9 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     }
   }
 
-  function updateCurrencyDisplay(){
-    coinsAmountMain.textContent = coins.toLocaleString();
-    coinsAmountShop.textContent = coins.toLocaleString();
-    crystalsAmountMain.textContent = crystals.toLocaleString();
-    crystalsAmountShop.textContent = crystals.toLocaleString();
+  function updateCreditsDisplay(){
+    creditsAmountMain.textContent = credits;
+    creditsAmountShop.textContent = credits;
     const statsEl = document.getElementById('statsLineMain');
     if(statsEl) statsEl.textContent = stats.kills + ' KILLS \u00b7 ' + stats.wins + ' WINS';
     lobbySync(); // mirror the same numbers into the lobby UI
@@ -7551,24 +7286,15 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       shopBody.appendChild(note);
       shopBody.appendChild(buildPowerGrid('PLAYER ONE', 'p1', equippedPowers));
       shopBody.appendChild(buildPowerGrid('PLAYER TWO', 'p2', equippedPowersP2));
-    } else if(shopTab==='abilities'){
+    } else {
       const note = document.createElement('div');
       note.className = 'power-slots-note';
       note.textContent = `EQUIP UP TO ${MAX_EQUIPPED_ABILITIES} ABILITY EACH \u2014 P1 USES Q/RIGHT-CLICK, P2 USES "."  \u2014 BOTH PLAYERS SHARE WHAT YOU'VE UNLOCKED`;
       shopBody.appendChild(note);
       shopBody.appendChild(buildAbilityGrid('PLAYER ONE', 'p1', equippedAbilities));
       shopBody.appendChild(buildAbilityGrid('PLAYER TWO', 'p2', equippedAbilitiesP2));
-    } else {
-      shopBody.appendChild(buildCrystalShop());
     }
   }
-
-  // Reads whichever local balance an item's OWN catalog entry says it
-  // costs -- never assumes Coins. Every item today costs Coins, but the
-  // Crystal Shop's packages (see buildCrystalShop) and any future
-  // Crystal-priced cosmetic go through the exact same shape.
-  function balanceFor(currency){ return currency === 'crystals' ? crystals : coins; }
-  function currencyGlyph(currency){ return currency === 'crystals' ? '\u25c6' : '\u25c8'; }
 
   function buildSkinRow(label, side, currentId, onEquip){
     const wrap = document.createElement('div');
@@ -7581,14 +7307,14 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     SKINS.forEach(skin=>{
       const owned = ownedSkins.has(skin.id);
       const equipped = currentId === skin.id;
-      const affordable = balanceFor(skin.currency) >= skin.price;
+      const affordable = credits >= skin.price;
       const card = document.createElement('div');
       card.className = 'skin-card' + (owned?' owned':'') + (equipped?' equipped':'') + (!owned?' locked':'') + (!owned && !affordable ? ' unaffordable':'');
       card.innerHTML = `
         ${skin.rarityClass ? `<div class="rarity-badge ${skin.rarityClass}">${skin.rarity.toUpperCase()}</div>` : ''}
         <canvas class="skin-preview" width="72" height="42"></canvas>
         <div class="skin-name">${skin.name}</div>
-        <div class="item-price ${skin.price===0?'free':''}">${skin.price===0 ? 'OWNED' : currencyGlyph(skin.currency)+' '+skin.price}</div>
+        <div class="item-price ${skin.price===0?'free':''}">${skin.price===0 ? 'OWNED' : '\u25c8 '+skin.price}</div>
       `;
       renderSkinPreviewCanvas(card.querySelector('.skin-preview'), skin);
       card.addEventListener('click', ()=>{
@@ -7597,7 +7323,12 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
           renderShop();
           saveProgress();
         } else if(affordable){
-          buyShopItem('skin', skin.id, skin.price, ownedSkins, onEquip);
+          credits -= skin.price;
+          ownedSkins.add(skin.id);
+          onEquip(skin.id);
+          updateCreditsDisplay();
+          renderShop();
+          saveProgress();
         }
       });
       grid.appendChild(card);
@@ -7621,14 +7352,14 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     POWERS.forEach(pw=>{
       const owned = ownedPowers.has(pw.id);
       const equipped = equippedSet.has(pw.id);
-      const affordable = balanceFor(pw.currency) >= pw.price;
+      const affordable = credits >= pw.price;
       const slotsFull = equippedSet.size >= MAX_EQUIPPED_POWERS;
       const card = document.createElement('div');
       card.className = 'power-card' + (owned?' owned':'') + (equipped?' equipped':'') + (!owned?' locked':'') + (!owned && !affordable ? ' unaffordable':'');
       card.innerHTML = `
         <div class="power-name">${pw.name}</div>
         <div class="power-desc">${pw.desc}</div>
-        <div class="item-price">${owned ? (equipped ? 'TAP TO UNEQUIP' : (slotsFull ? 'SLOTS FULL' : 'TAP TO EQUIP')) : currencyGlyph(pw.currency)+' '+pw.price}</div>
+        <div class="item-price">${owned ? (equipped ? 'TAP TO UNEQUIP' : (slotsFull ? 'SLOTS FULL' : 'TAP TO EQUIP')) : '\u25c8 '+pw.price}</div>
       `;
       card.addEventListener('click', ()=>{
         if(owned){
@@ -7640,9 +7371,12 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
           renderShop();
           saveProgress();
         } else if(affordable){
-          buyShopItem('power', pw.id, pw.price, ownedPowers, (id)=>{
-            if(equippedSet.size < MAX_EQUIPPED_POWERS) equippedSet.add(id);
-          });
+          credits -= pw.price;
+          ownedPowers.add(pw.id);
+          if(equippedSet.size < MAX_EQUIPPED_POWERS) equippedSet.add(pw.id);
+          updateCreditsDisplay();
+          renderShop();
+          saveProgress();
         }
       });
       grid.appendChild(card);
@@ -7662,7 +7396,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     ABILITIES.forEach(ab=>{
       const owned = ownedAbilities.has(ab.id);
       const equipped = equippedSet.has(ab.id);
-      const affordable = balanceFor(ab.currency) >= ab.price;
+      const affordable = credits >= ab.price;
       const slotsFull = equippedSet.size >= MAX_EQUIPPED_ABILITIES;
       const card = document.createElement('div');
       card.className = 'power-card' + (owned?' owned':'') + (equipped?' equipped':'') + (!owned?' locked':'') + (!owned && !affordable ? ' unaffordable':'');
@@ -7670,7 +7404,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         <div class="rarity-badge rarity-${ab.rarity}">${ab.rarity.toUpperCase()}</div>
         <div class="power-name">${ab.name}</div>
         <div class="power-desc">${ab.desc}</div>
-        <div class="item-price">${owned ? (equipped ? 'TAP TO UNEQUIP' : (slotsFull ? 'SLOTS FULL' : 'TAP TO EQUIP')) : currencyGlyph(ab.currency)+' '+ab.price}</div>
+        <div class="item-price">${owned ? (equipped ? 'TAP TO UNEQUIP' : (slotsFull ? 'SLOTS FULL' : 'TAP TO EQUIP')) : '\u25c8 '+ab.price}</div>
       `;
       card.addEventListener('click', ()=>{
         if(owned){
@@ -7682,196 +7416,18 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
           renderShop();
           saveProgress();
         } else if(affordable){
-          buyShopItem('ability', ab.id, ab.price, ownedAbilities, (id)=>{
-            if(equippedSet.size < MAX_EQUIPPED_ABILITIES) equippedSet.add(id);
-          });
+          credits -= ab.price;
+          ownedAbilities.add(ab.id);
+          if(equippedSet.size < MAX_EQUIPPED_ABILITIES) equippedSet.add(ab.id);
+          updateCreditsDisplay();
+          renderShop();
+          saveProgress();
         }
       });
       grid.appendChild(card);
     });
     wrap.appendChild(grid);
     return wrap;
-  }
-
-  // ====================================================================
-  // CRYSTAL SHOP -- Stripe Checkout foundation (client half).
-  //
-  // Real money never touches this client: a purchase here only ever
-  // asks the SERVER to create a Stripe Checkout Session (server decides
-  // the price from its own package list -- see billing.js), then
-  // redirects the whole page to Stripe's own hosted payment page.
-  // Crystals are granted later, server-side, once Stripe's webhook
-  // confirms the payment -- see server.js's /billing/stripe/webhook.
-  // This client NEVER credits Crystals just because it lands back here
-  // afterwards; see handleCheckoutReturn() further down for what it
-  // does instead (asks the server whether the purchase actually went
-  // through, and shows a message either way).
-  //
-  // The package list itself is fetched from the server (never hard-
-  // coded here) so changing a price/amount in billing.js's
-  // CRYSTAL_PACKAGES is the only place that ever needs editing.
-  // ====================================================================
-  let crystalPackagesCache = null; // { configured, packages } once fetched
-  let crystalPurchaseInFlight = false;
-
-  function buildCrystalShop(){
-    const wrap = document.createElement('div');
-    const lbl = document.createElement('div');
-    lbl.className = 'shop-section-label';
-    lbl.textContent = 'CRYSTALS — PREMIUM CURRENCY';
-    wrap.appendChild(lbl);
-
-    if(crystalPackagesCache === null){
-      const loading = document.createElement('div');
-      loading.className = 'power-slots-note';
-      loading.textContent = 'LOADING...';
-      wrap.appendChild(loading);
-      fetch(ACCOUNT_SERVER_URL + '/billing/crystals/packages')
-        .then(res => res.ok ? res.json() : null)
-        .then(data => {
-          crystalPackagesCache = data && Array.isArray(data.packages)
-            ? data : { configured: false, packages: [] };
-          if(shopTab === 'crystals') renderShop(); // only redraw if the player is still on this tab
-        })
-        .catch(()=>{
-          crystalPackagesCache = { configured: false, packages: [] };
-          if(shopTab === 'crystals') renderShop();
-        });
-      return wrap;
-    }
-
-    if(!crystalPackagesCache.configured){
-      const note = document.createElement('div');
-      note.className = 'soon-block';
-      note.innerHTML = '<div class="sb-main">CRYSTAL PURCHASES UNAVAILABLE</div>'
-        + '<div class="sb-sub">Real-money purchases are not set up on this server yet. Nothing was charged.</div>';
-      wrap.appendChild(note);
-      return wrap;
-    }
-
-    const note = document.createElement('div');
-    note.className = 'power-slots-note';
-    note.textContent = 'PURCHASES ARE HANDLED SECURELY BY STRIPE — THIS GAME NEVER SEES YOUR CARD DETAILS';
-    wrap.appendChild(note);
-
-    const grid = document.createElement('div');
-    grid.className = 'crystal-package-grid';
-    crystalPackagesCache.packages.forEach(pkg=>{
-      const card = document.createElement('div');
-      card.className = 'crystal-package-card';
-      const usd = (pkg.usdCents / 100).toFixed(2);
-      card.innerHTML = `
-        <div class="cpk-gem">&#9670;</div>
-        <div class="cpk-amount">${pkg.crystals.toLocaleString()}</div>
-        <div class="cpk-label">CRYSTALS</div>
-        <button class="menu-btn accent-2 cpk-buy" type="button">$${usd}</button>
-      `;
-      card.querySelector('.cpk-buy').addEventListener('click', ()=> buyCrystalPackage(pkg.id));
-      grid.appendChild(card);
-    });
-    wrap.appendChild(grid);
-    return wrap;
-  }
-
-  async function buyCrystalPackage(packageId){
-    if(crystalPurchaseInFlight) return;
-    if(!loggedIn || !sessionToken){
-      lobbyToast('SIGN IN TO BUY CRYSTALS');
-      return;
-    }
-    crystalPurchaseInFlight = true;
-    try{
-      const res = await fetch(ACCOUNT_SERVER_URL + '/billing/crystals/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionToken: sessionToken, packageId: packageId })
-      });
-      const data = await res.json().catch(()=>({}));
-      if(!res.ok || !data.url){
-        lobbyToast(data.error || 'COULD NOT START CHECKOUT');
-        crystalPurchaseInFlight = false;
-        return;
-      }
-      // A real redirect to Stripe's own hosted payment page -- this
-      // client never collects a card number itself. Crystals are
-      // granted later by the webhook, not by this navigation.
-      window.location.href = data.url;
-    }catch(e){
-      lobbyToast('COULD NOT REACH THE SERVER');
-      crystalPurchaseInFlight = false;
-    }
-  }
-
-  // ---------------------------------------------------------------------
-  // Handles landing back here after Stripe Checkout redirects the page
-  // (success_url/cancel_url -- see server.js's /billing/crystals/checkout).
-  //
-  // This is NOT where Crystals are granted -- that already happened (or
-  // didn't) server-side, via the webhook, independent of whether this
-  // code ever runs at all (a closed tab, a crashed browser, never
-  // coming back here). All this does is give the player an honest
-  // status message. It never sets `crystals` from anything in the URL.
-  //
-  // Because this game logs a player out on every page load (see the
-  // account-security notes elsewhere in this file), returning from
-  // Stripe means landing back as a guest, same as any other refresh --
-  // there is no session yet to ask "did it work" with. If this browser
-  // has an active Google session, tryInitGoogle()'s existing silent
-  // sign-in usually completes within a second or two, and THAT path
-  // (once signed in) polls the real purchase status below. A
-  // username/password account has no such silent path and simply needs
-  // to sign back in manually to see the updated balance -- exactly like
-  // it already needs to for anything else after a refresh.
-  // ---------------------------------------------------------------------
-  function handleCheckoutReturn(){
-    const params = new URLSearchParams(window.location.search);
-    const checkout = params.get('checkout');
-    if(!checkout) return;
-
-    const checkoutSessionId = params.get('session_id') || '';
-    // Strip the query string so a later manual refresh doesn't re-show
-    // this -- the outcome only matters once, right after returning.
-    history.replaceState({}, '', window.location.pathname);
-
-    if(checkout === 'cancel'){
-      lobbyToast('CRYSTAL PURCHASE CANCELED — NOTHING WAS CHARGED');
-      return;
-    }
-    if(checkout !== 'success') return;
-
-    lobbyToast('PAYMENT RECEIVED — SIGN IN TO SEE YOUR UPDATED CRYSTAL BALANCE');
-    if(!checkoutSessionId) return;
-
-    // Opportunistic: if a session appears within the next few seconds
-    // (Google's silent sign-in, most commonly), confirm the REAL
-    // outcome from the server's own purchase ledger and update the
-    // Crystal balance/HUD immediately instead of leaving the player to
-    // wonder. Gives up quietly after a short window rather than polling
-    // forever -- the account's own crystals field is authoritative the
-    // moment they sign in anyway, with or without this.
-    let attempts = 0;
-    const poll = setInterval(async ()=>{
-      attempts++;
-      if(attempts > 10){ clearInterval(poll); return; } // ~20s, then stop trying
-      if(!loggedIn || !sessionToken) return; // not signed in yet -- keep waiting, briefly
-      try{
-        const res = await fetch(ACCOUNT_SERVER_URL + '/billing/crystals/status?sessionToken=' + encodeURIComponent(sessionToken) + '&checkoutSessionId=' + encodeURIComponent(checkoutSessionId));
-        const data = await res.json().catch(()=>({}));
-        if(data.status === 'granted'){
-          clearInterval(poll);
-          if(typeof data.newBalance === 'number'){
-            crystals = data.newBalance;
-            updateCurrencyDisplay();
-          }
-          lobbyToast('+' + (data.crystals || '').toString() + ' CRYSTALS ADDED');
-        } else if(data.status === 'failed' || data.status === 'account_missing' || data.status === 'grant_failed'){
-          clearInterval(poll);
-          lobbyToast('CRYSTAL PURCHASE COULD NOT BE COMPLETED — CONTACT SUPPORT IF YOU WERE CHARGED');
-        }
-        // 'pending'/'unknown' -- keep polling; the webhook may simply
-        // not have arrived yet.
-      }catch(e){ /* try again next tick */ }
-    }, 2000);
   }
 
   let mouseX = W/2, mouseY = H/2;
@@ -8488,7 +8044,7 @@ else{
   }
 
   // Match-win bonus scales with lobby size: the original 2-player bonus,
-  // plus 10 more coins for every player added beyond 2 (3p:+50, 4p:+60...).
+  // plus 10 more credits for every player added beyond 2 (3p:+50, 4p:+60...).
   function matchWinBonus(){
     return 40 + Math.max(0, matchPlayerCount - 2) * 10;
   }
@@ -8504,7 +8060,7 @@ else{
   }
 
   // Generalized hit application used for FFA (3-4 player) Classic Mode --
-  // any combatant can hit any other. 15 coins go to the human player
+  // any combatant can hit any other. 15 credits go to the human player
   // (p1) the instant THEY land a kill, rather than waiting for the round
   // to end (a round can easily contain more than one of p1's kills).
   function applyHitToCombatant(target, shooterId, dmg){
@@ -8521,10 +8077,10 @@ else{
     if(target.health <= 0){
       target.alive = false;
       if(shooterId === 'p1' && target.id !== 'p1'){
-        coins += 15;
+        credits += 15;
         stats.kills++;
         bumpDailyProgress('kills');
-        updateCurrencyDisplay();
+        updateCreditsDisplay();
         saveProgress();
         reportXP('kill', { kills: 1 });
       }
@@ -8962,7 +8518,7 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
   // Time Warp: a targeted debuff, not a positional hit, so there's no
   // range check -- it just tells the opponent "you're slowed now" and
   // they apply it to themselves, same low-stakes trust model already
-  // used for things like coins. In online mode this is only ever
+  // used for things like credits. In online mode this is only ever
   // reachable with p.id==='p1' (the opponent is never locally controlled
   // there), so the network branch stays p1-vs-p2 specifically.
   function triggerTimeWarp(p){
@@ -9062,12 +8618,12 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
     if(isMe){
       endRound('p2');
     } else {
-      // Our kill: coins/stats are ours to keep, exactly as before --
+      // Our kill: credits/stats are ours to keep, exactly as before --
       // the only change is that the SERVER decided the kill happened.
-      coins += 15;
+      credits += 15;
       stats.kills++;
       bumpDailyProgress('kills');
-      updateCurrencyDisplay();
+      updateCreditsDisplay();
       saveProgress();
       reportXP('kill', { kills: 1 });
       endRound('p1');
@@ -9097,12 +8653,12 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
         } else if(gameType === 'bombrun'){
           handleBombDeath(p2);
         } else {
-          // 15 coins per kill, awarded the instant it happens (endRound
+          // 15 credits per kill, awarded the instant it happens (endRound
           // only handles the match-win bonus now, see below).
-          coins += 15;
+          credits += 15;
           stats.kills++;
           bumpDailyProgress('kills');
-          updateCurrencyDisplay();
+          updateCreditsDisplay();
           saveProgress();
           reportXP('kill', { kills: 1 });
           endRound('p1');
@@ -9481,7 +9037,7 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
     // The tutorial's PRACTICE DUEL step reuses this exact function (real
     // elimination detection, real round-end call) but needs its own,
     // much shorter win condition (1 round, no fail state) instead of
-    // ROUNDS_TO_WIN/coins/XP -- see tutorialHandleRoundEnd. Every
+    // ROUNDS_TO_WIN/credits/XP -- see tutorialHandleRoundEnd. Every
     // other caller of endRound (Classic Mode's real matches) is
     // completely unaffected since tutorialActive is only ever true
     // while the tutorial itself is running.
@@ -9493,24 +9049,19 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
     scoreCarry = { p1: p1.score, p2: p2.score };
     state = 'roundEnd';
     msgTimer = 1.7;
-    // Per-kill coins are now awarded the instant a kill happens (see
+    // Per-kill credits are now awarded the instant a kill happens (see
     // applyLocalHitToP2/applyHitToCombatant/the online damage handler) --
     // this only ever hands out the MATCH-win bonus, which scales with
     // how many players/bots were in the match (see matchWinBonus()).
     if(winnerId==='p1'){
-      reportXP('round_win'); // every round win -- same "only our own p1" scope as coins above
+      reportXP('round_win'); // every round win -- same "only our own p1" scope as credits above
       if(winner.score >= ROUNDS_TO_WIN){
-        coins += matchWinBonus();
+        credits += matchWinBonus();
         stats.wins++;
         bumpDailyProgress('wins');
-        updateCurrencyDisplay();
+        updateCreditsDisplay();
         saveProgress();
-        // players:matchPlayerCount lets the server compute the SAME
-        // lobby-size-scaled bonus matchWinBonus() just applied locally
-        // (see /xp/report's handling of reason:"match_win" in
-        // server.js) -- without it the server would fall back to the
-        // flat 2-player amount.
-        reportXP('match_win', { players: matchPlayerCount });
+        reportXP('match_win');
       }
     }
     if(winner.score >= ROUNDS_TO_WIN){ state = 'matchEnd'; countMatchPlayed(); }
@@ -9528,7 +9079,7 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
   //
   // Guarded on matchEnd so neither entry point can reset a live round.
   // Note it resets ROUND/MATCH state only (via the existing
-  // fullReset/initFootballMode/initHeistMode): coins, kills, wins,
+  // fullReset/initFootballMode/initHeistMode): credits, kills, wins,
   // skins, powers, abilities and account progression are untouched.
   function restartMatch(){
     if(state !== 'matchEnd') return;
@@ -10116,8 +9667,8 @@ if(tutorialActive) tutorialUpdate(dt);
         const p1won = footballWinnerId === 'p1';
         const winner = p1won ? combatantLabel('p1') : combatantLabel('p2');
         const color = p1won ? 'var(--p1)' : 'var(--p2)';
-        const coinNote = p1won ? '<div class="small" style="color:#ffce54;">+40 BONUS COINS</div>' : '';
-        centerMsg.innerHTML = `<div class="big" style="color:${color}">${winner} WINS</div><div class="small">${footballScore1} - ${footballScore2}</div><div class="small">PRESS R TO REMATCH</div>${coinNote}`;
+        const creditNote = p1won ? '<div class="small" style="color:#ffce54;">+40 BONUS CREDITS</div>' : '';
+        centerMsg.innerHTML = `<div class="big" style="color:${color}">${winner} WINS</div><div class="small">${footballScore1} - ${footballScore2}</div><div class="small">PRESS R TO REMATCH</div>${creditNote}`;
       } else {
         centerMsg.innerHTML = '';
       }
@@ -10128,8 +9679,8 @@ if(tutorialActive) tutorialUpdate(dt);
         const p1won = heistWinnerSide === myBaseSide();
         const winnerLabel = heistWinnerSide === myBaseSide() ? combatantLabel('p1') : combatantLabel('p2');
         const color = p1won ? 'var(--p1)' : 'var(--p2)';
-        const coinNote = p1won ? '<div class="small" style="color:#ffce54;">+50 BONUS COINS</div>' : '';
-        centerMsg.innerHTML = `<div class="big" style="color:${color}">HEIST DESTROYED</div><div class="small">${winnerLabel} WINS</div><div class="small">PRESS R TO REMATCH</div>${coinNote}`;
+        const creditNote = p1won ? '<div class="small" style="color:#ffce54;">+50 BONUS CREDITS</div>' : '';
+        centerMsg.innerHTML = `<div class="big" style="color:${color}">HEIST DESTROYED</div><div class="small">${winnerLabel} WINS</div><div class="small">PRESS R TO REMATCH</div>${creditNote}`;
       } else {
         centerMsg.innerHTML = '';
       }
@@ -10142,8 +9693,8 @@ if(tutorialActive) tutorialUpdate(dt);
         const p1won = bombWinnerId === 'p1';
         const winner = p1won ? combatantLabel('p1') : combatantLabel('p2');
         const color = p1won ? 'var(--p1)' : 'var(--p2)';
-        const coinNote = p1won ? '<div class="small" style="color:#ffce54;">+40 BONUS COINS</div>' : '';
-        centerMsg.innerHTML = `<div class="big" style="color:${color}">${winner} WINS</div><div class="small">${bombScore1} - ${bombScore2}</div><div class="small">PRESS R TO REMATCH</div>${coinNote}`;
+        const creditNote = p1won ? '<div class="small" style="color:#ffce54;">+40 BONUS CREDITS</div>' : '';
+        centerMsg.innerHTML = `<div class="big" style="color:${color}">${winner} WINS</div><div class="small">${bombScore1} - ${bombScore2}</div><div class="small">PRESS R TO REMATCH</div>${creditNote}`;
       } else {
         centerMsg.innerHTML = '';
       }
@@ -10154,14 +9705,14 @@ if(tutorialActive) tutorialUpdate(dt);
         const winnerId = lastRoundWinnerId || (p1.alive ? 'p1' : 'p2');
         const winner = combatantLabel(winnerId);
         const color = winnerId==='p1' ? 'var(--p1)' : (winnerId==='p2' ? 'var(--p2)' : '#5dffa0');
-        const coinNote = winnerId==='p1' ? '<div class="small" style="color:#ffce54;">+15 COINS</div>' : '';
-        centerMsg.innerHTML = `<div class="big" style="color:${color}">${winner}</div><div class="small">ROUND WIN</div>${coinNote}`;
+        const creditNote = winnerId==='p1' ? '<div class="small" style="color:#ffce54;">+15 CREDITS</div>' : '';
+        centerMsg.innerHTML = `<div class="big" style="color:${color}">${winner}</div><div class="small">ROUND WIN</div>${creditNote}`;
       } else if(state==='matchEnd'){
         const p1won = lastRoundWinnerId === 'p1';
         const winner = combatantLabel(lastRoundWinnerId || (p1.score>=ROUNDS_TO_WIN ? 'p1' : 'p2'));
         const color = p1won ? 'var(--p1)' : (lastRoundWinnerId==='p2' ? 'var(--p2)' : '#5dffa0');
-        const coinNote = p1won ? `<div class="small" style="color:#ffce54;">+${matchWinBonus()} BONUS COINS</div>` : '';
-        centerMsg.innerHTML = `<div class="big" style="color:${color}">${winner} WINS</div><div class="small">PRESS R TO REMATCH</div>${coinNote}`;
+        const creditNote = p1won ? `<div class="small" style="color:#ffce54;">+${matchWinBonus()} BONUS CREDITS</div>` : '';
+        centerMsg.innerHTML = `<div class="big" style="color:${color}">${winner} WINS</div><div class="small">PRESS R TO REMATCH</div>${creditNote}`;
       } else {
         centerMsg.innerHTML = '';
       }
@@ -10319,40 +9870,41 @@ if(tutorialActive) tutorialUpdate(dt);
     menuMain.classList.remove('hidden');
   });
 
-  // Every tab click deselects the other three -- a small shared
-  // helper instead of four near-identical listeners repeating the same
-  // four classList calls (now that there are four tabs, not three).
-  const shopTabButtons = { skins: tabSkins, powers: tabPowers, abilities: tabAbilities, crystals: tabCrystals };
-  function selectShopTab(tab){
-    shopTab = tab;
-    for(const key of Object.keys(shopTabButtons)) shopTabButtons[key].classList.toggle('selected', key === tab);
-    renderShop();
-  }
-
   btnShop.addEventListener('click', ()=>{
     menuMain.classList.add('hidden');
-    selectShopTab('skins');
-    updateCurrencyDisplay();
+    shopTab = 'skins';
+    tabSkins.classList.add('selected');
+    tabPowers.classList.remove('selected');
+    tabAbilities.classList.remove('selected');
+    updateCreditsDisplay();
+    renderShop();
     menuShop.classList.remove('hidden');
   });
-  // The Crystal pill's own "+" button (data-act="crystalshop") opens
-  // the SAME shop overlay straight to the CRYSTALS tab, rather than a
-  // separate screen -- one shop, four tabs, per the "don't build a
-  // second store" shape of this feature.
-  function openCrystalShop(){
-    menuMain.classList.add('hidden');
-    selectShopTab('crystals');
-    updateCurrencyDisplay();
-    menuShop.classList.remove('hidden');
-  }
   btnBackShop.addEventListener('click', ()=>{
     menuShop.classList.add('hidden');
     menuMain.classList.remove('hidden');
   });
-  tabSkins.addEventListener('click', ()=> selectShopTab('skins'));
-  tabPowers.addEventListener('click', ()=> selectShopTab('powers'));
-  tabAbilities.addEventListener('click', ()=> selectShopTab('abilities'));
-  tabCrystals.addEventListener('click', ()=> selectShopTab('crystals'));
+  tabSkins.addEventListener('click', ()=>{
+    shopTab = 'skins';
+    tabSkins.classList.add('selected');
+    tabPowers.classList.remove('selected');
+    tabAbilities.classList.remove('selected');
+    renderShop();
+  });
+  tabPowers.addEventListener('click', ()=>{
+    shopTab = 'powers';
+    tabPowers.classList.add('selected');
+    tabSkins.classList.remove('selected');
+    tabAbilities.classList.remove('selected');
+    renderShop();
+  });
+  tabAbilities.addEventListener('click', ()=>{
+    shopTab = 'abilities';
+    tabAbilities.classList.add('selected');
+    tabSkins.classList.remove('selected');
+    tabPowers.classList.remove('selected');
+    renderShop();
+  });
   btnBackOnline.addEventListener('click', ()=>{
     closeOnlineConnection();
     menuOnline.classList.add('hidden');
@@ -10405,7 +9957,7 @@ if(tutorialActive) tutorialUpdate(dt);
       touchDashBtn.classList.remove('pressed');
       touchAbilityBtn.classList.remove('pressed');
     }
-    updateCurrencyDisplay();
+    updateCreditsDisplay();
     menuMain.classList.remove('hidden');
     // Refreshes challenge progress/claim state on return to the lobby --
     // picks up anything just completed, and self-heals a date rollover
@@ -10661,7 +10213,7 @@ if(tutorialActive) tutorialUpdate(dt);
 
   // The tutorial's own, much shorter win condition for the PRACTICE
   // DUEL step -- see endRound()'s tutorialActive guard at the very top
-  // of that function. No coins, no XP, no round/match counters: this
+  // of that function. No credits, no XP, no round/match counters: this
   // is not a real match result.
   function tutorialHandleRoundEnd(winnerId){
     if(winnerId === 'p1'){
@@ -11146,11 +10698,8 @@ if(tutorialActive) tutorialUpdate(dt);
   const btnAdminPlayerSearch = document.getElementById('btnAdminPlayerSearch');
   const adminPlayerSearchInput = document.getElementById('adminPlayerSearch');
   const btnAdminGiveCredits = document.getElementById('btnAdminGiveCredits');
-  const btnAdminRemoveCredits = document.getElementById('btnAdminRemoveCredits');
   const btnAdminConfirmCancel = document.getElementById('btnAdminConfirmCancel');
   const btnAdminConfirmGive = document.getElementById('btnAdminConfirmGive');
-  const adminTabCoins = document.getElementById('adminTabCoins');
-  const adminTabCrystals = document.getElementById('adminTabCrystals');
 
   btnAdminPlayerSearch.addEventListener('click', adminSearchPlayers);
   adminPlayerSearchInput.addEventListener('keydown', (e)=>{
@@ -11161,20 +10710,7 @@ if(tutorialActive) tutorialUpdate(dt);
       document.getElementById('adminCreditAmount').value = btn.dataset.amount;
     });
   });
-  function selectAdminCurrencyTab(tab){
-    adminCurrencyTab = tab;
-    adminTabCoins.classList.toggle('selected', tab === 'coins');
-    adminTabCrystals.classList.toggle('selected', tab === 'crystals');
-    // Switching currency mid-form is a fresh start for the amount --
-    // an amount typed for Coins should never silently get applied to
-    // Crystals (or vice versa) just because the tab changed under it.
-    document.getElementById('adminCreditAmount').value = '';
-    setAdminCreditStatus('');
-  }
-  adminTabCoins.addEventListener('click', ()=> selectAdminCurrencyTab('coins'));
-  adminTabCrystals.addEventListener('click', ()=> selectAdminCurrencyTab('crystals'));
-  btnAdminGiveCredits.addEventListener('click', ()=> openAdminCreditConfirm(1));
-  btnAdminRemoveCredits.addEventListener('click', ()=> openAdminCreditConfirm(-1));
+  btnAdminGiveCredits.addEventListener('click', openAdminCreditConfirm);
   btnAdminConfirmCancel.addEventListener('click', cancelAdminCreditConfirm);
   btnAdminConfirmGive.addEventListener('click', confirmAdminGiveCredits);
 
@@ -11362,20 +10898,6 @@ if(tutorialActive) tutorialUpdate(dt);
   // number. Categories: NEW / IMPROVEMENTS / BALANCE / BUG FIXES --
   // include only the ones an entry actually has.
   const PATCH_NOTES = [
-    { version: 'v0.19', title: 'Coins, and the first Crystals',
-      NEW: [
-        'A second currency has arrived: CRYSTALS \u2014 a premium currency for a future Crystal Shop, separate from your everyday Coins and never earned by playing.',
-        'A CRYSTALS tab has been added to the Shop as the new home for Crystal packages once real-money purchases go live on this server.'
-      ],
-      IMPROVEMENTS: [
-        'Credits are now called Coins everywhere in the game \u2014 the same balance, just renamed. Nothing you\u2019ve earned changed or was reset.',
-        'The lobby now shows both balances side by side, and Coins/Crystals are tracked by the server the same way every other purchase already is.'
-      ] },
-    { version: 'v0.18', title: 'Anti-Cheat: Server-Side Shop',
-      IMPROVEMENTS: [
-        'Credits and every item you own (skins, powers, abilities) are now tracked by the server instead of trusted from your own game -- exactly like health/hits already are.',
-        'Nothing changes about how buying or equipping something feels; this closes off a way an account could previously give itself unearned credits or items.'
-      ] },
     { version: 'v0.17', title: 'Lobby Chat',
       NEW: [
         'Lobby chat is live \u2014 the LOBBY CHAT button in the bottom bar opens a real, real-time room for everyone sitting in the lobby.',
@@ -11554,14 +11076,12 @@ if(tutorialActive) tutorialUpdate(dt);
   }
 
   // Pushes the live account data into the lobby. Called from
-  // updateCurrencyDisplay(), sign-in and sign-out so it always mirrors
+  // updateCreditsDisplay(), sign-in and sign-out so it always mirrors
   // whatever the existing systems already decided.
   function lobbySync(){
     const setTxt = (id, val)=>{ const el = lobbyEl(id); if(el) el.textContent = val; };
-    setTxt('lobbyCoins', coins.toLocaleString());
-    setTxt('lobbyCoinsStat', coins.toLocaleString());
-    setTxt('lobbyCrystals', crystals.toLocaleString());
-    setTxt('lobbyCrystalsStat', crystals.toLocaleString());
+    setTxt('lobbyCredits', credits);
+    setTxt('lobbyCreditsStat', credits);
     setTxt('lobbyKills', stats.kills);
     setTxt('lobbyWins', stats.wins);
     setTxt('lobbyName', (loggedIn && accountName) ? accountName : 'GUEST');
@@ -11625,7 +11145,6 @@ if(tutorialActive) tutorialUpdate(dt);
           lobbyToast('PICK A MODE, THEN HIT PLAY');
         }
         else if(act === 'shop')         { lobbyEl('btnShop').click(); }
-        else if(act === 'crystalshop')  { openCrystalShop(); }
         else if(act === 'leaderboards') { lobbyEl('btnLeaderboard').click(); }
         else if(act === 'settings')     { lobbyEl('btnSettings').click(); }
         else if(act === 'admin')        { lobbyEl('btnAdmin').click(); }
@@ -13073,8 +12592,7 @@ if(tutorialActive) tutorialUpdate(dt);
     let html = renderXPBlock()
       + '<div class="rr-grid">'
       + renderUsernameRow()
-      + '<div class="rr-row"><span>COINS</span><b>' + coins.toLocaleString() + '</b></div>'
-      + '<div class="rr-row"><span>CRYSTALS</span><b>' + crystals.toLocaleString() + '</b></div>'
+      + '<div class="rr-row"><span>CREDITS</span><b>' + credits + '</b></div>'
       + '<div class="rr-row"><span>KILLS</span><b>' + stats.kills + '</b></div>'
       + '<div class="rr-row"><span>WINS</span><b>' + stats.wins + '</b></div>'
       + '</div>';
@@ -13235,8 +12753,7 @@ if(tutorialActive) tutorialUpdate(dt);
   initLobby();
   fetchAbilityConfig();
   tryInitGoogle();
-  updateCurrencyDisplay();
-  handleCheckoutReturn();
+  updateCreditsDisplay();
   requestAnimationFrame(loop);
   // Brief delay so a returning player's silent Google sign-in (if any)
   // has a chance to resolve and call applyAccount() first -- otherwise
