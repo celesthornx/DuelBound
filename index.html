@@ -1772,7 +1772,6 @@
     background: linear-gradient(90deg, var(--p1), #7ee8ff);
     transition: width .35s ease;
   }
-  .rk-phint{ font-size:9px; letter-spacing:1.2px; color: var(--ink-dim); margin-top:6px; }
   .rk-stats{ display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:6px; }
   .rk-stat{ text-align:center; min-width:0; }
   .rk-stat b{ display:block; font-size:16px; color: var(--ink); }
@@ -1851,16 +1850,6 @@
     text-align:center; margin-bottom:14px; padding:10px;
     border:1px solid var(--panel-edge); border-radius:10px;
   }
-  .rr-reveal{
-    text-align:center; margin-bottom:14px; padding:16px 10px;
-    border:1px solid rgba(255,206,84,.4); border-radius:10px;
-    background: rgba(255,206,84,.07);
-    animation: rrPop .5s cubic-bezier(.2,1.4,.4,1);
-  }
-  @keyframes rrPop{ from{ transform: scale(.86); opacity:0; } to{ transform: scale(1); opacity:1; } }
-  .rr-reveal-tag{ font-size:11px; letter-spacing:3px; color: var(--gold); }
-  .rr-reveal-rank{ font-size:26px; font-weight:900; letter-spacing:2px; color: var(--ink); margin:4px 0 2px; }
-  .rr-reveal-rp{ font-size:13px; letter-spacing:1.5px; color: var(--p1); }
   .rr-grid{ margin-bottom:14px; }
   .rr-row{
     display:flex; justify-content:space-between; align-items:center; gap:10px;
@@ -2325,7 +2314,7 @@
   <div class="ranked-banner hidden" id="rankedBanner">
     <div class="rb-side">
       <div class="rb-name" id="rbYouName">YOU</div>
-      <div class="rb-rank" id="rbYouRank">UNRANKED</div>
+      <div class="rb-rank" id="rbYouRank">BRONZE III</div>
     </div>
     <div class="rb-mid">
       <div class="rb-tag">RANKED</div>
@@ -2333,7 +2322,7 @@
     </div>
     <div class="rb-side rb-right">
       <div class="rb-name" id="rbFoeName">OPPONENT</div>
-      <div class="rb-rank" id="rbFoeRank">UNRANKED</div>
+      <div class="rb-rank" id="rbFoeRank">BRONZE III</div>
     </div>
   </div>
 
@@ -2840,16 +2829,10 @@
 
       <div class="rk-card" id="rkCard">
         <div class="rk-badge" id="rkBadge">
-          <div class="rk-badge-tier" id="rkBadgeTier">UNRANKED</div>
+          <div class="rk-badge-tier" id="rkBadgeTier">BRONZE III</div>
           <div class="rk-badge-rp" id="rkBadgeRP">&mdash;</div>
         </div>
         <div class="rk-info">
-          <div class="rk-placement hidden" id="rkPlacementWrap">
-            <div class="rk-plabel">PLACEMENT MATCHES</div>
-            <div class="rk-pcount" id="rkPlacementCount">0 / 10</div>
-            <div class="rk-pbar"><i id="rkPlacementBar" style="width:0%"></i></div>
-            <div class="rk-phint">COMPLETE YOUR PLACEMENTS TO EARN A RANK</div>
-          </div>
           <div class="rk-stats hidden" id="rkStatsWrap">
             <div class="rk-stat"><b id="rkWins">0</b><span>WINS</span></div>
             <div class="rk-stat"><b id="rkLosses">0</b><span>LOSSES</span></div>
@@ -2884,13 +2867,13 @@
       <div class="rq-found hidden" id="rqFound">
         <div class="rqf-side">
           <div class="rqf-name" id="rqfYouName">YOU</div>
-          <div class="rqf-rank" id="rqfYouRank">UNRANKED</div>
+          <div class="rqf-rank" id="rqfYouRank">BRONZE III</div>
           <div class="rqf-rp" id="rqfYouRP"></div>
         </div>
         <div class="rqf-vs">VS</div>
         <div class="rqf-side">
           <div class="rqf-name" id="rqfFoeName">OPPONENT</div>
-          <div class="rqf-rank" id="rqfFoeRank">UNRANKED</div>
+          <div class="rqf-rank" id="rqfFoeRank">BRONZE III</div>
           <div class="rqf-rp" id="rqfFoeRP"></div>
         </div>
       </div>
@@ -2909,18 +2892,6 @@
       <div class="rr-promo hidden" id="rrPromo">
         <div class="rr-promo-tag" id="rrPromoTag">RANK UP!</div>
         <div class="rr-promo-move" id="rrPromoMove"></div>
-      </div>
-
-      <div class="rr-placement hidden" id="rrPlacement">
-        <div class="rk-plabel">PLACEMENT PROGRESS</div>
-        <div class="rk-pcount" id="rrPlacementCount">1 / 10</div>
-        <div class="rk-pbar"><i id="rrPlacementBar" style="width:0%"></i></div>
-      </div>
-
-      <div class="rr-reveal hidden" id="rrReveal">
-        <div class="rr-reveal-tag">RANKED!</div>
-        <div class="rr-reveal-rank" id="rrRevealRank">GOLD III</div>
-        <div class="rr-reveal-rp" id="rrRevealRP">1,425 RP</div>
       </div>
 
       <div class="rr-grid">
@@ -10389,8 +10360,10 @@ if(tutorialActive) tutorialUpdate(dt);
     return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0');
   };
   // A rank descriptor from the server -> display string. Falls back to
-  // UNRANKED rather than rendering "undefined" if anything is missing.
-  const rkRankName = r => (r && r.name ? String(r.name).toUpperCase() : 'UNRANKED');
+  // an em dash rather than rendering "undefined" if anything is missing
+  // (e.g. a network error left the field empty) -- there is no more
+  // "unranked" state to fall back to, everyone has a real rank.
+  const rkRankName = r => (r && r.name ? String(r.name).toUpperCase() : '—');
 
   function rkHideAll(){
     [menuRanked, menuRankedQueue, menuRankedResult, menuRankedLadder].forEach(el=>{
@@ -10443,27 +10416,15 @@ if(tutorialActive) tutorialUpdate(dt);
 
     rkEl('rkBadgeTier').textContent = rkRankName(r.rank);
     if(r.rank && r.rank.color) rkEl('rkBadgeTier').style.color = r.rank.color;
-    rkEl('rkBadgeRP').textContent = r.placementComplete ? rkFmt(r.rp) + ' RP' : 'NO RANK YET';
+    rkEl('rkBadgeRP').textContent = rkFmt(r.rp) + ' RP';
 
-    const placementWrap = rkEl('rkPlacementWrap');
-    const statsWrap     = rkEl('rkStatsWrap');
+    rkEl('rkStatsWrap').classList.remove('hidden');
+    rkEl('rkWins').textContent    = r.wins;
+    rkEl('rkLosses').textContent  = r.losses;
+    rkEl('rkWinRate').textContent = r.winRate + '%';
+    rkEl('rkGames').textContent   = r.games;
 
-    if(!r.placementComplete){
-      placementWrap.classList.remove('hidden');
-      statsWrap.classList.add('hidden');
-      rkEl('rkPlacementCount').textContent = r.placementGames + ' / ' + r.placementTotal;
-      rkEl('rkPlacementBar').style.width =
-        Math.min(100, (r.placementGames / r.placementTotal) * 100) + '%';
-    } else {
-      placementWrap.classList.add('hidden');
-      statsWrap.classList.remove('hidden');
-      rkEl('rkWins').textContent    = r.wins;
-      rkEl('rkLosses').textContent  = r.losses;
-      rkEl('rkWinRate').textContent = r.winRate + '%';
-      rkEl('rkGames').textContent   = r.games;
-    }
-
-    rkEl('rkPeak').textContent = (r.placementComplete && r.highestRank)
+    rkEl('rkPeak').textContent = r.highestRank
       ? 'SEASON HIGH: ' + rkRankName(r.highestRank) + ' · ' + rkFmt(r.highestRP) + ' RP'
       : '';
     rkEl('rkPosition').textContent = (typeof data.position === 'number')
@@ -10659,21 +10620,19 @@ if(tutorialActive) tutorialUpdate(dt);
 
     rkEl('rqfYouName').textContent = data.you.name || 'YOU';
     rkEl('rqfYouRank').textContent = rkRankName(data.you.rank);
-    rkEl('rqfYouRP').textContent   = data.you.placementComplete ? rkFmt(data.you.rp) + ' RP' : 'IN PLACEMENTS';
+    rkEl('rqfYouRP').textContent   = rkFmt(data.you.rp) + ' RP';
     rkEl('rqfFoeName').textContent = data.opponent.name || 'OPPONENT';
     rkEl('rqfFoeRank').textContent = rkRankName(data.opponent.rank);
-    rkEl('rqfFoeRP').textContent   = data.opponent.placementComplete ? rkFmt(data.opponent.rp) + ' RP' : 'IN PLACEMENTS';
+    rkEl('rqfFoeRP').textContent   = rkFmt(data.opponent.rp) + ' RP';
   }
 
   // ---- IN-MATCH BANNER -------------------------------------------
   function showRankedBanner(){
     if(!RANKED.you || !RANKED.opponent) return;
     rkEl('rbYouName').textContent = RANKED.you.name || 'YOU';
-    rkEl('rbYouRank').textContent = RANKED.you.placementComplete
-      ? rkRankName(RANKED.you.rank) + ' · ' + rkFmt(RANKED.you.rp) + ' RP' : 'UNRANKED';
+    rkEl('rbYouRank').textContent = rkRankName(RANKED.you.rank) + ' · ' + rkFmt(RANKED.you.rp) + ' RP';
     rkEl('rbFoeName').textContent = RANKED.opponent.name || 'OPPONENT';
-    rkEl('rbFoeRank').textContent = RANKED.opponent.placementComplete
-      ? rkRankName(RANKED.opponent.rank) + ' · ' + rkFmt(RANKED.opponent.rp) + ' RP' : 'UNRANKED';
+    rkEl('rbFoeRank').textContent = rkRankName(RANKED.opponent.rank) + ' · ' + rkFmt(RANKED.opponent.rp) + ' RP';
     updateRankedBanner();
     rankedBanner.classList.remove('hidden');
   }
@@ -10704,12 +10663,7 @@ if(tutorialActive) tutorialUpdate(dt);
 
     const delta = rkEl('rrDelta');
     const change = r.rpChange || 0;
-    if(!r.placementComplete){
-      // No RP is shown during placements -- there is no rating yet.
-      delta.textContent = data.won ? 'PLACEMENT WIN' : 'PLACEMENT LOSS';
-      delta.className = 'rr-delta ' + (data.won ? 'up' : 'down');
-      rkEl('rrTrack').textContent = '';
-    } else if(change === 0){
+    if(change === 0){
       delta.textContent = data.rated ? '±0 RP' : 'UNRATED';
       delta.className = 'rr-delta flat';
       rkEl('rrTrack').textContent = data.rated ? '' : 'REPEATED OPPONENT — NO RP AWARDED';
@@ -10718,22 +10672,6 @@ if(tutorialActive) tutorialUpdate(dt);
       delta.className = 'rr-delta ' + (change > 0 ? 'up' : 'down');
       rkEl('rrTrack').textContent = (r.rpBefore !== null && r.rpBefore !== undefined)
         ? rkFmt(r.rpBefore) + ' → ' + rkFmt(r.rpAfter) + ' RP' : '';
-    }
-
-    // Placement progress / rank reveal
-    const pl = rkEl('rrPlacement');
-    const rev = rkEl('rrReveal');
-    pl.classList.add('hidden');
-    rev.classList.add('hidden');
-    if(r.placementJustCompleted){
-      rev.classList.remove('hidden');
-      rkEl('rrRevealRank').textContent = rkRankName(r.rankAfter);
-      rkEl('rrRevealRP').textContent = rkFmt(r.rpAfter) + ' RP';
-    } else if(!r.placementComplete && typeof r.placementGames === 'number'){
-      pl.classList.remove('hidden');
-      rkEl('rrPlacementCount').textContent = r.placementGames + ' / ' + r.placementTotal;
-      rkEl('rrPlacementBar').style.width =
-        Math.min(100, (r.placementGames / r.placementTotal) * 100) + '%';
     }
 
     // Promotion / demotion
@@ -10790,7 +10728,7 @@ if(tutorialActive) tutorialUpdate(dt);
 
       if(!data.entries.length){
         body.innerHTML = '<div class="rl-empty">NO RANKED PLAYERS YET.<br>'
-          + 'COMPLETE 10 PLACEMENT MATCHES TO APPEAR HERE.</div>';
+          + 'PLAY A RANKED MATCH TO APPEAR HERE.</div>';
         return;
       }
 
@@ -10813,7 +10751,7 @@ if(tutorialActive) tutorialUpdate(dt);
           + '<b>' + rkFmt(data.you.rp) + ' RP · ' + rkRankName(data.you.rank) + '</b>';
       } else if(loggedIn){
         you.classList.remove('hidden');
-        you.innerHTML = '<span>YOU ARE NOT RANKED YET</span><b>FINISH PLACEMENTS</b>';
+        you.innerHTML = '<span>NOT ON THE LADDER YET</span><b>PLAY A RANKED MATCH</b>';
       }
     } catch(e){
       body.innerHTML = '<div class="rl-empty">LEADERBOARD UNAVAILABLE</div>';
@@ -11361,13 +11299,11 @@ if(tutorialActive) tutorialUpdate(dt);
 
     const row = (k, v) => '<div class="rr-row"><span>' + k + '</span><b>' + v + '</b></div>';
     let stats = row('WINS', data.wins) + row('KILLS', data.kills);
-    if(data.ranked && data.ranked.placementComplete){
+    if(data.ranked){
       stats += row('RANK', frEscape(data.ranked.rank.name.toUpperCase()))
         + row('RP', (data.ranked.rp || 0).toLocaleString())
         + row('RANKED RECORD', data.ranked.wins + 'W · ' + data.ranked.losses + 'L')
         + row('WIN RATE', data.ranked.winRate + '%');
-    } else {
-      stats += row('RANKED', 'UNRANKED');
     }
     stats += row('FRIENDS', data.friendCount);
     frEl('fpStats').innerHTML = stats;
@@ -11441,31 +11377,22 @@ if(tutorialActive) tutorialUpdate(dt);
     html += '<div class="rk-season" style="margin:14px 0 8px">'
       + ((data.config && data.config.seasonName) || 'SEASON').toUpperCase() + ' · RANKED</div>';
 
-    if(!r.placementComplete){
-      html += '<div class="rr-placement" style="margin-bottom:0">'
-        + '<div class="rk-plabel">UNRANKED — PLACEMENT MATCHES</div>'
-        + '<div class="rk-pcount">' + r.placementGames + ' / ' + r.placementTotal + '</div>'
-        + '<div class="rk-pbar"><i style="width:'
-        + Math.min(100, (r.placementGames / r.placementTotal) * 100) + '%"></i></div>'
-        + '</div>';
-    } else {
-      html += '<div style="text-align:center;margin-bottom:10px">'
-        + '<div style="font-size:22px;font-weight:900;letter-spacing:2px;color:'
-        + (r.rank.color || '#e8edf5') + '">' + rkRankName(r.rank) + '</div>'
-        + '<div style="font-size:13px;color:var(--p1);letter-spacing:1.5px">'
-        + rkFmt(r.rp) + ' RP</div></div>'
-        + '<div class="rr-grid">'
-        + '<div class="rr-row"><span>RANKED WINS</span><b>' + r.wins + '</b></div>'
-        + '<div class="rr-row"><span>RANKED LOSSES</span><b>' + r.losses + '</b></div>'
-        + '<div class="rr-row"><span>TOTAL RANKED GAMES</span><b>' + r.games + '</b></div>'
-        + '<div class="rr-row"><span>WIN RATE</span><b>' + r.winRate + '%</b></div>'
-        + '<div class="rr-row"><span>HIGHEST RP</span><b>' + rkFmt(r.highestRP) + '</b></div>'
-        + '<div class="rr-row"><span>SEASON HIGH</span><b>'
-        + (r.highestRank ? rkRankName(r.highestRank) : '—') + '</b></div>'
-        + (typeof data.position === 'number'
-            ? '<div class="rr-row"><span>LEADERBOARD</span><b>#' + data.position + '</b></div>' : '')
-        + '</div>';
-    }
+    html += '<div style="text-align:center;margin-bottom:10px">'
+      + '<div style="font-size:22px;font-weight:900;letter-spacing:2px;color:'
+      + (r.rank.color || '#e8edf5') + '">' + rkRankName(r.rank) + '</div>'
+      + '<div style="font-size:13px;color:var(--p1);letter-spacing:1.5px">'
+      + rkFmt(r.rp) + ' RP</div></div>'
+      + '<div class="rr-grid">'
+      + '<div class="rr-row"><span>RANKED WINS</span><b>' + r.wins + '</b></div>'
+      + '<div class="rr-row"><span>RANKED LOSSES</span><b>' + r.losses + '</b></div>'
+      + '<div class="rr-row"><span>TOTAL RANKED GAMES</span><b>' + r.games + '</b></div>'
+      + '<div class="rr-row"><span>WIN RATE</span><b>' + r.winRate + '%</b></div>'
+      + '<div class="rr-row"><span>HIGHEST RP</span><b>' + rkFmt(r.highestRP) + '</b></div>'
+      + '<div class="rr-row"><span>SEASON HIGH</span><b>'
+      + (r.highestRank ? rkRankName(r.highestRank) : '—') + '</b></div>'
+      + (typeof data.position === 'number'
+          ? '<div class="rr-row"><span>LEADERBOARD</span><b>#' + data.position + '</b></div>' : '')
+      + '</div>';
 
     if(r.history && r.history.length){
       html += '<div class="rk-season" style="margin:12px 0 6px">PAST SEASONS</div><div class="rr-grid">'
