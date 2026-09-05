@@ -10108,13 +10108,37 @@ if(tutorialActive) tutorialUpdate(dt);
   // number. Categories: NEW / IMPROVEMENTS / BALANCE / BUG FIXES --
   // include only the ones an entry actually has.
   const PATCH_NOTES = [
-    { version: 'v0.6', title: 'Interactive Tutorial',
+    { version: 'v0.10', title: 'Ranked Start Changes',
+      IMPROVEMENTS: [
+        'Removed placement matches and the Unranked state — every player is now ranked from their very first match.',
+        'New players now start at the bottom of Bronze instead of grinding 10 placement games to reveal a rank.'
+      ] },
+    { version: 'v0.9', title: 'Interactive Tutorial',
       NEW: [
         'Added an interactive tutorial for new players, covering movement, shooting, dashing, abilities, ammo, and the match objective with a practice duel at the end.',
         'Added a PLAY TUTORIAL option in Settings to replay it any time.'
       ],
       IMPROVEMENTS: [
         'You can skip the tutorial at any point — your progress and account are never affected either way.'
+      ] },
+    { version: 'v0.8', title: 'Usernames & XP Progression',
+      NEW: [
+        'Added the ability to change your username from Settings.',
+        'Added XP and Levels — earn XP from match wins, kills, and objectives across every mode.',
+        'Online opponents and teammates now show real usernames and levels instead of placeholder labels.'
+      ] },
+    { version: 'v0.7', title: 'Mobile & iPad Improvements',
+      IMPROVEMENTS: [
+        'Rebuilt the mobile and iPad layout so controls and the HUD scale correctly on every device.',
+        'Added a DEVICE COMPATIBILITY setting (Auto / iPhone / iPad / Computer) in Settings.',
+        'Added a "rotate your device" prompt when playing in portrait.'
+      ],
+      'BUG FIXES': [
+        'Fixed a missing viewport tag that caused mobile scaling issues on many devices.'
+      ] },
+    { version: 'v0.6', title: 'Bomb Run',
+      NEW: [
+        'Added Bomb Run — a new game mode where you grab the bomb and deliver it to the enemy base to score.'
       ] },
     { version: 'v0.5', title: 'Patch Notes',
       NEW: [
