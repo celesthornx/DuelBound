@@ -335,8 +335,29 @@ const XP_REPORT_MIN_INTERVAL_MS = {
     kill: 1500,
     voidbreak_complete: 3000
 };
+// Throttle bookkeeping is per-account and would otherwise keep one entry
+// per account that ever reported XP, for the life of the process. The
+// entries are only meaningful for a few seconds, so anything older than
+// the longest throttle window is swept the next time the map is touched.
+const XP_REPORT_ENTRY_TTL_MS = 60 * 1000;
+let lastXPSweepAt = 0;
+
+function sweepXPReportThrottle(now) {
+    if (now - lastXPSweepAt < XP_REPORT_ENTRY_TTL_MS) return;
+    lastXPSweepAt = now;
+    for (const sub of Object.keys(lastXPReportAt)) {
+        const perSub = lastXPReportAt[sub];
+        let live = false;
+        for (const reason of Object.keys(perSub)) {
+            if (now - perSub[reason] < XP_REPORT_ENTRY_TTL_MS) { live = true; break; }
+        }
+        if (!live) delete lastXPReportAt[sub];
+    }
+}
+
 function xpReportThrottled(sub, reason) {
     const now = Date.now();
+    sweepXPReportThrottle(now);
     const perSub = lastXPReportAt[sub] || (lastXPReportAt[sub] = {});
     const minGap = XP_REPORT_MIN_INTERVAL_MS[reason] || 2000;
     if (perSub[reason] && (now - perSub[reason]) < minGap) return true;
@@ -1996,6 +2017,13 @@ function serveStatic(req, res) {
 // =====================================================================
 const httpServer = http.createServer(async (req, res) => {
 
+    // Network diagnostics, only mounted when DEBUG_NETWORKING=1 -- a
+    // production instance 404s this exactly like any unknown path.
+    if (DEBUG_NETWORKING && req.method === "GET" && req.url === "/__net/stats") {
+        sendJson(res, 200, netSnapshot());
+        return;
+    }
+
     if (req.method === "OPTIONS") {
         sendJson(res, 200, {});
         return;
@@ -3047,9 +3075,101 @@ function otherId(id) {
     return id === 1 ? 2 : 1;
 }
 
+// =====================================================================
+// NETWORK DIAGNOSTICS (opt-in)
+//
+// Off by default and, when off, costs one boolean test per message --
+// no counters, no allocation, no logging. Turn on with
+// DEBUG_NETWORKING=1 in the environment, then read GET /__net/stats
+// (which also stays 404 unless the flag is set, so it can't leak
+// anything about a production instance).
+//
+// Deliberately counts only what this server actually does: it has no
+// gameplay tick to time, because casual/ranked play is a MESSAGE RELAY
+// -- see the WEBSOCKET RELAY section. "tick duration" therefore doesn't
+// exist here; relay handling time per message is the equivalent number,
+// and that's what's sampled.
+// =====================================================================
+const DEBUG_NETWORKING = process.env.DEBUG_NETWORKING === "1";
+
+const netStats = {
+    startedAt: Date.now(),
+    msgsIn: 0, msgsOut: 0,
+    bytesIn: 0, bytesOut: 0,
+    maxPacketIn: 0, maxPacketOut: 0,
+    // Relay handling time (parse + route + forward) in ms, sampled.
+    handleMs: [],
+    byType: Object.create(null)
+};
+
+function netRecordIn(type, bytes) {
+    netStats.msgsIn++;
+    netStats.bytesIn += bytes;
+    if (bytes > netStats.maxPacketIn) netStats.maxPacketIn = bytes;
+    netStats.byType[type] = (netStats.byType[type] || 0) + 1;
+}
+function netRecordHandle(ms) {
+    netStats.handleMs.push(ms);
+    if (netStats.handleMs.length > 5000) netStats.handleMs.shift();
+}
+function netSnapshot() {
+    const s = netStats.handleMs.slice().sort((a, b) => a - b);
+    const q = p => (s.length ? +s[Math.min(s.length - 1, Math.floor(s.length * p))].toFixed(3) : 0);
+    const secs = Math.max(1, (Date.now() - netStats.startedAt) / 1000);
+    let sockets = 0;
+    wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) sockets++; });
+    return {
+        uptimeSec: Math.round(secs),
+        sockets: sockets,
+        casualSlotsUsed: (slots[1] ? 1 : 0) + (slots[2] ? 1 : 0),
+        rankedMatches: rankedMatches.size,
+        rankedQueued: rankedQueue.size,
+        presenceAccounts: presence.size,
+        msgsInPerSec: +(netStats.msgsIn / secs).toFixed(1),
+        msgsOutPerSec: +(netStats.msgsOut / secs).toFixed(1),
+        kbInPerSec: +(netStats.bytesIn / secs / 1024).toFixed(2),
+        kbOutPerSec: +(netStats.bytesOut / secs / 1024).toFixed(2),
+        avgPacketIn: netStats.msgsIn ? Math.round(netStats.bytesIn / netStats.msgsIn) : 0,
+        avgPacketOut: netStats.msgsOut ? Math.round(netStats.bytesOut / netStats.msgsOut) : 0,
+        maxPacketIn: netStats.maxPacketIn,
+        maxPacketOut: netStats.maxPacketOut,
+        relayHandleMs: { p50: q(.5), p95: q(.95), p99: q(.99), max: s.length ? +s[s.length - 1].toFixed(3) : 0 },
+        byType: netStats.byType
+    };
+}
+
+// Wraps the relay's message handler so DEBUG_NETWORKING can measure
+// per-message handling time and byte counts in ONE place, instead of
+// threading a branch through every route inside it. When the flag is
+// off this returns the original function unchanged -- literally the
+// same reference, so there is no wrapper, no timing call and no
+// measurable cost on the hot path.
+function instrumentMessage(handler) {
+    if (!DEBUG_NETWORKING) return handler;
+    return function (raw) {
+        const t0 = process.hrtime.bigint();
+        const bytes = typeof raw === "string" ? Buffer.byteLength(raw) : raw.length;
+        let type = "?";
+        try { type = (JSON.parse(raw.toString()) || {}).type || "?"; } catch (e) {}
+        netRecordIn(type, bytes);
+        try {
+            return handler.apply(this, arguments);
+        } finally {
+            netRecordHandle(Number(process.hrtime.bigint() - t0) / 1e6);
+        }
+    };
+}
+
 function send(player, obj) {
     if (player && player.socket.readyState === WebSocket.OPEN) {
-        player.socket.send(JSON.stringify(obj));
+        const payload = JSON.stringify(obj);
+        if (DEBUG_NETWORKING) {
+            netStats.msgsOut++;
+            const b = Buffer.byteLength(payload);
+            netStats.bytesOut += b;
+            if (b > netStats.maxPacketOut) netStats.maxPacketOut = b;
+        }
+        player.socket.send(payload);
     }
 }
 
@@ -3132,7 +3252,7 @@ wss.on("connection", (socket, request) => {
 
     const player = conn; // keep the original name for the relay code below
 
-    socket.on("message", raw => {
+    socket.on("message", instrumentMessage(raw => {
 
         let data;
         try {
@@ -3572,7 +3692,7 @@ wss.on("connection", (socket, request) => {
             send(opponent, { type: "rematch" });
         }
 
-    });
+    }));
 
     socket.on("close", () => {
 
@@ -3680,5 +3800,22 @@ async function startServer() {
         console.log("or http://<this computer's LAN IP>:" + PORT + " on the other player's computer.");
     });
 }
+
+// Account writes are coalesced behind a short window so gameplay bursts
+// don't hammer the disk (see storage.js). A redeploy/restart must not
+// drop whatever is still inside that window, so flush it on the way out.
+// Render sends SIGTERM before replacing an instance.
+let shuttingDown = false;
+function shutdown(signal) {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    store.flushPendingWrites()
+        .catch(e => console.log("[storage] flush on " + signal + " failed:", e.message))
+        .then(() => process.exit(0));
+    // Never hang the container waiting on a stuck disk.
+    setTimeout(() => process.exit(0), 3000).unref();
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
 
 startServer();
