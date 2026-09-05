@@ -1683,6 +1683,34 @@ function invalidateRankedLeaderboard() {
     rankedLbCache.at = 0;
 }
 
+// ---------------------------------------------------------------------
+// CASUAL LEADERBOARD -- same caching as the ranked one above, and for
+// the same reason. /leaderboard used to map AND sort every account in
+// the store on every single request, synchronously, on the one thread
+// the relay runs on. With a few hundred accounts that is a millisecond
+// of everybody's packets sitting still; it grows with the player base,
+// and the panel that calls it refetches on every sort toggle.
+//
+// Three keys, so three small cached arrays. Only the public columns are
+// ever materialised -- exactly what the endpoint already returned.
+// ---------------------------------------------------------------------
+const CASUAL_LB_TTL_MS = 5000;
+const casualLbCache = Object.create(null); // sortKey -> { at, rows }
+
+function getCasualLeaderboard(sortKey) {
+    const now = Date.now();
+    const cached = casualLbCache[sortKey];
+    if (cached && now - cached.at < CASUAL_LB_TTL_MS) return cached.rows;
+
+    const rows = Object.values(accounts)
+        .map(a => ({ name: a.name, coins: a.coins, kills: a.kills, wins: a.wins }))
+        .sort((a, b) => b[sortKey] - a[sortKey])
+        .slice(0, 20);
+
+    casualLbCache[sortKey] = { at: now, rows: rows };
+    return rows;
+}
+
 // =====================================================================
 // FRIENDS -- presence, two-sided writes, and real-time events.
 //
@@ -2488,49 +2516,49 @@ function validateAdminReason(raw) {
 
 // =====================================================================
 // STATIC FILE SERVING
+//
 // Serves index.html, bgm.mp3, and anything else sitting next to
 // server.js. Google Sign-In requires a real http(s) origin -- it will
 // not work if index.html is just double-clicked as a local file. Both
 // players should visit http://<this computer's IP>:3000 instead.
+//
+// The actual reading/caching/compressing/ranging lives in static.js.
+// It exists because the previous implementation here re-read the whole
+// file from disk on every request and sent it back with no validator,
+// no Cache-Control, no Content-Length and no compression -- so every
+// page view moved ~5 MB (594 KB of HTML + a 4.4 MB mp3) through the
+// same event loop the WebSocket relay runs on, and every RELOAD moved
+// it again. Measured, that was this server's single biggest source of
+// in-match latency spikes: 55 MB of static traffic over 12 seconds took
+// ping p99 from 0.67 ms to 7.97 ms. See static.js for the full note.
 // =====================================================================
-const MIME_TYPES = {
-    ".html": "text/html",
-    ".js": "application/javascript",
-    ".css": "text/css",
-    ".mp3": "audio/mpeg",
-    ".wav": "audio/wav",
-    ".ogg": "audio/ogg",
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".bmp": "image/bmp",
-    ".svg": "image/svg+xml",
-    ".json": "application/json"
-};
+const Static = require("./static");
 
-function serveStatic(req, res) {
-    let urlPath = req.url.split("?")[0];
-    if (urlPath === "/") urlPath = "/index.html";
+const staticServer = Static.createStaticServer(__dirname, {
+    // In production the checkout never changes under a running process,
+    // so the per-request fs.stat revalidation can be skipped entirely.
+    // Locally it stays on, so editing index.html still shows up on the
+    // next reload without restarting the server.
+    revalidate: process.env.NODE_ENV !== "production"
+});
 
-    const filePath = path.join(__dirname, decodeURIComponent(urlPath));
-
-    // Basic safety: never serve a file outside this folder.
-    if (!filePath.startsWith(__dirname)) {
-        res.writeHead(403, { "Content-Type": "text/plain" });
-        res.end("Forbidden");
+async function serveStatic(req, res) {
+    let served = false;
+    try {
+        served = await staticServer.serve(req, res);
+    } catch (e) {
+        console.log("[static] error serving " + req.url + ":", e.message);
+        if (!res.headersSent) {
+            res.writeHead(500, { "Content-Type": "text/plain" });
+            res.end("Internal error");
+        }
         return;
     }
-
-    fs.readFile(filePath, (err, data) => {
-        if (err) {
-            res.writeHead(404, { "Content-Type": "text/plain" });
-            res.end("Not found: " + urlPath);
-            return;
-        }
-        const ext = path.extname(filePath).toLowerCase();
-        res.writeHead(200, { "Content-Type": MIME_TYPES[ext] || "application/octet-stream" });
-        res.end(data);
-    });
+    if (!served) {
+        const urlPath = req.url.split("?")[0];
+        res.writeHead(404, { "Content-Type": "text/plain" });
+        res.end("Not found: " + urlPath);
+    }
 }
 
 // =====================================================================
@@ -3566,12 +3594,7 @@ const httpServer = http.createServer(async (req, res) => {
         const sortKey = ["coins", "kills", "wins"].includes(urlObj.searchParams.get("sort"))
             ? urlObj.searchParams.get("sort") : "coins";
 
-        const entries = Object.values(accounts)
-            .map(a => ({ name: a.name, coins: a.coins, kills: a.kills, wins: a.wins }))
-            .sort((a, b) => b[sortKey] - a[sortKey])
-            .slice(0, 20);
-
-        sendJson(res, 200, { sort: sortKey, entries: entries });
+        sendJson(res, 200, { sort: sortKey, entries: getCasualLeaderboard(sortKey) });
         return;
     }
 
@@ -4253,8 +4276,10 @@ const httpServer = http.createServer(async (req, res) => {
     }
 
     // ---- everything else: serve it as a static file (index.html, bgm.mp3, ...) ----
-    if (req.method === "GET") {
-        serveStatic(req, res);
+    // HEAD is handled too: iOS/iPadOS Safari probes media with one
+    // before it will stream it.
+    if (req.method === "GET" || req.method === "HEAD") {
+        await serveStatic(req, res);
         return;
     }
 
@@ -4368,7 +4393,10 @@ function resetCasualCombat() {
 // Sends one authoritative health line to both sides of a match. Both
 // clients render exactly this -- neither computes its own.
 function broadcastHealth(a, b, result) {
-    const payload = {
+    // Serialised once and sent twice: both sides receive byte-identical
+    // authoritative numbers, and the server pays for one stringify
+    // instead of two.
+    const payload = JSON.stringify({
         type: "health",
         slot: result.slot,
         by: result.by,
@@ -4377,9 +4405,9 @@ function broadcastHealth(a, b, result) {
         blocked: result.blocked,
         eliminated: result.eliminated,
         kind: result.kind
-    };
-    send(a, payload);
-    send(b, payload);
+    });
+    sendRaw(a, payload);
+    sendRaw(b, payload);
 }
 
 // =====================================================================
@@ -4440,15 +4468,60 @@ function otherId(id) {
 // =====================================================================
 const DEBUG_NETWORKING = process.env.DEBUG_NETWORKING === "1";
 
+const NET_SAMPLE_MAX = 4096;
+
 const netStats = {
     startedAt: Date.now(),
     msgsIn: 0, msgsOut: 0,
     bytesIn: 0, bytesOut: 0,
     maxPacketIn: 0, maxPacketOut: 0,
-    // Relay handling time (parse + route + forward) in ms, sampled.
-    handleMs: [],
+    // Relay handling time (parse + route + forward) in ms, sampled into
+    // a fixed ring (see netRecordHandle).
+    handleMs: new Float64Array(NET_SAMPLE_MAX),
+    handleIdx: 0,
+    handleCount: 0,
+    // Position frames dropped because a client's socket was already
+    // backed up (see sendVolatile). A non-zero number here means
+    // somebody's connection could not keep up, which is worth knowing.
+    volatileDropped: 0,
+    // Sockets reaped by the heartbeat because they stopped answering.
+    socketsReaped: 0,
     byType: Object.create(null)
 };
+
+// ---------------------------------------------------------------------
+// EVENT-LOOP LAG
+//
+// The one number that explains "the server was fine and then everyone
+// lagged at once". A relay has no tick to time, so this is the real
+// equivalent: how late a timer that asked for 100ms actually fired. Any
+// value well above zero means something blocked the single thread --
+// and while it was blocked, every player's packets were sitting in a
+// queue. Costs one timer and one subtraction every 100ms, so it runs
+// unconditionally rather than behind the debug flag.
+// ---------------------------------------------------------------------
+const LOOP_LAG_INTERVAL_MS = 100;
+const loopLag = {
+    samples: new Float64Array(NET_SAMPLE_MAX),
+    idx: 0, count: 0, max: 0
+};
+let loopLagLast = Date.now();
+setInterval(() => {
+    const now = Date.now();
+    const lag = Math.max(0, now - loopLagLast - LOOP_LAG_INTERVAL_MS);
+    loopLagLast = now;
+    loopLag.samples[loopLag.idx] = lag;
+    loopLag.idx = (loopLag.idx + 1) % NET_SAMPLE_MAX;
+    if (loopLag.count < NET_SAMPLE_MAX) loopLag.count++;
+    if (lag > loopLag.max) loopLag.max = lag;
+}, LOOP_LAG_INTERVAL_MS).unref();
+
+function percentiles(ring, count) {
+    if (!count) return { p50: 0, p95: 0, p99: 0, max: 0 };
+    const s = Array.prototype.slice.call(ring, 0, count).sort((a, b) => a - b);
+    const q = p => +s[Math.min(s.length - 1, Math.floor(s.length * p))].toFixed(3);
+    return { p50: q(.5), p95: q(.95), p99: q(.99), max: +s[s.length - 1].toFixed(3) };
+}
 
 function netRecordIn(type, bytes) {
     netStats.msgsIn++;
@@ -4456,13 +4529,17 @@ function netRecordIn(type, bytes) {
     if (bytes > netStats.maxPacketIn) netStats.maxPacketIn = bytes;
     netStats.byType[type] = (netStats.byType[type] || 0) + 1;
 }
+// A fixed ring, not a growing array with shift(): shift() on a
+// 5000-element array is an O(n) memmove, and this used to run on EVERY
+// relayed message the moment diagnostics were switched on -- so turning
+// on the instrumentation measurably slowed down the thing it was
+// measuring.
 function netRecordHandle(ms) {
-    netStats.handleMs.push(ms);
-    if (netStats.handleMs.length > 5000) netStats.handleMs.shift();
+    netStats.handleMs[netStats.handleIdx] = ms;
+    netStats.handleIdx = (netStats.handleIdx + 1) % NET_SAMPLE_MAX;
+    if (netStats.handleCount < NET_SAMPLE_MAX) netStats.handleCount++;
 }
 function netSnapshot() {
-    const s = netStats.handleMs.slice().sort((a, b) => a - b);
-    const q = p => (s.length ? +s[Math.min(s.length - 1, Math.floor(s.length * p))].toFixed(3) : 0);
     const secs = Math.max(1, (Date.now() - netStats.startedAt) / 1000);
     let sockets = 0;
     wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) sockets++; });
@@ -4481,8 +4558,16 @@ function netSnapshot() {
         avgPacketOut: netStats.msgsOut ? Math.round(netStats.bytesOut / netStats.msgsOut) : 0,
         maxPacketIn: netStats.maxPacketIn,
         maxPacketOut: netStats.maxPacketOut,
-        relayHandleMs: { p50: q(.5), p95: q(.95), p99: q(.99), max: s.length ? +s[s.length - 1].toFixed(3) : 0 },
+        relayHandleMs: percentiles(netStats.handleMs, netStats.handleCount),
+        // The number that explains a server-wide latency spike. See the
+        // EVENT-LOOP LAG note above.
+        eventLoopLagMs: Object.assign(percentiles(loopLag.samples, loopLag.count), { allTimeMax: +loopLag.max.toFixed(3) }),
+        volatileDropped: netStats.volatileDropped,
+        socketsReaped: netStats.socketsReaped,
         byType: netStats.byType,
+        // Static asset cache: how much of a page load this server is
+        // still actually transferring (see static.js).
+        staticCache: staticServer.snapshot(),
         // Shadow hit detection: how often this server's own verdict
         // matched what the client reported. See shadow.js.
         shadowHitDetection: shadowSnapshot()
@@ -4495,17 +4580,23 @@ function netSnapshot() {
 // off this returns the original function unchanged -- literally the
 // same reference, so there is no wrapper, no timing call and no
 // measurable cost on the hot path.
+// The handler publishes the type it just parsed here, so the wrapper
+// can count by type without parsing the same JSON a second time. It used
+// to do exactly that -- a full JSON.parse per message purely to read one
+// field -- which roughly doubled the parse cost of every packet the
+// moment diagnostics were switched on.
+let lastMessageType = "?";
+
 function instrumentMessage(handler) {
     if (!DEBUG_NETWORKING) return handler;
     return function (raw) {
         const t0 = process.hrtime.bigint();
         const bytes = typeof raw === "string" ? Buffer.byteLength(raw) : raw.length;
-        let type = "?";
-        try { type = (JSON.parse(raw.toString()) || {}).type || "?"; } catch (e) {}
-        netRecordIn(type, bytes);
+        lastMessageType = "?";
         try {
             return handler.apply(this, arguments);
         } finally {
+            netRecordIn(lastMessageType, bytes);
             netRecordHandle(Number(process.hrtime.bigint() - t0) / 1e6);
         }
     };
@@ -4513,18 +4604,126 @@ function instrumentMessage(handler) {
 
 function send(player, obj) {
     if (player && player.socket.readyState === WebSocket.OPEN) {
-        const payload = JSON.stringify(obj);
-        if (DEBUG_NETWORKING) {
-            netStats.msgsOut++;
-            const b = Buffer.byteLength(payload);
-            netStats.bytesOut += b;
-            if (b > netStats.maxPacketOut) netStats.maxPacketOut = b;
-        }
-        player.socket.send(payload);
+        sendRaw(player, JSON.stringify(obj));
     }
 }
 
+// Sends an ALREADY-SERIALISED payload. Anything that goes to more than
+// one recipient should stringify once and use this, instead of paying
+// for the same JSON.stringify per player -- see broadcastHealth and the
+// mode broadcasts below.
+function sendRaw(player, payload) {
+    if (!player || player.socket.readyState !== WebSocket.OPEN) return;
+    if (DEBUG_NETWORKING) {
+        netStats.msgsOut++;
+        const b = Buffer.byteLength(payload);
+        netStats.bytesOut += b;
+        if (b > netStats.maxPacketOut) netStats.maxPacketOut = b;
+    }
+    player.socket.send(payload);
+}
+
+// How much unsent data may sit in one client's socket buffer before
+// this server stops adding POSITION frames to it. Roughly a second of
+// 60Hz position traffic.
+const MAX_BUFFERED_BYTES = 64 * 1024;
+
+// For frames whose only value is being CURRENT. If a client's socket is
+// already backed up (a stalled mobile connection, a tab the OS
+// suspended), queueing yet another position behind the backlog does not
+// help it -- it makes things worse: the client eventually receives a
+// long tail of positions that were true seconds ago and plays them
+// back, which is exactly what "rubber-banding" and "the opponent
+// teleporting" look like. Dropping the frame instead means that when
+// the connection recovers, the next thing it receives is the CURRENT
+// position.
+//
+// Only ever used for position/decoy relays. Every gameplay event
+// (bullets, hits, health, round and match results, ranked, currency)
+// goes through send() and is never dropped.
+function sendVolatile(player, payload) {
+    if (!player || player.socket.readyState !== WebSocket.OPEN) return;
+    if (player.socket.bufferedAmount > MAX_BUFFERED_BYTES) {
+        netStats.volatileDropped++;
+        return;
+    }
+    sendRaw(player, payload);
+}
+
+// Builds the relayed position frame as a string directly. This is the
+// single hottest line on the server -- it runs once per player per
+// network tick -- and it was allocating a throwaway object and running
+// the generic serialiser over it every time.
+//
+// `id` is stamped from the CONNECTION's own slot, never from anything
+// the client sent, exactly as before. Every number is validated finite
+// first: a client that sends NaN/Infinity would otherwise produce a
+// payload the opponent's JSON.parse rejects, which would look like the
+// opponent freezing.
+function finiteNum(v) {
+    return typeof v === "number" && isFinite(v) ? v : 0;
+}
+
+function positionFrame(id, data) {
+    let s = '{"type":"position","id":' + id +
+            ',"x":' + finiteNum(data.x) +
+            ',"y":' + finiteNum(data.y) +
+            ',"facing":' + finiteNum(data.facing);
+    // Omitted rather than defaulted when absent: the client treats a
+    // missing seq as "no sequence info" and a present one as a
+    // monotonic counter, so inventing a 0 here would make it discard
+    // every subsequent frame as stale.
+    if (typeof data.seq === "number" && isFinite(data.seq)) s += ',"seq":' + (data.seq | 0);
+    return s + "}";
+}
+
+// ---------------------------------------------------------------------
+// SOCKET HEARTBEAT
+//
+// A TCP connection that dies without a FIN (a phone going through a
+// tunnel, a laptop lid closing, a proxy dropping an idle link) leaves a
+// socket that still reads as OPEN. Before this, nothing ever noticed:
+//   * the casual slot that connection held was never released, so the
+//     next player to arrive got "SERVER FULL" against a ghost,
+//   * every relayed frame kept being queued into a socket nobody was
+//     reading, growing bufferedAmount without bound,
+//   * the presence row and friends list kept showing the player online.
+//
+// A protocol-level ping every 30s costs 2 bytes per socket and closes
+// all three. Note this is the WEBSOCKET ping frame, which the browser
+// answers automatically -- it is not the app-level {type:"ping"} the
+// client sends to measure RTT, and it works even on the presence
+// connection, which sends nothing at all on its own.
+// ---------------------------------------------------------------------
+const HEARTBEAT_INTERVAL_MS = 30000;
+
+setInterval(() => {
+    wss.clients.forEach(socket => {
+        if (socket.isAlive === false) {
+            netStats.socketsReaped++;
+            // terminate(), not close(): a socket that missed a ping is
+            // not going to complete a closing handshake either. The
+            // 'close' event still fires, so all the existing cleanup
+            // (casual slot, ranked forfeit, presence) runs normally.
+            socket.terminate();
+            return;
+        }
+        socket.isAlive = false;
+        try { socket.ping(); } catch (e) { /* already gone */ }
+    });
+}, HEARTBEAT_INTERVAL_MS).unref();
+
 wss.on("connection", (socket, request) => {
+
+    socket.isAlive = true;
+    socket.on("pong", () => { socket.isAlive = true; });
+
+    // Node's http.Server already sets this on the sockets it hands over,
+    // so this is belt-and-braces rather than a fix -- but it is the
+    // difference between a 5ms relay and a 45ms one if that default ever
+    // changes, because Nagle would hold a 60-byte position frame back
+    // waiting for more data that never comes.
+    try { socket._socket.setNoDelay(true); } catch (e) {}
 
     // A presence connection asks for it explicitly with ?presence=1 and
     // is NEVER given a casual slot. That is the whole point: idle lobby
@@ -4615,6 +4814,10 @@ wss.on("connection", (socket, request) => {
             console.log("Invalid message from connection");
             return;
         }
+        // Publishes the type for the diagnostics wrapper above. One
+        // assignment; no branch, no allocation, and nothing at all when
+        // DEBUG_NETWORKING is off (the wrapper does not exist then).
+        if (DEBUG_NETWORKING) lastMessageType = (data && typeof data.type === "string") ? data.type : "?";
 
         // =============================================================
         // FRIENDS / PRESENCE MESSAGES
@@ -4836,12 +5039,16 @@ wss.on("connection", (socket, request) => {
                 return;
             }
 
-            if (data.type === "position" && typeof data.seq === "number") conn.lastSeq = data.seq;
+            if (data.type === "position") {
+                if (typeof data.seq === "number") conn.lastSeq = data.seq;
+                if (match.shadow) match.shadow.onPosition(conn.rankedSlot, data.x, data.y, data.d === 1, Date.now());
+                sendVolatile(foe.conn, positionFrame(conn.rankedSlot, data));
+                return;
+            }
 
             if (match.shadow) {
                 const now = Date.now();
-                if (data.type === "position") match.shadow.onPosition(conn.rankedSlot, data.x, data.y, data.d === 1, now);
-                else if (data.type === "bullet") match.shadow.onBullet(conn.rankedSlot, data, now);
+                if (data.type === "bullet") match.shadow.onBullet(conn.rankedSlot, data, now);
                 else if (data.type === "decoy") match.shadow.onDecoy(conn.rankedSlot, data.x, data.y, data.life, now);
                 else if (data.type === "hitClaim" || data.type === "damage") match.shadow.onClaim(conn.rankedSlot, now);
             }
@@ -4917,14 +5124,9 @@ wss.on("connection", (socket, request) => {
             // through a dash would look like a suppressed hit.
             if (casualShadow) casualShadow.onPosition(id, data.x, data.y, data.d === 1, Date.now());
 
-            send(opponent, {
-                type: "position",
-                id: id,
-                x: data.x,
-                y: data.y,
-                facing: data.facing,
-                seq: data.seq
-            });
+            // Volatile: a position frame is only worth sending while it
+            // is still current (see sendVolatile).
+            sendVolatile(opponent, positionFrame(id, data));
         }
 
         else if (data.type === "bullet") {
@@ -5031,13 +5233,13 @@ wss.on("connection", (socket, request) => {
 
             if (casualShadow) casualShadow.onDecoy(id, data.x, data.y, data.life, Date.now());
 
-            send(opponent, {
+            sendVolatile(opponent, JSON.stringify({
                 type: "decoy",
                 x: data.x,
                 y: data.y,
                 facing: data.facing,
                 life: data.life
-            });
+            }));
         }
 
         // ---- HEIST MODE: match start / rematch -- both bases reset to
@@ -5048,9 +5250,9 @@ wss.on("connection", (socket, request) => {
             if (casualShadow) { casualShadow.setArena("heist"); casualShadow.reset(); }
             resetCasualCombat();
             resetHeistState();
-            const payload = { type: "heistUpdate", hp: heistHP, destroyed: false, winner: null };
-            send(player, payload);
-            send(opponent, payload);
+            const payload = JSON.stringify({ type: "heistUpdate", hp: heistHP, destroyed: false, winner: null });
+            sendRaw(player, payload);
+            sendRaw(opponent, payload);
         }
 
         // ---- HEIST MODE: a bullet (or triburst pellet) landed on the
@@ -5071,9 +5273,9 @@ wss.on("connection", (socket, request) => {
                         heistDestroyed = true;
                         winner = otherId(target);
                     }
-                    const payload = { type: "heistUpdate", hp: heistHP, destroyed: heistDestroyed, winner: winner };
-                    send(player, payload);
-                    send(opponent, payload);
+                    const payload = JSON.stringify({ type: "heistUpdate", hp: heistHP, destroyed: heistDestroyed, winner: winner });
+                    sendRaw(player, payload);
+                    sendRaw(opponent, payload);
                     // Server-authoritative XP: this IS the server's own
                     // confirmation of the win (HP just hit 0 in server
                     // state), so no client report is needed or accepted.
@@ -5089,9 +5291,9 @@ wss.on("connection", (socket, request) => {
             if (casualShadow) { casualShadow.setArena("bombrun"); casualShadow.reset(); }
             resetCasualCombat();
             resetBombState();
-            const payload = { type: "bombUpdate", carrier: null, x: null, y: null };
-            send(player, payload);
-            send(opponent, payload);
+            const payload = JSON.stringify({ type: "bombUpdate", carrier: null, x: null, y: null });
+            sendRaw(player, payload);
+            sendRaw(opponent, payload);
         }
 
         // ---- BOMB RUN MODE: a pickup claim. Only granted if nobody
@@ -5105,9 +5307,9 @@ wss.on("connection", (socket, request) => {
 
             if (!bombMatchOver && bombCarrier === null) {
                 bombCarrier = id; // trust only the connection's own slot, never a client-supplied id
-                const payload = { type: "bombUpdate", carrier: bombCarrier, x: data.x, y: data.y };
-                send(player, payload);
-                send(opponent, payload);
+                const payload = JSON.stringify({ type: "bombUpdate", carrier: bombCarrier, x: data.x, y: data.y });
+                sendRaw(player, payload);
+                sendRaw(opponent, payload);
             }
         }
 
@@ -5121,9 +5323,9 @@ wss.on("connection", (socket, request) => {
             const claimedId = id; // this connection's own slot number
             if (!bombMatchOver && bombCarrier === claimedId) {
                 bombCarrier = null;
-                const payload = { type: "bombUpdate", carrier: null, x: data.x, y: data.y };
-                send(player, payload);
-                send(opponent, payload);
+                const payload = JSON.stringify({ type: "bombUpdate", carrier: null, x: data.x, y: data.y });
+                sendRaw(player, payload);
+                sendRaw(opponent, payload);
             }
         }
 
@@ -5145,9 +5347,9 @@ wss.on("connection", (socket, request) => {
                     winner = bombScore[1] > bombScore[2] ? 1 : 2;
                     bombWinner = winner;
                 }
-                const payload = { type: "bombGoalUpdate", scorer: id, score1: bombScore[1], score2: bombScore[2], matchOver: bombMatchOver, winner: winner };
-                send(player, payload);
-                send(opponent, payload);
+                const payload = JSON.stringify({ type: "bombGoalUpdate", scorer: id, score1: bombScore[1], score2: bombScore[2], matchOver: bombMatchOver, winner: winner });
+                sendRaw(player, payload);
+                sendRaw(opponent, payload);
                 // Server-authoritative XP -- bombMatchOver just flipped
                 // true in the server's own state, so this can't be forged
                 // or double-claimed via a client report.
@@ -5299,6 +5501,22 @@ async function startServer() {
             "On an ephemeral host (Render without a persistent disk) this data " +
             "does NOT survive a redeploy or restart.");
     }
+
+    // Pre-read and pre-compress what every player pulls on their first
+    // load, so the first visitor after a deploy doesn't pay for the
+    // Brotli pass (and nobody already in a match pays for it either).
+    // Deliberately not awaited: the port opens immediately and the warm
+    // runs behind it.
+    staticServer.warm(["index.html", "voidbreak.html", "bgm.mp3"])
+        .then(() => {
+            const s = staticServer.snapshot();
+            const html = s.files.find(f => f.file === "index.html");
+            console.log("[static] warmed " + s.files.length + " file(s), " +
+                Math.round(s.cachedBytes / 1024) + " KB cached" +
+                (html && html.br ? "; index.html " + Math.round(html.bytes / 1024) + " KB -> " +
+                    Math.round(html.br / 1024) + " KB brotli" : ""));
+        })
+        .catch(e => console.log("[static] warm failed:", e.message));
 
     httpServer.listen(PORT, "0.0.0.0", () => {
         console.log("DUEL ARENA SERVER STARTED on port " + PORT);

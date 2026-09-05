@@ -3899,34 +3899,42 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   // last-known position is displayed between updates.
   // ====================================================================
 
-  // ---- 20-30Hz network send loop (separate from the render loop) ----
+  // ---- 60Hz network send loop ----
   // p1's own position is still updated every rendered frame inside
   // updatePlayer() for full local responsiveness (client-side
   // prediction is inherent here: each client is the sole authority over
   // its own player, so local movement never waits on the network). Only
-  // the WIRE SEND is decoupled to a fixed-rate timer.
-  // NETWORK_SEND_HZ and INTERP_DELAY_MS are a COUPLED PAIR -- changing
-  // one without the other is what causes either visible stutter or
-  // needless opponent lag, so tune them together and keep the invariant
-  // below.
+  // the WIRE SEND is rate-limited.
   //
-  //   INTERP_DELAY_MS must stay >= ~2 send intervals.
+  // NETWORK_SEND_HZ and the interpolation delay are a COUPLED PAIR --
+  // the delay has to cover at least a couple of send intervals or a
+  // single late packet empties the buffer and the opponent stutters.
+  // The difference from before is that the delay is no longer a
+  // hardcoded constant tuned by hand against the send rate: it is
+  // measured from real arrival jitter at runtime (see netQuality
+  // below), with a floor of ~2.3 intervals. Raising the send rate
+  // therefore lowers the floor automatically.
   //
-  // The buffer has to hold at least two snapshots to interpolate
-  // between, plus a spare so a single dropped/late packet doesn't empty
-  // it (which shows up as the opponent briefly freezing). At 30Hz the
-  // interval is 33ms, so 75ms is 2.25 intervals -- the same safety
-  // margin the previous 25Hz/100ms pair had (2.5), but 25ms less
-  // opponent latency on screen.
-  //
-  // The bandwidth cost of 30Hz over 25Hz is ~0.5 KB/s per player:
-  // measured position packets are 96 bytes, so 30/s is ~2.9 KB/s. That
-  // is far below anything that matters here, which is why the trade
-  // (more packets, less perceived lag) is worth taking. Do NOT push this
-  // higher without re-measuring -- past ~30Hz the added packets stop
-  // buying visible smoothness because rendering already interpolates.
-  const NETWORK_SEND_HZ = 30;
-  const NETWORK_SEND_INTERVAL_MS = Math.round(1000 / NETWORK_SEND_HZ); // 33ms
+  // Bandwidth went DOWN despite doubling the rate. The old 30Hz packets
+  // measured 96 bytes each (~2.9 KB/s) because x/y/facing were written
+  // at full double precision -- ~45 bytes per packet of digits far
+  // below a screen pixel. Rounded to 0.1px / 0.001rad and with the
+  // ignored `id` field dropped, a packet is ~63 bytes, so 60Hz is
+  // ~3.7 KB/s: twice the update rate for a fraction more traffic.
+  // Position updates now go out at ~60Hz rather than 30Hz, and the
+  // packet they go out in is roughly half the size, so the higher rate
+  // costs LESS bandwidth than the old 30Hz one did (see the rounding
+  // note on the packet below). Doubling the rate is what lets the
+  // interpolation delay below halve, and that delay is the single
+  // biggest piece of opponent lag this client adds on top of the
+  // network.
+  const NETWORK_SEND_HZ = 60;
+  const NETWORK_SEND_INTERVAL_MS = Math.round(1000 / NETWORK_SEND_HZ); // 17ms
+  // The send is ALSO driven from the render loop (see maybeSendNetworkPosition,
+  // called right after updatePlayer(p1)) so the position on the wire is the
+  // one that was just computed, instead of one up to a whole interval old.
+  // This timer stays as the floor: it keeps the idle heartbeat going and
+  // covers the lobby, where the render loop is not simulating anything.
   let networkSendTimer = null;
   let inputSeq = 0;
   let lastSentNetState = null;
@@ -3965,16 +3973,42 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     // is immune to bullets (see updateBullets), so the server needs it
     // to reason about hits at all -- without it, every shot that passed
     // through a dash looks like a hit the client failed to report.
+    //
+    // x/y go out at 0.1px and facing at 0.001rad (0.057 degrees).
+    // Full double precision was costing ~45 bytes a packet to transmit
+    // digits far below one screen pixel; the rounding is invisible and
+    // is smoothed further by the receiver's interpolation. It changes
+    // nothing about gameplay: the shooter computes its own bullet
+    // velocity from its OWN unrounded facing and sends vx/vy, so aim is
+    // unaffected -- this value is only ever used to DRAW the opponent.
+    // `id` is gone entirely: the server always stamped the relayed
+    // packet with the connection's own slot number and never read this
+    // field, so it was pure overhead (and one less thing a client can
+    // claim).
     const packet = {
       type: "position",
-      id: myPlayerID,
-      x: p1.x,
-      y: p1.y,
-      facing: p1.facing,
+      x: Math.round(p1.x * 10) / 10,
+      y: Math.round(p1.y * 10) / 10,
+      facing: Math.round(p1.facing * 1000) / 1000,
       seq: inputSeq
     };
     if(p1.dashing) packet.d = 1;
     socket.send(JSON.stringify(packet));
+  }
+
+  // Render-loop entry point. Rate-limited to the send interval, so this
+  // never sends MORE than the timer would -- it just makes sure the
+  // packet that does go out carries the position computed microseconds
+  // earlier rather than one from the previous frame.
+  function maybeSendNetworkPosition(){
+    if(mode !== 'online') return;
+    // Recorded every frame regardless of the send rate: this is what
+    // relayed projectiles are hit-tested against, and it needs full
+    // frame resolution, not network resolution.
+    recordLocalHistory(p1);
+    if(!networkSendTimer) return;
+    if(performance.now() - lastSentNetAt < NETWORK_SEND_INTERVAL_MS - 1) return;
+    sendNetworkPosition();
   }
 
   function startNetworkSendLoop(){
@@ -3985,26 +4019,205 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     if(networkSendTimer){ clearInterval(networkSendTimer); networkSendTimer = null; }
     lastSentNetState = null;
     lastSentNetAt = 0;
+    netQuality.reset();
   }
 
   // ---- Remote entity snapshot-buffer interpolation ----
   // Every received network position is timestamped and kept in a short
   // buffer instead of being applied directly. Rendering samples the
-  // buffer ~100ms in the past, interpolating between the two bracketing
-  // snapshots -- the standard fix for "jitter / teleport / choppiness"
-  // when updates arrive at a fixed, lower-than-render rate (25Hz here vs
-  // ~60fps rendering). Facing is interpolated along the shortest angular
-  // path so it never spins the long way around.
-  // How far in the past remote players are rendered. See the coupling
-  // note on NETWORK_SEND_HZ above -- this must stay >= ~2 send intervals
-  // (2.25 at 30Hz) so one late or dropped packet can't empty the buffer.
-  const INTERP_DELAY_MS = 75;
+  // buffer a little in the past, interpolating between the two
+  // bracketing snapshots -- the standard fix for "jitter / teleport /
+  // choppiness" when updates arrive at a fixed, lower-than-render rate.
+  // Facing is interpolated along the shortest angular path so it never
+  // spins the long way around.
+  //
+  // WHY THE DELAY IS NOW ADAPTIVE
+  // -----------------------------
+  // This delay is pure, self-inflicted opponent lag: whatever it is set
+  // to is added to every player's ping before they see the other player
+  // move. It used to be a hardcoded 75ms chosen as ~2.25 intervals of a
+  // 30Hz send rate -- a fixed cost paid by a player on a clean 15ms
+  // connection and a player on a 150ms jittery one alike.
+  //
+  // It only has to be big enough to cover the ACTUAL spread in arrival
+  // times, so it is now measured instead of guessed: the buffer needs
+  // one send interval plus however much those arrivals jitter. On a
+  // clean connection that lands on the 38ms floor (~2.3 intervals of
+  // the 60Hz send rate above); on a lossy or bursty one it grows on its
+  // own up to 180ms rather than stuttering.
+  //
+  // The value is EASED rather than snapped, because changing it
+  // instantly would time-warp the remote player (a shrinking delay
+  // fast-forwards them, a growing one freezes them). Capped at 15% of
+  // real time, the shift is not perceptible.
+  const INTERP_MIN_DELAY_MS = 38;
+  const INTERP_MAX_DELAY_MS = 150;
+  // Gaps longer than this are the SENDER pausing (its dead-zone skip, or
+  // the 350ms idle heartbeat), not the network being late, so they are
+  // excluded from the jitter estimate that sizes the buffer.
+  const ARRIVAL_SAMPLE_MAX_MS = 150;
+  const INTERP_EASE_RATE = 0.15; // ms of delay change per ms of real time
   const SNAPSHOT_BUFFER_MAX_AGE_MS = 1000;
-  const SNAPSHOT_BUFFER_MAX_LEN = 30;
+  const SNAPSHOT_BUFFER_MAX_LEN = 60;
+
+  // How far past the newest snapshot rendering may guess forward before
+  // it gives up and holds. Without this, a single dropped packet showed
+  // up as the opponent FREEZING and then jumping -- which reads exactly
+  // like rubber-banding even though the local player is never corrected.
+  const EXTRAPOLATE_FULL_MS = 60;   // guess at full velocity up to here
+  const EXTRAPOLATE_MAX_MS = 140;   // velocity ramps to zero by here
+  // The two guards that keep a guess sane. See sampleSnapshotBuffer:
+  // without them, two snapshots delivered in the same millisecond imply
+  // an enormous velocity and fling the drawn opponent off the arena.
+  const EXTRAPOLATE_MIN_SPAN_MS = 20;          // shortest pair worth deriving velocity from
+  const EXTRAPOLATE_MAX_SPEED_PX_MS = 900 / 1000; // a dash is 780px/s; anything above this is noise
+
+  // Rolling measurement of how position packets are actually arriving.
+  // Feeds the adaptive delay above and the on-screen diagnostics.
+  const netQuality = {
+    lastArrivalAt: 0,
+    meanIntervalMs: NETWORK_SEND_INTERVAL_MS,
+    jitterMs: 0,
+    delayMs: INTERP_MIN_DELAY_MS,
+    targetDelayMs: INTERP_MIN_DELAY_MS,
+    gaps: 0,        // arrivals that came in more than 3 intervals late
+    received: 0,
+    extrapolatedFrames: 0,
+    reset(){
+      this.lastArrivalAt = 0;
+      this.meanIntervalMs = NETWORK_SEND_INTERVAL_MS;
+      this.jitterMs = 0;
+      this.delayMs = INTERP_MIN_DELAY_MS;
+      this.targetDelayMs = INTERP_MIN_DELAY_MS;
+      this.gaps = 0; this.received = 0; this.extrapolatedFrames = 0;
+      this.smoothRttMs = null;
+      localHistory.length = 0;
+      localHistoryHead = 0;
+    },
+    // One received position packet.
+    onArrival(now){
+      this.received++;
+      if(this.lastArrivalAt){
+        const gap = now - this.lastArrivalAt;
+        // Only NETWORK jitter should size the buffer. A gap this long is
+        // the sender's own dead-zone/idle heartbeat -- a player who
+        // stopped moving -- and letting that inflate the estimate would
+        // add real lag the moment they started moving again. It is still
+        // counted as a gap for the diagnostics, just not fed to the EWMA.
+        if(gap > NETWORK_SEND_INTERVAL_MS * 3) this.gaps++;
+        if(gap < ARRIVAL_SAMPLE_MAX_MS){
+          const a = 1 / 12; // EWMA over roughly the last dozen packets
+          this.meanIntervalMs += (gap - this.meanIntervalMs) * a;
+          this.jitterMs += (Math.abs(gap - this.meanIntervalMs) - this.jitterMs) * a;
+        }
+      }
+      this.lastArrivalAt = now;
+      // One send interval to have something to interpolate between,
+      // plus enough jitter headroom to cover the great majority of late
+      // arrivals. Two deviations is roughly the 95th percentile, which
+      // is the right place to sit: covering the last 5% would cost
+      // every player real lag to smooth a stutter they see once a
+      // minute, and extrapolation already covers those.
+      this.targetDelayMs = Math.max(
+        INTERP_MIN_DELAY_MS,
+        Math.min(INTERP_MAX_DELAY_MS, this.meanIntervalMs * 1.2 + this.jitterMs * 2 + 6)
+      );
+    },
+    // ---- Round-trip time, and the one-way estimate built from it ----
+    // Used to place a relayed projectile where it really is by now (see
+    // LAG COMPENSATION in updateBullets). Smoothed rather than taken raw
+    // so a single spiky sample can't throw a shot far down the arena,
+    // and hard-capped so a genuinely awful connection degrades to
+    // roughly today's behaviour instead of something wilder.
+    smoothRttMs: null,
+    onRtt(rtt){
+      if(!(rtt > 0) || rtt > 3000) return;
+      this.smoothRttMs = this.smoothRttMs === null ? rtt : this.smoothRttMs + (rtt - this.smoothRttMs) / 8;
+    },
+    oneWayMs(){
+      if(this.smoothRttMs === null) return 0;
+      return Math.max(0, Math.min(LAG_COMP_MAX_MS, this.smoothRttMs / 2));
+    },
+
+    // Eased once per rendered frame.
+    step(dtMs){
+      const maxStep = Math.max(0.05, dtMs * INTERP_EASE_RATE);
+      const diff = this.targetDelayMs - this.delayMs;
+      this.delayMs += Math.abs(diff) <= maxStep ? diff : Math.sign(diff) * maxStep;
+    }
+  };
+
+  // ====================================================================
+  // LOCAL POSITION HISTORY
+  //
+  // Where OUR OWN player has been over the last half second, recorded
+  // once per rendered frame. This is ground truth -- it is our own
+  // player, never anything that crossed the network -- and it is what
+  // makes lag compensation possible without trusting anybody.
+  //
+  // It exists because a projectile relayed from the opponent arrives
+  // one network trip after it was fired. Spawning it at the reported
+  // muzzle position at the moment it ARRIVES draws it roughly half an
+  // RTT behind where the shooter sees it, so a shot that visibly
+  // connected on their screen lands late here, or misses entirely.
+  // Fast-forwarding it to where it really is by now fixes that -- but
+  // only if the hit test along the way runs against where WE actually
+  // were during that window, which is what this buffer provides.
+  //
+  // A plain ring buffer: fixed size, no allocation per frame, no growth.
+  // ====================================================================
+  // Sized so the ring always spans more than LAG_COMP_MAX_MS even on a
+  // high-refresh display, where frames (and so entries) arrive faster:
+  // 64 entries is 1.06s at 60Hz, 533ms at 120Hz, 266ms at 240Hz -- all
+  // comfortably past the 150ms this ever rewinds.
+  const LOCAL_HISTORY_MAX = 64;
+  const LAG_COMP_MAX_MS = 150;         // never rewind further than this
+  const localHistory = [];             // {t, x, y, alive, dashing}
+  let localHistoryHead = 0;
+
+  function recordLocalHistory(p){
+    if(!p) return;
+    const entry = localHistory[localHistoryHead];
+    const now = performance.now();
+    if(entry){
+      entry.t = now; entry.x = p.x; entry.y = p.y;
+      entry.alive = p.alive; entry.dashing = !!p.dashing;
+    } else {
+      localHistory[localHistoryHead] = { t: now, x: p.x, y: p.y, alive: p.alive, dashing: !!p.dashing };
+    }
+    localHistoryHead = (localHistoryHead + 1) % LOCAL_HISTORY_MAX;
+  }
+
+  // Where our player was at wall-clock time `tMs`, interpolated between
+  // the two recorded frames that bracket it. Returns null when there is
+  // no history to answer with, in which case callers fall back to the
+  // live position (i.e. exactly the old behaviour).
+  function localStateAt(tMs){
+    if(!localHistory.length) return null;
+    let before = null, after = null;
+    for(const e of localHistory){
+      if(!e) continue;
+      if(e.t <= tMs && (!before || e.t > before.t)) before = e;
+      if(e.t >= tMs && (!after || e.t < after.t)) after = e;
+    }
+    if(!before) return after;
+    if(!after || after === before) return before;
+    const span = after.t - before.t;
+    const f = span > 0 ? (tMs - before.t) / span : 0;
+    return {
+      x: before.x + (after.x - before.x) * f,
+      y: before.y + (after.y - before.y) * f,
+      alive: before.alive,
+      // Dash immunity is a state, not something to interpolate: if we
+      // were dashing at EITHER end of the window we were immune for it.
+      dashing: before.dashing || after.dashing
+    };
+  }
 
   function pushSnapshot(buffer, x, y, facing){
-    buffer.push({ t: performance.now(), x, y, facing });
-    const cutoff = performance.now() - SNAPSHOT_BUFFER_MAX_AGE_MS;
+    const now = performance.now();
+    buffer.push({ t: now, x, y, facing });
+    const cutoff = now - SNAPSHOT_BUFFER_MAX_AGE_MS;
     while(buffer.length && buffer[0].t < cutoff) buffer.shift();
     if(buffer.length > SNAPSHOT_BUFFER_MAX_LEN) buffer.shift();
   }
@@ -4017,21 +4230,81 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     if(!buffer.length) return null;
     const renderTime = performance.now() - delayMs;
     if(buffer.length === 1 || renderTime <= buffer[0].t) return buffer[0];
-    for(let i = 0; i < buffer.length - 1; i++){
-      if(renderTime >= buffer[i].t && renderTime <= buffer[i+1].t){
-        const span = (buffer[i+1].t - buffer[i].t) || 1;
-        const t = (renderTime - buffer[i].t) / span;
+
+    const newest = buffer[buffer.length - 1];
+    if(renderTime <= newest.t){
+      // Normal case: find the bracketing pair and interpolate. Searched
+      // from the END because the sample we want is almost always the
+      // last or second-to-last pair.
+      for(let i = buffer.length - 2; i >= 0; i--){
+        if(renderTime >= buffer[i].t){
+          const span = (buffer[i+1].t - buffer[i].t) || 1;
+          const t = (renderTime - buffer[i].t) / span;
+          return {
+            x: buffer[i].x + (buffer[i+1].x - buffer[i].x) * t,
+            y: buffer[i].y + (buffer[i+1].y - buffer[i].y) * t,
+            facing: lerpAngle(buffer[i].facing, buffer[i+1].facing, t)
+          };
+        }
+      }
+      return buffer[0];
+    }
+
+    // Render time has run past our newest snapshot -- a dropped or late
+    // packet. Rather than freezing on the last known position (which
+    // then visibly jumps when the next packet lands), keep moving along
+    // the velocity implied by the last two snapshots, ramping that
+    // velocity down to zero so a player who genuinely STOPPED can only
+    // ever overshoot by a few pixels. Total guessed displacement is
+    // bounded at velocity x 0.1s.
+    const ahead = renderTime - newest.t;
+    if(buffer.length >= 2){
+      // Velocity has to be measured over a MEANINGFUL span. Two frames
+      // that arrived in the same millisecond (a burst after a stall, or
+      // jitter delivering two packets together) differ by a few pixels
+      // over a fraction of a millisecond, which reads as a velocity of
+      // thousands of pixels a second and throws the opponent clean off
+      // the arena. So walk back until the pair is at least one send
+      // interval apart, and give up rather than guess from a pair that
+      // is too close together.
+      let prev = null;
+      for(let i = buffer.length - 2; i >= 0; i--){
+        if(newest.t - buffer[i].t >= EXTRAPOLATE_MIN_SPAN_MS){ prev = buffer[i]; break; }
+      }
+      const span = prev ? newest.t - prev.t : 0;
+      if(prev && span >= EXTRAPOLATE_MIN_SPAN_MS && span < 300){
+        let vx = (newest.x - prev.x) / span;
+        let vy = (newest.y - prev.y) / span;
+        // Second belt: nothing in this game moves faster than a dash, so
+        // an implied speed above that is measurement noise, not motion.
+        const speed = Math.hypot(vx, vy);
+        if(speed > EXTRAPOLATE_MAX_SPEED_PX_MS){
+          const k = EXTRAPOLATE_MAX_SPEED_PX_MS / speed;
+          vx *= k; vy *= k;
+        }
+        // Integral of a velocity that is flat to EXTRAPOLATE_FULL_MS and
+        // then falls linearly to zero at EXTRAPOLATE_MAX_MS.
+        const ramp = EXTRAPOLATE_MAX_MS - EXTRAPOLATE_FULL_MS;
+        let travel;
+        if(ahead <= EXTRAPOLATE_FULL_MS){
+          travel = ahead;
+        } else if(ahead <= EXTRAPOLATE_MAX_MS){
+          const u = ahead - EXTRAPOLATE_FULL_MS;
+          travel = EXTRAPOLATE_FULL_MS + u - (u * u) / (2 * ramp);
+        } else {
+          travel = EXTRAPOLATE_FULL_MS + ramp / 2;
+        }
+        // Third belt: a player is always inside the arena, so a guess
+        // that lands outside it is wrong by definition.
         return {
-          x: buffer[i].x + (buffer[i+1].x - buffer[i].x) * t,
-          y: buffer[i].y + (buffer[i+1].y - buffer[i].y) * t,
-          facing: lerpAngle(buffer[i].facing, buffer[i+1].facing, t)
+          x: Math.max(0, Math.min(W, newest.x + vx * travel)),
+          y: Math.max(0, Math.min(H, newest.y + vy * travel)),
+          facing: newest.facing,
+          extrapolated: true
         };
       }
     }
-    // Render time is newer than our newest snapshot (e.g. a dropped
-    // packet or brief hitch) -- hold the last known good sample rather
-    // than freezing or guessing forward.
-    return buffer[buffer.length - 1];
+    return newest;
   }
 
   // p2's interpolation buffer + last received input seq (used only to
@@ -4041,14 +4314,48 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   let p2SnapshotBuffer = [];
   let lastRemoteSeq = -1;
 
-  function updateRemotePlayerInterpolation(p, buffer){
+  // Residual error left over when extrapolation ends and real snapshots
+  // take back over. Applied on top of the sampled position and decayed
+  // away over ~150ms, so the correction is never a visible snap. This
+  // is cosmetic only -- it moves the drawn opponent, never the local
+  // player, and never anything the server decides.
+  const remoteCorrection = { x: 0, y: 0, active: false };
+  let lastSampleExtrapolated = false;
+
+  function updateRemotePlayerInterpolation(p, buffer, dt){
     if(!p) return;
-    const sample = sampleSnapshotBuffer(buffer, INTERP_DELAY_MS);
-    if(sample){
-      p.x = sample.x;
-      p.y = sample.y;
-      p.facing = sample.facing;
+    netQuality.step((dt || 0) * 1000);
+    const sample = sampleSnapshotBuffer(buffer, netQuality.delayMs);
+    if(!sample) return;
+
+    if(lastSampleExtrapolated && !sample.extrapolated){
+      // We were guessing and are now back on real data. Absorb whatever
+      // we got wrong instead of teleporting to the truth.
+      const ex = p.x - sample.x;
+      const ey = p.y - sample.y;
+      // A big delta is a real teleport (Void Blink), not a guessing
+      // error -- smearing that would look worse than the snap.
+      if(Math.hypot(ex, ey) <= 60){
+        remoteCorrection.x = ex;
+        remoteCorrection.y = ey;
+        remoteCorrection.active = true;
+      }
     }
+    if(sample.extrapolated) netQuality.extrapolatedFrames++;
+    lastSampleExtrapolated = !!sample.extrapolated;
+
+    if(remoteCorrection.active){
+      const decay = Math.pow(0.001, Math.min(0.05, dt || 0.016) / 0.15);
+      remoteCorrection.x *= decay;
+      remoteCorrection.y *= decay;
+      if(Math.abs(remoteCorrection.x) < 0.05 && Math.abs(remoteCorrection.y) < 0.05){
+        remoteCorrection.x = 0; remoteCorrection.y = 0; remoteCorrection.active = false;
+      }
+    }
+
+    p.x = sample.x + remoteCorrection.x;
+    p.y = sample.y + remoteCorrection.y;
+    p.facing = sample.facing;
   }
 
   // ---- DEVELOPER NETWORK DIAGNOSTICS (opt-in) ----
@@ -4119,7 +4426,11 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         'OUT      ' + (netDbg.rateOut / 1024).toFixed(2) + ' KB/s\n' +
         'IN       ' + (netDbg.rateIn / 1024).toFixed(2) + ' KB/s\n' +
         'PKT MAX  ' + netDbg.maxOut + '/' + netDbg.maxIn + ' B\n' +
-        'INTERP   ' + INTERP_DELAY_MS + ' ms (' + p2SnapshotBuffer.length + ' snaps)\n' +
+        'INTERP   ' + netQuality.delayMs.toFixed(0) + ' ms (target ' + netQuality.targetDelayMs.toFixed(0) +
+              ', ' + p2SnapshotBuffer.length + ' snaps)\n' +
+        'ARRIVAL  ' + netQuality.meanIntervalMs.toFixed(1) + ' ms +/- ' + netQuality.jitterMs.toFixed(1) +
+              ' (' + netQuality.gaps + ' gaps)\n' +
+        'PREDICT  ' + netQuality.extrapolatedFrames + ' extrapolated frames\n' +
         'PLAYERS  ' + players + '\n' +
         'ENTITIES ' + entities + '\n' +
         'MODE     ' + mode + '/' + gameType + ' fps ' + fpsDisplay;
@@ -4300,6 +4611,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       // exactly why the local player can never "teleport backward".
       if(data.type === "pong"){
         currentPingMs = performance.now() - lastPingSentAt;
+        netQuality.onRtt(currentPingMs);
         updatePingBadge();
         return;
       }
@@ -4351,6 +4663,10 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
           if(data.seq <= lastRemoteSeq) return; // stale/duplicate -- ignore
           lastRemoteSeq = data.seq;
         }
+        // Feeds the arrival-jitter measurement that sizes the
+        // interpolation delay (see netQuality). Counted for every
+        // accepted frame, before anything is done with it.
+        netQuality.onArrival(performance.now());
         if(p2){
           p2.netX = data.x;
           p2.netY = data.y;
@@ -4364,6 +4680,16 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       // so it's tagged owner:'p2' here regardless of what id the sender
       // used locally (every client calls its own local player 'p1').
       if(data.type === "bullet"){
+        // This shot left the opponent's muzzle one network trip ago, so
+        // spawning it here at the reported muzzle position would draw it
+        // roughly half an RTT behind where they already see it -- and
+        // would land, or miss, that much late. catchUpMs asks
+        // updateBullets to advance it through that transit time on the
+        // next frame, in sub-steps, through the same collision rules,
+        // hit-tested against where WE actually were (see the LAG
+        // COMPENSATION note there). Zero when the ping is unknown, which
+        // is exactly the previous behaviour.
+        const lag = netQuality.oneWayMs();
         bullets.push({
           x: data.x,
           y: data.y,
@@ -4374,7 +4700,9 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
           range: data.range,
           traveled: 0,
           bounces: data.bounces || 0,
-          damage: data.damage || 1
+          damage: data.damage || 1,
+          catchUpMs: lag,
+          firedAt: performance.now() - lag
         });
         playShootSound();
         return;
@@ -4407,10 +4735,19 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       if(data.type === "shockwave"){
         spawnHitFlash(data.x, data.y, '#ff6b35');
         playShockwaveSound();
-        if(p1 && p1.alive && !p1.dashing && mode==='online' && state==='playing'){
-          const dist = Math.hypot(data.x - p1.x, data.y - p1.y);
-          if(dist <= (data.radius || SHOCKWAVE_RADIUS)){
-            applyRealHitToP1(SHOCKWAVE_DAMAGE);
+        if(p1 && p1.alive && mode==='online' && state==='playing'){
+          // The blast went off one network trip ago, so the position it
+          // has to be range-checked against is where we WERE then, not
+          // where we are now -- otherwise a blast the caster clearly saw
+          // land does nothing because we have since walked out of it.
+          // Same recorded local history the projectile catch-up uses;
+          // falls back to the live position when there is none.
+          const at = localStateAt(performance.now() - netQuality.oneWayMs()) || p1;
+          if(!at.dashing){
+            const dist = Math.hypot(data.x - at.x, data.y - at.y);
+            if(dist <= (data.radius || SHOCKWAVE_RADIUS)){
+              applyRealHitToP1(SHOCKWAVE_DAMAGE);
+            }
           }
         }
         return;
@@ -6638,6 +6975,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     decoys = [];
     ball.x = W/2; ball.y = H/2; ball.vx = 0; ball.vy = 0; ball.owner = null;
     ball.netX = ball.x; ball.netY = ball.y; ball.trail = [];
+    lastBallSync = null; lastBallSyncAt = 0; // a kickoff always re-announces the ball
     // Deterministic default so exactly one client is authoritative for a
     // stationary kickoff ball -- server player 1's client starts true.
     footballBallAuthority = !(mode === 'online' && myPlayerID === 2);
@@ -6857,8 +7195,47 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     if(checkFootballGoal()) return;
 
     if(mode === 'online' && footballBallAuthority && socket && socket.readyState === WebSocket.OPEN){
-      socket.send(JSON.stringify({ type:'footballBall', action:'sync', x:ball.x, y:ball.y, vx:ball.vx, vy:ball.vy }));
+      sendFootballBallSync();
     }
+  }
+
+  // The ball's authority used to relay a sync on EVERY RENDERED FRAME,
+  // with no rate limit and no change check. On a 60Hz screen that is 60
+  // extra messages a second on top of the player's own position stream;
+  // on a 120Hz iPad or a high-refresh monitor it is 120-165, measured --
+  // more traffic than everything else in a Football match combined, and
+  // most of it describing a ball that was not moving.
+  //
+  // Now it goes out on the same cadence as every other position stream,
+  // is skipped entirely while the ball is genuinely still, and rounds to
+  // 0.1px. The receiver eases toward the last value it was given (see
+  // updateFootball's !footballBallAuthority branch), so it cannot tell
+  // the difference except that the numbers arrive on a steady clock.
+  let lastBallSyncAt = 0;
+  let lastBallSync = null;
+  function sendFootballBallSync(){
+    const now = performance.now();
+    if(now - lastBallSyncAt < NETWORK_SEND_INTERVAL_MS - 1) return;
+    const prev = lastBallSync;
+    const moving = Math.abs(ball.vx) > 0.01 || Math.abs(ball.vy) > 0.01;
+    const changed = !prev
+      || Math.abs(ball.x - prev.x) > 0.4
+      || Math.abs(ball.y - prev.y) > 0.4
+      || moving !== prev.moving;
+    // A still ball still heartbeats, so a client that joined or missed a
+    // packet converges instead of easing toward a stale spot forever.
+    const BALL_IDLE_HEARTBEAT_MS = 350;
+    if(!changed && (now - lastBallSyncAt) < BALL_IDLE_HEARTBEAT_MS) return;
+
+    lastBallSyncAt = now;
+    lastBallSync = { x: ball.x, y: ball.y, moving: moving };
+    socket.send(JSON.stringify({
+      type:'footballBall', action:'sync',
+      x: Math.round(ball.x * 10) / 10,
+      y: Math.round(ball.y * 10) / 10,
+      vx: Math.round(ball.vx * 10) / 10,
+      vy: Math.round(ball.vy * 10) / 10
+    }));
   }
 
   // Basic-but-competent Football bot for VS COMPUTER. Movement here is
@@ -6958,11 +7335,12 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     });
 
     updatePlayer(p1, dt);
+    maybeSendNetworkPosition();
     if(mode !== 'online'){
       updatePlayer(p2, dt);
       if(p2 && p2.isAI && p2.alive) updateFootballBot(p2, dt);
     } else if(p2){
-      updateRemotePlayerInterpolation(p2, p2SnapshotBuffer);
+      updateRemotePlayerInterpolation(p2, p2SnapshotBuffer, dt);
     }
 
     updateBullets(dt);
@@ -7262,10 +7640,11 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     });
 
     updatePlayer(p1, dt);
+    maybeSendNetworkPosition();
     if(mode !== 'online'){
       updatePlayer(p2, dt);
     } else if(p2){
-      updateRemotePlayerInterpolation(p2, p2SnapshotBuffer);
+      updateRemotePlayerInterpolation(p2, p2SnapshotBuffer, dt);
     }
 
     updateBullets(dt);
@@ -7608,11 +7987,12 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     });
 
     updatePlayer(p1, dt);
+    maybeSendNetworkPosition();
     if(mode !== 'online'){
       updatePlayer(p2, dt);
       if(p2 && p2.isAI && p2.alive) updateBombRunBot(p2, dt);
     } else if(p2){
-      updateRemotePlayerInterpolation(p2, p2SnapshotBuffer);
+      updateRemotePlayerInterpolation(p2, p2SnapshotBuffer, dt);
     }
 
     updateBullets(dt);
@@ -9453,16 +9833,29 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
         d.trail.push({x:d.x, y:d.y, life:0.25});
         resolvePlayerCover(d);
 
+        // Rate-limited to the same cadence as the player's own position
+        // stream. This used to fire on EVERY rendered frame, so a single
+        // active decoy doubled this client's outbound message rate for
+        // its whole lifetime -- and the receiver interpolates it anyway,
+        // so the extra packets bought nothing.
         if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
-          socket.send(JSON.stringify({
-            type:'decoy', x:d.x, y:d.y, facing:d.facing, life:d.life
-          }));
+          const nowMs = performance.now();
+          if(!d.lastNetSendAt || nowMs - d.lastNetSendAt >= NETWORK_SEND_INTERVAL_MS - 1){
+            d.lastNetSendAt = nowMs;
+            socket.send(JSON.stringify({
+              type:'decoy',
+              x: Math.round(d.x * 10) / 10,
+              y: Math.round(d.y * 10) / 10,
+              facing: Math.round(d.facing * 1000) / 1000,
+              life: Math.round(d.life * 100) / 100
+            }));
+          }
         }
       } else {
         // Received over the network -- interpolated from its own
         // snapshot buffer, same technique used for the opponent's real
         // position (see updateRemotePlayerInterpolation).
-        const sample = d.buffer ? sampleSnapshotBuffer(d.buffer, INTERP_DELAY_MS) : null;
+        const sample = d.buffer ? sampleSnapshotBuffer(d.buffer, netQuality.delayMs) : null;
         if(sample){
           d.x = sample.x; d.y = sample.y; d.facing = sample.facing;
         } else {
@@ -9503,10 +9896,70 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
     }
   }
 
+  // ====================================================================
+  // PROJECTILE UPDATE + LAG COMPENSATION
+  //
+  // stepBullet() advances ONE bullet by ONE time step through exactly
+  // the collision rules this game has always used -- walls, ricochets,
+  // Heist bases, cover, decoys, players. It is the old body of
+  // updateBullets, unchanged apart from taking its step length as an
+  // argument and accepting an optional historical position to hit-test
+  // against.
+  //
+  // updateBullets() then does two things with it:
+  //
+  //   * every bullet gets its normal single step of `dt`, exactly as
+  //     before, and
+  //   * a bullet that just arrived over the network is first advanced
+  //     through the time it spent in transit, in small fixed sub-steps,
+  //     so it ends up where the shooter already sees it instead of
+  //     roughly half an RTT behind.
+  //
+  // That second part is the fix for "my shots hit late" and "I dodged
+  // that and still got hit": both clients now draw the same projectile
+  // in the same place at the same moment. It is done in sub-steps
+  // through the SAME collision code so a fast-forwarded shot cannot
+  // tunnel through a wall, a cover, or a Heist base, and hit tests
+  // during it run against our own recorded position at that instant --
+  // never our current one.
+  //
+  // Nothing here decides damage. The server still validates every hit
+  // claim against a shot the opponent really fired, still picks the
+  // damage number, still owns health, shields and eliminations (see
+  // combat.js). This only changes WHERE the bullet is drawn and WHEN
+  // the victim notices -- which is what makes both sides agree.
+  // ====================================================================
+  const LAG_CATCHUP_STEP_S = 1 / 120;  // fine enough that a bullet can't skip a wall
+  const LAG_CATCHUP_MAX_STEPS = 24;    // hard cap: 200ms of catch-up per bullet
+
   function updateBullets(dt){
   for(let i = bullets.length - 1; i >= 0; i--){
     const b = bullets[i];
+    let dead = false;
 
+    if(b.catchUpMs > 0){
+      let remaining = b.catchUpMs / 1000;
+      let simT = b.firedAt;
+      let guard = 0;
+      while(remaining > 1e-6 && guard++ < LAG_CATCHUP_MAX_STEPS && !dead){
+        const step = Math.min(LAG_CATCHUP_STEP_S, remaining);
+        simT += step * 1000;
+        dead = stepBullet(b, step, localStateAt(simT));
+        remaining -= step;
+      }
+      b.catchUpMs = 0;
+    }
+
+    if(!dead) dead = stepBullet(b, dt, null);
+
+    if(dead){
+      bullets.splice(i,1);
+    }
+
+  }
+}
+
+  function stepBullet(b, dt, histTarget){
     b.x += b.vx * dt;
     b.y += b.vy * dt;
 
@@ -9635,10 +10088,19 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
         // so target selection is the same for every mode: a real distance
         // check against the actual player position, never an automatic hit.
         const target = b.owner === 'p1' ? p2 : p1;
+        // LAG COMPENSATION. While a relayed bullet is catching up (see
+        // updateBullets), `histTarget` is where WE actually were at the
+        // moment being simulated -- our own recorded history, never
+        // anything from the network. Testing against our live position
+        // instead would check a shot fired half an RTT ago against a
+        // spot we only reached afterwards. It is null on every ordinary
+        // step and in every offline mode, so this is the existing
+        // behaviour byte for byte outside the catch-up window.
+        const hitAgainst = histTarget || target;
 
-        if(target && target.alive && !target.dashing){
+        if(target && hitAgainst && hitAgainst.alive && !hitAgainst.dashing){
 
-          const dist = Math.hypot(b.x-target.x, b.y-target.y);
+          const dist = Math.hypot(b.x-hitAgainst.x, b.y-hitAgainst.y);
 
           if(dist < BULLET_R+PLAYER_R){
 
@@ -9667,12 +10129,8 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
       }
     }
 
-    if(dead){
-      bullets.splice(i,1);
-    }
-
+    return dead;
   }
-}
 
   function endRound(winnerId){
     // The tutorial's PRACTICE DUEL step reuses this exact function (real
@@ -9791,6 +10249,13 @@ if(gameType === 'football'){
 } else {
 updatePlayer(p1, dt);
 
+// Straight after the local player's own position is computed, so the
+// packet on the wire carries THIS frame's position rather than the
+// previous frame's. Rate-limited internally to the send interval, so
+// this adds no extra packets -- it only removes up to a full send
+// interval of staleness from every one of them.
+maybeSendNetworkPosition();
+
 if(mode !== "online"){
     // During the tutorial's early steps the trainer (p2) stays asleep
     // (not simulated/drawn) until the PRACTICE DUEL step actually
@@ -9803,7 +10268,7 @@ if(mode !== "online"){
     // real time, see updateRemotePlayerInterpolation) instead of a
     // simple exponential smoothing -- eliminates jitter/teleporting
     // between the ~25/sec network updates without snapping.
-    updateRemotePlayerInterpolation(p2, p2SnapshotBuffer);
+    updateRemotePlayerInterpolation(p2, p2SnapshotBuffer, dt);
 }
 
 // FFA extra bots (Classic Mode, local/AI only -- never present online).
