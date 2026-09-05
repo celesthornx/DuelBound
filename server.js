@@ -51,6 +51,7 @@ const Auth = require("./auth");
 // the FRIENDS section further down).
 const Friends = require("./friends");
 const Chat = require("./chat");
+const Catalog = require("./catalog");
 
 const accounts = {}; // sub -> account record (populated in startServer())
 
@@ -695,9 +696,13 @@ function clampField(key, rawValue) {
 // timer that a restart could lose.
 //
 // Trust boundary: PROGRESS counts ride on the same client-authoritative
-// /save path as the account's lifetime kills/wins/credits already do
-// (see the /save handler) -- that trust level is this codebase's
-// existing, deliberate tradeoff, not a new one introduced here. What is
+// /save path as the account's lifetime kills/wins already do (see the
+// /save handler) -- that trust level is this codebase's existing,
+// deliberate tradeoff, not a new one introduced here. Credits are NOT
+// part of that tradeoff any more: /save no longer accepts a
+// client-supplied balance at all (see catalog.js / /shop/buy), so the
+// same lie-about-progress ceiling applies here as everywhere else that
+// reads kills/wins. What is
 // NOT client-trusted is the reward itself: /challenges/claim
 // independently recomputes today's canonical challenge set, checks the
 // account's own stored progress against it, checks the claimed flag,
@@ -2610,6 +2615,81 @@ const httpServer = http.createServer(async (req, res) => {
         return;
     }
 
+    // ---- POST /shop/buy ----
+    // body: { sessionToken, itemType: 'skin'|'power'|'ability', itemId }
+    //
+    // The ONLY way an account's owned-items lists or credit balance can
+    // grow from here on (see /save below, which now refuses to accept
+    // either from the client). Price and existence are checked against
+    // catalog.js -- the server's own copy of what things cost -- never
+    // against anything the client sent. Mirrors /admin/credits' and
+    // /challenges/claim's atomic read-modify-write-then-persist shape,
+    // with the same rollback on a failed write.
+    if (req.method === "POST" && req.url === "/shop/buy") {
+        try {
+            const body = await readJsonBody(req);
+            const sub = sessions[body.sessionToken];
+            if (!sub) {
+                sendJson(res, 401, { error: "Not signed in" });
+                return;
+            }
+            const target = accounts[sub];
+            if (!target) {
+                sendJson(res, 409, { error: "Account not loaded -- sign in again" });
+                return;
+            }
+
+            const ownedField = Catalog.OWNED_FIELD[body.itemType];
+            if (!ownedField) {
+                sendJson(res, 400, { error: "Unknown item type" });
+                return;
+            }
+            const item = Catalog.findItem(body.itemType, body.itemId);
+            if (!item) {
+                sendJson(res, 400, { error: "Unknown item" });
+                return;
+            }
+
+            const owned = Array.isArray(target[ownedField]) ? target[ownedField] : [];
+            if (owned.indexOf(item.id) !== -1) {
+                sendJson(res, 409, { error: "You already own this" });
+                return;
+            }
+
+            const previousBalance = target.credits || 0;
+            if (previousBalance < item.price) {
+                sendJson(res, 400, { error: "Not enough credits" });
+                return;
+            }
+
+            const previousOwned = owned;
+            target.credits = previousBalance - item.price; // atomic decrement, never a client-supplied total
+            target[ownedField] = owned.concat([item.id]);
+            try {
+                await persistAccount(sub);
+            } catch (e) {
+                // Write failed -- put both fields back exactly as they
+                // were, so a failed purchase can never be charged for.
+                target.credits = previousBalance;
+                target[ownedField] = previousOwned;
+                sendJson(res, 503, { error: "Could not save purchase -- try again" });
+                return;
+            }
+
+            sendJson(res, 200, {
+                ok: true,
+                itemType: body.itemType,
+                itemId: item.id,
+                price: item.price,
+                newBalance: target.credits,
+                owned: target[ownedField]
+            });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
     // ---- POST /save ----
     if (req.method === "POST" && req.url === "/save") {
         try {
@@ -2637,9 +2717,10 @@ const httpServer = http.createServer(async (req, res) => {
                 (typeof incoming === "number" && isFinite(incoming) && incoming >= 0)
                     ? Math.floor(incoming) : current;
 
-            // Same client-authoritative trust level as kills/wins/credits
-            // above -- see the DAILY CHALLENGES comment block for why
-            // that's an accepted tradeoff here, not a new one. Rolls to a
+            // Same client-authoritative trust level as kills/wins above
+            // (credits is no longer part of that group -- see /shop/buy)
+            // -- see the DAILY CHALLENGES comment block for why that's
+            // an accepted tradeoff here, not a new one. Rolls to a
             // fresh {progress:0, claimed:{}} first if the stored record is
             // missing or from an earlier day, THEN merges in today's
             // progress if the client sent any -- so a stale/offline
@@ -2657,21 +2738,54 @@ const httpServer = http.createServer(async (req, res) => {
             }
             const newDailyChallenges = { date: dc.date, progress: dailyProgress, claimed: dc.claimed };
 
+            // Equip picks cost nothing, so they stay client-reported --
+            // but ONLY as a choice among items this account genuinely
+            // owns. Anything not present in the account's OWN stored
+            // ownedPowers/ownedAbilities (never body.ownedPowers, which
+            // is not trusted either -- see below) is filtered out, and
+            // the surviving list is capped at how many of that item type
+            // can ever be equipped at once. Without this, a client could
+            // claim {equippedPowers:["kevlar"]} having never bought it
+            // and the server would grant the shield anyway -- combat.js
+            // and shieldsForConnection() read equippedPowers directly.
+            const ownedPowersNow = Array.isArray(existing.ownedPowers) ? existing.ownedPowers : [];
+            const ownedAbilitiesNow = Array.isArray(existing.ownedAbilities) ? existing.ownedAbilities : [];
+            const clampEquip = (incoming, ownedList, max) =>
+                (Array.isArray(incoming) ? incoming : [])
+                    .filter(id => typeof id === "string" && ownedList.indexOf(id) !== -1)
+                    .slice(0, max);
+
             accounts[sub] = {
                 name: existing.name,
                 email: existing.email || "",
-                credits: safeCount(body.credits, existing.credits),
+                // CREDITS AND OWNED-ITEM LISTS ARE DELIBERATELY NOT READ
+                // FROM `body`, for the same field-by-field-rebuild reason
+                // as xp/level/ranked/friends below: anything not carried
+                // here is destroyed by the next routine save, so leaving
+                // these three out means a client POSTing
+                // {credits:999999, ownedSkins:[...everything]} here has
+                // no effect whatsoever. Credits only ever change inside
+                // /shop/buy, /admin/credits and /challenges/claim now;
+                // ownership only ever grows inside /shop/buy.
+                credits: existing.credits,
                 kills: safeCount(body.kills, existing.kills),
                 wins: safeCount(body.wins, existing.wins),
-                ownedSkins: Array.isArray(body.ownedSkins) ? body.ownedSkins : existing.ownedSkins,
-                ownedPowers: Array.isArray(body.ownedPowers) ? body.ownedPowers : existing.ownedPowers,
-                equippedPowers: Array.isArray(body.equippedPowers) ? body.equippedPowers : existing.equippedPowers,
-                equippedPowersP2: Array.isArray(body.equippedPowersP2) ? body.equippedPowersP2 : (existing.equippedPowersP2 || []),
-                ownedAbilities: Array.isArray(body.ownedAbilities) ? body.ownedAbilities : (existing.ownedAbilities || []),
-                equippedAbilities: Array.isArray(body.equippedAbilities) ? body.equippedAbilities : (existing.equippedAbilities || []),
-                equippedAbilitiesP2: Array.isArray(body.equippedAbilitiesP2) ? body.equippedAbilitiesP2 : (existing.equippedAbilitiesP2 || []),
-                p1SkinId: body.p1SkinId || existing.p1SkinId,
-                p2SkinId: body.p2SkinId || existing.p2SkinId,
+                ownedSkins: Array.isArray(existing.ownedSkins) ? existing.ownedSkins : ["cyan", "red"],
+                ownedPowers: ownedPowersNow,
+                equippedPowers: clampEquip(body.equippedPowers, ownedPowersNow, Catalog.MAX_EQUIPPED_POWERS),
+                equippedPowersP2: clampEquip(body.equippedPowersP2, ownedPowersNow, Catalog.MAX_EQUIPPED_POWERS),
+                ownedAbilities: ownedAbilitiesNow,
+                equippedAbilities: clampEquip(body.equippedAbilities, ownedAbilitiesNow, Catalog.MAX_EQUIPPED_ABILITIES),
+                equippedAbilitiesP2: clampEquip(body.equippedAbilitiesP2, ownedAbilitiesNow, Catalog.MAX_EQUIPPED_ABILITIES),
+                // Same reasoning again: a skin can only ever be equipped
+                // if the account's OWN stored ownedSkins already contains
+                // it, so claiming a skin never paid for is worth nothing
+                // -- it draws a hull nobody else's client trusts as paid
+                // for, but it's the last piece of that same class of bug.
+                p1SkinId: (typeof body.p1SkinId === "string" && existing.ownedSkins && existing.ownedSkins.indexOf(body.p1SkinId) !== -1)
+                    ? body.p1SkinId : existing.p1SkinId,
+                p2SkinId: (typeof body.p2SkinId === "string" && existing.ownedSkins && existing.ownedSkins.indexOf(body.p2SkinId) !== -1)
+                    ? body.p2SkinId : existing.p2SkinId,
                 autoAimP1: typeof body.autoAimP1 === "boolean" ? body.autoAimP1 : (existing.autoAimP1 || false),
                 autoAimP2: typeof body.autoAimP2 === "boolean" ? body.autoAimP2 : (existing.autoAimP2 || false),
                 aimMode: (body.aimMode === "mouse" || body.aimMode === "movement") ? body.aimMode : (existing.aimMode || "movement"),
@@ -2711,8 +2825,9 @@ const httpServer = http.createServer(async (req, res) => {
                 // ONLY from the stored record, never from the request.
                 //
                 // That is also exactly what makes ranked tamper-proof
-                // against this endpoint: kills/wins/credits above are
-                // client-authoritative by existing design, but RP, rank,
+                // against this endpoint: kills/wins above are
+                // client-authoritative by existing design (credits is
+                // no longer -- see /shop/buy), but RP, rank,
                 // ranked W/L and placement state can only ever be changed
                 // by the server's own match pipeline (completeRankedMatch).
                 // A client POSTing {ranked:{rp:99999}} here has no effect
