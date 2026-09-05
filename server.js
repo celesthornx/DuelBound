@@ -42,6 +42,7 @@ const store = require("./storage");
 // the match rooms and persistence all live in this file (see the RANKED
 // section further down).
 const Ranked = require("./ranked");
+const Combat = require("./combat");
 
 // Friends data shape, validation and public views. Pure functions only;
 // persistence, presence and the WebSocket wiring live in this file (see
@@ -335,8 +336,29 @@ const XP_REPORT_MIN_INTERVAL_MS = {
     kill: 1500,
     voidbreak_complete: 3000
 };
+// Throttle bookkeeping is per-account and would otherwise keep one entry
+// per account that ever reported XP, for the life of the process. The
+// entries are only meaningful for a few seconds, so anything older than
+// the longest throttle window is swept the next time the map is touched.
+const XP_REPORT_ENTRY_TTL_MS = 60 * 1000;
+let lastXPSweepAt = 0;
+
+function sweepXPReportThrottle(now) {
+    if (now - lastXPSweepAt < XP_REPORT_ENTRY_TTL_MS) return;
+    lastXPSweepAt = now;
+    for (const sub of Object.keys(lastXPReportAt)) {
+        const perSub = lastXPReportAt[sub];
+        let live = false;
+        for (const reason of Object.keys(perSub)) {
+            if (now - perSub[reason] < XP_REPORT_ENTRY_TTL_MS) { live = true; break; }
+        }
+        if (!live) delete lastXPReportAt[sub];
+    }
+}
+
 function xpReportThrottled(sub, reason) {
     const now = Date.now();
+    sweepXPReportThrottle(now);
     const perSub = lastXPReportAt[sub] || (lastXPReportAt[sub] = {});
     const minGap = XP_REPORT_MIN_INTERVAL_MS[reason] || 2000;
     if (perSub[reason] && (now - perSub[reason]) < minGap) return true;
@@ -873,6 +895,17 @@ function createRankedMatch(entryA, entryB) {
 
     setup(1, entryA, entryB);
     setup(2, entryB, entryA);
+
+    // Each ranked room owns its combat state, so health/damage in one
+    // match can never be affected by another. Shields are read from each
+    // player's own account, never from anything they send.
+    match.combat = Combat.createCombatMatch(abilityConfig);
+    for (const slot of [1, 2]) {
+        const acct = accounts[match.players[slot].sub];
+        const kevlar = acct && Array.isArray(acct.equippedPowers) &&
+            acct.equippedPowers.indexOf("kevlar") >= 0;
+        match.combat.setShields(slot, kevlar ? 1 : 0);
+    }
 
     rankedMatches.set(matchId, match);
 
@@ -1996,6 +2029,13 @@ function serveStatic(req, res) {
 // =====================================================================
 const httpServer = http.createServer(async (req, res) => {
 
+    // Network diagnostics, only mounted when DEBUG_NETWORKING=1 -- a
+    // production instance 404s this exactly like any unknown path.
+    if (DEBUG_NETWORKING && req.method === "GET" && req.url === "/__net/stats") {
+        sendJson(res, 200, netSnapshot());
+        return;
+    }
+
     if (req.method === "OPTIONS") {
         sendJson(res, 200, {});
         return;
@@ -3006,6 +3046,52 @@ const wss = new WebSocket.Server({ server: httpServer });
 
 const slots = { 1: null, 2: null };
 
+// ---------------------------------------------------------------------
+// SERVER-AUTHORITATIVE COMBAT
+//
+// Health, shields, damage amounts and eliminations are decided here, not
+// by the clients -- see combat.js for the full rationale and for what
+// deliberately stays client-side. Casual play has one shared match (it
+// has one shared pair of slots); every ranked room gets its own.
+// ---------------------------------------------------------------------
+let casualCombat = Combat.createCombatMatch(abilityConfig);
+
+// Shield charges come from the account's own equipped powers, looked up
+// server-side. A client never gets to say how many free hits it has.
+function shieldsForConnection(conn) {
+    if (!conn || !conn.authSub) return 0;
+    const account = accounts[conn.authSub];
+    if (!account || !Array.isArray(account.equippedPowers)) return 0;
+    return account.equippedPowers.indexOf("kevlar") >= 0 ? 1 : 0;
+}
+
+// Re-reads both sides' loadouts and starts the match's combat state
+// fresh. Called when a casual pairing forms and whenever a match or
+// round restarts.
+function resetCasualCombat() {
+    casualCombat.resetMatch();
+    for (const slot of [1, 2]) {
+        if (slots[slot]) casualCombat.setShields(slot, shieldsForConnection(slots[slot]));
+    }
+}
+
+// Sends one authoritative health line to both sides of a match. Both
+// clients render exactly this -- neither computes its own.
+function broadcastHealth(a, b, result) {
+    const payload = {
+        type: "health",
+        slot: result.slot,
+        by: result.by,
+        health: result.health,
+        shields: result.shields,
+        blocked: result.blocked,
+        eliminated: result.eliminated,
+        kind: result.kind
+    };
+    send(a, payload);
+    send(b, payload);
+}
+
 // =====================================================================
 // HEIST MODE -- server-authoritative base health.
 // Unlike position/damage/shockwave (which are relayed and trusted to
@@ -3047,9 +3133,101 @@ function otherId(id) {
     return id === 1 ? 2 : 1;
 }
 
+// =====================================================================
+// NETWORK DIAGNOSTICS (opt-in)
+//
+// Off by default and, when off, costs one boolean test per message --
+// no counters, no allocation, no logging. Turn on with
+// DEBUG_NETWORKING=1 in the environment, then read GET /__net/stats
+// (which also stays 404 unless the flag is set, so it can't leak
+// anything about a production instance).
+//
+// Deliberately counts only what this server actually does: it has no
+// gameplay tick to time, because casual/ranked play is a MESSAGE RELAY
+// -- see the WEBSOCKET RELAY section. "tick duration" therefore doesn't
+// exist here; relay handling time per message is the equivalent number,
+// and that's what's sampled.
+// =====================================================================
+const DEBUG_NETWORKING = process.env.DEBUG_NETWORKING === "1";
+
+const netStats = {
+    startedAt: Date.now(),
+    msgsIn: 0, msgsOut: 0,
+    bytesIn: 0, bytesOut: 0,
+    maxPacketIn: 0, maxPacketOut: 0,
+    // Relay handling time (parse + route + forward) in ms, sampled.
+    handleMs: [],
+    byType: Object.create(null)
+};
+
+function netRecordIn(type, bytes) {
+    netStats.msgsIn++;
+    netStats.bytesIn += bytes;
+    if (bytes > netStats.maxPacketIn) netStats.maxPacketIn = bytes;
+    netStats.byType[type] = (netStats.byType[type] || 0) + 1;
+}
+function netRecordHandle(ms) {
+    netStats.handleMs.push(ms);
+    if (netStats.handleMs.length > 5000) netStats.handleMs.shift();
+}
+function netSnapshot() {
+    const s = netStats.handleMs.slice().sort((a, b) => a - b);
+    const q = p => (s.length ? +s[Math.min(s.length - 1, Math.floor(s.length * p))].toFixed(3) : 0);
+    const secs = Math.max(1, (Date.now() - netStats.startedAt) / 1000);
+    let sockets = 0;
+    wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) sockets++; });
+    return {
+        uptimeSec: Math.round(secs),
+        sockets: sockets,
+        casualSlotsUsed: (slots[1] ? 1 : 0) + (slots[2] ? 1 : 0),
+        rankedMatches: rankedMatches.size,
+        rankedQueued: rankedQueue.size,
+        presenceAccounts: presence.size,
+        msgsInPerSec: +(netStats.msgsIn / secs).toFixed(1),
+        msgsOutPerSec: +(netStats.msgsOut / secs).toFixed(1),
+        kbInPerSec: +(netStats.bytesIn / secs / 1024).toFixed(2),
+        kbOutPerSec: +(netStats.bytesOut / secs / 1024).toFixed(2),
+        avgPacketIn: netStats.msgsIn ? Math.round(netStats.bytesIn / netStats.msgsIn) : 0,
+        avgPacketOut: netStats.msgsOut ? Math.round(netStats.bytesOut / netStats.msgsOut) : 0,
+        maxPacketIn: netStats.maxPacketIn,
+        maxPacketOut: netStats.maxPacketOut,
+        relayHandleMs: { p50: q(.5), p95: q(.95), p99: q(.99), max: s.length ? +s[s.length - 1].toFixed(3) : 0 },
+        byType: netStats.byType
+    };
+}
+
+// Wraps the relay's message handler so DEBUG_NETWORKING can measure
+// per-message handling time and byte counts in ONE place, instead of
+// threading a branch through every route inside it. When the flag is
+// off this returns the original function unchanged -- literally the
+// same reference, so there is no wrapper, no timing call and no
+// measurable cost on the hot path.
+function instrumentMessage(handler) {
+    if (!DEBUG_NETWORKING) return handler;
+    return function (raw) {
+        const t0 = process.hrtime.bigint();
+        const bytes = typeof raw === "string" ? Buffer.byteLength(raw) : raw.length;
+        let type = "?";
+        try { type = (JSON.parse(raw.toString()) || {}).type || "?"; } catch (e) {}
+        netRecordIn(type, bytes);
+        try {
+            return handler.apply(this, arguments);
+        } finally {
+            netRecordHandle(Number(process.hrtime.bigint() - t0) / 1e6);
+        }
+    };
+}
+
 function send(player, obj) {
     if (player && player.socket.readyState === WebSocket.OPEN) {
-        player.socket.send(JSON.stringify(obj));
+        const payload = JSON.stringify(obj);
+        if (DEBUG_NETWORKING) {
+            netStats.msgsOut++;
+            const b = Buffer.byteLength(payload);
+            netStats.bytesOut += b;
+            if (b > netStats.maxPacketOut) netStats.maxPacketOut = b;
+        }
+        player.socket.send(payload);
     }
 }
 
@@ -3117,6 +3295,9 @@ wss.on("connection", (socket, request) => {
 
         const opponent = slots[otherId(id)];
         if (opponent) {
+            // A fresh pairing starts from full health, with each side's
+            // shields read from its own account (see resetCasualCombat).
+            resetCasualCombat();
             send(conn, { type: "opponentJoined" });
             send(opponent, { type: "opponentJoined" });
         }
@@ -3132,7 +3313,7 @@ wss.on("connection", (socket, request) => {
 
     const player = conn; // keep the original name for the relay code below
 
-    socket.on("message", raw => {
+    socket.on("message", instrumentMessage(raw => {
 
         let data;
         try {
@@ -3294,18 +3475,28 @@ wss.on("connection", (socket, request) => {
 
             if (data.type === "position" && typeof data.seq === "number") conn.lastSeq = data.seq;
 
-            // The elimination report. `data.eliminated` on a `damage`
-            // message means "MY player just died" -- so the round goes
-            // to the opponent. This is the server's own count; the
-            // clients are never asked, and never believed, about who won.
-            if (data.type === "damage" && data.eliminated) {
-                send(foe.conn, {
-                    type: "damage",
-                    health: data.health,
-                    shieldCharges: data.shieldCharges,
-                    eliminated: true
-                });
-                registerRankedElimination(match, conn.rankedSlot);
+            // Projectiles are registered so a hit claim can be checked
+            // against something that was really fired.
+            if (data.type === "bullet") match.combat.trackBullet(conn.rankedSlot, data, Date.now());
+            else if (data.type === "shockwave") match.combat.trackShockwave(conn.rankedSlot, Date.now());
+
+            // A hit claim. Previously the round went to the opponent
+            // because the losing client SAID "eliminated: true" -- so a
+            // client that simply never sent it could not lose a round.
+            // Now the server applies the damage itself and decides when
+            // someone is dead, which is what actually decides the round.
+            // ("damage" is the pre-authoritative name for the same
+            // event, still accepted across a redeploy; its health and
+            // eliminated fields are ignored.)
+            if (data.type === "hitClaim" || data.type === "damage") {
+                const result = match.combat.claimHit(conn.rankedSlot, Date.now());
+                if (result.accepted) {
+                    broadcastHealth(conn, foe.conn, result);
+                    if (result.eliminated) {
+                        match.combat.resetRound();
+                        registerRankedElimination(match, conn.rankedSlot);
+                    }
+                }
                 return;
             }
 
@@ -3361,6 +3552,12 @@ wss.on("connection", (socket, request) => {
 
         else if (data.type === "bullet") {
 
+            // Every projectile is registered as a damage source so a hit
+            // claim can be checked against something that was really
+            // fired (see combat.js). The damage VALUE is taken from the
+            // server's own config there, never from this message.
+            casualCombat.trackBullet(id, data, Date.now());
+
             send(opponent, {
                 type: "bullet",
                 x: data.x,
@@ -3374,18 +3571,38 @@ wss.on("connection", (socket, request) => {
             });
         }
 
-        // The player who actually got hit reports every real hit here --
-        // chip damage or a round-ending elimination -- so the opponent's
-        // health bar and hit sound both stay in sync with what truly
-        // happened, not just what looked like it happened on their screen.
-        else if (data.type === "damage") {
+        // A hit claim. The player who was hit is still the one who
+        // DETECTS it (their own position is the only view of it that
+        // isn't network-delayed), but that is all they get to say: this
+        // message carries no health, no damage and no "I died". The
+        // server checks the claim against shots the opponent really
+        // fired, decides the damage from its own config, applies it, and
+        // tells BOTH clients the resulting numbers.
+        //
+        // "damage" is the pre-authoritative name for the same event and
+        // is still accepted so a client left open across a redeploy
+        // keeps working; its health/eliminated fields are ignored.
+        else if (data.type === "hitClaim" || data.type === "damage") {
 
-            send(opponent, {
-                type: "damage",
-                health: data.health,
-                shieldCharges: data.shieldCharges,
-                eliminated: data.eliminated
-            });
+            const result = casualCombat.claimHit(id, Date.now());
+            if (result.accepted) {
+                broadcastHealth(player, opponent, result);
+                // The round is over the moment the server says someone
+                // died, so the next round starts from full health. Any
+                // shot still tracked from the old round is dropped with
+                // it, so it cannot land after the reset.
+                if (result.eliminated) casualCombat.resetRound();
+            }
+        }
+
+        // A respawn in the modes where death is not the end of a round
+        // (Football / Heist / Bomb Run) restores that player's health
+        // server-side, so the authoritative numbers match what their
+        // client is about to draw.
+        else if (data.type === "footballRespawn" || data.type === "heistRespawn" || data.type === "bombRespawn") {
+
+            casualCombat.resetRound();
+            send(opponent, data);
         }
 
         // Tells the opponent which skin color to render you as, instead
@@ -3403,6 +3620,8 @@ wss.on("connection", (socket, request) => {
         // position) whether it actually hit them -- same trust model as
         // bullets and damage.
         else if (data.type === "shockwave") {
+
+            casualCombat.trackShockwave(id, Date.now());
 
             send(opponent, {
                 type: "shockwave",
@@ -3442,6 +3661,7 @@ wss.on("connection", (socket, request) => {
         // relay below), so it gets its own branch ahead of it.
         else if (data.type === "heistReset") {
 
+            resetCasualCombat();
             resetHeistState();
             const payload = { type: "heistUpdate", hp: heistHP, destroyed: false, winner: null };
             send(player, payload);
@@ -3481,6 +3701,7 @@ wss.on("connection", (socket, request) => {
         // score reset to 0/0. Mirrors heistReset above exactly.
         else if (data.type === "bombReset") {
 
+            resetCasualCombat();
             resetBombState();
             const payload = { type: "bombUpdate", carrier: null, x: null, y: null };
             send(player, payload);
@@ -3569,10 +3790,11 @@ wss.on("connection", (socket, request) => {
 
         else if (data.type === "rematch") {
 
+            resetCasualCombat();
             send(opponent, { type: "rematch" });
         }
 
-    });
+    }));
 
     socket.on("close", () => {
 
@@ -3680,5 +3902,22 @@ async function startServer() {
         console.log("or http://<this computer's LAN IP>:" + PORT + " on the other player's computer.");
     });
 }
+
+// Account writes are coalesced behind a short window so gameplay bursts
+// don't hammer the disk (see storage.js). A redeploy/restart must not
+// drop whatever is still inside that window, so flush it on the way out.
+// Render sends SIGTERM before replacing an instance.
+let shuttingDown = false;
+function shutdown(signal) {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    store.flushPendingWrites()
+        .catch(e => console.log("[storage] flush on " + signal + " failed:", e.message))
+        .then(() => process.exit(0));
+    // Never hang the container waiting on a stuck disk.
+    setTimeout(() => process.exit(0), 3000).unref();
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
 
 startServer();

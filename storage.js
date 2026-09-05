@@ -27,6 +27,7 @@
 // =====================================================================
 
 const fs = require("fs");
+const fsp = require("fs").promises;
 const path = require("path");
 
 const DATABASE_URL = process.env.DATABASE_URL || "";
@@ -77,10 +78,25 @@ function readJsonFileStrict(file, fallback) {
 // Atomic write: a full write to a temp file followed by a rename, which
 // is atomic on POSIX. A crash can leave the temp file behind but can
 // never leave the real store half-written.
+//
+// SYNCHRONOUS version -- boot only (seeding a fresh store, pruning
+// expired sessions at startup). Nothing is being served yet at those
+// points, so blocking is free. It must NEVER be used on a request or
+// gameplay path: it blocks the single Node event loop, which stalls
+// every in-flight WebSocket relay packet for its whole duration.
 function writeJsonFileAtomic(file, value) {
     const tmp = file + ".tmp-" + process.pid;
-    fs.writeFileSync(tmp, JSON.stringify(value, null, 2));
+    fs.writeFileSync(tmp, JSON.stringify(value));
     fs.renameSync(tmp, file);
+}
+
+// ASYNCHRONOUS version -- everything after boot. Same tmp+rename
+// atomicity, but the serialize and the disk write both yield instead of
+// blocking, so a save can never freeze the real-time relay.
+async function writeJsonFileAtomicAsync(file, value) {
+    const tmp = file + ".tmp-" + process.pid;
+    await fsp.writeFile(tmp, JSON.stringify(value));
+    await fsp.rename(tmp, file);
 }
 
 // Serializes writes per key so two overlapping saves can never interleave
@@ -96,6 +112,74 @@ function makeWriteQueue() {
     };
 }
 
+// Coalesces rapid successive saves of the SAME key into ONE physical
+// write. The file backend rewrites the whole accounts file per save, and
+// gameplay fires several saves back to back -- a single kill triggers
+// both /save and /xp/report, a round win another -- so without this the
+// disk is hit once per game event instead of once per burst.
+//
+// The contract callers already depend on is preserved exactly: the
+// promise returned resolves only once THIS caller's data has actually
+// reached disk, and rejects if that write failed (server.js's /save
+// rolls its in-memory record back on rejection, so a false "saved" here
+// would silently desync the cache from the store).
+//
+// The batching is self-regulating rather than timer-based: a save with
+// no write in flight goes out on the next tick (so an idle server still
+// responds in ~1ms), while saves that arrive DURING a write pile into
+// one batch that goes out when it finishes. Coalescing therefore kicks
+// in exactly when the disk is the bottleneck and costs nothing when it
+// isn't -- no fixed delay is ever added to a quiet server.
+function makeCoalescingWriter() {
+    const pending = new Map();  // key -> { waiters, write, scheduled }
+    const running = new Map();  // key -> promise for a flush already on disk
+
+    function flush(key) {
+        const entry = pending.get(key);
+        if (!entry) return Promise.resolve();
+        pending.delete(key);
+
+        // Never let two flushes of the same key overlap or land out of
+        // order -- chain each one behind the previous.
+        const prev = running.get(key) || Promise.resolve();
+        const task = prev.then(() => entry.write(), () => entry.write());
+        running.set(key, task.then(() => {}, () => {}));
+        return task.then(
+            () => { for (const w of entry.waiters) w.resolve(); },
+            (e) => { for (const w of entry.waiters) w.reject(e); }
+        );
+    }
+
+    return {
+        // `write` is re-supplied on every call so a flush always persists
+        // the LATEST snapshot, never a stale one captured earlier.
+        save(key, write) {
+            let entry = pending.get(key);
+            if (!entry) {
+                entry = { waiters: [], write: write, scheduled: false };
+                pending.set(key, entry);
+            }
+            entry.write = write;
+            const p = new Promise((resolve, reject) => entry.waiters.push({ resolve, reject }));
+            if (!entry.scheduled) {
+                entry.scheduled = true;
+                // Next tick, not a timer: everything queued in this same
+                // turn of the event loop (a kill fires /save AND
+                // /xp/report) collapses into a single physical write,
+                // without delaying a lone save at all.
+                const inFlight = running.get(key);
+                if (inFlight) inFlight.then(() => flush(key));
+                else setImmediate(() => flush(key));
+            }
+            return p;
+        },
+        // Used on shutdown so nothing still queued is lost.
+        flushAll() {
+            return Promise.all(Array.from(pending.keys()).map(flush));
+        }
+    };
+}
+
 // ---------------------------------------------------------------------
 // FILE BACKEND -- local dev, and Render Persistent Disk via DATA_DIR
 // ---------------------------------------------------------------------
@@ -103,7 +187,7 @@ function createFileBackend() {
     const accountsFile = path.join(DATA_DIR, "accounts.json");
     const sessionsFile = path.join(DATA_DIR, "sessions.json");
     const docsDir = DATA_DIR;
-    const enqueue = makeWriteQueue();
+    const coalesced = makeCoalescingWriter();
 
     // In-memory mirrors so a single save doesn't have to re-read the
     // whole file (and can't lose a concurrent write to another key).
@@ -135,10 +219,12 @@ function createFileBackend() {
         },
 
         async saveAccount(sub, record) {
+            // The cache is the source of truth the rest of the server
+            // reads, so it updates synchronously and immediately; only
+            // the disk write is deferred/coalesced.
             accountsCache[sub] = record;
-            return enqueue("accounts", () => {
-                writeJsonFileAtomic(accountsFile, accountsCache);
-            });
+            return coalesced.save("accounts", () =>
+                writeJsonFileAtomicAsync(accountsFile, accountsCache));
         },
 
         async loadDoc(key, fallback) {
@@ -147,9 +233,8 @@ function createFileBackend() {
         },
 
         async saveDoc(key, value) {
-            return enqueue("doc:" + key, () => {
-                writeJsonFileAtomic(path.join(docsDir, key + ".json"), value);
-            });
+            return coalesced.save("doc:" + key, () =>
+                writeJsonFileAtomicAsync(path.join(docsDir, key + ".json"), value));
         },
 
         // Sessions are disposable -- the worst case for losing them is
@@ -180,9 +265,14 @@ function createFileBackend() {
 
         async saveSession(token, record) {
             sessionsCache[token] = record;
-            return enqueue("sessions", () => {
-                writeJsonFileAtomic(sessionsFile, sessionsCache);
-            });
+            return coalesced.save("sessions", () =>
+                writeJsonFileAtomicAsync(sessionsFile, sessionsCache));
+        },
+
+        // Lets the process flush anything still sitting in the coalescing
+        // window before exiting, so a restart can't drop the last save.
+        flushPendingWrites() {
+            return coalesced.flushAll();
         }
     };
 }
@@ -342,5 +432,10 @@ module.exports = {
     loadDoc: (key, fallback) => backend.loadDoc(key, fallback),
     saveDoc: (key, value) => backend.saveDoc(key, value),
     loadValidSessions: () => backend.loadValidSessions(),
-    saveSession: (token, record) => backend.saveSession(token, record)
+    saveSession: (token, record) => backend.saveSession(token, record),
+    // Only the file backend batches writes behind a short coalescing
+    // window; Postgres writes go straight out, so there is nothing to
+    // flush there and this is a no-op.
+    flushPendingWrites: () =>
+        backend.flushPendingWrites ? backend.flushPendingWrites() : Promise.resolve()
 };
