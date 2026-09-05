@@ -52,6 +52,7 @@ const Auth = require("./auth");
 const Friends = require("./friends");
 const Chat = require("./chat");
 const Catalog = require("./catalog");
+const Billing = require("./billing");
 
 const accounts = {}; // sub -> account record (populated in startServer())
 
@@ -117,7 +118,17 @@ function defaultAccount(name, email) {
     return {
         name: name,
         email: email || "",
-        credits: 100,
+        // COINS -- the free, earned-by-playing currency (was called
+        // "Credits" before the rename; see ensureAccountCurrency() for
+        // how an existing account's stored `credits` value becomes
+        // this field without losing its balance).
+        coins: 100,
+        // CRYSTALS -- the premium currency, sold in fixed packages via
+        // Stripe Checkout (see billing.js). A brand-new account always
+        // starts at 0; there is no free way to earn Crystals by design
+        // -- see /admin/currency for the one exception (a logged,
+        // reason-required manual adjustment).
+        crystals: 0,
         kills: 0,
         wins: 0,
         ownedSkins: ["cyan", "red"],
@@ -343,42 +354,55 @@ function computeLevelFromXP(totalXp) {
 
 // Same trust boundary as Daily Challenges' reward grant and the ranked
 // pipeline: this is the ONLY function that actually changes an
-// account's xp, it NEVER accepts a client-supplied amount (every call
-// site below passes a fixed, server-decided number for a fixed reason
-// string), and it does the same atomic read-modify-write-then-persist-
-// with-rollback as /challenges/claim. Returns null if the account
-// doesn't exist; otherwise the account's new xp/level plus enough
-// about what changed for a caller to show "+N XP" / "LEVEL UP" feedback.
-async function awardXP(sub, amount, reason) {
+// account's xp (and, now, its coins), it NEVER accepts a client-
+// supplied amount for either (every call site below passes a fixed,
+// server-decided number for a fixed reason string), and it does the
+// same atomic read-modify-write-then-persist-with-rollback as
+// /challenges/claim. Returns null if the account doesn't exist;
+// otherwise the account's new xp/level/coins plus enough about what
+// changed for a caller to show "+N XP" / "+N COINS" / "LEVEL UP"
+// feedback.
+//
+// coinAmount defaults to 0 so every pre-existing call site that hasn't
+// been given a COIN_REWARDS lookup yet (there are none left, but this
+// keeps the function safe against a future one) simply awards no coins
+// rather than throwing.
+async function awardXP(sub, amount, reason, coinAmount) {
     const account = accounts[sub];
     if (!account) return null;
     amount = Math.max(0, Math.floor(amount) || 0);
-    if (amount === 0) {
+    coinAmount = Math.max(0, Math.floor(coinAmount) || 0);
+    if (amount === 0 && coinAmount === 0) {
         const cur = computeLevelFromXP(account.xp || 0);
-        return { awarded: 0, reason: reason, totalXp: account.xp || 0, level: cur.level, xpIntoLevel: cur.xpIntoLevel, xpForNextLevel: cur.xpForNextLevel, leveledUp: false, levelsGained: 0 };
+        return { awarded: 0, coinsAwarded: 0, reason: reason, totalXp: account.xp || 0, totalCoins: account.coins || 0, level: cur.level, xpIntoLevel: cur.xpIntoLevel, xpForNextLevel: cur.xpForNextLevel, leveledUp: false, levelsGained: 0 };
     }
 
     const previousXp = account.xp || 0;
     const previousLevel = account.level || 1;
+    const previousCoins = account.coins || 0;
     const newTotal = previousXp + amount;
     const derived = computeLevelFromXP(newTotal);
 
     account.xp = newTotal;
     account.level = derived.level;
+    account.coins = previousCoins + coinAmount;
 
     try {
         await persistAccount(sub);
     } catch (e) {
         account.xp = previousXp; // write failed -- undo the in-memory grant
         account.level = previousLevel;
-        console.log("[xp] failed to persist XP award for " + sub + ":", e.message);
+        account.coins = previousCoins;
+        console.log("[xp] failed to persist XP/coin award for " + sub + ":", e.message);
         return null;
     }
 
     return {
         awarded: amount,
+        coinsAwarded: coinAmount,
         reason: reason,
         totalXp: newTotal,
+        totalCoins: account.coins,
         level: derived.level,
         xpIntoLevel: derived.xpIntoLevel,
         xpForNextLevel: derived.xpForNextLevel,
@@ -389,18 +413,110 @@ async function awardXP(sub, amount, reason) {
 
 // Convenience wrapper for the fully server-authoritative award sites
 // (Heist base destroyed, Bomb Run match won, Ranked match complete) --
-// awards XP to the account behind a live casual WebSocket connection
-// (identified via conn.authSub, set by presence_hello -- see the
-// "Casual connection identity" section below) and, if that socket is
-// still open, tells its own client right away via a small `xpAward`
-// message so the in-match/lobby toast can show up without a poll.
-// Silently does nothing if the connection was never authenticated
-// (a guest with no account has nothing to award XP to) -- calling code
-// never needs its own "is this player signed in" branch.
-async function awardXPAndNotify(conn, amount, reason) {
+// awards XP+Coins to the account behind a live casual WebSocket
+// connection (identified via conn.authSub, set by presence_hello -- see
+// the "Casual connection identity" section below) and, if that socket
+// is still open, tells its own client right away via a small `xpAward`
+// message (it now also carries coinsAwarded/totalCoins) so the
+// in-match/lobby toast can show up without a poll. Silently does
+// nothing if the connection was never authenticated (a guest with no
+// account has nothing to award) -- calling code never needs its own
+// "is this player signed in" branch.
+async function awardXPAndNotify(conn, amount, reason, coinAmount) {
     if (!conn || !conn.authSub) return;
-    const result = await awardXP(conn.authSub, amount, reason);
+    const result = await awardXP(conn.authSub, amount, reason, coinAmount);
     if (result) send(conn, Object.assign({ type: "xpAward" }, result));
+}
+
+// ---------------------------------------------------------------------
+// The one function that actually grants Crystals for a real-money
+// purchase. Called ONLY from the Stripe webhook handler, and only
+// after that handler has already verified the event's signature --
+// this function itself does not re-verify anything about Stripe, but
+// it DOES independently re-validate the metadata against billing.js's
+// own package list (never trusting the numbers in the event alone),
+// and it claims the idempotency slot in the purchase ledger BEFORE
+// touching the account, so a duplicate delivery of the same webhook
+// event (Stripe's own retry behavior, or two instances racing) grants
+// Crystals at most once. Never called with anything the CLIENT sent
+// directly -- `session` here is Stripe's own object, reached only
+// through a signature-verified webhook event.
+// ---------------------------------------------------------------------
+async function grantCrystalsForCheckoutSession(session) {
+    const sessionId = session && session.id;
+    if (!sessionId) return;
+
+    const metadata = session.metadata || {};
+    const accountId = metadata.accountId;
+    const packageId = metadata.packageId;
+    const crystals = parseInt(metadata.crystals, 10);
+
+    if (typeof accountId !== "string" || !accountId ||
+        typeof packageId !== "string" || !Number.isInteger(crystals) || crystals <= 0) {
+        console.log("[billing] session " + sessionId + " has missing/invalid metadata -- refusing to grant");
+        return;
+    }
+
+    // Re-derived from OUR OWN package list, never trusted from the
+    // event alone -- metadata could only ever have been set by this
+    // server's own createCheckoutSession(), but this is the second,
+    // independent check that what's about to be granted matches a
+    // real, currently-defined package.
+    const pkg = Billing.findPackage(packageId);
+    if (!pkg || pkg.crystals !== crystals) {
+        console.log("[billing] session " + sessionId + "'s metadata does not match a real package -- refusing to grant");
+        return;
+    }
+
+    const amountUsdCents = typeof session.amount_total === "number" ? session.amount_total : pkg.usdCents;
+
+    // Claims this session id in the ledger FIRST, atomically (see
+    // storage.js). A null return means it was already there -- this
+    // exact session has already been processed, by this delivery or an
+    // earlier duplicate of it, so stop here WITHOUT crediting anything.
+    const claimed = await store.recordPurchaseIfNew({
+        sessionId: sessionId,
+        accountId: accountId,
+        paymentIntentId: session.payment_intent || null,
+        packageId: pkg.id,
+        crystals: pkg.crystals,
+        amountUsdCents: amountUsdCents,
+        status: "granted"
+    });
+    if (!claimed) {
+        console.log("[billing] session " + sessionId + " already processed -- not granting Crystals again");
+        return;
+    }
+
+    const account = accounts[accountId];
+    if (!account) {
+        // Genuinely nowhere to put the Crystals (the account was
+        // deleted, or the metadata pointed at something stale). Marked
+        // distinctly in the ledger so this is auditable rather than
+        // silently lost.
+        await store.updatePurchase(sessionId, { status: "account_missing" }).catch(() => {});
+        console.log("[billing] session " + sessionId + " references unknown account " + accountId);
+        return;
+    }
+
+    const previousBalance = account.crystals || 0;
+    account.crystals = previousBalance + pkg.crystals;
+    try {
+        await persistAccount(accountId);
+    } catch (e) {
+        account.crystals = previousBalance; // undo the in-memory grant
+        // The ledger still says "granted" from the claim above -- mark
+        // it as a failed grant instead so it's visible for manual
+        // reconciliation (see /admin/currency) rather than silently
+        // stuck. This narrow window (ledger claimed, account write
+        // failed) is the one place a real cross-table transaction would
+        // remove entirely; documented here rather than hidden.
+        await store.updatePurchase(sessionId, { status: "grant_failed" }).catch(() => {});
+        console.log("[billing] FAILED to persist Crystal grant for " + accountId + " (session " + sessionId + "):", e.message);
+        return;
+    }
+
+    console.log("[billing] granted " + pkg.crystals + " crystals to " + accountId + " (session " + sessionId + ", $" + (amountUsdCents / 100).toFixed(2) + ")");
 }
 
 // Brings an account up to the current XP shape -- exactly the same
@@ -429,6 +545,71 @@ function ensureAccountXP(sub) {
     return { level: account.level, xp: account.xp };
 }
 
+// ---------------------------------------------------------------------
+// CURRENCY MIGRATION -- "Credits" -> "Coins", plus adding Crystals.
+//
+// This is a rename of the SAME balance, not a reset: an account's old
+// `credits` NUMBER becomes its new `coins` number, unchanged, and the
+// old field is then removed (this codebase fully owns the account
+// record's shape end to end, so there is no external reader anywhere
+// still expecting `credits` -- a clean rename is safe here in a way it
+// would not be against a public API). Idempotent and never destructive,
+// same as ensureAccountXP/ensureAccountRanked/ensureFriendsRecord above:
+// an account that has already been migrated (has a numeric `coins`, no
+// `credits`) is left completely alone.
+//
+// Called once, at boot, over every account already in the loaded cache
+// (see migrateAllAccountsCurrency() below) -- unlike ensureAccountXP,
+// this never needs a second per-request call site, because every
+// account that will EVER exist after boot is either (a) already in the
+// cache and covered by that one pass, or (b) created fresh afterwards
+// via defaultAccount(), which already starts with coins/crystals in the
+// new shape and so never needs migrating at all.
+function ensureAccountCurrency(sub) {
+    const account = accounts[sub];
+    if (!account) return false;
+    let dirty = false;
+
+    if (typeof account.coins !== "number" || !isFinite(account.coins) || account.coins < 0) {
+        // The old balance, if this account predates the rename.
+        // Preserved exactly -- this is a rename, never a reset.
+        account.coins = (typeof account.credits === "number" && isFinite(account.credits) && account.credits >= 0)
+            ? Math.floor(account.credits) : 0;
+        dirty = true;
+    }
+    if (Object.prototype.hasOwnProperty.call(account, "credits")) {
+        delete account.credits; // the rename is complete; nothing reads this field any more
+        dirty = true;
+    }
+    if (typeof account.crystals !== "number" || !isFinite(account.crystals) || account.crystals < 0) {
+        account.crystals = 0; // every existing account gets crystals:0, never crystals:undefined
+        dirty = true;
+    }
+
+    return dirty;
+}
+
+// Runs the migration above over every account already in memory --
+// called once at boot, right after the store's accounts are loaded (see
+// startServer()), so the leaderboard/admin panel/every sign-in shows
+// the renamed field immediately rather than only after that ONE
+// account happens to be touched again. Mirrors reconcileFriendships()'s
+// "normalise everything once, persist only what actually changed" shape.
+function migrateAllAccountsCurrency() {
+    let migrated = 0;
+    for (const sub of Object.keys(accounts)) {
+        if (ensureAccountCurrency(sub)) {
+            migrated++;
+            persistAccount(sub).catch(e =>
+                console.log("[currency] migration write failed for " + sub + ":", e.message));
+        }
+    }
+    if (migrated) {
+        console.log("[currency] migrated " + migrated + " account(s): credits -> coins" +
+            (migrated ? ", crystals:0 added where missing" : ""));
+    }
+}
+
 // Fixed, server-decided XP amounts. This is the ONE place XP values for
 // each event live, per the "centralized so it's easy to rebalance"
 // requirement -- nothing else in this file hardcodes an XP number.
@@ -437,11 +618,45 @@ const XP_REWARDS = {
     match_win: 40,
     kill: 4,
     football_goal: 12,
+    // Bomb Run mirrors Football everywhere else in this codebase (goal
+    // scored, match won) but was missing this one XP entry -- a goal
+    // never granted XP at all, purely an oversight from when Bomb Run
+    // was added. Given the SAME value as football_goal since the two
+    // modes are treated as equivalent everywhere else.
+    bombrun_goal: 12,
     heist_win: 50,
     bombrun_win: 50,
     ranked_win: 60,
     ranked_loss: 10,
     voidbreak_complete: 80
+};
+
+// COINS earned for the same fixed set of reasons XP already is, so both
+// currencies flow through the identical trust boundary/throttle
+// (/xp/report below) with zero new endpoints. Values match what
+// index.html used to add to its own local `credits` variable before
+// the server-authoritative shop rewrite made that number stop actually
+// persisting -- this table is what makes "receiving Coins" for a kill
+// or a match win real again, server-side, rather than a client-side
+// number that silently never reached the account.
+//
+// round_win/ranked_win/ranked_loss/voidbreak_complete are 0 on purpose:
+// none of those ever paid out Coins/Credits in this game either, only
+// XP -- this table preserves that, it does not invent new income.
+// match_win's FULL amount (including the classic-mode FFA player-count
+// bonus) is computed in the /xp/report handler, not looked up flatly
+// from here -- see the handler for why.
+const COIN_REWARDS = {
+    round_win: 0,
+    match_win: 40,
+    kill: 15,
+    football_goal: 15,
+    bombrun_goal: 15,
+    heist_win: 50,
+    bombrun_win: 50,
+    ranked_win: 0,
+    ranked_loss: 0,
+    voidbreak_complete: 0
 };
 // A single client report can claim at most this many "kill" units at
 // once (see the /xp/report handler) -- a real match cannot produce an
@@ -470,6 +685,7 @@ const XP_REPORT_MIN_INTERVAL_MS = {
     round_win: 3000,
     match_win: 3000,
     football_goal: 800,
+    bombrun_goal: 800,
     kill: 1500,
     voidbreak_complete: 3000
 };
@@ -565,6 +781,38 @@ function verifyGoogleToken(idToken) {
             });
         }).on("error", reject);
     });
+}
+
+// Raw-bytes body reader for the ONE route that needs it (the Stripe
+// webhook, below): Stripe signs the exact bytes it sent, so verifying
+// that signature against a re-serialized JSON.parse/stringify round
+// trip (which can reorder keys or change whitespace) would fail a
+// perfectly genuine event. Returns a Buffer, never a decoded string.
+function readRawBody(req) {
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+        let size = 0;
+        req.on("data", chunk => {
+            size += chunk.length;
+            if (size > 1e6) { req.destroy(); return; } // Stripe events are small; this is a basic size guard
+            chunks.push(chunk);
+        });
+        req.on("end", () => resolve(Buffer.concat(chunks)));
+        req.on("error", reject);
+    });
+}
+
+// The origin (scheme + host) this request itself arrived on, used to
+// build Stripe's success/cancel redirect URLs so they always point
+// back at whatever this game is actually being served from -- this
+// deployment's Render URL, a custom domain, or localhost in dev --
+// without a separate PUBLIC_ORIGIN env var to keep in sync by hand.
+// Render's proxy sets x-forwarded-proto; a direct local connection has
+// neither header, so falls back to whether THIS socket is itself TLS.
+function originOf(req) {
+    const proto = req.headers["x-forwarded-proto"] || (req.socket && req.socket.encrypted ? "https" : "http");
+    const host = req.headers.host || ("localhost:" + PORT);
+    return proto + "://" + host;
 }
 
 function readJsonBody(req) {
@@ -706,7 +954,7 @@ function clampField(key, rawValue) {
 // NOT client-trusted is the reward itself: /challenges/claim
 // independently recomputes today's canonical challenge set, checks the
 // account's own stored progress against it, checks the claimed flag,
-// and increments credits by the server's own copy of the reward amount
+// and increments coins by the server's own copy of the reward amount
 // -- never a client-supplied one. A modified client can lie about
 // progress (same as it already could about kills/wins); it cannot claim
 // a reward it hasn't earned or claim one twice.
@@ -2159,8 +2407,8 @@ function persistAdminLog() {
 
 let adminLog = []; // replaced in startServer()
 
-// Shared by every admin action (ability balance changes and credit
-// grants alike) -- the single audit trail, newest first, capped at 100
+// Shared by every admin action (ability balance changes and currency
+// adjustments alike) -- the single audit trail, newest first, capped at 100
 // and persisted to the same adminLog.json every time.
 function pushAdminLog(entry) {
     adminLog.unshift(Object.assign({ time: Date.now() }, entry));
@@ -2206,20 +2454,36 @@ function publicNewsItem(item) {
 }
 
 // =====================================================================
-// ADMIN CREDIT GRANTS
+// ADMIN CURRENCY ADJUSTMENTS -- Coins and Crystals, both.
 // =====================================================================
-// Sanity ceiling on a single manual grant -- not a game-balance number,
-// just a guard against a fat-fingered or malicious "give 999999999"
-// request. Well above anything a legitimate grant would ever need.
-const MAX_CREDIT_GRANT = 1000000;
+// Sanity ceiling on a single manual adjustment -- not a game-balance
+// number, just a guard against a fat-fingered or malicious
+// "give 999999999" request. Well above anything a legitimate grant
+// would ever need.
+const MAX_CURRENCY_ADJUSTMENT = 1000000;
 
-// True only for a whole number in (0, MAX_CREDIT_GRANT] -- rejects
-// negative, zero, decimal, NaN/Infinity, non-numeric, and absurdly
-// large amounts. The browser's own input validation is just UX; this
-// is what actually decides whether a grant is allowed.
-function isValidCreditAmount(raw) {
+// A whole, nonzero number whose magnitude is within the ceiling above.
+// Negative is allowed here (that's how an admin REMOVES currency) --
+// whether a specific negative amount is actually safe to apply (i.e.
+// doesn't take the balance below zero) is checked separately, against
+// the account's live balance, at the point of use. The browser's own
+// input validation is just UX; this is what actually decides whether
+// an adjustment is allowed through at all.
+function isValidCurrencyAdjustment(raw) {
     const n = Number(raw);
-    return Number.isInteger(n) && n > 0 && n <= MAX_CREDIT_GRANT;
+    return Number.isInteger(n) && n !== 0 && Math.abs(n) <= MAX_CURRENCY_ADJUSTMENT;
+}
+
+// Free-text justification the task requires on every manual
+// adjustment. Control characters and newlines are stripped (this is
+// rendered later, client-side, through escapeHtml() -- see
+// renderAdminLog() -- so the concern here is length/garbage, not
+// markup); 3-200 characters after trimming.
+function validateAdminReason(raw) {
+    if (typeof raw !== "string") return null;
+    const reason = raw.replace(/[\r\n\t]+/g, " ").replace(/[\u0000-\u001F\u007F]/g, "").trim();
+    if (reason.length < 3 || reason.length > 200) return null;
+    return reason;
 }
 
 // =====================================================================
@@ -2285,6 +2549,168 @@ const httpServer = http.createServer(async (req, res) => {
 
     if (req.method === "OPTIONS") {
         sendJson(res, 200, {});
+        return;
+    }
+
+    // =================================================================
+    // CRYSTAL BILLING -- Stripe Checkout foundation.
+    //
+    // Flow: client asks for a Checkout Session (server decides the
+    // price from billing.js's own package list) -> player pays on
+    // Stripe's own hosted page -> Stripe calls the webhook below with a
+    // SIGNED event -> the webhook verifies that signature, checks the
+    // purchase ledger for "have I already granted this session" (an
+    // atomic, database-level check -- see storage.js's
+    // recordPurchaseIfNew), and only then credits the account.
+    //
+    // The client is NEVER trusted to say a payment succeeded, including
+    // when it lands back on success_url after Stripe redirects it there
+    // -- that redirect fires the instant Stripe's own page thinks the
+    // payment is done, well before this server's webhook necessarily
+    // has. /billing/crystals/status exists so the client can poll
+    // "did the grant actually happen yet" without the answer to that
+    // question ever being self-reported.
+    // =================================================================
+
+    // ---- GET /billing/crystals/packages ----
+    // Public, no auth needed -- this is a price list, not an account.
+    // `configured:false` is what the Crystal Shop UI uses to show
+    // "not available right now" instead of pretending a purchase button
+    // works when STRIPE_SECRET_KEY isn't set in this environment yet.
+    if (req.method === "GET" && req.url === "/billing/crystals/packages") {
+        sendJson(res, 200, { configured: Billing.isConfigured(), packages: Billing.publicPackages() });
+        return;
+    }
+
+    // ---- POST /billing/crystals/checkout ----  body: { sessionToken, packageId }
+    if (req.method === "POST" && req.url === "/billing/crystals/checkout") {
+        try {
+            const body = await readJsonBody(req);
+            const sub = sessions[body.sessionToken];
+            if (!sub) {
+                sendJson(res, 401, { error: "Not signed in" });
+                return;
+            }
+            if (!accounts[sub]) {
+                sendJson(res, 409, { error: "Account not loaded -- sign in again" });
+                return;
+            }
+            if (!Billing.isConfigured()) {
+                sendJson(res, 503, { error: "Crystal purchases are not available right now." });
+                return;
+            }
+            const pkg = Billing.findPackage(body.packageId);
+            if (!pkg) {
+                sendJson(res, 400, { error: "Unknown Crystal package" });
+                return;
+            }
+
+            const origin = originOf(req);
+            let session;
+            try {
+                session = await Billing.createCheckoutSession({
+                    accountId: sub,
+                    packageId: pkg.id,
+                    successUrl: origin + "/?checkout=success&session_id={CHECKOUT_SESSION_ID}",
+                    cancelUrl: origin + "/?checkout=cancel"
+                });
+            } catch (e) {
+                console.log("[billing] checkout session creation failed:", e.message);
+                sendJson(res, 502, { error: "Could not start checkout -- try again" });
+                return;
+            }
+
+            sendJson(res, 200, { ok: true, url: session.url, sessionId: session.id });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // ---- GET /billing/crystals/status?sessionToken=...&checkoutSessionId=... ----
+    // Lets the client find out whether a specific purchase has actually
+    // been granted yet, WITHOUT the answer ever coming from the client
+    // itself (it only supplies which session to look up; the ledger,
+    // written only by the webhook handler, supplies the answer). Scoped
+    // to the caller's own account -- a purchase record from a different
+    // account is reported as not found, never leaked.
+    if (req.method === "GET" && req.url.startsWith("/billing/crystals/status")) {
+        const urlObj = new URL(req.url, "http://x");
+        const sub = sessions[urlObj.searchParams.get("sessionToken")];
+        if (!sub) {
+            sendJson(res, 401, { error: "Not signed in" });
+            return;
+        }
+        const checkoutSessionId = urlObj.searchParams.get("checkoutSessionId") || "";
+        const purchase = await store.getPurchase(checkoutSessionId);
+        if (!purchase || purchase.accountId !== sub) {
+            sendJson(res, 200, { status: "unknown" });
+            return;
+        }
+        sendJson(res, 200, {
+            status: purchase.status,
+            crystals: purchase.crystals,
+            newBalance: purchase.status === "granted" ? (accounts[sub] ? accounts[sub].crystals : null) : null
+        });
+        return;
+    }
+
+    // ---- POST /billing/stripe/webhook ----
+    // Stripe calls this directly -- there is no sessionToken, no
+    // account-level auth, because the caller isn't a player's browser.
+    // What proves this request is genuinely from Stripe (and not
+    // forged by anyone who found the URL) is the Stripe-Signature
+    // header, verified against STRIPE_WEBHOOK_SECRET below. A request
+    // that fails verification is rejected outright; nothing in its body
+    // is ever read before that check passes.
+    if (req.method === "POST" && req.url === "/billing/stripe/webhook") {
+        let rawBody;
+        try {
+            rawBody = await readRawBody(req);
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+            return;
+        }
+        if (!Billing.isConfigured() || !Billing.webhookConfigured()) {
+            // Not an error a real Stripe webhook would ever trigger
+            // (Stripe wouldn't be sending events to an unconfigured
+            // deployment), but fails closed rather than pretending.
+            sendJson(res, 503, { error: "Webhook not configured" });
+            return;
+        }
+
+        let event;
+        try {
+            event = Billing.constructWebhookEvent(rawBody, req.headers["stripe-signature"]);
+        } catch (e) {
+            console.log("[billing] webhook signature verification FAILED:", e.message);
+            sendJson(res, 400, { error: "Invalid signature" });
+            return;
+        }
+
+        try {
+            if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
+                const session = event.data.object;
+                if (event.type === "checkout.session.async_payment_succeeded" || session.payment_status === "paid") {
+                    await grantCrystalsForCheckoutSession(session);
+                }
+            } else if (event.type === "checkout.session.async_payment_failed") {
+                const session = event.data.object;
+                if (session && session.id) {
+                    await store.updatePurchase(session.id, { status: "failed" }).catch(() => {});
+                }
+            }
+            // Every other event type (and every branch above) still
+            // gets a 200 -- acknowledging receipt is what stops Stripe
+            // retrying an event this server has no use for.
+            sendJson(res, 200, { received: true });
+        } catch (e) {
+            console.log("[billing] webhook handling error:", e.message);
+            // A 500 here makes Stripe retry later, which is what we
+            // want if this was a transient failure (e.g. the database
+            // was briefly unreachable) rather than a real rejection.
+            sendJson(res, 500, { error: "Internal error" });
+        }
         return;
     }
 
@@ -2645,11 +3071,12 @@ const httpServer = http.createServer(async (req, res) => {
     // ---- POST /shop/buy ----
     // body: { sessionToken, itemType: 'skin'|'power'|'ability', itemId }
     //
-    // The ONLY way an account's owned-items lists or credit balance can
-    // grow from here on (see /save below, which now refuses to accept
-    // either from the client). Price and existence are checked against
-    // catalog.js -- the server's own copy of what things cost -- never
-    // against anything the client sent. Mirrors /admin/credits' and
+    // The ONLY way an account's owned-items lists or Coins/Crystals
+    // balance can grow from here on (see /save below, which now
+    // refuses to accept either from the client). Price, existence AND
+    // CURRENCY are checked against catalog.js -- the server's own copy
+    // of what things cost and what they cost it IN -- never against
+    // anything the client sent. Mirrors /admin/currency's and
     // /challenges/claim's atomic read-modify-write-then-persist shape,
     // with the same rollback on a failed write.
     if (req.method === "POST" && req.url === "/shop/buy") {
@@ -2676,6 +3103,11 @@ const httpServer = http.createServer(async (req, res) => {
                 sendJson(res, 400, { error: "Unknown item" });
                 return;
             }
+            // The item's OWN catalog entry says which currency it costs
+            // -- never anything the client sends. Every existing item
+            // is currency:"coins"; a future Crystal-priced cosmetic just
+            // needs that one field changed on its catalog.js entry.
+            const currencyField = item.currency === "crystals" ? "crystals" : "coins";
 
             const owned = Array.isArray(target[ownedField]) ? target[ownedField] : [];
             if (owned.indexOf(item.id) !== -1) {
@@ -2683,21 +3115,21 @@ const httpServer = http.createServer(async (req, res) => {
                 return;
             }
 
-            const previousBalance = target.credits || 0;
+            const previousBalance = target[currencyField] || 0;
             if (previousBalance < item.price) {
-                sendJson(res, 400, { error: "Not enough credits" });
+                sendJson(res, 400, { error: "Not enough " + currencyField });
                 return;
             }
 
             const previousOwned = owned;
-            target.credits = previousBalance - item.price; // atomic decrement, never a client-supplied total
+            target[currencyField] = previousBalance - item.price; // atomic decrement, never a client-supplied total
             target[ownedField] = owned.concat([item.id]);
             try {
                 await persistAccount(sub);
             } catch (e) {
                 // Write failed -- put both fields back exactly as they
                 // were, so a failed purchase can never be charged for.
-                target.credits = previousBalance;
+                target[currencyField] = previousBalance;
                 target[ownedField] = previousOwned;
                 sendJson(res, 503, { error: "Could not save purchase -- try again" });
                 return;
@@ -2708,7 +3140,8 @@ const httpServer = http.createServer(async (req, res) => {
                 itemType: body.itemType,
                 itemId: item.id,
                 price: item.price,
-                newBalance: target.credits,
+                currency: currencyField,
+                newBalance: target[currencyField],
                 owned: target[ownedField]
             });
         } catch (e) {
@@ -2729,7 +3162,7 @@ const httpServer = http.createServer(async (req, res) => {
             // A live session must map to a real stored account. If it
             // doesn't, something is wrong upstream -- refuse rather than
             // manufacture a default account, which would replace real
-            // progress with 100 credits / 0 kills.
+            // progress with 100 coins / 0 kills.
             const existing = accounts[sub];
             if (!existing) {
                 sendJson(res, 409, { error: "Account not loaded -- sign in again" });
@@ -2745,7 +3178,7 @@ const httpServer = http.createServer(async (req, res) => {
                     ? Math.floor(incoming) : current;
 
             // Same client-authoritative trust level as kills/wins above
-            // (credits is no longer part of that group -- see /shop/buy)
+            // (coins is no longer part of that group -- see /shop/buy)
             // -- see the DAILY CHALLENGES comment block for why that's
             // an accepted tradeoff here, not a new one. Rolls to a
             // fresh {progress:0, claimed:{}} first if the stored record is
@@ -2785,16 +3218,20 @@ const httpServer = http.createServer(async (req, res) => {
             accounts[sub] = {
                 name: existing.name,
                 email: existing.email || "",
-                // CREDITS AND OWNED-ITEM LISTS ARE DELIBERATELY NOT READ
-                // FROM `body`, for the same field-by-field-rebuild reason
-                // as xp/level/ranked/friends below: anything not carried
-                // here is destroyed by the next routine save, so leaving
-                // these three out means a client POSTing
-                // {credits:999999, ownedSkins:[...everything]} here has
-                // no effect whatsoever. Credits only ever change inside
-                // /shop/buy, /admin/credits and /challenges/claim now;
+                // COINS, CRYSTALS AND OWNED-ITEM LISTS ARE DELIBERATELY
+                // NOT READ FROM `body`, for the same field-by-field-
+                // rebuild reason as xp/level/ranked/friends below:
+                // anything not carried here is destroyed by the next
+                // routine save, so leaving these four out means a client
+                // POSTing {coins:999999, crystals:999999,
+                // ownedSkins:[...everything]} here has no effect
+                // whatsoever. Coins only ever change inside /shop/buy,
+                // /admin/currency, /challenges/claim and /xp/report's
+                // coin-reward path now; Crystals only ever change inside
+                // /admin/currency and the Stripe webhook handler;
                 // ownership only ever grows inside /shop/buy.
-                credits: existing.credits,
+                coins: existing.coins,
+                crystals: existing.crystals,
                 kills: safeCount(body.kills, existing.kills),
                 wins: safeCount(body.wins, existing.wins),
                 ownedSkins: Array.isArray(existing.ownedSkins) ? existing.ownedSkins : ["cyan", "red"],
@@ -2839,7 +3276,7 @@ const httpServer = http.createServer(async (req, res) => {
                 usernameLower: existing.usernameLower,
                 passwordHash: existing.passwordHash,
                 recoveryHash: existing.recoveryHash,
-                // Non-sensitive UX state (no credits/XP/rank riding on
+                // Non-sensitive UX state (no coins/crystals/XP/rank riding on
                 // it), same trust tier as aimMode/matchSize/deviceMode
                 // above -- client-reported is fine here, unlike xp/level.
                 tutorialComplete: typeof body.tutorialComplete === "boolean" ? body.tutorialComplete : (existing.tutorialComplete || false),
@@ -2853,8 +3290,8 @@ const httpServer = http.createServer(async (req, res) => {
                 //
                 // That is also exactly what makes ranked tamper-proof
                 // against this endpoint: kills/wins above are
-                // client-authoritative by existing design (credits is
-                // no longer -- see /shop/buy), but RP, rank,
+                // client-authoritative by existing design (coins/crystals
+                // is no longer -- see /shop/buy), but RP, rank,
                 // ranked W/L and placement state can only ever be changed
                 // by the server's own match pipeline (completeRankedMatch).
                 // A client POSTing {ranked:{rp:99999}} here has no effect
@@ -2941,8 +3378,8 @@ const httpServer = http.createServer(async (req, res) => {
     // Server-authoritative reward grant: independently recomputes TODAY's
     // canonical challenge set (never trusts a client-sent definition),
     // checks the account's own stored progress against it, checks the
-    // claimed flag, and credits the server's own copy of the reward --
-    // never a client-supplied amount. Mirrors /admin/credits' atomic
+    // claimed flag, and credits Coins with the server's own copy of the reward --
+    // never a client-supplied amount. Mirrors /admin/currency's atomic
     // read-modify-write-then-persist shape, with the same rollback on a
     // failed write.
     if (req.method === "POST" && req.url === "/challenges/claim") {
@@ -2976,9 +3413,9 @@ const httpServer = http.createServer(async (req, res) => {
                 return;
             }
 
-            const previousBalance = target.credits || 0;
+            const previousBalance = target.coins || 0;
             const previousDC = target.dailyChallenges;
-            target.credits = previousBalance + def.reward; // atomic increment, not a client-supplied total
+            target.coins = previousBalance + def.reward; // atomic increment, not a client-supplied total
             target.dailyChallenges = {
                 date: dc.date,
                 progress: dc.progress,
@@ -2987,7 +3424,7 @@ const httpServer = http.createServer(async (req, res) => {
             try {
                 await persistAccount(sub);
             } catch (e) {
-                target.credits = previousBalance; // write failed -- undo the in-memory grant
+                target.coins = previousBalance; // write failed -- undo the in-memory grant
                 target.dailyChallenges = previousDC;
                 sendJson(res, 503, { error: "Could not save reward -- try again" });
                 return;
@@ -2997,7 +3434,7 @@ const httpServer = http.createServer(async (req, res) => {
                 ok: true,
                 challengeId: body.challengeId,
                 reward: def.reward,
-                newBalance: target.credits,
+                newBalance: target.coins,
                 dailyChallenges: target.dailyChallenges
             });
         } catch (e) {
@@ -3007,13 +3444,22 @@ const httpServer = http.createServer(async (req, res) => {
     }
 
     // ---- POST /xp/report ----
-    // body: { sessionToken, reason, kills? }
-    // The client-report half of the XP system -- see the big comment
-    // above XP_REWARDS/lastXPReportAt for the trust model. `reason` must
-    // be one of a fixed whitelist; the XP amount always comes from
-    // XP_REWARDS, never from the request. `kills` (only meaningful for
-    // reason:"kill") is clamped to XP_MAX_KILLS_PER_REPORT so one report
-    // can't claim an arbitrary kill count.
+    // body: { sessionToken, reason, kills?, players? }
+    // The client-report half of the XP AND COIN systems -- see the big
+    // comment above XP_REWARDS/COIN_REWARDS/lastXPReportAt for the trust
+    // model. `reason` must be one of a fixed whitelist; the XP amount
+    // always comes from XP_REWARDS and the coin amount from
+    // COIN_REWARDS, never from the request. `kills` (only meaningful
+    // for reason:"kill") is clamped to XP_MAX_KILLS_PER_REPORT so one
+    // report can't claim an arbitrary kill count. `players` (only
+    // meaningful for reason:"match_win") is clamped to [2,4] -- Classic
+    // Mode's match-win Coin bonus scales with lobby size (see
+    // index.html's matchWinBonus()); this is the one place that
+    // formula is computed server-side, from a client-reported player
+    // count that is already the SAME trust tier kills/wins/matchSize
+    // already are (a local/bot match's own configuration, not something
+    // the server can independently verify -- see the DAILY CHALLENGES
+    // comment block for why that tier is an accepted tradeoff here).
     if (req.method === "POST" && req.url === "/xp/report") {
         try {
             const body = await readJsonBody(req);
@@ -3044,12 +3490,20 @@ const httpServer = http.createServer(async (req, res) => {
             }
 
             let amount = XP_REWARDS[reason];
+            let coinAmount = COIN_REWARDS[reason] || 0;
             if (reason === "kill") {
                 const n = Math.max(1, Math.min(XP_MAX_KILLS_PER_REPORT, Math.floor(body.kills) || 1));
                 amount = XP_REWARDS.kill * n;
+                coinAmount = (COIN_REWARDS.kill || 0) * n;
+            }
+            if (reason === "match_win" && Number.isInteger(body.players)) {
+                const players = Math.max(2, Math.min(4, body.players));
+                // Mirrors matchWinBonus() in index.html exactly: base 40
+                // for 2 players, +10 Coins per player beyond 2.
+                coinAmount = 40 + Math.max(0, players - 2) * 10;
             }
 
-            const result = await awardXP(sub, amount, reason);
+            const result = await awardXP(sub, amount, reason, coinAmount);
             if (!result) {
                 sendJson(res, 503, { error: "Could not save XP -- try again" });
                 return;
@@ -3106,14 +3560,14 @@ const httpServer = http.createServer(async (req, res) => {
         return;
     }
 
-    // ---- GET /leaderboard?sort=credits|kills|wins ----
+    // ---- GET /leaderboard?sort=coins|kills|wins ----
     if (req.method === "GET" && req.url.startsWith("/leaderboard")) {
         const urlObj = new URL(req.url, "http://x");
-        const sortKey = ["credits", "kills", "wins"].includes(urlObj.searchParams.get("sort"))
-            ? urlObj.searchParams.get("sort") : "credits";
+        const sortKey = ["coins", "kills", "wins"].includes(urlObj.searchParams.get("sort"))
+            ? urlObj.searchParams.get("sort") : "coins";
 
         const entries = Object.values(accounts)
-            .map(a => ({ name: a.name, credits: a.credits, kills: a.kills, wins: a.wins }))
+            .map(a => ({ name: a.name, coins: a.coins, kills: a.kills, wins: a.wins }))
             .sort((a, b) => b[sortKey] - a[sortKey])
             .slice(0, 20);
 
@@ -3440,7 +3894,7 @@ const httpServer = http.createServer(async (req, res) => {
             const adminAccount = getAccountForSession(body.sessionToken);
 
             // Wipe ONE player's ranked data back to a fresh record. Only
-            // ever touches `ranked` -- credits/kills/wins/skins/powers
+            // ever touches `ranked` -- coins/crystals/kills/wins/skins/powers
             // are not read or written here at all.
             if (body.action === "resetPlayer") {
                 const target = accounts[body.playerId];
@@ -3599,7 +4053,7 @@ const httpServer = http.createServer(async (req, res) => {
     }
 
     // ---- GET /admin/search-players?sessionToken=...&q=... ----
-    // Admin-only player lookup for Credit Management. Matches by display
+    // Admin-only player lookup for Currency Management. Matches by display
     // name (case-insensitive substring) or an exact account id, and
     // returns only what the admin UI actually needs to pick a target and
     // show its current balance -- never email or anything else from the
@@ -3620,23 +4074,28 @@ const httpServer = http.createServer(async (req, res) => {
                 return sub === q || (a.name || "").toLowerCase().includes(q);
             })
             .slice(0, 20)
-            .map(sub => ({ id: sub, name: accounts[sub].name, credits: accounts[sub].credits }));
+            .map(sub => ({ id: sub, name: accounts[sub].name, coins: accounts[sub].coins, crystals: accounts[sub].crystals }));
         sendJson(res, 200, { results: results });
         return;
     }
 
-    // ---- POST /admin/credits ----
-    // body: { sessionToken, playerId, amount }
-    // Server-authoritative credit grant: verifies admin + target + amount,
-    // then increments the account's own stored balance (never accepts a
-    // client-supplied newBalance) and persists it. Node's single-threaded
-    // event loop means the read of accounts[playerId].credits and the
-    // increment below run with no `await` in between, so no other request
-    // can interleave and race the read-modify-write -- equivalent to an
-    // atomic addCredits(playerId, amount). The persist that follows is
-    // awaited and serialized per account by the storage layer, so
-    // concurrent grants are written in the order they were applied.
-    if (req.method === "POST" && req.url === "/admin/credits") {
+    // ---- POST /admin/currency ----
+    // body: { sessionToken, playerId, currency: 'coins'|'crystals', amount, reason }
+    // Server-authoritative currency adjustment: verifies admin + target +
+    // currency + amount + reason, then adjusts the account's own stored
+    // balance (never accepts a client-supplied newBalance) and persists
+    // it. `amount` can be negative -- that's how an admin REMOVES
+    // currency -- but the result can never go below zero (see the
+    // check against the live balance below). Node's single-threaded
+    // event loop means the read of the balance and the adjustment below
+    // run with no `await` in between, so no other request can
+    // interleave and race the read-modify-write. The persist that
+    // follows is awaited and serialized per account by the storage
+    // layer, so concurrent adjustments are written in the order they
+    // were applied. Every adjustment is logged with WHO, WHAT, HOW MUCH
+    // and WHY (the required reason) via pushAdminLog, same as every
+    // other admin action already is.
+    if (req.method === "POST" && req.url === "/admin/currency") {
         try {
             const body = await readJsonBody(req);
 
@@ -3652,38 +4111,59 @@ const httpServer = http.createServer(async (req, res) => {
                 return;
             }
 
-            if (!isValidCreditAmount(body.amount)) {
-                sendJson(res, 400, { error: "Invalid credit amount" });
+            const currency = body.currency === "crystals" ? "crystals" : (body.currency === "coins" ? "coins" : null);
+            if (!currency) {
+                sendJson(res, 400, { error: "Currency must be \"coins\" or \"crystals\"" });
+                return;
+            }
+
+            if (!isValidCurrencyAdjustment(body.amount)) {
+                sendJson(res, 400, { error: "Invalid amount" });
                 return;
             }
             const amount = Number(body.amount);
 
-            const previousBalance = target.credits || 0;
-            target.credits = previousBalance + amount; // atomic increment, not a client-supplied total
+            const reason = validateAdminReason(body.reason);
+            if (!reason) {
+                sendJson(res, 400, { error: "A reason (3-200 characters) is required" });
+                return;
+            }
+
+            const previousBalance = target[currency] || 0;
+            const nextBalance = previousBalance + amount;
+            if (nextBalance < 0) {
+                sendJson(res, 400, { error: "That would take the balance below zero" });
+                return;
+            }
+
+            target[currency] = nextBalance; // atomic adjustment, not a client-supplied total
             try {
                 await persistAccount(body.playerId);
             } catch (e) {
-                target.credits = previousBalance; // write failed -- undo the in-memory grant
-                sendJson(res, 503, { error: "Could not save credit grant -- try again" });
+                target[currency] = previousBalance; // write failed -- undo the in-memory adjustment
+                sendJson(res, 503, { error: "Could not save adjustment -- try again" });
                 return;
             }
 
             pushAdminLog({
                 admin: adminAccount ? adminAccount.name : "unknown",
-                type: "creditGrant",
+                type: "currencyAdjust",
+                currency: currency,
                 targetPlayer: target.name,
                 targetId: body.playerId,
                 amount: amount,
                 previousBalance: previousBalance,
-                newBalance: target.credits
+                newBalance: target[currency],
+                reason: reason
             });
 
             sendJson(res, 200, {
                 ok: true,
                 playerId: body.playerId,
                 name: target.name,
+                currency: currency,
                 previousBalance: previousBalance,
-                newBalance: target.credits
+                newBalance: target[currency]
             });
         } catch (e) {
             sendJson(res, 400, { error: "Bad request" });
@@ -4597,7 +5077,7 @@ wss.on("connection", (socket, request) => {
                     // Server-authoritative XP: this IS the server's own
                     // confirmation of the win (HP just hit 0 in server
                     // state), so no client report is needed or accepted.
-                    if (winner) awardXPAndNotify(slots[winner], XP_REWARDS.heist_win, "heist_win");
+                    if (winner) awardXPAndNotify(slots[winner], XP_REWARDS.heist_win, "heist_win", COIN_REWARDS.heist_win);
                 }
             }
         }
@@ -4671,7 +5151,7 @@ wss.on("connection", (socket, request) => {
                 // Server-authoritative XP -- bombMatchOver just flipped
                 // true in the server's own state, so this can't be forged
                 // or double-claimed via a client report.
-                if (winner) awardXPAndNotify(slots[winner], XP_REWARDS.bombrun_win, "bombrun_win");
+                if (winner) awardXPAndNotify(slots[winner], XP_REWARDS.bombrun_win, "bombrun_win", COIN_REWARDS.bombrun_win);
             }
         }
 
@@ -4757,6 +5237,11 @@ async function startServer() {
     try {
         await store.init();
         Object.assign(accounts, await store.loadAllAccounts());
+        // Currency rename/migration runs BEFORE anything else touches
+        // an account -- the leaderboard, admin panel and every sign-in
+        // below this point must see `coins`/`crystals`, never a
+        // still-unmigrated `credits`.
+        migrateAllAccountsCurrency();
         // Rebuilt from what is actually stored, so the login lookup can
         // never drift from the accounts it points at.
         buildUsernameIndex();
