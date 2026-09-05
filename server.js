@@ -44,6 +44,7 @@ const store = require("./storage");
 const Ranked = require("./ranked");
 const Combat = require("./combat");
 const Shadow = require("./shadow");
+const Auth = require("./auth");
 
 // Friends data shape, validation and public views. Pure functions only;
 // persistence, presence and the WebSocket wiring live in this file (see
@@ -166,9 +167,132 @@ function ensureAccountRanked(sub) {
 }
 
 // Resolves a sessionToken to that player's account record, or null.
+// =====================================================================
+// ACCOUNT IDENTITY / CREDENTIALS
+//
+// An account is keyed by a STABLE internal id and nothing else:
+//   Google accounts   -> the Google "sub"
+//   password accounts -> "local:" + random, minted once at registration
+//
+// The login username is deliberately NOT the identity. It is a separate,
+// changeable field, so renaming later never has to touch friend lists,
+// ranked records, or anything else that stores an account id.
+//
+// Three distinct things, kept distinct:
+//   accountId   -- the map key. Never changes, never shown to players.
+//   username    -- the login identifier. Unique, case-insensitive.
+//   name        -- the in-game DISPLAY name (pre-existing field). Not
+//                  unique, and never overwritten for a Google account.
+// =====================================================================
+
+// usernameLower -> accountId. Rebuilt from the accounts map at boot, so
+// it can never drift from what is actually stored.
+const usernameIndex = new Map();
+
+function indexUsername(accountId, account) {
+    if (account && typeof account.usernameLower === "string" && account.usernameLower) {
+        usernameIndex.set(account.usernameLower, accountId);
+    }
+}
+
+function buildUsernameIndex() {
+    usernameIndex.clear();
+    for (const id of Object.keys(accounts)) indexUsername(id, accounts[id]);
+    if (usernameIndex.size) console.log("[auth] indexed " + usernameIndex.size + " username(s)");
+}
+
+function newLocalAccountId() {
+    return "local:" + crypto.randomBytes(16).toString("hex");
+}
+
+// THE ONLY shape of an account that is ever sent to a client.
+//
+// The account record holds a password hash. Several endpoints hand the
+// whole record back (sign-in returns it so the client can populate
+// progression in one round trip), so allowing the raw object out even
+// once would leak every player's hash. Everything sensitive is stripped
+// here, by omission from an explicit allowlist rather than by deleting
+// fields -- a field added to the account later is then private by
+// default instead of accidentally public.
+function publicAccount(account) {
+    if (!account || typeof account !== "object") return null;
+    const out = {};
+    for (const key of Object.keys(account)) {
+        if (key === "passwordHash") continue; // never leaves the server
+        if (key === "email") continue;        // not needed by the client, and admin checks key off it
+        out[key] = account[key];
+    }
+    return out;
+}
+
+// Failed-login throttling.
+const loginThrottle = Auth.createLoginThrottle();
+
+// Registration is throttled separately and much more loosely. Every
+// signup counts against the limit (not just failures), so the login
+// numbers would be wrong here: several people on ONE shared address --
+// a household, a school, a cafe -- legitimately create accounts in a
+// burst, and locking that out would be worse than the abuse it stops.
+const registerThrottle = Auth.createLoginThrottle({
+    maxFailures: 20,               // signups per window, per address
+    windowMs: 60 * 60 * 1000,      // one hour
+    lockoutMs: 10 * 60 * 1000
+});
+
+// Compared against when the username does not exist, so a failed login
+// costs the same time either way and cannot be used to tell real
+// usernames from fake ones by response latency. Generated once at boot
+// from a random value nobody can log in with.
+let DUMMY_PASSWORD_HASH = "";
+Auth.hashPassword(crypto.randomBytes(32).toString("hex"))
+    .then(h => { DUMMY_PASSWORD_HASH = h; })
+    .catch(() => { DUMMY_PASSWORD_HASH = "scrypt$32768$8$1$AAAA$AAAA"; });
+
+// Best-effort client address for rate limiting. x-forwarded-for is only
+// consulted because Render terminates TLS in front of the app; it is
+// used for THROTTLING ONLY and never for identity or authorisation, so
+// a spoofed header can at worst throttle the spoofer.
+function clientIpOf(req) {
+    const fwd = req.headers["x-forwarded-for"];
+    if (typeof fwd === "string" && fwd.length) return fwd.split(",")[0].trim();
+    return (req.socket && req.socket.remoteAddress) || "unknown";
+}
+
+// Ends a session everywhere: this instance, and the store, so a restart
+// cannot resurrect it.
+async function destroySession(token) {
+    if (typeof token !== "string" || !token) return;
+    delete sessions[token];
+    delete sessionLastSeen[token];
+    try {
+        await store.deleteSession(token);
+    } catch (e) {
+        console.log("[auth] failed to delete stored session:", e.message);
+    }
+}
+
+// token -> last time it was used. Backs the idle sweep below.
+const sessionLastSeen = Object.create(null);
+
+// A session left behind by a closed tab (the unload beacon can be
+// dropped by the browser) would otherwise sit in the store until its
+// 30-day TTL. Anything unused for this long is reaped instead, which
+// keeps the set of live sessions close to the set of people actually
+// playing.
+const SESSION_IDLE_MS = 12 * 60 * 60 * 1000;
+setInterval(() => {
+    const now = Date.now();
+    for (const token of Object.keys(sessionLastSeen)) {
+        if (now - sessionLastSeen[token] > SESSION_IDLE_MS) {
+            destroySession(token).catch(() => {});
+        }
+    }
+}, 60 * 60 * 1000).unref();
+
 function getAccountForSession(sessionToken) {
     const sub = sessions[sessionToken];
     if (!sub) return null;
+    sessionLastSeen[sessionToken] = Date.now();
     return accounts[sub] || null;
 }
 
@@ -2045,6 +2169,169 @@ const httpServer = http.createServer(async (req, res) => {
 
     // ---- POST /auth/google ----
     // body: { credential } (the ID token JWT from Google Identity Services)
+    // =================================================================
+    // USERNAME + PASSWORD AUTHENTICATION
+    //
+    // The second door into the same account system. Everything a client
+    // sends here is validated again server-side -- the browser's own
+    // checks exist only so a player sees the problem sooner.
+    // =================================================================
+
+    // ---- POST /auth/register ----  body: { username, password, confirm }
+    if (req.method === "POST" && req.url === "/auth/register") {
+        try {
+            const body = await readJsonBody(req);
+
+            const u = Auth.validateLoginUsername(body.username);
+            if (!u.ok) { sendJson(res, 400, { error: u.error }); return; }
+
+            const p = Auth.validatePassword(body.password);
+            if (!p.ok) { sendJson(res, 400, { error: p.error }); return; }
+
+            if (typeof body.confirm === "string" && body.confirm !== body.password) {
+                sendJson(res, 400, { error: "Passwords do not match." });
+                return;
+            }
+
+            if (usernameIndex.has(u.key)) {
+                sendJson(res, 409, { error: "That username is already taken." });
+                return;
+            }
+
+            // Registration is rate-limited too, so the endpoint can't be
+            // used to mass-create accounts or to probe which usernames
+            // exist by watching for the 409.
+            const ip = clientIpOf(req);
+            const gate = registerThrottle.check(["reg:" + ip]);
+            if (gate.blocked) {
+                sendJson(res, 429, { error: "Too many accounts created from here. Try again later." });
+                return;
+            }
+            registerThrottle.recordFailure(["reg:" + ip]);
+
+            const passwordHash = await Auth.hashPassword(body.password);
+
+            // A brand new, stable internal id. Never derived from the
+            // username, so the username stays changeable later.
+            const accountId = newLocalAccountId();
+
+            // Same starting account every Google player gets. The login
+            // username doubles as the initial DISPLAY name; the two are
+            // separate fields from here on, and changing one (via
+            // /account/username) never touches the other.
+            const account = defaultAccount(u.username, "");
+            account.authMethods = ["password"];
+            account.username = u.username;
+            account.usernameLower = u.key;
+            account.passwordHash = passwordHash;
+            // A password account has no email, and admin is decided by
+            // email (see isAdminSession) -- so registering any username,
+            // "admin" included, can never confer admin rights.
+
+            accounts[accountId] = account;
+            indexUsername(accountId, account);
+            await persistAccount(accountId);
+
+            const sessionToken = crypto.randomBytes(24).toString("hex");
+            await persistSession(sessionToken, accountId);
+
+            console.log("[auth] new password account registered: " + u.username);
+            sendJson(res, 200, {
+                sessionToken: sessionToken,
+                account: publicAccount(account),
+                isAdmin: false
+            });
+        } catch (e) {
+            console.log("[auth] register failed:", e.message);
+            sendJson(res, 500, { error: "Something went wrong. Please try again." });
+        }
+        return;
+    }
+
+    // ---- POST /auth/login ----  body: { username, password }
+    if (req.method === "POST" && req.url === "/auth/login") {
+        try {
+            const body = await readJsonBody(req);
+            const ip = clientIpOf(req);
+
+            // Deliberately the SAME message for every failure -- unknown
+            // username, wrong password, malformed input. Saying which
+            // one it was would turn this endpoint into a way to discover
+            // who has an account.
+            const GENERIC = "Incorrect username or password.";
+
+            const rawUsername = typeof body.username === "string" ? body.username.trim() : "";
+            const key = rawUsername.toLowerCase();
+            const throttleKeys = ["ip:" + ip, "user:" + key];
+
+            const gate = loginThrottle.check(throttleKeys);
+            if (gate.blocked) {
+                sendJson(res, 429, { error: "Too many failed attempts. Try again in " + gate.retryAfterSec + "s." });
+                return;
+            }
+
+            const accountId = usernameIndex.get(key);
+            const account = accountId ? accounts[accountId] : null;
+
+            // Verify even when the account doesn't exist, against a
+            // dummy hash, so a missing username and a wrong password
+            // take the same amount of time. Otherwise the response
+            // latency alone reveals which usernames are real.
+            const storedHash = (account && typeof account.passwordHash === "string")
+                ? account.passwordHash
+                : DUMMY_PASSWORD_HASH;
+            const okPassword = await Auth.verifyPassword(
+                typeof body.password === "string" ? body.password : "", storedHash);
+
+            if (!account || !okPassword) {
+                loginThrottle.recordFailure(throttleKeys);
+                sendJson(res, 401, { error: GENERIC });
+                return;
+            }
+
+            loginThrottle.recordSuccess(throttleKeys);
+
+            // Same lazy migrations the Google path runs, so a password
+            // account created before a later feature self-heals too.
+            const rolledDC = ensureDailyChallenges(account.dailyChallenges);
+            if (rolledDC !== account.dailyChallenges) {
+                account.dailyChallenges = rolledDC;
+                await persistAccount(accountId);
+            }
+            ensureAccountXP(accountId);
+
+            const sessionToken = crypto.randomBytes(24).toString("hex");
+            await persistSession(sessionToken, accountId);
+
+            sendJson(res, 200, {
+                sessionToken: sessionToken,
+                account: publicAccount(account),
+                // Admin is derived from the stored account, never from
+                // the login method or the username.
+                isAdmin: isAdminSession(sessionToken)
+            });
+        } catch (e) {
+            console.log("[auth] login failed:", e.message);
+            sendJson(res, 500, { error: "Something went wrong. Please try again." });
+        }
+        return;
+    }
+
+    // ---- POST /auth/logout ----  body: { sessionToken }
+    // Ends the session on the SERVER, so the token is dead even if a
+    // copy of it survives somewhere. Used by the LOG OUT button and, on
+    // a best-effort basis, by the page-unload beacon.
+    if (req.method === "POST" && req.url === "/auth/logout") {
+        try {
+            const body = await readJsonBody(req);
+            await destroySession(body.sessionToken);
+        } catch (e) {
+            // A logout that fails to parse is still a logout.
+        }
+        sendJson(res, 200, { ok: true });
+        return;
+    }
+
     if (req.method === "POST" && req.url === "/auth/google") {
         try {
             const body = await readJsonBody(req);
@@ -2084,6 +2371,14 @@ const httpServer = http.createServer(async (req, res) => {
                 accounts[sub].tutorialComplete = true;
                 dirty = true;
             }
+            // Records how this account can be signed into. Purely
+            // descriptive -- nothing grants access off it -- but it is
+            // what a future "add a password to my Google account" flow
+            // would extend, and it lets the client show the right thing.
+            if (!Array.isArray(accounts[sub].authMethods) || accounts[sub].authMethods.indexOf("google") === -1) {
+                accounts[sub].authMethods = (Array.isArray(accounts[sub].authMethods) ? accounts[sub].authMethods : []).concat(["google"]);
+                dirty = true;
+            }
             if (dirty) await persistAccount(sub);
 
             const sessionToken = crypto.randomBytes(24).toString("hex");
@@ -2091,7 +2386,7 @@ const httpServer = http.createServer(async (req, res) => {
 
             sendJson(res, 200, {
                 sessionToken: sessionToken,
-                account: accounts[sub],
+                account: publicAccount(accounts[sub]),
                 isAdmin: isAdminSession(sessionToken)
             });
         } catch (e) {
@@ -2178,6 +2473,16 @@ const httpServer = http.createServer(async (req, res) => {
                 // inside awardXP(), never here.
                 xp: typeof existing.xp === "number" ? existing.xp : 0,
                 level: typeof existing.level === "number" ? existing.level : 1,
+                // CREDENTIALS ARE CARRIED, NEVER READ FROM `body` -- for
+                // the same reason as xp/level above: this handler rebuilds
+                // the account field-by-field, so anything not listed here
+                // is destroyed by the next routine save. A client POSTing
+                // {passwordHash:...} or {username:...} has no effect
+                // whatsoever; both only ever change in /auth/register.
+                authMethods: Array.isArray(existing.authMethods) ? existing.authMethods : undefined,
+                username: existing.username,
+                usernameLower: existing.usernameLower,
+                passwordHash: existing.passwordHash,
                 // Non-sensitive UX state (no credits/XP/rank riding on
                 // it), same trust tier as aimMode/matchSize/deviceMode
                 // above -- client-reported is fine here, unlike xp/level.
@@ -3936,6 +4241,9 @@ async function startServer() {
     try {
         await store.init();
         Object.assign(accounts, await store.loadAllAccounts());
+        // Rebuilt from what is actually stored, so the login lookup can
+        // never drift from the accounts it points at.
+        buildUsernameIndex();
         abilityConfig = await loadAbilityConfig();
         adminLog = await loadAdminLog();
 

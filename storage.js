@@ -269,6 +269,16 @@ function createFileBackend() {
                 writeJsonFileAtomicAsync(sessionsFile, sessionsCache));
         },
 
+        // Logging out has to actually remove the session, not just drop
+        // it from the running instance -- otherwise a restart would
+        // resurrect a session the player already ended.
+        async deleteSession(token) {
+            if (!(token in sessionsCache)) return;
+            delete sessionsCache[token];
+            return coalesced.save("sessions", () =>
+                writeJsonFileAtomicAsync(sessionsFile, sessionsCache));
+        },
+
         // Lets the process flush anything still sitting in the coalescing
         // window before exiting, so a restart can't drop the last save.
         flushPendingWrites() {
@@ -417,6 +427,12 @@ function createPostgresBackend() {
                     [token, record.sub]
                 )
             );
+        },
+
+        async deleteSession(token) {
+            return enqueue("session:" + token, () =>
+                pool.query("DELETE FROM sessions WHERE token = $1", [token])
+            );
         }
     };
 }
@@ -433,6 +449,7 @@ module.exports = {
     saveDoc: (key, value) => backend.saveDoc(key, value),
     loadValidSessions: () => backend.loadValidSessions(),
     saveSession: (token, record) => backend.saveSession(token, record),
+    deleteSession: (token) => backend.deleteSession(token),
     // Only the file backend batches writes behind a short coalescing
     // window; Postgres writes go straight out, so there is nothing to
     // flush there and this is a no-op.

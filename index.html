@@ -745,6 +745,76 @@
     white-space: pre; pointer-events: none; z-index: 5;
   }
   .net-debug b{ color:#fff; font-weight:700; }
+  /* Username/password sign-in, styled to sit next to the Google
+     button without redesigning the account card. */
+  .auth-alt-btn{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 9.5px; letter-spacing: 1.4px;
+    color: var(--p1);
+    background: rgba(63,208,255,0.08);
+    border: 1px solid rgba(63,208,255,0.35);
+    border-radius: 3px;
+    padding: 6px 10px; margin-top: 6px;
+    cursor: pointer;
+    /* Capped, not full-width: on a short landscape phone the profile
+       column stretches and an unconstrained button would run underneath
+       the mode carousel, which then swallows the taps. */
+    width: 100%; max-width: 220px; align-self: flex-start;
+    transition: background .15s, border-color .15s;
+  }
+  .auth-alt-btn:hover{ background: rgba(63,208,255,0.16); border-color: rgba(63,208,255,0.6); }
+  .auth-form{ display:flex; flex-direction:column; gap:10px; }
+  .auth-field{ display:flex; flex-direction:column; gap:4px; }
+  .auth-label{
+    font-family:'Share Tech Mono', monospace;
+    font-size:9px; letter-spacing:2px; color: var(--ink-dim);
+  }
+  .auth-input{
+    font-family:'Share Tech Mono', monospace;
+    font-size:13px; color: var(--ink);
+    background: rgba(255,255,255,.04);
+    border:1px solid rgba(122,158,200,.3);
+    border-radius:6px; padding:10px 11px; width:100%;
+    /* 16px+ on mobile would be ideal to stop iOS zooming on focus, but
+       the field is inside a scaled panel -- the viewport meta already
+       disables that zoom (see the device-compatibility work). */
+  }
+  .auth-input:focus{ outline:none; border-color: var(--p1); background: rgba(63,208,255,.06); }
+  .auth-pw-wrap{ position:relative; }
+  .auth-pw-wrap .auth-input{ padding-right:52px; }
+  .auth-show{
+    position:absolute; right:6px; top:50%; transform:translateY(-50%);
+    font-family:'Share Tech Mono', monospace; font-size:8.5px; letter-spacing:1px;
+    color: var(--ink-dim); background:none; border:1px solid rgba(122,158,200,.25);
+    border-radius:3px; padding:4px 6px; cursor:pointer;
+  }
+  .auth-show:hover{ color: var(--p1); border-color: rgba(63,208,255,.45); }
+  .auth-hint{ font-family:'Share Tech Mono', monospace; font-size:8.5px; letter-spacing:1px; color: var(--ink-dim); }
+  .auth-error{
+    font-family:'Share Tech Mono', monospace; font-size:10px; letter-spacing:1px;
+    color: var(--p2); min-height:13px; text-align:center;
+  }
+  .auth-actions{ display:flex; flex-direction:column; gap:8px; margin-top:2px; }
+  .auth-switch{
+    background:none; border:none; cursor:pointer;
+    font-family:'Share Tech Mono', monospace; font-size:9px; letter-spacing:1.4px;
+    color: var(--ink-dim); text-decoration:underline; padding:4px;
+  }
+  .auth-switch:hover{ color: var(--p1); }
+  @media (max-width: 560px){
+    .auth-input{ font-size:14px; padding:11px; }
+  }
+  /* Short landscape phones: the create-account form is the tallest
+     thing this modal ever shows, so give it more of the screen and
+     tighten the spacing rather than making the player scroll to reach
+     the submit button. */
+  @media (max-height: 460px){
+    .lm-card{ max-height: 92vh; }
+    .auth-form{ gap:7px; }
+    .auth-field{ gap:2px; }
+    .auth-input{ padding:7px 10px; font-size:12px; }
+    .auth-hint{ font-size:8px; }
+  }
   .ping-badge{
     position:absolute; top: calc(42px + env(safe-area-inset-top, 0px)); left:50%; transform: translateX(-50%);
     font-family:'Share Tech Mono', monospace;
@@ -1157,6 +1227,15 @@
     padding: 16px var(--lobby-pad);
     min-height: 0;
   }
+  /* The account column holds the only interactive sign-in controls, and
+     on a short landscape phone .mode-carousel -- a LATER grid sibling,
+     so painted on top by default -- extends across this area and
+     swallows taps aimed at them. Giving this column its own stacking
+     context puts the sign-in buttons back in front. This overlap
+     predates the username/password option: it made the Google button
+     untappable at that size too. */
+  .lobby-left{ position:relative; z-index:2; }
+
   .lobby-col{
     display:flex; flex-direction:column; gap: 12px;
     min-height:0; overflow-y:auto; overflow-x:hidden;
@@ -1187,7 +1266,13 @@
     font-size: 8.5px; letter-spacing: 1.2px; color: var(--ink-dim);
     line-height:1.5; margin-top:3px;
   }
-  .profile-auth{ margin-top:8px; display:flex; align-items:center; gap:8px; }
+  /* Wraps so the Google button and the username/password button stack
+     instead of squashing on a narrow card. The stacking context lifts
+     the whole row above .mode-carousel, which on a short landscape
+     phone extends over this area and would otherwise swallow every tap
+     aimed at a sign-in button -- that overlap predates the
+     username/password option and affected the Google button too. */
+  .profile-auth{ margin-top:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
   .profile-auth .menu-back{ margin-top:0; }
 
   .rank-strip{
@@ -2425,7 +2510,8 @@
               <div class="profile-tag" id="accountStatus">NOT SIGNED IN &mdash; PROGRESS WON'T BE SAVED</div>
               <div class="profile-auth">
                 <div id="googleSignInBtn"></div>
-                <button class="menu-back hidden" id="signOutBtn">sign out</button>
+                <button class="auth-alt-btn" id="btnPasswordAuth">USE USERNAME &amp; PASSWORD</button>
+                <button class="menu-back hidden" id="signOutBtn">log out</button>
               </div>
             </div>
           </div>
@@ -4532,35 +4618,184 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         body: JSON.stringify({ credential: response.credential })
       });
       if(!res.ok) throw new Error('sign-in failed');
-      const data = await res.json();
-      sessionToken = data.sessionToken;
-      applyAccount(data.account);
-      loggedIn = true;
-      setAccountStatus('SIGNED IN AS ' + accountName.toUpperCase());
-      const gBtn = document.getElementById('googleSignInBtn');
-      const oBtn = document.getElementById('signOutBtn');
-      if(gBtn) gBtn.classList.add('hidden');
-      if(oBtn) oBtn.classList.remove('hidden');
-      // The button's visibility is just UX -- every actual admin request
-      // is independently re-verified server-side regardless of this flag.
-      isAdmin = !!data.isAdmin;
-      const adminBtn = document.getElementById('btnAdmin');
-      if(adminBtn) adminBtn.classList.toggle('hidden', !isAdmin);
-      lobbySync();
-      refreshLobbyRank();
-      renderLobbyFriends();
-      // Re-fetch now that sessionToken is set, so the panel switches from
-      // the anonymous/guest view to this account's real persisted
-      // progress and claimed state right away.
-      fetchDailyChallenges();
-      // Friends: open the presence connection and load the list. This is
-      // what makes the player visible to their friends while they are
-      // just sitting in the lobby.
-      connectPresence();
-      refreshFriends();
+      onAuthenticated(await res.json());
     } catch(e){
       setAccountStatus('SIGN-IN FAILED \u2014 IS THE SERVER RUNNING?');
     }
+  }
+
+  // Everything that has to happen once a sign-in succeeds, for EITHER
+  // method. Google and username/password both land here, so the two can
+  // never drift apart -- there is one account-session path, not two.
+  //
+  // `data.account` is the server's sanitised view of the account: it
+  // never contains a password hash (see publicAccount in server.js), and
+  // the session token lives only in this variable. It is deliberately
+  // NOT written to localStorage/sessionStorage/a cookie, which is what
+  // makes a page refresh log the player out -- there is nothing left for
+  // the reloaded page to authenticate with.
+  function onAuthenticated(data){
+    sessionToken = data.sessionToken;
+    applyAccount(data.account);
+    loggedIn = true;
+    setAccountStatus('SIGNED IN AS ' + accountName.toUpperCase());
+    const gBtn = document.getElementById('googleSignInBtn');
+    const oBtn = document.getElementById('signOutBtn');
+    const pBtn = document.getElementById('btnPasswordAuth');
+    if(gBtn) gBtn.classList.add('hidden');
+    if(pBtn) pBtn.classList.add('hidden');
+    if(oBtn) oBtn.classList.remove('hidden');
+    // The button's visibility is just UX -- every actual admin request
+    // is independently re-verified server-side regardless of this flag.
+    isAdmin = !!data.isAdmin;
+    const adminBtn = document.getElementById('btnAdmin');
+    if(adminBtn) adminBtn.classList.toggle('hidden', !isAdmin);
+    lobbySync();
+    refreshLobbyRank();
+    renderLobbyFriends();
+    // Re-fetch now that sessionToken is set, so the panel switches from
+    // the anonymous/guest view to this account's real persisted
+    // progress and claimed state right away.
+    fetchDailyChallenges();
+    // Friends: open the presence connection and load the list. This is
+    // what makes the player visible to their friends while they are
+    // just sitting in the lobby.
+    connectPresence();
+    refreshFriends();
+  }
+
+  // ====================================================================
+  // USERNAME + PASSWORD SIGN-IN (client)
+  //
+  // The second way into the same account. Reuses the existing lobby
+  // modal rather than adding a screen, and funnels into the same
+  // onAuthenticated() path Google uses.
+  //
+  // The checks here are for FEEL ONLY -- the server validates every one
+  // of them again and is the only thing that decides anything (see
+  // /auth/register and /auth/login in server.js). Nothing typed here is
+  // ever stored: no localStorage, no cookie, and the password is only
+  // held long enough to be POSTed.
+  // ====================================================================
+  let authMode = 'login'; // 'login' | 'register'
+
+  function authFormHtml(){
+    const isReg = authMode === 'register';
+    return ''
+      + '<div class="auth-form">'
+      +   '<div class="auth-field">'
+      +     '<span class="auth-label">USERNAME</span>'
+      +     '<input class="auth-input" id="authUser" type="text" autocomplete="username" '
+      +       'autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="16">'
+      +     (isReg ? '<span class="auth-hint">3\u201316 CHARACTERS \u00b7 LETTERS, NUMBERS AND UNDERSCORES</span>' : '')
+      +   '</div>'
+      +   '<div class="auth-field">'
+      +     '<span class="auth-label">PASSWORD</span>'
+      +     '<div class="auth-pw-wrap">'
+      +       '<input class="auth-input" id="authPass" type="password" maxlength="200" '
+      +         'autocomplete="' + (isReg ? 'new-password' : 'current-password') + '">'
+      +       '<button class="auth-show" id="authShow" type="button">SHOW</button>'
+      +     '</div>'
+      +     (isReg ? '<span class="auth-hint">AT LEAST 8 CHARACTERS</span>' : '')
+      +   '</div>'
+      +   (isReg
+        ? '<div class="auth-field">'
+          +   '<span class="auth-label">CONFIRM PASSWORD</span>'
+          +   '<input class="auth-input" id="authConfirm" type="password" maxlength="200" autocomplete="new-password">'
+          + '</div>'
+        : '')
+      +   '<div class="auth-error" id="authError"></div>'
+      +   '<div class="auth-actions">'
+      +     '<button class="menu-btn accent-2" id="authSubmit">' + (isReg ? 'CREATE ACCOUNT' : 'LOG IN') + '</button>'
+      +     '<button class="auth-switch" id="authSwitch">'
+      +       (isReg ? '\u2190 BACK TO LOG IN' : 'NO ACCOUNT? CREATE ONE')
+      +     '</button>'
+      +   '</div>'
+      +   '<div class="auth-hint" style="text-align:center;margin-top:2px">'
+      +     'YOUR PROGRESS SAVES TO THIS ACCOUNT. YOU WILL BE LOGGED OUT WHEN THE PAGE RELOADS.'
+      +   '</div>'
+      + '</div>';
+  }
+
+  function openAuthModal(mode){
+    authMode = mode || 'login';
+    lobbyOpenModal(authMode === 'register' ? 'CREATE ACCOUNT' : 'LOG IN', authFormHtml());
+    wireAuthForm();
+  }
+
+  function wireAuthForm(){
+    const userEl = document.getElementById('authUser');
+    const passEl = document.getElementById('authPass');
+    const confirmEl = document.getElementById('authConfirm');
+    const errEl = document.getElementById('authError');
+    const submit = document.getElementById('authSubmit');
+    const showBtn = document.getElementById('authShow');
+    const switchBtn = document.getElementById('authSwitch');
+    if(!userEl || !passEl || !submit) return;
+
+    const fail = msg => { if(errEl) errEl.textContent = msg; };
+
+    if(showBtn){
+      showBtn.addEventListener('click', ()=>{
+        const showing = passEl.type === 'text';
+        passEl.type = showing ? 'password' : 'text';
+        if(confirmEl) confirmEl.type = passEl.type;
+        showBtn.textContent = showing ? 'SHOW' : 'HIDE';
+      });
+    }
+    if(switchBtn){
+      switchBtn.addEventListener('click', ()=> openAuthModal(authMode === 'register' ? 'login' : 'register'));
+    }
+
+    let busy = false;
+    async function go(){
+      if(busy) return;
+      const username = userEl.value.trim();
+      const password = passEl.value;
+      const isReg = authMode === 'register';
+
+      // Mirrors the server's rules so the player hears about a problem
+      // without a round trip. The server re-checks all of it regardless.
+      if(username.length < 3 || username.length > 16){ return fail('Username must be 3\u201316 characters.'); }
+      if(!/^[A-Za-z0-9_]+$/.test(username)){ return fail('Username can only use letters, numbers and underscores.'); }
+      if(password.length < 8){ return fail('Password must be at least 8 characters.'); }
+      if(isReg && confirmEl && confirmEl.value !== password){ return fail('Passwords do not match.'); }
+
+      busy = true;
+      fail('');
+      submit.textContent = isReg ? 'CREATING...' : 'LOGGING IN...';
+      try{
+        const res = await fetch(ACCOUNT_SERVER_URL + (isReg ? '/auth/register' : '/auth/login'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(isReg
+            ? { username: username, password: password, confirm: confirmEl ? confirmEl.value : password }
+            : { username: username, password: password })
+        });
+        const data = await res.json().catch(()=>({}));
+        if(!res.ok){
+          busy = false;
+          submit.textContent = isReg ? 'CREATE ACCOUNT' : 'LOG IN';
+          return fail(data.error || 'Something went wrong. Please try again.');
+        }
+        // Clear the typed password out of the DOM before the modal
+        // closes, so it isn't sitting in a detached input.
+        passEl.value = '';
+        if(confirmEl) confirmEl.value = '';
+        lobbyCloseModal();
+        onAuthenticated(data);
+      } catch(e){
+        busy = false;
+        submit.textContent = isReg ? 'CREATE ACCOUNT' : 'LOG IN';
+        fail('Something went wrong. Please try again.');
+      }
+    }
+
+    submit.addEventListener('click', go);
+    for(const el of [userEl, passEl, confirmEl]){
+      if(el) el.addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); go(); } });
+    }
+    setTimeout(()=>{ try{ userEl.focus(); }catch(e){} }, 50);
   }
 
   function signOut(){
@@ -4568,6 +4803,20 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     // valid, so this account goes offline for its friends immediately
     // rather than lingering until the socket times out.
     disconnectPresence();
+    // End the session on the SERVER too, while the token is still
+    // valid, so the token is dead even if a copy of it survives
+    // anywhere. Fire-and-forget: the local sign-out below happens
+    // regardless of whether this request lands.
+    if(sessionToken){
+      const token = sessionToken;
+      try{
+        fetch(ACCOUNT_SERVER_URL + '/auth/logout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionToken: token })
+        }).catch(()=>{});
+      } catch(e){}
+    }
     FRIENDS.friends = []; FRIENDS.incoming = []; FRIENDS.outgoing = [];
     FRIENDS.counts = { friends: 0, incoming: 0, outgoing: 0, maxFriends: FRIENDS.counts.maxFriends };
     FRIENDS.announced = {};
@@ -4580,7 +4829,9 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     setAccountStatus('NOT SIGNED IN \u2014 PROGRESS WON\u2019T BE SAVED');
     const gBtn = document.getElementById('googleSignInBtn');
     const oBtn = document.getElementById('signOutBtn');
+    const pBtn = document.getElementById('btnPasswordAuth');
     if(gBtn) gBtn.classList.remove('hidden');
+    if(pBtn) pBtn.classList.remove('hidden');
     if(oBtn) oBtn.classList.add('hidden');
     const adminBtn = document.getElementById('btnAdmin');
     if(adminBtn) adminBtn.classList.add('hidden');
@@ -9925,6 +10176,23 @@ if(tutorialActive) tutorialUpdate(dt);
   const btnLeaderboard = document.getElementById('btnLeaderboard');
   const btnBackLeaderboard = document.getElementById('btnBackLeaderboard');
   const lbTabs = document.querySelectorAll('#menuLeaderboard .shop-tab');
+  const btnPasswordAuth = document.getElementById('btnPasswordAuth');
+  if(btnPasswordAuth) btnPasswordAuth.addEventListener('click', ()=> openAuthModal('login'));
+
+  // Best-effort: tell the server to drop the session as the page goes
+  // away, so a closed tab doesn't leave one behind. This is a TIDY-UP
+  // layer, not the security mechanism -- a beacon can be dropped by the
+  // browser and is not relied on. What actually logs the player out on
+  // refresh is that the token lives only in a JS variable and is never
+  // persisted, so a reloaded page has nothing to authenticate with.
+  window.addEventListener('pagehide', ()=>{
+    if(!sessionToken) return;
+    try{
+      const blob = new Blob([JSON.stringify({ sessionToken: sessionToken })], { type: 'application/json' });
+      navigator.sendBeacon(ACCOUNT_SERVER_URL + '/auth/logout', blob);
+    } catch(e){}
+  });
+
   const signOutBtn = document.getElementById('signOutBtn');
 
   btnLeaderboard.addEventListener('click', ()=>{
@@ -10277,6 +10545,15 @@ if(tutorialActive) tutorialUpdate(dt);
   // number. Categories: NEW / IMPROVEMENTS / BALANCE / BUG FIXES --
   // include only the ones an entry actually has.
   const PATCH_NOTES = [
+    { version: 'v0.15', title: 'Username & Password Accounts',
+      NEW: [
+        'You can now create a DuelBound account with a username and password \u2014 no Google account needed.',
+        'Added a LOG OUT button to the account panel.'
+      ],
+      IMPROVEMENTS: [
+        'Signing in with Google still works exactly as before, on the same account.',
+        'For your security you are now signed out whenever the page reloads. Your account and all your progress are kept.'
+      ] },
     { version: 'v0.14', title: 'Anti-Cheat Groundwork',
       IMPROVEMENTS: [
         'The server now double-checks hit detection in the background to measure how well it agrees with each player\u2019s game. Nothing about how hits work has changed yet \u2014 this is the measurement step before it can safely take over.'
