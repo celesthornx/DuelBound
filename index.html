@@ -2501,18 +2501,22 @@
 
       <!-- ===== RIGHT: reserved space for future systems ===== -->
       <aside class="lobby-col lobby-right">
+        <!-- Mirrors the real Friends system (see the FRIENDS menu / FRIENDS
+             object below) -- renderLobbyFriends() keeps this in sync at
+             boot, sign-in/out, and every real friends-list update, same
+             pattern as the rank strip above it. -->
         <div class="lp">
           <div class="lp-head">
             <span class="lp-title">FRIENDS</span>
-            <span class="soon-tag">COMING SOON</span>
+            <span class="soon-tag" id="lobbyFriendsTag">&mdash;</span>
           </div>
-          <div class="lp-body">
+          <div class="lp-body" id="lobbyFriendsBody">
             <div class="ghost-stack">
               <div class="ghost-row"><div class="ghost-av"></div><div class="ghost-lines"><span></span><span></span></div></div>
               <div class="ghost-row"><div class="ghost-av"></div><div class="ghost-lines"><span></span><span></span></div></div>
               <div class="ghost-row"><div class="ghost-av"></div><div class="ghost-lines"><span></span><span></span></div></div>
             </div>
-            <div class="micro" style="text-align:center; margin-top:6px;">FRIENDS LIST NOT AVAILABLE YET</div>
+            <div class="micro" style="text-align:center; margin-top:6px;">SIGN IN TO ADD FRIENDS</div>
           </div>
         </div>
 
@@ -4415,6 +4419,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       if(adminBtn) adminBtn.classList.toggle('hidden', !isAdmin);
       lobbySync();
       refreshLobbyRank();
+      renderLobbyFriends();
       // Re-fetch now that sessionToken is set, so the panel switches from
       // the anonymous/guest view to this account's real persisted
       // progress and claimed state right away.
@@ -4452,6 +4457,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     if(adminBtn) adminBtn.classList.add('hidden');
     lobbySync();
     refreshLobbyRank();
+    renderLobbyFriends();
     // Drop back to the anonymous view -- same challenge list, but no
     // personal (persisted) progress or claimed state attached to it.
     dailyClaimed = {};
@@ -10084,6 +10090,10 @@ if(tutorialActive) tutorialUpdate(dt);
   // number. Categories: NEW / IMPROVEMENTS / BALANCE / BUG FIXES --
   // include only the ones an entry actually has.
   const PATCH_NOTES = [
+    { version: 'v0.11', title: 'Friends Preview in Lobby',
+      IMPROVEMENTS: [
+        'The FRIENDS card in the lobby now shows your actual friends and who’s online, instead of a "Coming Soon" placeholder.'
+      ] },
     { version: 'v0.10', title: 'Ranked Start Changes',
       IMPROVEMENTS: [
         'Removed placement matches and the Unranked state — every player is now ranked from their very first match.',
@@ -10242,6 +10252,7 @@ if(tutorialActive) tutorialUpdate(dt);
     renderLobbyModes();
     lobbySync();
     refreshLobbyRank();
+    renderLobbyFriends();
     fetchDailyChallenges();
 
     const prev = lobbyEl('lobbyModePrev');
@@ -10974,6 +10985,7 @@ if(tutorialActive) tutorialUpdate(dt);
     if(p.counts) FRIENDS.counts = p.counts;
     updateFriendsBadge();
     if(menuFriends && !menuFriends.classList.contains('hidden')) renderFriends();
+    renderLobbyFriends();
   }
 
   // A presence delta for one friend -- patched in place so the list
@@ -10994,6 +11006,7 @@ if(tutorialActive) tutorialUpdate(dt);
       }
     });
     if(changed && menuFriends && !menuFriends.classList.contains('hidden')) renderFriends();
+    if(changed) renderLobbyFriends();
     if(changed && menuFriendProfile && !menuFriendProfile.classList.contains('hidden')
        && FRIENDS.profile && FRIENDS.profile.id === evt.id){
       FRIENDS.profile.presence = evt.presence;
@@ -11106,6 +11119,57 @@ if(tutorialActive) tutorialUpdate(dt);
     const n = FRIENDS.counts.incoming || 0;
     btn.classList.toggle('has-badge', n > 0);
     btn.setAttribute('title', n > 0 ? ('Friends (' + n + ' request' + (n === 1 ? '' : 's') + ')') : 'Friends');
+  }
+
+  // Compact preview of the real friends list in the lobby sidebar (see
+  // renderFriends() for the full menu this mirrors) -- so a player can
+  // see who's online without leaving the lobby.
+  function renderLobbyFriends(){
+    const body = lobbyEl('lobbyFriendsBody');
+    const tag  = lobbyEl('lobbyFriendsTag');
+    if(!body || !tag) return;
+
+    if(!loggedIn || !sessionToken){
+      tag.textContent = '—';
+      body.innerHTML = '<div class="ghost-stack">'
+        + '<div class="ghost-row"><div class="ghost-av"></div><div class="ghost-lines"><span></span><span></span></div></div>'
+        + '<div class="ghost-row"><div class="ghost-av"></div><div class="ghost-lines"><span></span><span></span></div></div>'
+        + '<div class="ghost-row"><div class="ghost-av"></div><div class="ghost-lines"><span></span><span></span></div></div>'
+        + '</div><div class="micro" style="text-align:center; margin-top:6px;">SIGN IN TO ADD FRIENDS</div>';
+      return;
+    }
+
+    const online = FRIENDS.friends.filter(f => f.presence !== 'offline').length;
+    tag.textContent = online > 0
+      ? (online + ' ONLINE')
+      : (FRIENDS.counts.friends + ' FRIEND' + (FRIENDS.counts.friends === 1 ? '' : 'S'));
+
+    if(!FRIENDS.friends.length){
+      body.innerHTML = '<div class="micro" style="text-align:center; margin:10px 0;">NO FRIENDS YET</div>'
+        + '<button class="menu-btn" style="width:100%" id="lobbyFriendsAdd">ADD FRIENDS</button>';
+      const addBtn = lobbyEl('lobbyFriendsAdd');
+      if(addBtn) addBtn.addEventListener('click', ()=> openFriends());
+      return;
+    }
+
+    // Online friends first, then alphabetical, capped to a short preview
+    // -- the full sorted/searchable list still lives in the real menu.
+    const sorted = FRIENDS.friends.slice().sort((a, b)=>{
+      const aOn = a.presence !== 'offline', bOn = b.presence !== 'offline';
+      if(aOn !== bOn) return aOn ? -1 : 1;
+      return String(a.name).localeCompare(String(b.name));
+    }).slice(0, 4);
+
+    body.innerHTML = sorted.map(p =>
+      '<div class="fr-row" data-lobby-fr="' + frEscape(p.id) + '" style="cursor:pointer">' + presenceRowHtml(p) + '</div>'
+    ).join('') + '<button class="menu-btn" style="width:100%; margin-top:4px" id="lobbyFriendsViewAll">VIEW ALL</button>';
+
+    body.querySelectorAll('[data-lobby-fr]').forEach(el => el.addEventListener('click', ()=>{
+      menuMain.classList.add('hidden');
+      openFriendProfile(el.dataset.lobbyFr);
+    }));
+    const viewAll = lobbyEl('lobbyFriendsViewAll');
+    if(viewAll) viewAll.addEventListener('click', ()=> openFriends());
   }
 
   // ---- UI --------------------------------------------------------
