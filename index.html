@@ -1675,16 +1675,107 @@
     border-top: 1px solid rgba(122,158,200,.13);
     background: linear-gradient(0deg, rgba(6,9,15,.94), rgba(6,9,15,.5));
   }
-  .chat-stub{
+  /* ---- Lobby chat ----
+     The toggle lives in the bottom bar where the "coming soon" stub
+     used to be; the panel itself is absolutely positioned above it so
+     it never reflows the lobby columns behind it. */
+  .chat-toggle{
     display:flex; align-items:center; gap:10px;
     padding: 8px 14px; border-radius:3px;
     border:1px solid rgba(122,158,200,.16);
     background: rgba(255,255,255,.02);
     color: var(--ink-dim);
     font-family:'Share Tech Mono', monospace; font-size: 10px; letter-spacing:1.4px;
-    cursor: default; opacity:.75; min-width: 300px;
+    cursor: pointer; min-width: 220px; text-align:left;
+    transition: color .15s, border-color .15s, background .15s;
   }
-  .chat-stub svg{ width:15px; height:15px; opacity:.7; }
+  .chat-toggle:hover, .chat-toggle.open{
+    color: var(--p1); border-color: rgba(63,208,255,.45); background: rgba(63,208,255,.07);
+  }
+  .chat-toggle svg{ width:15px; height:15px; opacity:.8; }
+  .chat-unread{
+    margin-left:auto; min-width:16px; padding:1px 5px; border-radius:9px;
+    background: var(--p2); color:#0a0d14; font-size:9px; letter-spacing:0; text-align:center;
+  }
+  .chat-panel{
+    position:absolute; left: var(--lobby-pad); bottom: 58px; z-index: 15;
+    width: 340px; max-width: calc(100vw - 2 * var(--lobby-pad));
+    height: 360px; max-height: 52vh;
+    display:flex; flex-direction:column;
+    /* Near-opaque plus a blur: the lobby art behind the panel showed
+       through enough to compete with the messages. */
+    background: rgba(8,11,18,.985); backdrop-filter: blur(6px);
+    border:1px solid rgba(122,158,200,.22); border-radius:4px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.55);
+    animation: lobbyIn .16s ease both;
+  }
+  .chat-head{
+    display:flex; align-items:center; gap:8px;
+    padding:8px 10px; border-bottom:1px solid rgba(122,158,200,.16);
+  }
+  .chat-title{
+    font-family:'Chakra Petch', sans-serif; font-weight:700;
+    font-size:11px; letter-spacing:2.2px; color: var(--p1);
+  }
+  .chat-count{ font-family:'Share Tech Mono', monospace; font-size:9px; color: var(--ink-dim); }
+  .chat-close{
+    margin-left:auto; background:none; border:none; cursor:pointer;
+    color: var(--ink-dim); font-size:16px; line-height:1; padding:0 4px;
+  }
+  .chat-close:hover{ color: var(--p1); }
+  .chat-log{
+    flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden;
+    padding:8px 10px; display:flex; flex-direction:column; gap:6px;
+    scrollbar-width: thin; scrollbar-color: rgba(122,158,200,.3) transparent;
+  }
+  .chat-log::-webkit-scrollbar{ width:5px; }
+  .chat-log::-webkit-scrollbar-thumb{ background: rgba(122,158,200,.28); border-radius:3px; }
+  .chat-msg{ font-family:'Share Tech Mono', monospace; font-size:11px; line-height:1.5; }
+  .chat-msg .cm-name{ color: var(--p1); }
+  .chat-msg.mine .cm-name{ color:#5dffa0; }
+  .chat-msg.admin .cm-name{ color:#ffce54; }
+  .chat-msg .cm-time{ color: rgba(122,158,200,.5); font-size:9px; margin-right:4px; }
+  .chat-msg .cm-text{ color: var(--ink); word-break:break-word; }
+  .chat-msg.system .cm-text{ color: var(--ink-dim); font-style:italic; }
+  .chat-empty{
+    font-family:'Share Tech Mono', monospace; font-size:10px;
+    color: var(--ink-dim); text-align:center; margin:auto 0; line-height:1.7;
+  }
+  .chat-newpill{
+    position:absolute; left:50%; transform:translateX(-50%); bottom:64px;
+    font-family:'Share Tech Mono', monospace; font-size:9px; letter-spacing:1.4px;
+    color:#0a0d14; background: var(--p1); border:none; border-radius:10px;
+    padding:4px 12px; cursor:pointer; z-index:2;
+  }
+  .chat-foot{ display:flex; gap:6px; padding:8px; border-top:1px solid rgba(122,158,200,.16); }
+  .chat-input{
+    flex:1 1 auto; min-width:0;
+    font-family:'Share Tech Mono', monospace; font-size:12px; color: var(--ink);
+    background: rgba(255,255,255,.04); border:1px solid rgba(122,158,200,.3);
+    border-radius:4px; padding:8px 9px;
+  }
+  .chat-input:focus{ outline:none; border-color: var(--p1); background: rgba(63,208,255,.06); }
+  .chat-input:disabled{ opacity:.5; cursor:not-allowed; }
+  .chat-send{
+    font-family:'Chakra Petch', sans-serif; font-weight:600;
+    font-size:10px; letter-spacing:1.6px; color: var(--ink);
+    background: rgba(63,208,255,.12); border:1px solid rgba(63,208,255,.4);
+    border-radius:4px; padding:0 12px; cursor:pointer;
+  }
+  .chat-send:hover{ background: rgba(63,208,255,.2); }
+  .chat-send:disabled{ opacity:.45; cursor:not-allowed; }
+  .chat-note{
+    font-family:'Share Tech Mono', monospace; font-size:9px; letter-spacing:1px;
+    color: var(--p2); min-height:12px; padding:0 10px 7px; text-align:center;
+  }
+  /* Touch: a bigger target, and a panel that uses the width it has. */
+  @media (max-width: 760px), (max-height: 520px){
+    .chat-panel{ width: min(340px, calc(100vw - 24px)); height: 300px; max-height: 60vh; bottom: 52px; }
+    .chat-input{ font-size:13px; padding:9px; }
+    .chat-send{ padding:0 14px; }
+    .chat-toggle{ min-width:0; }
+    .chat-toggle span:not(.chat-unread){ display:none; }
+  }
   .lobby-bottom .spacer{ flex:1 1 auto; }
   .ghost-btn{
     background: rgba(255,255,255,.03); border:1px solid var(--panel-edge);
@@ -1801,7 +1892,7 @@
     .brand-mark{ width:32px; height:32px; }
     .nav-item{ font-size: 11px; letter-spacing: 1.4px; padding: 8px 8px; }
     .mode-card{ width: 146px; }
-    .chat-stub{ min-width: 0; }
+    .chat-toggle{ min-width: 0; }
   }
   /* short laptop screens (768px tall) -- compress vertical rhythm */
   @media (max-height: 850px){
@@ -1842,7 +1933,8 @@
     .mode-card{ width: 132px; }
     .mode-card.selected{ transform: scale(1.06); }
     .play-label{ font-size: 34px; letter-spacing: 5px; }
-    .chat-stub{ display:none; }
+    .chat-toggle{ min-width:0; padding:7px 10px; }
+    .chat-toggle span:not(.chat-unread){ display:none; }
     .arena-banner{ display:none; }
   }
 
@@ -2680,17 +2772,39 @@
 
     <!-- ---------- BOTTOM BAR ---------- -->
     <footer class="lobby-bottom">
-      <div class="chat-stub" title="Lobby chat is not implemented yet">
+      <button class="chat-toggle" id="chatToggle" type="button" aria-expanded="false" aria-controls="lobbyChat">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.5-5A8 8 0 1 1 21 12z"/>
         </svg>
-        LOBBY CHAT &mdash; COMING SOON
-      </div>
+        <span>LOBBY CHAT</span>
+        <span class="chat-unread hidden" id="chatUnread">0</span>
+      </button>
       <div class="spacer"></div>
       <button class="ghost-btn" data-act="controls">CONTROLS</button>
       <button class="ghost-btn" data-act="patch">PATCH NOTES</button>
       <span class="version-tag" id="lobbyVersion">v1.0.0</span>
     </footer>
+
+    <!-- ---------- LOBBY CHAT ----------
+         One global room for players sitting in the lobby. Rides on the
+         existing presence WebSocket (see connectPresence / CHAT below);
+         there is no second connection and no polling. -->
+    <div class="chat-panel hidden" id="lobbyChat">
+      <div class="chat-head">
+        <span class="chat-title">LOBBY CHAT</span>
+        <span class="chat-count" id="chatCount"></span>
+        <button class="chat-close" id="chatCollapse" type="button" title="Collapse">&ndash;</button>
+      </div>
+      <div class="chat-log" id="chatLog"></div>
+      <button class="chat-newpill hidden" id="chatNewPill" type="button">&darr; NEW MESSAGES</button>
+      <div class="chat-foot">
+        <input class="chat-input" id="chatInput" type="text" maxlength="200"
+               autocomplete="off" autocapitalize="sentences" spellcheck="true"
+               placeholder="SAY SOMETHING...">
+        <button class="chat-send" id="chatSend" type="button">SEND</button>
+      </div>
+      <div class="chat-note" id="chatNote"></div>
+    </div>
 
     <div class="lobby-toast" id="lobbyToast"></div>
     <div class="lobby-modal hidden" id="lobbyModal">
@@ -4687,6 +4801,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     // just sitting in the lobby.
     connectPresence();
     refreshFriends();
+    chatUpdateAvailability();
   }
 
   // ====================================================================
@@ -5002,6 +5117,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     if(rBtn) rBtn.classList.add('hidden');
     const adminBtn = document.getElementById('btnAdmin');
     if(adminBtn) adminBtn.classList.add('hidden');
+    chatSetOpen(false);
+    chatReset();
     lobbySync();
     refreshLobbyRank();
     renderLobbyFriends();
@@ -10774,6 +10891,16 @@ if(tutorialActive) tutorialUpdate(dt);
   // number. Categories: NEW / IMPROVEMENTS / BALANCE / BUG FIXES --
   // include only the ones an entry actually has.
   const PATCH_NOTES = [
+    { version: 'v0.17', title: 'Lobby Chat',
+      NEW: [
+        'Lobby chat is live \u2014 the LOBBY CHAT button in the bottom bar opens a real, real-time room for everyone sitting in the lobby.',
+        'The button shows an unread count while the panel is collapsed, and scrolling back through the log now shows a "new messages" button instead of yanking you to the bottom.',
+        'Chat is lobby-only: you stop receiving messages while you are in a match, and catch up when you come back.'
+      ],
+      IMPROVEMENTS: [
+        'Names in chat come from your signed-in account, so nobody can pretend to be another player or staff.',
+        'Messages are capped at 200 characters, lightly rate-limited, and passed through a language filter.'
+      ] },
     { version: 'v0.16', title: 'Account Recovery',
       NEW: [
         'Forgot your password? The log-in screen now has a FORGOT PASSWORD? link that resets it with your recovery code.',
@@ -11619,6 +11746,7 @@ if(tutorialActive) tutorialUpdate(dt);
     ws.onclose = function(){
       FRIENDS.ready = false;
       if(FRIENDS.socket === ws) FRIENDS.socket = null;
+      chatUpdateAvailability();
       // Reconnect with backoff while still signed in, so a dropped
       // connection doesn't silently leave the player invisible.
       if(loggedIn && sessionToken){
@@ -11629,6 +11757,273 @@ if(tutorialActive) tutorialUpdate(dt);
     };
 
     ws.onerror = function(){ /* onclose handles the retry */ };
+  }
+
+  // ====================================================================
+  // LOBBY CHAT (client)
+  //
+  // Rides on the presence socket opened above -- there is no second
+  // connection, and nothing polls. Outgoing messages carry ONE field,
+  // the text: the server stamps the sender, the time and the id from
+  // the session that socket authenticated with, so this client cannot
+  // claim to be anyone (see the chat_ block in server.js).
+  //
+  // Everything rendered here goes in through textContent. No message
+  // text ever touches innerHTML, which is what makes a message
+  // containing markup harmless -- it is displayed, never parsed.
+  // ====================================================================
+  const CHAT = {
+    open: false,
+    unread: 0,
+    maxLength: 200,
+    seen: new Set(),      // message ids already rendered, so a history
+                          // re-send after a match never duplicates lines
+    pinned: true,         // is the log scrolled to the bottom?
+    noteTimer: null
+  };
+
+  const chatEl = id => document.getElementById(id);
+
+  function chatSocketReady(){
+    return !!(FRIENDS.socket && FRIENDS.socket.readyState === WebSocket.OPEN && FRIENDS.ready);
+  }
+
+  function chatSetNote(text){
+    const note = chatEl('chatNote');
+    if(!note) return;
+    note.textContent = text || '';
+    clearTimeout(CHAT.noteTimer);
+    if(text) CHAT.noteTimer = setTimeout(()=>{ note.textContent = ''; }, 4000);
+  }
+
+  function chatUpdateAvailability(){
+    const input = chatEl('chatInput');
+    const send = chatEl('chatSend');
+    if(!input || !send) return;
+    const usable = loggedIn && chatSocketReady();
+    input.disabled = !usable;
+    send.disabled = !usable;
+    input.placeholder = loggedIn
+      ? (chatSocketReady() ? 'SAY SOMETHING...' : 'CONNECTING...')
+      : 'SIGN IN TO CHAT';
+  }
+
+  function chatUpdateUnread(){
+    const badge = chatEl('chatUnread');
+    if(!badge) return;
+    badge.textContent = CHAT.unread > 99 ? '99+' : String(CHAT.unread);
+    badge.classList.toggle('hidden', CHAT.unread === 0);
+  }
+
+  // Auto-scroll only when the player is already at the bottom. Someone
+  // reading back through the log must never be yanked away from it --
+  // they get the pill instead.
+  function chatAtBottom(log){
+    return log.scrollHeight - log.scrollTop - log.clientHeight < 24;
+  }
+  function chatScrollToBottom(){
+    const log = chatEl('chatLog');
+    if(!log) return;
+    log.scrollTop = log.scrollHeight;
+    CHAT.pinned = true;
+    const pill = chatEl('chatNewPill');
+    if(pill) pill.classList.add('hidden');
+  }
+
+  function chatTimeLabel(ts){
+    const d = new Date(ts);
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return hh + ':' + mm;
+  }
+
+  function chatRenderMessage(msg){
+    const log = chatEl('chatLog');
+    if(!log || !msg || !msg.id || CHAT.seen.has(msg.id)) return false;
+    CHAT.seen.add(msg.id);
+
+    const empty = log.querySelector('.chat-empty');
+    if(empty) empty.remove();
+
+    const row = document.createElement('div');
+    row.className = 'chat-msg'
+      + (msg.kind === 'system' ? ' system' : '')
+      + (msg.admin ? ' admin' : '')
+      + (msg.from && FRIENDS.myId && msg.from === FRIENDS.myId ? ' mine' : '');
+
+    const time = document.createElement('span');
+    time.className = 'cm-time';
+    time.textContent = chatTimeLabel(msg.ts || Date.now());
+    row.appendChild(time);
+
+    if(msg.kind !== 'system'){
+      const name = document.createElement('span');
+      name.className = 'cm-name';
+      // textContent, so a display name made of markup is shown as the
+      // characters the player typed rather than parsed as HTML.
+      name.textContent = (msg.admin ? '[STAFF] ' : '') + (msg.name || 'Player') + ': ';
+      row.appendChild(name);
+    }
+
+    const text = document.createElement('span');
+    text.className = 'cm-text';
+    text.textContent = msg.text || '';
+    row.appendChild(text);
+
+    log.appendChild(row);
+    // Bounded on the client too, so a long session cannot grow the DOM
+    // without limit.
+    while(log.children.length > 200) log.removeChild(log.firstChild);
+    return true;
+  }
+
+  function chatShowEmpty(){
+    const log = chatEl('chatLog');
+    if(!log || log.children.length) return;
+    const empty = document.createElement('div');
+    empty.className = 'chat-empty';
+    empty.textContent = loggedIn
+      ? 'NO MESSAGES YET \u2014 SAY HELLO'
+      : 'SIGN IN TO JOIN THE LOBBY CHAT';
+    log.appendChild(empty);
+  }
+
+  function chatOnMessage(msg){
+    const log = chatEl('chatLog');
+    const wasPinned = !log || chatAtBottom(log);
+    const added = chatRenderMessage(msg);
+    if(!added) return;
+
+    if(CHAT.open && wasPinned){
+      chatScrollToBottom();
+    } else if(CHAT.open){
+      const pill = chatEl('chatNewPill');
+      if(pill) pill.classList.remove('hidden');
+    } else {
+      CHAT.unread++;
+      chatUpdateUnread();
+    }
+  }
+
+  function chatApplyHistory(data){
+    const log = chatEl('chatLog');
+    if(!log) return;
+    if(data.config && data.config.maxLength){
+      CHAT.maxLength = data.config.maxLength;
+      const input = chatEl('chatInput');
+      if(input) input.maxLength = CHAT.maxLength;
+    }
+    // Only messages this client has not already shown are appended, so
+    // re-receiving the history (after a match, or a reconnect) reads as
+    // a continuation rather than a repeat.
+    for(const msg of (data.messages || [])) chatRenderMessage(msg);
+    if(!log.children.length) chatShowEmpty();
+    if(CHAT.open) chatScrollToBottom();
+    // History deliberately does NOT raise the unread count: it is
+    // scrollback, not something that arrived while the player was
+    // looking away. Only live messages (chatOnMessage) do.
+    chatUpdateAvailability();
+  }
+
+  function chatSend(){
+    const input = chatEl('chatInput');
+    if(!input || input.disabled) return;
+    const text = input.value.trim();
+    if(!text) return;
+    if(!chatSocketReady()){ chatSetNote('NOT CONNECTED'); return; }
+    if(text.length > CHAT.maxLength){
+      chatSetNote('TOO LONG \u2014 ' + CHAT.maxLength + ' CHARACTERS MAX');
+      return;
+    }
+    // The message that goes on the wire, in full. No name, no id, no
+    // admin flag -- the server has all of that already.
+    FRIENDS.socket.send(JSON.stringify({ type: 'chat_send', text: text }));
+    input.value = '';
+    chatUpdateCounter();
+  }
+
+  function chatUpdateCounter(){
+    const input = chatEl('chatInput');
+    const count = chatEl('chatCount');
+    if(!input || !count) return;
+    const left = CHAT.maxLength - input.value.length;
+    count.textContent = left <= 40 ? String(left) : '';
+  }
+
+  function chatSetOpen(open){
+    CHAT.open = !!open;
+    const panel = chatEl('lobbyChat');
+    const toggle = chatEl('chatToggle');
+    if(panel) panel.classList.toggle('hidden', !CHAT.open);
+    if(toggle){
+      toggle.classList.toggle('open', CHAT.open);
+      toggle.setAttribute('aria-expanded', CHAT.open ? 'true' : 'false');
+    }
+    if(CHAT.open){
+      CHAT.unread = 0;
+      chatUpdateUnread();
+      chatShowEmpty();
+      chatUpdateAvailability();
+      chatScrollToBottom();
+      // Ask for whatever was said while the panel was shut. Cheap, and
+      // it also covers a socket that reconnected in the meantime.
+      if(chatSocketReady()) FRIENDS.socket.send(JSON.stringify({ type: 'chat_history_request' }));
+      const input = chatEl('chatInput');
+      if(input && !input.disabled && !isTouchDevice) setTimeout(()=>{ try{ input.focus(); }catch(e){} }, 40);
+    }
+  }
+
+  function wireLobbyChat(){
+    const toggle = chatEl('chatToggle');
+    if(!toggle) return;
+    toggle.addEventListener('click', ()=> chatSetOpen(!CHAT.open));
+    const collapse = chatEl('chatCollapse');
+    if(collapse) collapse.addEventListener('click', ()=> chatSetOpen(false));
+    const send = chatEl('chatSend');
+    if(send) send.addEventListener('click', chatSend);
+    const pill = chatEl('chatNewPill');
+    if(pill) pill.addEventListener('click', chatScrollToBottom);
+    const input = chatEl('chatInput');
+    if(input){
+      input.addEventListener('keydown', e => {
+        // The lobby is keyboard-driven; while typing, keys belong to
+        // the input and nothing else.
+        e.stopPropagation();
+        if(e.key === 'Enter'){ e.preventDefault(); chatSend(); }
+        if(e.key === 'Escape'){ e.preventDefault(); input.blur(); chatSetOpen(false); }
+      });
+      input.addEventListener('keyup', e => e.stopPropagation());
+      input.addEventListener('input', chatUpdateCounter);
+    }
+    const log = chatEl('chatLog');
+    if(log){
+      log.addEventListener('scroll', ()=>{
+        CHAT.pinned = chatAtBottom(log);
+        if(CHAT.pinned){
+          const p = chatEl('chatNewPill');
+          if(p) p.classList.add('hidden');
+        }
+      });
+    }
+    chatShowEmpty();
+    chatUpdateAvailability();
+    chatUpdateUnread();
+  }
+
+  // Wired here rather than with the rest of the lobby buttons further
+  // up: CHAT is a const in this scope, so the call has to come after it.
+  wireLobbyChat();
+
+  // Signing out clears the room from this client: the messages belong
+  // to a session that no longer exists.
+  function chatReset(){
+    const log = chatEl('chatLog');
+    if(log) log.innerHTML = '';
+    CHAT.seen.clear();
+    CHAT.unread = 0;
+    chatUpdateUnread();
+    chatShowEmpty();
+    chatUpdateAvailability();
   }
 
   function disconnectPresence(){
@@ -11664,8 +12059,14 @@ if(tutorialActive) tutorialUpdate(dt);
       FRIENDS.myId = data.id;
       if(data.friends) applyFriendsPayload(data.friends);
       syncActivity();
+      chatUpdateAvailability();
       return true;
     }
+
+    // ---- lobby chat ----
+    if(data.type === 'chat_history'){ chatApplyHistory(data); return true; }
+    if(data.type === 'chat_message'){ chatOnMessage(data.message); return true; }
+    if(data.type === 'chat_error'){ chatSetNote(String(data.message || '').toUpperCase()); return true; }
     if(data.type === 'presence_error'){
       return true;
     }
