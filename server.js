@@ -50,6 +50,7 @@ const Auth = require("./auth");
 // persistence, presence and the WebSocket wiring live in this file (see
 // the FRIENDS section further down).
 const Friends = require("./friends");
+const Chat = require("./chat");
 
 const accounts = {}; // sub -> account record (populated in startServer())
 
@@ -1550,6 +1551,79 @@ function presenceEventFor(sub) {
     };
 }
 
+// =====================================================================
+// LOBBY CHAT -- routing.
+//
+// The room itself (validation, rate limits, filter, history) lives in
+// chat.js. This half decides WHO a message reaches, and it reuses the
+// presence system for it rather than tracking its own membership: an
+// account is "in the lobby" exactly when the presence system says its
+// activity is `online` -- not inMatch, not voidbreak. That is the same
+// server-verified signal the friends list uses, so a client cannot put
+// itself in the room by claiming to be there.
+//
+// Chat is delivered only over PRESENCE connections. The main gameplay
+// socket authenticates with the same presence_hello, so without this
+// filter a player sitting in the lobby with a gameplay socket open
+// would receive every message twice.
+// =====================================================================
+
+// Off with CHAT_FILTER_ENABLED=0. On by default -- a lot of the people
+// playing this are children.
+const CHAT_FILTER_ENABLED = process.env.CHAT_FILTER_ENABLED !== "0";
+const lobbyChat = Chat.createChatRoom({ filterEnabled: CHAT_FILTER_ENABLED });
+
+function isInLobby(sub) {
+    return presenceStateOf(sub) === Friends.PRESENCE.ONLINE;
+}
+
+function sendChatToAccount(sub, payload) {
+    const row = presence.get(sub);
+    if (!row) return;
+    for (const conn of row.conns) {
+        if (conn.presenceOnly) send(conn, payload);
+    }
+}
+
+// Join lines are SYSTEM messages: they carry no sender, and a client
+// cannot produce one -- chat.js only ever stamps kind:"user" on
+// anything that arrives from a socket. Announced at most once every few
+// minutes per account, so a flapping connection cannot spam the room.
+const chatAnnouncedAt = new Map();
+const CHAT_JOIN_COOLDOWN_MS = 5 * 60 * 1000;
+
+function announceLobbyJoin(sub) {
+    const account = accounts[sub];
+    if (!account) return;
+    const now = Date.now();
+    const last = chatAnnouncedAt.get(sub) || 0;
+    if (now - last < CHAT_JOIN_COOLDOWN_MS) return;
+    chatAnnouncedAt.set(sub, now);
+    const message = lobbyChat.system(String(account.name || "A player") + " joined the lobby.");
+    // Everyone EXCEPT the player who just arrived: they do not need to
+    // be told they are here, and an unread badge for their own join
+    // would be nonsense.
+    if (message) broadcastChat({ type: "chat_message", message: message }, sub);
+}
+
+function chatHistoryPayload() {
+    return {
+        type: "chat_history",
+        messages: lobbyChat.history(),
+        config: {
+            maxLength: lobbyChat.config.maxLength,
+            filterEnabled: lobbyChat.filterEnabled
+        }
+    };
+}
+
+function broadcastChat(payload, exceptSub) {
+    for (const sub of presence.keys()) {
+        if (sub === exceptSub) continue;
+        if (isInLobby(sub)) sendChatToAccount(sub, payload);
+    }
+}
+
 // ---------------------------------------------------------------------
 // MIGRATION -- lazy, idempotent, additive. Mirrors ensureAccountRanked.
 // ---------------------------------------------------------------------
@@ -2046,7 +2120,12 @@ setInterval(() => {
         if (row.conns.size === 0) {
             presence.delete(sub);
             broadcastToFriends(sub, presenceEventFor(sub));
+            lobbyChat.forget(sub);
         }
+    }
+    // Join-announcement cooldowns stop mattering once they expire.
+    for (const [sub, at] of Array.from(chatAnnouncedAt.entries())) {
+        if (now - at > CHAT_JOIN_COOLDOWN_MS) chatAnnouncedAt.delete(sub);
     }
 }, 15000);
 
@@ -3869,6 +3948,14 @@ wss.on("connection", (socket, request) => {
                 // so opening a second tab doesn't notify everyone again.
                 if (cameOnline) broadcastToFriends(sub, presenceEventFor(sub));
 
+                // Lobby chat scrollback. Presence connections only --
+                // the gameplay socket sends this same hello, and does
+                // not want a copy (see the routing comment above).
+                if (conn.presenceOnly) {
+                    send(conn, chatHistoryPayload());
+                    if (cameOnline) announceLobbyJoin(sub);
+                }
+
                 // ---- Casual online-match identity ----
                 // A connection that ALSO holds one of the two casual
                 // gameplay slots (conn.id, set at connect time -- see
@@ -3906,6 +3993,10 @@ wss.on("connection", (socket, request) => {
             if (data.type === "presence_activity") {
                 if (presenceSetActivity(conn.authSub, data.activity)) {
                     broadcastToFriends(conn.authSub, presenceEventFor(conn.authSub));
+                    // Coming back from a match means rejoining the chat
+                    // room, and whatever was said while away is what
+                    // the panel should be showing.
+                    if (conn.presenceOnly && isInLobby(conn.authSub)) send(conn, chatHistoryPayload());
                 }
                 return;
             }
@@ -3914,6 +4005,64 @@ wss.on("connection", (socket, request) => {
                 const row = presence.get(conn.authSub);
                 if (row) row.lastSeen = Date.now();
                 send(conn, { type: "presence_pong" });
+                return;
+            }
+            return;
+        }
+
+        // =============================================================
+        // LOBBY CHAT
+        //
+        // Reached only on a connection that has already proved which
+        // account it is (conn.authSub, set by presence_hello). The
+        // message carries ONE field -- the text. Everything else about
+        // it (who sent it, what it is called, whether that account is
+        // an admin, when it happened, its id) is stamped server-side,
+        // because there is no field on the wire for a client to claim
+        // any of it.
+        // =============================================================
+        if (typeof data.type === "string" && data.type.indexOf("chat_") === 0) {
+            if (!conn.authSub || !accounts[conn.authSub]) {
+                send(conn, { type: "chat_error", message: "Sign in to use lobby chat." });
+                return;
+            }
+
+            if (data.type === "chat_history_request") {
+                send(conn, chatHistoryPayload());
+                return;
+            }
+
+            if (data.type === "chat_send") {
+                // Chat is delivered over presence connections only, so
+                // a message sent on any other socket could not even be
+                // echoed back to its own sender. The client never does
+                // this; refusing it keeps the rule in one place.
+                if (!conn.presenceOnly) {
+                    send(conn, { type: "chat_error", message: "Lobby chat is not available on this connection." });
+                    return;
+                }
+                if (!isInLobby(conn.authSub)) {
+                    // Not an error the player can hit normally -- the
+                    // panel is only reachable from the lobby -- so it
+                    // just says what the rule is.
+                    send(conn, { type: "chat_error", message: "Lobby chat is only available in the lobby." });
+                    return;
+                }
+                const account = accounts[conn.authSub];
+                const result = lobbyChat.submit({
+                    accountId: conn.authSub,
+                    name: account.name,
+                    // Decided here, from the account's email, exactly
+                    // like every other admin check on this server.
+                    isAdmin: !!(account.email && ADMIN_EMAIL &&
+                                account.email.toLowerCase() === ADMIN_EMAIL.toLowerCase())
+                }, data.text);
+
+                if (!result.ok) {
+                    send(conn, { type: "chat_error", message: result.error });
+                    return;
+                }
+                broadcastChat({ type: "chat_message", message: result.message });
                 return;
             }
             return;
@@ -4339,7 +4488,12 @@ wss.on("connection", (socket, request) => {
         if (conn.authSub) {
             const sub = conn.authSub;
             const wentOffline = presenceDetach(sub, conn);
-            if (wentOffline) broadcastToFriends(sub, presenceEventFor(sub));
+            if (wentOffline) {
+                broadcastToFriends(sub, presenceEventFor(sub));
+                // Drop the account's chat rate-limit entry too, so the
+                // table tracks only who is actually connected.
+                lobbyChat.forget(sub);
+            }
         }
 
         // Ranked cleanup: drops any queue entry and turns an
