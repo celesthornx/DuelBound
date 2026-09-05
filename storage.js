@@ -186,6 +186,7 @@ function makeCoalescingWriter() {
 function createFileBackend() {
     const accountsFile = path.join(DATA_DIR, "accounts.json");
     const sessionsFile = path.join(DATA_DIR, "sessions.json");
+    const purchasesFile = path.join(DATA_DIR, "stripePurchases.json");
     const docsDir = DATA_DIR;
     const coalesced = makeCoalescingWriter();
 
@@ -193,6 +194,7 @@ function createFileBackend() {
     // whole file (and can't lose a concurrent write to another key).
     let accountsCache = {};
     let sessionsCache = {};
+    let purchasesCache = {}; // sessionId -> purchase record
 
     return {
         name: "file (" + DATA_DIR + ")",
@@ -212,6 +214,8 @@ function createFileBackend() {
                 const n = Object.keys(seed).length;
                 if (n) console.log("[storage] seeded " + n + " account(s) into " + accountsFile);
             }
+
+            purchasesCache = readJsonFileStrict(purchasesFile, {});
         },
 
         async loadAllAccounts() {
@@ -283,6 +287,39 @@ function createFileBackend() {
         // window before exiting, so a restart can't drop the last save.
         flushPendingWrites() {
             return coalesced.flushAll();
+        },
+
+        // ---- Stripe purchase ledger (see billing.js) ----
+        //
+        // The idempotency guard the webhook handler depends on: a
+        // purchase is recorded ONCE, keyed by its Stripe Checkout
+        // Session ID, and every later delivery of the same webhook
+        // event finds it already there instead of granting Crystals a
+        // second time. Safe on a single Node process because the
+        // check-then-insert below has no `await` between reading the
+        // map and writing to it -- nothing else can run in between on
+        // one event loop, which is the same reasoning the rest of this
+        // file's in-memory caches already rely on.
+        async recordPurchaseIfNew(record) {
+            if (purchasesCache[record.sessionId]) return null; // already exists -- caller must not grant again
+            purchasesCache[record.sessionId] = record;
+            await coalesced.save("purchases", () =>
+                writeJsonFileAtomicAsync(purchasesFile, purchasesCache));
+            return record;
+        },
+
+        async updatePurchase(sessionId, patch) {
+            const existing = purchasesCache[sessionId];
+            if (!existing) return null;
+            const updated = Object.assign({}, existing, patch);
+            purchasesCache[sessionId] = updated;
+            await coalesced.save("purchases", () =>
+                writeJsonFileAtomicAsync(purchasesFile, purchasesCache));
+            return updated;
+        },
+
+        async getPurchase(sessionId) {
+            return purchasesCache[sessionId] || null;
         }
     };
 }
@@ -290,6 +327,20 @@ function createFileBackend() {
 // ---------------------------------------------------------------------
 // POSTGRES BACKEND -- Render Postgres, survives deploys and restarts
 // ---------------------------------------------------------------------
+function rowToPurchase(row) {
+    return {
+        sessionId: row.session_id,
+        accountId: row.account_id,
+        paymentIntentId: row.payment_intent_id,
+        packageId: row.package_id,
+        crystals: row.crystals,
+        amountUsdCents: row.amount_usd_cents,
+        status: row.status,
+        createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+        updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now()
+    };
+}
+
 function createPostgresBackend() {
     const { Pool } = require("pg");
 
@@ -336,6 +387,26 @@ function createPostgresBackend() {
                 token      TEXT PRIMARY KEY,
                 sub        TEXT NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+        `);
+        // Stripe purchase ledger (see billing.js). session_id is the
+        // PRIMARY KEY specifically so INSERT ... ON CONFLICT DO NOTHING
+        // is an atomic, database-enforced "has this webhook event
+        // already been processed" check -- the actual idempotency
+        // guard, not just an in-memory one, so it survives a redeploy
+        // and holds even if two webhook deliveries land on two
+        // different server instances at once.
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS stripe_purchases (
+                session_id         TEXT PRIMARY KEY,
+                account_id         TEXT NOT NULL,
+                payment_intent_id  TEXT,
+                package_id         TEXT NOT NULL,
+                crystals           INTEGER NOT NULL,
+                amount_usd_cents   INTEGER NOT NULL,
+                status             TEXT NOT NULL,
+                created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
             )
         `);
     }
@@ -433,6 +504,55 @@ function createPostgresBackend() {
             return enqueue("session:" + token, () =>
                 pool.query("DELETE FROM sessions WHERE token = $1", [token])
             );
+        },
+
+        // ---- Stripe purchase ledger ----
+        // Returns the inserted row, or null if session_id already
+        // existed -- the caller (billing.js's webhook handler) treats
+        // null as "already processed, do not grant Crystals again".
+        // enqueue()'d per session id so two deliveries of the SAME
+        // event that somehow reach this process concurrently still
+        // serialize rather than both reading "not present yet".
+        async recordPurchaseIfNew(record) {
+            return enqueue("purchase:" + record.sessionId, async () => {
+                const { rows } = await pool.query(
+                    `INSERT INTO stripe_purchases
+                        (session_id, account_id, payment_intent_id, package_id, crystals, amount_usd_cents, status)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7)
+                     ON CONFLICT (session_id) DO NOTHING
+                     RETURNING session_id`,
+                    [record.sessionId, record.accountId, record.paymentIntentId || null,
+                     record.packageId, record.crystals, record.amountUsdCents, record.status]
+                );
+                return rows.length ? record : null;
+            });
+        },
+
+        async updatePurchase(sessionId, patch) {
+            return enqueue("purchase:" + sessionId, async () => {
+                const sets = [];
+                const values = [];
+                let i = 1;
+                for (const key of Object.keys(patch)) {
+                    const column = key === "paymentIntentId" ? "payment_intent_id" : key;
+                    sets.push(column + " = $" + (++i));
+                    values.push(patch[key]);
+                }
+                if (!sets.length) return this.getPurchase(sessionId);
+                const { rows } = await pool.query(
+                    `UPDATE stripe_purchases SET ${sets.join(", ")}, updated_at = now()
+                     WHERE session_id = $1 RETURNING *`,
+                    [sessionId, ...values]
+                );
+                return rows.length ? rowToPurchase(rows[0]) : null;
+            });
+        },
+
+        async getPurchase(sessionId) {
+            const { rows } = await pool.query(
+                "SELECT * FROM stripe_purchases WHERE session_id = $1", [sessionId]
+            );
+            return rows.length ? rowToPurchase(rows[0]) : null;
         }
     };
 }
@@ -454,5 +574,8 @@ module.exports = {
     // window; Postgres writes go straight out, so there is nothing to
     // flush there and this is a no-op.
     flushPendingWrites: () =>
-        backend.flushPendingWrites ? backend.flushPendingWrites() : Promise.resolve()
+        backend.flushPendingWrites ? backend.flushPendingWrites() : Promise.resolve(),
+    recordPurchaseIfNew: (record) => backend.recordPurchaseIfNew(record),
+    updatePurchase: (sessionId, patch) => backend.updatePurchase(sessionId, patch),
+    getPurchase: (sessionId) => backend.getPurchase(sessionId)
 };
