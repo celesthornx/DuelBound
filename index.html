@@ -2414,17 +2414,20 @@
             </div>
           </div>
 
-          <!-- Ranked progression isn't part of the game yet -- reserved, not faked. -->
-          <div class="rank-strip">
+          <!-- Mirrors the player's real Ranked standing (see the RANKED
+               hub / ranked.js) -- refreshLobbyRank() below keeps this in
+               sync at boot and sign-in so it's visible without having to
+               open the Ranked hub first. -->
+          <div class="rank-strip" id="lobbyRankStrip">
             <svg viewBox="0 0 30 30" fill="none" aria-hidden="true">
               <path d="M15 2 L27 8 L27 17 C27 23 21 27 15 28 C9 27 3 23 3 17 L3 8 Z" stroke="rgba(160,190,225,.7)" stroke-width="1.3" fill="rgba(122,158,200,.10)"/>
               <path d="M15 9 L20 15 L15 21 L10 15 Z" fill="rgba(190,215,245,.55)"/>
             </svg>
             <div class="rk">
               <div class="micro">RANK</div>
-              <div class="rank-name">UNRANKED</div>
+              <div class="rank-name" id="lobbyRankName">&mdash;</div>
             </div>
-            <span class="soon-tag">COMING SOON</span>
+            <span class="soon-tag" id="lobbyRankTag">SIGN IN</span>
           </div>
 
           <div class="stat-list">
@@ -4411,6 +4414,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       const adminBtn = document.getElementById('btnAdmin');
       if(adminBtn) adminBtn.classList.toggle('hidden', !isAdmin);
       lobbySync();
+      refreshLobbyRank();
       // Re-fetch now that sessionToken is set, so the panel switches from
       // the anonymous/guest view to this account's real persisted
       // progress and claimed state right away.
@@ -4447,6 +4451,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     const adminBtn = document.getElementById('btnAdmin');
     if(adminBtn) adminBtn.classList.add('hidden');
     lobbySync();
+    refreshLobbyRank();
     // Drop back to the anonymous view -- same challenge list, but no
     // personal (persisted) progress or claimed state attached to it.
     dailyClaimed = {};
@@ -10082,7 +10087,8 @@ if(tutorialActive) tutorialUpdate(dt);
     { version: 'v0.10', title: 'Ranked Start Changes',
       IMPROVEMENTS: [
         'Removed placement matches and the Unranked state — every player is now ranked from their very first match.',
-        'New players now start at the bottom of Bronze instead of grinding 10 placement games to reveal a rank.'
+        'New players now start at the bottom of Bronze instead of grinding 10 placement games to reveal a rank.',
+        'Your real rank now shows right in the lobby, not just inside the RANKED hub.'
       ] },
     { version: 'v0.9', title: 'Interactive Tutorial',
       NEW: [
@@ -10235,6 +10241,7 @@ if(tutorialActive) tutorialUpdate(dt);
   function initLobby(){
     renderLobbyModes();
     lobbySync();
+    refreshLobbyRank();
     fetchDailyChallenges();
 
     const prev = lobbyEl('lobbyModePrev');
@@ -10406,6 +10413,40 @@ if(tutorialActive) tutorialUpdate(dt);
       rkEl('rkBadgeTier').textContent = 'UNAVAILABLE';
       rkEl('rkBadgeRP').textContent = 'SERVER OFFLINE';
       rkEl('rkPosition').textContent = '';
+    }
+  }
+
+  // Mirrors the player's real rank into the lobby sidebar (lobbyRankStrip)
+  // so it's visible without opening the RANKED hub. Every account is
+  // ranked from its first match (see ranked.js), so a guest is the only
+  // case with nothing to show yet.
+  async function refreshLobbyRank(){
+    const nameEl = lobbyEl('lobbyRankName');
+    const tagEl  = lobbyEl('lobbyRankTag');
+    if(!nameEl || !tagEl) return;
+
+    if(!loggedIn || !sessionToken){
+      nameEl.textContent = '—';
+      nameEl.style.color = '';
+      tagEl.textContent = 'SIGN IN';
+      tagEl.classList.remove('hidden');
+      return;
+    }
+
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/ranked/me?sessionToken=' + encodeURIComponent(sessionToken));
+      if(!res.ok) throw new Error('http ' + res.status);
+      const data = await res.json();
+      RANKED.profile = data;
+      const r = data.ranked;
+      nameEl.textContent = rkRankName(r.rank);
+      nameEl.style.color = (r.rank && r.rank.color) || '';
+      tagEl.textContent = rkFmt(r.rp) + ' RP';
+      tagEl.classList.remove('hidden');
+    } catch(e){
+      nameEl.textContent = '—';
+      nameEl.style.color = '';
+      tagEl.classList.add('hidden');
     }
   }
 
