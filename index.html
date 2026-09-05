@@ -730,6 +730,21 @@
   /* ---- Online multiplayer ping badge -- only ever shown while
      mode==='online' and a match is running (see beginGame/exitToMenu).
      Never appears in Local 2 Player or VS Computer. ---- */
+  /* Developer-only networking panel. Never rendered unless
+     DEBUG_NETWORKING is switched on (?netdebug=1) -- see netDbg in the
+     NETWORKING OPTIMIZATION block. */
+  .net-debug{
+    position:absolute; top: calc(42px + env(safe-area-inset-top, 0px));
+    right: calc(8px + env(safe-area-inset-right, 0px));
+    font-family:'Share Tech Mono', monospace;
+    font-size: 10px; line-height: 1.5; letter-spacing: 1px;
+    color: #7ee8ff;
+    background: rgba(10,13,20,0.82);
+    border: 1px solid rgba(63,208,255,0.35);
+    padding: 6px 9px; border-radius: 3px;
+    white-space: pre; pointer-events: none; z-index: 5;
+  }
+  .net-debug b{ color:#fff; font-weight:700; }
   .ping-badge{
     position:absolute; top: calc(42px + env(safe-area-inset-top, 0px)); left:50%; transform: translateX(-50%);
     font-family:'Share Tech Mono', monospace;
@@ -2307,6 +2322,7 @@
 
   <!-- ONLINE MULTIPLAYER PING BADGE (hidden outside mode==='online') -->
   <div class="ping-badge hidden" id="pingBadge">PING: -- ms</div>
+  <div class="net-debug hidden" id="netDebugPanel"></div>
 
   <!-- RANKED IN-MATCH BANNER. Only shown during a ranked match -- it
        adds the ranked context on top of the normal HUD rather than
@@ -3462,8 +3478,28 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   // prediction is inherent here: each client is the sole authority over
   // its own player, so local movement never waits on the network). Only
   // the WIRE SEND is decoupled to a fixed-rate timer.
-  const NETWORK_SEND_HZ = 25;
-  const NETWORK_SEND_INTERVAL_MS = Math.round(1000 / NETWORK_SEND_HZ); // 40ms
+  // NETWORK_SEND_HZ and INTERP_DELAY_MS are a COUPLED PAIR -- changing
+  // one without the other is what causes either visible stutter or
+  // needless opponent lag, so tune them together and keep the invariant
+  // below.
+  //
+  //   INTERP_DELAY_MS must stay >= ~2 send intervals.
+  //
+  // The buffer has to hold at least two snapshots to interpolate
+  // between, plus a spare so a single dropped/late packet doesn't empty
+  // it (which shows up as the opponent briefly freezing). At 30Hz the
+  // interval is 33ms, so 75ms is 2.25 intervals -- the same safety
+  // margin the previous 25Hz/100ms pair had (2.5), but 25ms less
+  // opponent latency on screen.
+  //
+  // The bandwidth cost of 30Hz over 25Hz is ~0.5 KB/s per player:
+  // measured position packets are 96 bytes, so 30/s is ~2.9 KB/s. That
+  // is far below anything that matters here, which is why the trade
+  // (more packets, less perceived lag) is worth taking. Do NOT push this
+  // higher without re-measuring -- past ~30Hz the added packets stop
+  // buying visible smoothness because rendering already interpolates.
+  const NETWORK_SEND_HZ = 30;
+  const NETWORK_SEND_INTERVAL_MS = Math.round(1000 / NETWORK_SEND_HZ); // 33ms
   let networkSendTimer = null;
   let inputSeq = 0;
   let lastSentNetState = null;
@@ -3521,7 +3557,10 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   // when updates arrive at a fixed, lower-than-render rate (25Hz here vs
   // ~60fps rendering). Facing is interpolated along the shortest angular
   // path so it never spins the long way around.
-  const INTERP_DELAY_MS = 100;
+  // How far in the past remote players are rendered. See the coupling
+  // note on NETWORK_SEND_HZ above -- this must stay >= ~2 send intervals
+  // (2.25 at 30Hz) so one late or dropped packet can't empty the buffer.
+  const INTERP_DELAY_MS = 75;
   const SNAPSHOT_BUFFER_MAX_AGE_MS = 1000;
   const SNAPSHOT_BUFFER_MAX_LEN = 30;
 
@@ -3571,6 +3610,100 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       p.x = sample.x;
       p.y = sample.y;
       p.facing = sample.facing;
+    }
+  }
+
+  // ---- DEVELOPER NETWORK DIAGNOSTICS (opt-in) ----
+  // Off unless explicitly switched on with ?netdebug=1 in the URL (or
+  // localStorage duelarena.netdebug = "1"). When off, nothing is
+  // counted, no panel exists and no timer runs -- the only cost is the
+  // `if (NET_DEBUG)` guards below, which V8 folds away for a constant
+  // false. Byte counting is done by wrapping the socket's own send at
+  // connect time (see connectOnline) rather than editing every call
+  // site, so the gameplay code paths are untouched.
+  const NET_DEBUG = (function(){
+    try{
+      if(/[?&]netdebug=1(&|$)/.test(location.search)) return true;
+      return localStorage.getItem('duelarena.netdebug') === '1';
+    } catch(e){ return false; }
+  })();
+
+  const netDbg = {
+    outBytes: 0, outMsgs: 0, inBytes: 0, inMsgs: 0,
+    maxIn: 0, maxOut: 0,
+    windowStart: 0, timer: null,
+    // Rolling per-second rates, recomputed on the panel's own timer.
+    rateOut: 0, rateIn: 0, msgOut: 0, msgIn: 0
+  };
+
+  function netDbgCountIn(bytes){
+    netDbg.inBytes += bytes; netDbg.inMsgs++;
+    if(bytes > netDbg.maxIn) netDbg.maxIn = bytes;
+  }
+
+  // Wraps this socket's send so outgoing traffic is measured without
+  // touching any of the ~20 places that call socket.send().
+  function netDbgWrapSocket(sock){
+    if(!NET_DEBUG || !sock || sock.__netDbgWrapped) return;
+    const original = sock.send.bind(sock);
+    sock.send = function(payload){
+      const n = typeof payload === 'string' ? payload.length : (payload.byteLength || 0);
+      netDbg.outBytes += n; netDbg.outMsgs++;
+      if(n > netDbg.maxOut) netDbg.maxOut = n;
+      original(payload);
+    };
+    sock.__netDbgWrapped = true;
+  }
+
+  function startNetDebug(){
+    if(!NET_DEBUG) return;
+    const panel = document.getElementById('netDebugPanel');
+    if(!panel) return;
+    panel.classList.remove('hidden');
+    netDbg.windowStart = performance.now();
+    if(netDbg.timer) clearInterval(netDbg.timer);
+    netDbg.timer = setInterval(function(){
+      const now = performance.now();
+      const secs = Math.max(0.001, (now - netDbg.windowStart) / 1000);
+      netDbg.rateOut = netDbg.outBytes / secs;
+      netDbg.rateIn  = netDbg.inBytes / secs;
+      netDbg.msgOut  = netDbg.outMsgs / secs;
+      netDbg.msgIn   = netDbg.inMsgs / secs;
+      netDbg.outBytes = netDbg.inBytes = netDbg.outMsgs = netDbg.inMsgs = 0;
+      netDbg.windowStart = now;
+
+      const entities = bullets.length + decoys.length + (typeof tutorialDrones !== 'undefined' ? tutorialDrones.length : 0);
+      const players = (p1 ? 1 : 0) + (p2 ? 1 : 0) + (typeof extraBots !== 'undefined' ? extraBots.length : 0);
+      panel.textContent =
+        'PING     ' + (currentPingMs === null ? '--' : Math.round(currentPingMs)) + ' ms\n' +
+        'SEND     ' + NETWORK_SEND_HZ + ' Hz (' + netDbg.msgOut.toFixed(0) + ' msg/s)\n' +
+        'RECV     ' + netDbg.msgIn.toFixed(0) + ' msg/s\n' +
+        'OUT      ' + (netDbg.rateOut / 1024).toFixed(2) + ' KB/s\n' +
+        'IN       ' + (netDbg.rateIn / 1024).toFixed(2) + ' KB/s\n' +
+        'PKT MAX  ' + netDbg.maxOut + '/' + netDbg.maxIn + ' B\n' +
+        'INTERP   ' + INTERP_DELAY_MS + ' ms (' + p2SnapshotBuffer.length + ' snaps)\n' +
+        'PLAYERS  ' + players + '\n' +
+        'ENTITIES ' + entities + '\n' +
+        'MODE     ' + mode + '/' + gameType + ' fps ' + fpsDisplay;
+    }, 500);
+  }
+
+  function stopNetDebug(){
+    if(netDbg.timer){ clearInterval(netDbg.timer); netDbg.timer = null; }
+    const panel = document.getElementById('netDebugPanel');
+    if(panel) panel.classList.add('hidden');
+  }
+
+  // Rendering FPS, sampled cheaply and only while the panel is on.
+  let fpsDisplay = 0;
+  let fpsFrames = 0, fpsLast = 0;
+  function netDbgFrame(nowMs){
+    if(!NET_DEBUG) return;
+    fpsFrames++;
+    if(!fpsLast) fpsLast = nowMs;
+    if(nowMs - fpsLast >= 1000){
+      fpsDisplay = Math.round(fpsFrames * 1000 / (nowMs - fpsLast));
+      fpsFrames = 0; fpsLast = nowMs;
     }
   }
 
@@ -3647,6 +3780,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     // send/ping loops running after a reconnect.
     stopNetworkSendLoop();
     stopPingLoop();
+    stopNetDebug();
     p2SnapshotBuffer = [];
     lastRemoteSeq = -1;
     inputSeq = 0;
@@ -3663,6 +3797,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
 
     socket.onopen = function(){
       console.log("Connected to server!");
+      netDbgWrapSocket(socket);   // no-op unless NET_DEBUG
+      startNetDebug();            // no-op unless NET_DEBUG
       startPingLoop();
       startNetworkSendLoop();
       // A ranked queue join requested before the socket was ready is
@@ -3692,6 +3828,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     };
 
     socket.onmessage = function(event){
+
+      if(NET_DEBUG) netDbgCountIn(typeof event.data === 'string' ? event.data.length : 0);
 
       let data;
       try{
@@ -8397,6 +8535,7 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
 
   function loop(ts){
     requestAnimationFrame(loop);
+    netDbgFrame(ts); // no-op unless NET_DEBUG -- render-rate sampling only
     if(!started) return;
     const dt = Math.min(0.032, (loop._last? (ts-loop._last)/1000 : 0.016));
     loop._last = ts;
