@@ -2083,10 +2083,41 @@
   .chat-msg{ font-family:'Share Tech Mono', monospace; font-size:11px; line-height:1.5; }
   .chat-msg .cm-name{ color: var(--p1); }
   .chat-msg.mine .cm-name{ color:#5dffa0; }
-  .chat-msg.admin .cm-name{ color:#ffce54; }
   .chat-msg .cm-time{ color: rgba(122,158,200,.5); font-size:9px; margin-right:4px; }
   .chat-msg .cm-text{ color: var(--ink); word-break:break-word; }
   .chat-msg.system .cm-text{ color: var(--ink-dim); font-style:italic; }
+
+  /* [OWNER] chat tag -- ultragodbit@gmail.com only (see ADMIN_EMAIL in
+     server.js; the "admin" chat flag is only ever true for that one
+     account). A moving gold gradient clipped to the text, rather than a
+     flat color, is what reads as "shining" instead of just "gold". */
+  @keyframes gold-shimmer{
+    0%{ background-position: 0% 50%; }
+    100%{ background-position: 200% 50%; }
+  }
+  .chat-msg.admin .cm-name, .chat-msg.admin .cm-text{
+    background: linear-gradient(90deg, #b8860b, #fff6d8, #ffce54, #fff6d8, #b8860b);
+    background-size: 300% 100%;
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent; color: transparent;
+    animation: gold-shimmer 2.4s linear infinite;
+    text-shadow: 0 0 12px rgba(255,206,84,.35);
+  }
+  .chat-msg.admin .cm-name{ font-weight:700; }
+  /* The Owner's OWN input box, while composing -- shines the same gold
+     as their sent messages, so the effect is visible before they even
+     hit send. Only ever applied client-side to the account that IS the
+     Owner (see the isAdmin toggle in onAuthenticated/logout); every
+     other player's messages/inputs are never touched by this rule. */
+  .chat-input.owner-typing{
+    background: linear-gradient(90deg, #b8860b, #fff6d8, #ffce54, #fff6d8, #b8860b);
+    background-size: 300% 100%;
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent; color: transparent;
+    animation: gold-shimmer 2.4s linear infinite;
+    caret-color: #ffce54;
+  }
+  .chat-input.owner-typing::placeholder{ -webkit-text-fill-color: var(--ink-dim); color: var(--ink-dim); }
   .chat-empty{
     font-family:'Share Tech Mono', monospace; font-size:10px;
     color: var(--ink-dim); text-align:center; margin:auto 0; line-height:1.7;
@@ -5746,6 +5777,11 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     isAdmin = !!data.isAdmin;
     const adminBtn = document.getElementById('btnAdmin');
     if(adminBtn) adminBtn.classList.toggle('hidden', !isAdmin);
+    // The Owner's chat input shines the same gold as their sent messages
+    // (see .chat-input.owner-typing / .chat-msg.admin) -- purely cosmetic,
+    // toggled off the same UX-only isAdmin flag as the admin nav button.
+    const chatInputEl = document.getElementById('chatInput');
+    if(chatInputEl) chatInputEl.classList.toggle('owner-typing', isAdmin);
     lobbySync();
     refreshLobbyRank();
     renderLobbyFriends();
@@ -6064,6 +6100,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     loggedIn = false;
     accountName = null;
     isAdmin = false;
+    const chatInputSignOut = document.getElementById('chatInput');
+    if(chatInputSignOut) chatInputSignOut.classList.remove('owner-typing');
     setAccountStatus('NOT SIGNED IN \u2014 PROGRESS WON\u2019T BE SAVED');
     const gBtn = document.getElementById('googleSignInBtn');
     const oBtn = document.getElementById('signOutBtn');
@@ -14371,7 +14409,7 @@ if(tutorialActive) tutorialUpdate(dt);
       name.className = 'cm-name';
       // textContent, so a display name made of markup is shown as the
       // characters the player typed rather than parsed as HTML.
-      name.textContent = (msg.admin ? '[STAFF] ' : '') + (msg.name || 'Player') + ': ';
+      name.textContent = (msg.admin ? '[OWNER] ' : '') + (msg.name || 'Player') + ': ';
       row.appendChild(name);
     }
 
