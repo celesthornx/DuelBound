@@ -31,5 +31,33 @@
   "quickreload": {
     "reloadSpeedPercent": 80,
     "ammoPenalty": 2
+  },
+  "gravitytrap": {
+    "pullRadius": 130,
+    "pullStrength": 90,
+    "slowPercent": 50,
+    "duration": 3,
+    "cooldown": 9
+  },
+  "phaseshift": {
+    "duration": 1,
+    "cooldown": 14
+  },
+  "huntersmark": {
+    "homingTurnRate": 70,
+    "range": 260,
+    "cooldown": 6
+  },
+  "portal": {
+    "duration": 6,
+    "cooldown": 18
+  },
+  "overcharge": {
+    "damage": 2,
+    "speed": 780,
+    "hitboxPercent": 130,
+    "reloadPenaltyPercent": 130,
+    "duration": 3,
+    "cooldown": 15
   }
 }

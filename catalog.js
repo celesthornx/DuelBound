@@ -76,11 +76,16 @@ const POWERS = [
 const ABILITIES = [
     { id: "quickreload", price: 90, currency: "coins" },
     { id: "triburst", price: 150, currency: "coins" },
+    { id: "huntersmark", price: 170, currency: "coins" },
     { id: "shockwave", price: 200, currency: "coins" },
+    { id: "gravitytrap", price: 230, currency: "coins" },
     { id: "timewarp", price: 280, currency: "coins" },
+    { id: "phaseshift", price: 300, currency: "coins" },
     { id: "decoy", price: 350, currency: "coins" },
     { id: "ricochet", price: 320, currency: "coins" },
-    { id: "voidblink", price: 420, currency: "coins" }
+    { id: "overcharge", price: 360, currency: "coins" },
+    { id: "voidblink", price: 420, currency: "coins" },
+    { id: "portal", price: 450, currency: "coins" }
 ];
 
 // How many of an item TYPE can be equipped at once. Mirrors index.html's

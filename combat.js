@@ -47,6 +47,20 @@ const COMBAT_CONFIG = {
     bulletDamage: 1,
     triburstDamage: 1,
     shockwaveDamage: 1,
+    overchargeDamage: 2,
+
+    // Ability cooldowns this module enforces server-side (see
+    // activateAbility below). Fallbacks only -- server.js passes the
+    // live, admin-tunable seconds-based values in via createCombatMatch,
+    // same as the damage numbers above.
+    abilityCooldownMs: {
+        gravitytrap: 9000,
+        phaseshift: 14000,
+        huntersmark: 6000,
+        portal: 18000,
+        overcharge: 15000
+    },
+    phaseShiftDurationMs: 1000,
 
     // Ordinary bullets have no range limit in index.html (they die on a
     // wall), so a tracked bullet is kept alive for as long as one could
@@ -94,6 +108,23 @@ function createCombatMatch(abilityConfig) {
         if (abilityConfig.shockwave && typeof abilityConfig.shockwave.damage === "number") {
             cfg.shockwaveDamage = abilityConfig.shockwave.damage;
         }
+        if (abilityConfig.overcharge) {
+            if (typeof abilityConfig.overcharge.damage === "number") cfg.overchargeDamage = abilityConfig.overcharge.damage;
+            if (typeof abilityConfig.overcharge.cooldown === "number") cfg.abilityCooldownMs.overcharge = abilityConfig.overcharge.cooldown * 1000;
+        }
+        if (abilityConfig.phaseshift) {
+            if (typeof abilityConfig.phaseshift.duration === "number") cfg.phaseShiftDurationMs = abilityConfig.phaseshift.duration * 1000;
+            if (typeof abilityConfig.phaseshift.cooldown === "number") cfg.abilityCooldownMs.phaseshift = abilityConfig.phaseshift.cooldown * 1000;
+        }
+        if (abilityConfig.gravitytrap && typeof abilityConfig.gravitytrap.cooldown === "number") {
+            cfg.abilityCooldownMs.gravitytrap = abilityConfig.gravitytrap.cooldown * 1000;
+        }
+        if (abilityConfig.huntersmark && typeof abilityConfig.huntersmark.cooldown === "number") {
+            cfg.abilityCooldownMs.huntersmark = abilityConfig.huntersmark.cooldown * 1000;
+        }
+        if (abilityConfig.portal && typeof abilityConfig.portal.cooldown === "number") {
+            cfg.abilityCooldownMs.portal = abilityConfig.portal.cooldown * 1000;
+        }
     }
 
     function newPlayer() {
@@ -103,7 +134,13 @@ function createCombatMatch(abilityConfig) {
             shields: 0,
             maxShields: 0,
             alive: true,
-            lastHitAt: 0
+            lastHitAt: 0,
+
+            // ---- new abilities' server-authoritative state ----
+            phaseUntil: 0,             // Phase Shift: claimHit() rejects any hit while now < this
+            overchargeShotsRemaining: 0, // Overcharge: only this many NEXT tracked bullets can be boosted
+            huntersMarkReady: false,   // Hunter's Mark: only the next tracked bullet can carry the flag
+            abilityLastUsed: {}        // { [abilityId]: ms timestamp }, for activateAbility's cooldown gate
         };
     }
 
@@ -135,22 +172,83 @@ function createCombatMatch(abilityConfig) {
             p.shields = n;
         },
 
+        // ---- ability activation / cooldowns ----------------------------
+        // The ONLY place an activation of one of the 5 new abilities is
+        // considered valid. A client that claims to activate one faster
+        // than its own configured cooldown allows is simply refused --
+        // its own optimistic local effect already happened (same
+        // client-prediction pattern every existing ability uses), but
+        // that refusal is what stops the server's own state (phaseUntil,
+        // overchargeShotsRemaining, huntersMarkReady) from ever being
+        // refreshed faster than the real cooldown, which is the actual
+        // exploit surface this closes: a modified client spamming
+        // activation messages to keep itself permanently phased or
+        // permanently topped up on Overcharge shots.
+        activateAbility(slot, abilityId, now) {
+            const p = players[slot];
+            if (!p) return { accepted: false, reason: "no-such-slot" };
+            const cooldownMs = cfg.abilityCooldownMs[abilityId];
+            if (typeof cooldownMs !== "number") return { accepted: false, reason: "unknown-ability" };
+            const lastUsed = p.abilityLastUsed[abilityId] || 0;
+            if (now - lastUsed < cooldownMs) {
+                return { accepted: false, reason: "cooldown" };
+            }
+            p.abilityLastUsed[abilityId] = now;
+
+            if (abilityId === "phaseshift") {
+                p.phaseUntil = now + cfg.phaseShiftDurationMs;
+            } else if (abilityId === "overcharge") {
+                p.overchargeShotsRemaining = 2;
+            } else if (abilityId === "huntersmark") {
+                p.huntersMarkReady = true;
+            }
+            return { accepted: true };
+        },
+
+        // Diagnostics/UI only -- never used to decide whether a hit lands.
+        isPhased(slot, now) {
+            const p = players[slot];
+            return !!(p && now < p.phaseUntil);
+        },
+
         // ---- damage sources -------------------------------------------
         // Every projectile the shooter relays is tracked. `damage` is
         // NOT taken from the message: it is derived from the server's
         // own config, so a client that relays damage:99 still only ever
         // gets the real number applied.
         trackBullet(slot, msg, now) {
-            if (!players[slot]) return;
+            const shooter = players[slot];
+            if (!shooter) return;
             prune(now);
             // A triburst pellet is distinguishable by carrying an
             // explicit finite range; ordinary fire has none.
             const isAbilityShot = typeof msg.range === "number" && isFinite(msg.range) && msg.range > 0;
+
+            // Overcharge: honored only up to however many boosted shots
+            // this slot's OWN activateAbility call actually granted --
+            // never simply because the message claims overcharged:true.
+            // Consumed here, one per tracked bullet, so a client cannot
+            // get more than the 2 real activations gave it regardless of
+            // how many shots it fires or what it claims about them.
+            const isOvercharged = msg.overcharged === true && shooter.overchargeShotsRemaining > 0;
+            if (isOvercharged) shooter.overchargeShotsRemaining--;
+
+            // Hunter's Mark: same one-shot consumption pattern, gated on
+            // the server's own huntersMarkReady flag rather than the
+            // message's claim. Doesn't change damage -- only recorded so
+            // a client can't claim an unlimited number of "marked" shots.
+            const isMarked = msg.homing === true && shooter.huntersMarkReady;
+            if (isMarked) shooter.huntersMarkReady = false;
+
+            const damage = isOvercharged ? cfg.overchargeDamage
+                : isAbilityShot ? cfg.triburstDamage
+                : cfg.bulletDamage;
+
             sources.push({
                 id: nextSourceId++,
                 slot: slot,
-                kind: isAbilityShot ? "triburst" : "bullet",
-                damage: isAbilityShot ? cfg.triburstDamage : cfg.bulletDamage,
+                kind: isOvercharged ? "overcharge" : (isAbilityShot ? "triburst" : "bullet"),
+                damage: damage,
                 from: now,
                 until: now + cfg.bulletMaxFlightMs
             });
@@ -186,6 +284,16 @@ function createCombatMatch(abilityConfig) {
             const victim = players[victimSlot];
             if (!victim) return { accepted: false, reason: "no-such-slot" };
             if (!victim.alive) return { accepted: false, reason: "already-eliminated" };
+            // Phase Shift: rejected before touching `sources` at all, so
+            // a genuinely in-flight shot from an honest opponent is
+            // still there to land a moment later once phasing ends --
+            // this only ever refuses the CLAIM, it never consumes
+            // anything. The client-side collision check already skips a
+            // phased target the same way it already skips a dashing one
+            // (see index.html), so an honest client never even sends
+            // this claim while phased; this is the backstop for a
+            // request that arrives anyway.
+            if (now < victim.phaseUntil) return { accepted: false, reason: "phased" };
             if (now - victim.lastHitAt < cfg.minMsBetweenHits) {
                 return { accepted: false, reason: "rate-limited" };
             }
@@ -249,6 +357,17 @@ function createCombatMatch(abilityConfig) {
                 p.shields = p.maxShields;
                 p.alive = true;
                 p.lastHitAt = 0;
+                // Transient effects AND cooldowns end with the round --
+                // matches index.html's resetPositions(), which rebuilds
+                // p1/p2 from scratch every round (abilityCd: 0 included,
+                // see makePlayer), not just at match start. Mirroring
+                // that here is what keeps the client's cooldown UI and
+                // this server-side gate from disagreeing the moment a
+                // new round begins.
+                p.phaseUntil = 0;
+                p.overchargeShotsRemaining = 0;
+                p.huntersMarkReady = false;
+                p.abilityLastUsed = {};
             }
             sources = [];
         },
