@@ -348,6 +348,34 @@
   .shop-panel.admin-panel::-webkit-scrollbar{ width:6px; }
   .shop-panel.admin-panel::-webkit-scrollbar-thumb{ background: rgba(255,95,109,.35); border-radius:3px; }
   .shop-panel.admin-panel::-webkit-scrollbar-thumb:hover{ background: rgba(255,95,109,.55); }
+
+  /* Same fix as .shop-panel.admin-panel above, for the same reason: the
+     Settings panel's content (device compatibility, aim type, match
+     size, auto-aim...) grew past .shop-panel's fixed 460px max-height
+     over time, and with html/body set to overflow:hidden the rows past
+     that height (Auto-Aim included) were pushed off-screen instead of
+     being reachable -- not removed, just unreachable. Scrolling inside
+     the panel keeps every row reachable regardless of how tall the
+     content gets in the future. */
+  .shop-panel.settings-panel{
+    max-height: 88vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.25) transparent;
+  }
+  .shop-panel.settings-panel::-webkit-scrollbar{ width:6px; }
+  .shop-panel.settings-panel::-webkit-scrollbar-thumb{ background: rgba(255,255,255,.25); border-radius:3px; }
+  .shop-panel.settings-panel::-webkit-scrollbar-thumb:hover{ background: rgba(255,255,255,.4); }
+  .settings-section-label{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 11px; letter-spacing: 3px;
+    color: var(--ink-dim);
+    margin-top: 6px;
+    width: 100%; text-align: left;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+    padding-bottom: 6px;
+  }
+  .settings-section-label:first-child{ margin-top: 0; }
   .admin-section-label{
     font-family:'Share Tech Mono', monospace;
     font-size: 11px; letter-spacing: 3px;
@@ -3019,16 +3047,52 @@
 
   <!-- SETTINGS -->
   <div class="menu-overlay hidden" id="menuSettings">
-    <div class="shop-panel">
+    <div class="shop-panel settings-panel">
       <div class="menu-title">PLAYER SETTINGS</div>
+
+      <div class="settings-section-label">PLAYER SETTINGS</div>
+      <div class="settings-note">
+        Aim Type is how Player One aims in every mode. Mouse Aim aims freely
+        with the pointer while moving independently; Keyboard Aim faces the
+        way you move. Touch devices always use the on-screen aim stick.
+      </div>
       <div class="settings-row">
-        <span class="settings-label p1">TUTORIAL</span>
-        <button class="toggle-btn" id="btnPlayTutorial">PLAY TUTORIAL</button>
+        <span class="settings-label p1">AIM TYPE</span>
+        <span class="aim-type-group">
+          <button class="toggle-btn" id="btnAimTypeMouse">MOUSE AIM</button>
+          <button class="toggle-btn" id="btnAimTypeKeyboard">KEYBOARD AIM</button>
+        </span>
       </div>
       <div class="settings-note">
-        Replays the interactive tutorial at any time -- it never resets
-        your Coins, Crystals, XP, stats, or anything else about your account.
+        Auto-aim keeps a player's facing locked onto the opponent automatically
+        &mdash; handy if aiming with keyboard-only movement feels difficult.
+        It needs a clear line of sight to engage, and overrides Mouse Aim
+        when both are active.
       </div>
+      <div class="settings-row">
+        <span class="settings-label p1">PLAYER ONE AUTO-AIM</span>
+        <button class="toggle-btn" id="toggleAutoAimP1">OFF</button>
+      </div>
+      <div class="settings-row">
+        <span class="settings-label p2">PLAYER TWO AUTO-AIM</span>
+        <button class="toggle-btn" id="toggleAutoAimP2">OFF</button>
+      </div>
+      <div class="settings-row">
+        <span class="settings-label p1">MATCH SIZE</span>
+        <span class="aim-type-group">
+          <button class="toggle-btn" id="btnMatchSize2" data-count="2">2 PLAYERS</button>
+          <button class="toggle-btn" id="btnMatchSize3" data-count="3">3 PLAYERS</button>
+          <button class="toggle-btn" id="btnMatchSize4" data-count="4">4 PLAYERS</button>
+        </span>
+      </div>
+      <div class="settings-note">
+        Match Size sets how many combatants join a Local or VS Computer
+        Classic Mode match — any slots beyond Player One/Two are filled
+        by bots. Football and Heist always stay 1v1, and Online Multiplayer
+        is always exactly 2 players, regardless of this setting.
+      </div>
+
+      <div class="settings-section-label">CONTROLS</div>
       <div class="settings-note">
         Device Compatibility controls which layout and controls the game
         uses. AUTO detects your device automatically (touch capability,
@@ -3046,46 +3110,17 @@
         </span>
       </div>
       <div class="settings-note" id="deviceDetectedNote" style="color:#5dffa0;"></div>
-      <div class="settings-note">
-        Aim Type is how Player One aims in every mode. Mouse Aim aims freely
-        with the pointer while moving independently; Keyboard Aim faces the
-        way you move. Touch devices always use the on-screen aim stick.
-      </div>
+
+      <div class="settings-section-label">GAMEPLAY</div>
       <div class="settings-row">
-        <span class="settings-label p1">AIM TYPE</span>
-        <span class="aim-type-group">
-          <button class="toggle-btn" id="btnAimTypeMouse">MOUSE AIM</button>
-          <button class="toggle-btn" id="btnAimTypeKeyboard">KEYBOARD AIM</button>
-        </span>
-      </div>
-      <div class="settings-row">
-        <span class="settings-label p1">MATCH SIZE</span>
-        <span class="aim-type-group">
-          <button class="toggle-btn" id="btnMatchSize2" data-count="2">2 PLAYERS</button>
-          <button class="toggle-btn" id="btnMatchSize3" data-count="3">3 PLAYERS</button>
-          <button class="toggle-btn" id="btnMatchSize4" data-count="4">4 PLAYERS</button>
-        </span>
+        <span class="settings-label p1">TUTORIAL</span>
+        <button class="toggle-btn" id="btnPlayTutorial">PLAY TUTORIAL</button>
       </div>
       <div class="settings-note">
-        Match Size sets how many combatants join a Local or VS Computer
-        Classic Mode match — any slots beyond Player One/Two are filled
-        by bots. Football and Heist always stay 1v1, and Online Multiplayer
-        is always exactly 2 players, regardless of this setting.
+        Replays the interactive tutorial at any time -- it never resets
+        your Coins, Crystals, XP, stats, or anything else about your account.
       </div>
-      <div class="settings-note">
-        Auto-aim keeps a player's facing locked onto the opponent automatically
-        &mdash; handy if aiming with keyboard-only movement feels difficult.
-        It needs a clear line of sight to engage, and overrides Mouse Aim
-        when both are active.
-      </div>
-      <div class="settings-row">
-        <span class="settings-label p1">PLAYER ONE AUTO-AIM</span>
-        <button class="toggle-btn" id="toggleAutoAimP1">OFF</button>
-      </div>
-      <div class="settings-row">
-        <span class="settings-label p2">PLAYER TWO AUTO-AIM</span>
-        <button class="toggle-btn" id="toggleAutoAimP2">OFF</button>
-      </div>
+
       <button class="menu-back" id="btnBackSettings">&larr; back</button>
     </div>
   </div>
