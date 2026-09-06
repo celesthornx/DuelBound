@@ -1277,6 +1277,8 @@
   .nav-item.active::after{ transform: scaleX(1); }
   .nav-item.nav-admin{ color:#ff8a94; }
   .nav-item.nav-admin::after{ background: var(--p2); box-shadow:0 0 10px var(--p2); }
+  .nav-item.nav-battlepass{ color:#ffce54; }
+  .nav-item.nav-battlepass::after{ background: var(--gold); box-shadow:0 0 10px var(--gold); }
 
   .lobby-top-right{ display:flex; align-items:center; gap:9px; flex:0 0 auto; }
   /* .currency-pill is the shared shape for BOTH the Coins pill and the
@@ -1798,6 +1800,177 @@
   }
   @media (max-width: 1000px){
     .dc-claim{ min-height:32px; padding:7px 13px; }
+  }
+
+  /* ====================================================================
+     BATTLE PASS -- dark neon panel matching the Shop/Ranked screens.
+     Two horizontally-scrolling rows (Premium above, Free below) share
+     one scroll container so a tier's free/premium reward always line up
+     in the same column -- see .bp-row/.bp-card widths, which must match.
+     ==================================================================== */
+  .bp-panel{
+    width: 980px; max-width: 96vw;
+    max-height: 88vh;
+    display:flex; flex-direction:column; gap:14px;
+    padding: 22px 26px;
+    background: linear-gradient(180deg, rgba(16,21,31,.96), rgba(8,11,18,.98));
+    border: 1px solid rgba(122,158,200,.22);
+    border-radius: 6px;
+    box-shadow: 0 0 60px rgba(0,0,0,.5);
+  }
+  .bp-header{ display:flex; align-items:flex-start; justify-content:space-between; gap:14px; }
+  .bp-header-left .menu-title{ margin-bottom:4px; }
+  .bp-season-name{
+    font-family:'Chakra Petch', sans-serif; font-weight:700;
+    font-size: 20px; letter-spacing: 3px;
+    background: linear-gradient(90deg, #3fd0ff, #ff5fc4);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .bp-header-right{ display:flex; align-items:center; gap:16px; }
+  .bp-countdown{
+    font-family:'Share Tech Mono', monospace; font-size:11px; letter-spacing:1.5px;
+    color: var(--ink-dim); border: 1px solid rgba(122,158,200,.25);
+    border-radius: 3px; padding: 6px 10px; white-space:nowrap;
+  }
+
+  .bp-progress-row{ display:flex; align-items:center; gap:14px; }
+  .bp-tier-chip{
+    display:flex; align-items:baseline; gap:4px; flex:0 0 auto;
+    border: 1px solid rgba(255,206,84,.5);
+    background: linear-gradient(180deg, rgba(255,206,84,.14), rgba(255,206,84,.04));
+    border-radius: 4px; padding: 6px 14px;
+    box-shadow: 0 0 14px rgba(255,206,84,.15);
+  }
+  .bp-tier-chip-label{ font-family:'Share Tech Mono', monospace; font-size:9px; letter-spacing:1.5px; color:#ffe7a8; }
+  .bp-tier-chip-num{ font-family:'Chakra Petch', sans-serif; font-weight:700; font-size:22px; color:#ffe9b8; }
+  .bp-tier-chip-max{ font-family:'Share Tech Mono', monospace; font-size:11px; color: var(--ink-dim); }
+  .bp-xpbar-wrap{
+    position:relative; flex:1 1 auto; height:22px; border-radius:4px;
+    background: rgba(255,255,255,.05); border: 1px solid rgba(122,158,200,.18);
+    overflow:hidden;
+  }
+  .bp-xpbar-fill{
+    height:100%; border-radius:4px;
+    background: linear-gradient(90deg, var(--p1), #8be9ff);
+    transition: width .4s ease;
+    box-shadow: 0 0 12px rgba(63,208,255,.5);
+  }
+  .bp-xpbar-label{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-family:'Share Tech Mono', monospace; font-size:10.5px; letter-spacing:1px;
+    color: var(--ink); text-shadow: 0 1px 2px rgba(0,0,0,.8);
+  }
+  .bp-boost-box{
+    display:flex; align-items:center; gap:8px; flex:0 0 auto;
+    font-family:'Share Tech Mono', monospace; font-size:10px; letter-spacing:1px; color:#ffe7a8;
+    white-space:nowrap;
+  }
+  .bp-boost-btn{ min-width:0; padding:8px 12px; font-size:10px; border-color:#ffce54; color:#ffe9b8; }
+  .bp-boost-btn:hover:not(:disabled){ background: rgba(255,206,84,.14); box-shadow:0 0 12px rgba(255,206,84,.3); }
+  .bp-boost-btn:disabled{ opacity:.4; cursor:default; }
+
+  .bp-premium-cta{
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    border: 1px solid rgba(176,107,255,.4);
+    background: linear-gradient(90deg, rgba(176,107,255,.12), rgba(255,95,196,.08));
+    border-radius: 5px; padding: 12px 18px;
+  }
+  .bp-premium-cta-title{
+    font-family:'Chakra Petch', sans-serif; font-weight:700; font-size:13px; letter-spacing:2px; color:#e6d4ff;
+  }
+  .bp-premium-cta-sub{
+    font-family:'Share Tech Mono', monospace; font-size:10px; letter-spacing:.5px; color: var(--ink-dim); margin-top:2px;
+  }
+  .bp-unlock-btn{ min-width:0; white-space:nowrap; border-color:#b06bff; color:#e6d4ff; flex:0 0 auto; }
+  .bp-unlock-btn:hover{ background: rgba(176,107,255,.2); box-shadow:0 0 18px rgba(176,107,255,.4); }
+
+  .bp-scroll{ overflow-x:auto; overflow-y:hidden; flex:1 1 auto; min-height:0; padding-bottom:6px; }
+  .bp-scroll-inner{ display:inline-flex; flex-direction:column; gap:6px; min-width:100%; }
+  .bp-track-label{
+    font-family:'Share Tech Mono', monospace; font-size:9px; letter-spacing:2.5px;
+    padding: 2px 2px 0;
+  }
+  .bp-track-label-premium{ color:#c58bff; }
+  .bp-track-label-free{ color:#7ecbff; }
+
+  .bp-row{ display:flex; gap:8px; }
+  .bp-tier-ruler{ display:flex; gap:8px; }
+  .bp-tier-tick{
+    flex: 0 0 112px; text-align:center;
+    font-family:'Share Tech Mono', monospace; font-size:9px; color: var(--ink-dim);
+    border-top: 1px dashed rgba(122,158,200,.2); padding-top:3px;
+  }
+  .bp-tier-tick-finale{ color:#ffe89a; font-weight:bold; border-top-color: rgba(255,210,63,.5); }
+
+  .bp-card{
+    flex: 0 0 112px; display:flex; flex-direction:column; align-items:center; gap:5px;
+    border: 1px solid var(--grid); border-radius: 4px;
+    background: rgba(255,255,255,.02);
+    padding: 8px 6px 7px;
+    position:relative;
+  }
+  .bp-card-tiernum{
+    font-family:'Share Tech Mono', monospace; font-size:8px; letter-spacing:1px; color: var(--ink-dim);
+    align-self:flex-start;
+  }
+  .bp-card.locked{ opacity:.45; }
+  .bp-card.premium-locked{ opacity:.6; }
+  .bp-card.ready{
+    border-color: rgba(255,206,84,.55);
+    background: rgba(255,206,84,.06);
+    box-shadow: 0 0 12px rgba(255,206,84,.18);
+  }
+  .bp-card.claimed{ border-color: rgba(63,208,255,.3); background: rgba(63,208,255,.04); opacity:.8; }
+  .bp-card.claimed::after{
+    content:'✓'; position:absolute; top:5px; right:7px; font-size:11px; color: var(--p1);
+  }
+  .bp-card-finale{
+    flex-basis: 130px;
+    animation: mythic-shift 2.4s linear infinite;
+  }
+
+  .bp-reward{ display:flex; flex-direction:column; align-items:center; gap:3px; min-height:56px; justify-content:center; }
+  .bp-reward-glyph{ font-size:16px; color: var(--gold); }
+  .bp-reward-currency.crystals .bp-reward-glyph{ color:#b06bff; }
+  .bp-reward-amt{ font-family:'Chakra Petch', sans-serif; font-weight:700; font-size:12px; color: var(--ink); }
+  .bp-reward-boost .bp-reward-glyph{ color:#ffce54; }
+  .bp-reward-name{
+    font-family:'Share Tech Mono', monospace; font-size:8.5px; letter-spacing:.5px;
+    color: var(--ink-dim); text-align:center; line-height:1.3;
+  }
+  .bp-card.ready .bp-reward-name, .bp-card-finale .bp-reward-name{ color: var(--ink); }
+  .bp-skin-preview{ width:56px; height:34px; }
+  .bp-reward-cosmetic{
+    width:40px; height:40px; border-radius:4px; border:1px solid; display:flex;
+    align-items:center; justify-content:center;
+  }
+  .bp-reward-code{ font-family:'Share Tech Mono', monospace; font-size:9px; letter-spacing:1px; }
+
+  .bp-claim-btn{
+    width:100%; font-family:'Chakra Petch', sans-serif; font-weight:700; font-size:9px; letter-spacing:1.2px;
+    padding:6px 4px; border-radius:2px; min-height:26px;
+    border:1px solid rgba(122,158,200,.3); background: rgba(122,158,200,.07); color: var(--ink-dim);
+    cursor:default;
+  }
+  .bp-card.ready .bp-claim-btn{
+    border-color: var(--gold); background: rgba(255,206,84,.18); color:#ffe9b8; cursor:pointer;
+  }
+  .bp-card.ready .bp-claim-btn:hover{ background: rgba(255,206,84,.3); box-shadow:0 0 10px rgba(255,206,84,.3); }
+  .bp-card.premium-locked .bp-claim-btn{
+    border-color: rgba(176,107,255,.4); background: rgba(176,107,255,.08); color:#c58bff; cursor:pointer;
+  }
+  .bp-card.claimed .bp-claim-btn{ border-color: rgba(63,208,255,.3); color: var(--p1); }
+
+  @media (max-width: 1040px){
+    .bp-panel{ width: 96vw; padding: 16px 14px; }
+    .bp-progress-row{ flex-wrap:wrap; }
+  }
+  @media (max-width: 640px){
+    .bp-card, .bp-tier-tick{ flex-basis: 92px; }
+    .bp-card-finale{ flex-basis: 104px; }
+    .bp-season-name{ font-size:15px; }
+    .bp-premium-cta{ flex-direction:column; align-items:flex-start; }
+    .bp-unlock-btn{ width:100%; }
   }
 
   /* ---------- Voidbreak overlay -- the minigame itself runs entirely
@@ -2718,6 +2891,7 @@
       <nav class="lobby-nav">
         <button class="nav-item active" data-act="play">PLAY</button>
         <button class="nav-item" data-act="ranked">RANKED</button>
+        <button class="nav-item nav-battlepass" data-act="battlepass">BATTLE PASS</button>
         <button class="nav-item" data-act="modes">MODES</button>
         <button class="nav-item" data-act="shop">SHOP</button>
         <button class="nav-item" data-act="leaderboards">LEADERBOARDS</button>
@@ -3393,6 +3567,62 @@
       </div>
       <div class="shop-body" id="shopBody"></div>
       <button class="menu-back" id="btnBackShop">&larr; back</button>
+    </div>
+  </div>
+
+  <!-- BATTLE PASS -- season progression screen. All numbers on this
+       screen come from the server (GET /battlepass/config for the
+       season/tier table, GET /battlepass/state for this account's own
+       xp/tier/premium/claimed state) -- see fetchBattlePassConfig /
+       fetchBattlePassState / renderBattlePass below. Nothing here is
+       computed or trusted client-side; every claim/purchase click just
+       asks the server and re-renders from its response. -->
+  <div class="menu-overlay hidden" id="menuBattlePass">
+    <div class="bp-panel">
+      <div class="bp-header">
+        <div class="bp-header-left">
+          <div class="menu-title">BATTLE PASS</div>
+          <div class="bp-season-name" id="bpSeasonName">SEASON</div>
+        </div>
+        <div class="bp-header-right">
+          <div class="bp-countdown" id="bpCountdown">&mdash;</div>
+          <button class="menu-back" id="btnBackBattlePass">&larr; back</button>
+        </div>
+      </div>
+
+      <div class="bp-progress-row">
+        <div class="bp-tier-chip">
+          <span class="bp-tier-chip-label">TIER</span>
+          <span class="bp-tier-chip-num" id="bpTierNum">0</span>
+          <span class="bp-tier-chip-max">/ 50</span>
+        </div>
+        <div class="bp-xpbar-wrap">
+          <div class="bp-xpbar-fill" id="bpXpFill" style="width:0%"></div>
+          <div class="bp-xpbar-label" id="bpXpLabel">0 / 1000 BP XP</div>
+        </div>
+        <div class="bp-boost-box hidden" id="bpBoostBox">
+          <span id="bpBoostChargesText">0</span>
+          <button class="menu-btn bp-boost-btn" id="btnUseBoost" title="Double Battle Pass XP for 1 hour">USE BOOST</button>
+        </div>
+      </div>
+
+      <div class="bp-premium-cta" id="bpPremiumCta">
+        <div class="bp-premium-cta-text">
+          <div class="bp-premium-cta-title">UNLOCK THE PREMIUM TRACK</div>
+          <div class="bp-premium-cta-sub">Exclusive skins &middot; cosmetics &middot; bonus Coins &amp; Crystals</div>
+        </div>
+        <button class="menu-btn accent-2 bp-unlock-btn" id="btnUnlockPremium">&#9670; 499 &mdash; UNLOCK PREMIUM</button>
+      </div>
+
+      <div class="bp-scroll" id="bpScroll">
+        <div class="bp-scroll-inner" id="bpScrollInner">
+          <div class="bp-track-label bp-track-label-premium">PREMIUM</div>
+          <div class="bp-row bp-row-premium" id="bpPremiumRow"></div>
+          <div class="bp-tier-ruler" id="bpTierRuler"></div>
+          <div class="bp-row bp-row-free" id="bpFreeRow"></div>
+          <div class="bp-track-label bp-track-label-free">FREE</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -5390,6 +5620,21 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     (account.equippedAbilities || []).forEach(id => equippedAbilities.add(id));
     equippedAbilitiesP2.clear();
     (account.equippedAbilitiesP2 || []).forEach(id => equippedAbilitiesP2.add(id));
+    ownedBanners.clear();
+    (account.ownedBanners || []).forEach(id => ownedBanners.add(id));
+    ownedPlayerIcons.clear();
+    (account.ownedPlayerIcons || []).forEach(id => ownedPlayerIcons.add(id));
+    ownedEmotes.clear();
+    (account.ownedEmotes || []).forEach(id => ownedEmotes.add(id));
+    ownedKillEffects.clear();
+    (account.ownedKillEffects || []).forEach(id => ownedKillEffects.add(id));
+    ownedAbilityCosmetics.clear();
+    (account.ownedAbilityCosmetics || []).forEach(id => ownedAbilityCosmetics.add(id));
+    ownedBadges.clear();
+    (account.ownedBadges || []).forEach(id => ownedBadges.add(id));
+    equippedBanner = account.equippedBanner || null;
+    equippedPlayerIcon = account.equippedPlayerIcon || null;
+    equippedKillEffect = account.equippedKillEffect || null;
     p1SkinId = account.p1SkinId || 'cyan';
     p2SkinId = account.p2SkinId || 'red';
     autoAimP1 = !!account.autoAimP1;
@@ -5473,6 +5718,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     // the anonymous/guest view to this account's real persisted
     // progress and claimed state right away.
     fetchDailyChallenges();
+    fetchBattlePassState();
     // Friends: open the presence connection and load the list. This is
     // what makes the player visible to their friends while they are
     // just sitting in the lobby.
@@ -5834,6 +6080,9 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         equippedAbilitiesP2: Array.from(equippedAbilitiesP2),
         p1SkinId: p1SkinId,
         p2SkinId: p2SkinId,
+        equippedBanner: equippedBanner,
+        equippedPlayerIcon: equippedPlayerIcon,
+        equippedKillEffect: equippedKillEffect,
         autoAimP1: autoAimP1,
         autoAimP2: autoAimP2,
         aimMode: aimMode,
@@ -6331,12 +6580,60 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       color:'#d8d8d8', grad:['#e8e8e8','#8a8a8a'], accent:'#ff5f2a', deco:'toast' },
     { id:'carrot',       name:'CARROT',         price:150, currency:'coins', rarity:'meme',      rarityClass:'rarity-meme',
       color:'#ff8c1a', grad:['#ff8c1a','#e05a00'], accent:'#3fae3f', deco:'carrot' },
+
+    // ---- Battle Pass Season 1 skins -- never purchasable (see
+    // battlePass:true below, and buildSkinRow()'s handling of it): these
+    // are only ever granted by claiming their Battle Pass tier (see
+    // battlepass.js). Same procedural hull/gradient/deco rendering as
+    // every skin above -- no new art pipeline, just new color/deco
+    // choices, so they read as part of the same collection.
+    { id:'bp_s1_starter', name:'VANGUARD STARTER', battlePass:true, rarity:'common',    rarityClass:'rarity-skin-common',
+      color:'#3fd0ff', grad:['#1c2230','#05070c'], accent:'#3fd0ff', deco:'stripe' },
+    { id:'bp_s1_free10',  name:'SIGNAL FLARE',     battlePass:true, rarity:'common',    rarityClass:'rarity-skin-common',
+      color:'#5dffa0', grad:['#173322','#040c08'], accent:'#5dffa0', deco:'bolt' },
+    { id:'bp_s1_prem10',  name:'AURORA STRIKE',    battlePass:true, rarity:'rare',      rarityClass:'rarity-skin-rare',
+      color:'#ff5fc4', grad:['#3a1330','#0d030b'], accent:'#7ecbff', deco:'stars' },
+    { id:'bp_s1_free20',  name:'RUSTBACK RUNNER',  battlePass:true, rarity:'rare',      rarityClass:'rarity-skin-rare',
+      color:'#ff9142', grad:['#3a2412','#0d0703'], accent:'#ff9142', deco:'armor' },
+    { id:'bp_s1_prem20',  name:'PRISM BREAKER',    battlePass:true, rarity:'epic',      rarityClass:'rarity-epic',
+      color:'#8b6bff', grad:['#241547','#07030f'], accent:'#ffce54', deco:'core' },
+    { id:'bp_s1_free30',  name:'IRON WAKE',        battlePass:true, rarity:'rare',      rarityClass:'rarity-skin-rare',
+      color:'#bfc7d6', grad:['#2a2f3a','#0a0c10'], accent:'#bfc7d6', deco:'fang' },
+    { id:'bp_s1_prem30',  name:'SOLAR FLARE',      battlePass:true, rarity:'epic',      rarityClass:'rarity-epic',
+      color:'#ff9142', grad:['#3a1a0a','#0d0603'], accent:'#ffe89a', deco:'radiant' },
+    { id:'bp_s1_free40',  name:'GHOSTLINE',        battlePass:true, rarity:'epic',      rarityClass:'rarity-epic',
+      color:'#eaf6ff', grad:['#2a3140','#0a0d14'], accent:'#7ecbff', deco:'frost' },
+    { id:'bp_s1_prem40',  name:'VOID SOVEREIGN',   battlePass:true, rarity:'legendary', rarityClass:'rarity-legendary',
+      color:'#b06bff', grad:['#1a0a2e','#05020a'], accent:'#ffe89a', deco:'rift' },
+    // The Season Finale showpiece (Tier 50 Premium) -- gets its own
+    // bespoke deco (see drawSkinDeco's 'ascendant' case) instead of
+    // reusing an existing one, so it visibly stands apart from every
+    // other skin in the collection.
+    { id:'bp_s1_mythic',  name:'ASCENDANT ZERO',   battlePass:true, rarity:'mythic',    rarityClass:'rarity-mythic',
+      color:'#ffffff', grad:['#1a1a1a','#000000'], accent:'#ff5fc4', deco:'ascendant' },
   ];
   const SKIN_BY_ID = {};
   SKINS.forEach(s => { SKIN_BY_ID[s.id] = s; });
   const ownedSkins = new Set(['cyan','red']);
   let p1SkinId = 'cyan';
   let p2SkinId = 'red';
+
+  // ---- Battle Pass cosmetic inventories -- granted only by claiming a
+  // Battle Pass tier (see claimBattlePassReward()), never purchasable.
+  // Skins land in ownedSkins above like any other skin; these are the
+  // brand-new cosmetic categories the pass introduces. Banner/player
+  // icon/kill effect have a single equip slot each (shown on the lobby
+  // profile card); emotes/ability cosmetics/badges are owned collectibles
+  // only for now -- see renderBattlePassRewardTile() for how each is drawn.
+  const ownedBanners = new Set();
+  const ownedPlayerIcons = new Set();
+  const ownedEmotes = new Set();
+  const ownedKillEffects = new Set();
+  const ownedAbilityCosmetics = new Set();
+  const ownedBadges = new Set();
+  let equippedBanner = null;
+  let equippedPlayerIcon = null;
+  let equippedKillEffect = null;
 
   const POWERS = [
     { id:'extramag',    name:'EXTRA MAG',     desc:'+2 max ammo (8 total)',              price:60, currency:'coins' },
@@ -8302,14 +8599,21 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     SKINS.forEach(skin=>{
       const owned = ownedSkins.has(skin.id);
       const equipped = currentId === skin.id;
-      const affordable = balanceFor(skin.currency) >= skin.price;
+      // Battle Pass skins are never purchasable here -- they're only
+      // ever granted by claiming their tier (see the Battle Pass
+      // screen) -- so this card can only ever equip or sit locked,
+      // never spend anything.
+      const affordable = skin.battlePass ? false : balanceFor(skin.currency) >= skin.price;
       const card = document.createElement('div');
-      card.className = 'skin-card' + (owned?' owned':'') + (equipped?' equipped':'') + (!owned?' locked':'') + (!owned && !affordable ? ' unaffordable':'');
+      card.className = 'skin-card' + (owned?' owned':'') + (equipped?' equipped':'') + (!owned?' locked':'') + (!owned && !skin.battlePass && !affordable ? ' unaffordable':'');
+      let priceLabel;
+      if(skin.battlePass) priceLabel = owned ? 'OWNED' : 'BATTLE PASS';
+      else priceLabel = skin.price===0 ? 'OWNED' : currencyGlyph(skin.currency)+' '+skin.price;
       card.innerHTML = `
         ${skin.rarityClass ? `<div class="rarity-badge ${skin.rarityClass}">${skin.rarity.toUpperCase()}</div>` : ''}
         <canvas class="skin-preview" width="72" height="42"></canvas>
         <div class="skin-name">${skin.name}</div>
-        <div class="item-price ${skin.price===0?'free':''}">${skin.price===0 ? 'OWNED' : currencyGlyph(skin.currency)+' '+skin.price}</div>
+        <div class="item-price ${(skin.price===0 || (skin.battlePass && owned))?'free':''}">${priceLabel}</div>
       `;
       renderSkinPreviewCanvas(card.querySelector('.skin-preview'), skin);
       card.addEventListener('click', ()=>{
@@ -8593,6 +8897,357 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         // not have arrived yet.
       }catch(e){ /* try again next tick */ }
     }, 2000);
+  }
+
+  // ====================================================================
+  // BATTLE PASS (client)
+  //
+  // Every number this screen shows is server-authoritative -- tier, XP,
+  // premium ownership and claimed state all come from GET
+  // /battlepass/state, and the 50-tier reward table itself comes from
+  // GET /battlepass/config (fetched once and cached) rather than being
+  // duplicated here by hand. Claiming or unlocking Premium only ever
+  // asks the server and re-renders from whatever it actually persisted
+  // -- exactly the same "never assume, always resync" shape
+  // claimDailyChallenge() and buyShopItem() already use.
+  // ====================================================================
+  let battlePassConfig = null;   // { season, priceCrystals, tierCount, xpPerTier, tiers } -- GET /battlepass/config
+  let battlePassState = null;    // { xp, tier, xpIntoTier, xpForNextTier, premium, claimedFree, claimedPremium, boostCharges, boostActiveUntil }
+  let battlePassClaimInFlight = false;
+  let battlePassPurchaseInFlight = false;
+
+  async function fetchBattlePassConfig(){
+    if(battlePassConfig) { renderBattlePass(); return; } // already cached
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/battlepass/config');
+      if(!res.ok) throw new Error('battlepass config fetch failed');
+      battlePassConfig = await res.json();
+    }catch(e){
+      return; // server unreachable -- leave whatever was last rendered (or nothing yet)
+    }
+    renderBattlePass();
+  }
+
+  async function fetchBattlePassState(){
+    try{
+      const qs = (loggedIn && sessionToken) ? ('?sessionToken=' + encodeURIComponent(sessionToken)) : '';
+      const res = await fetch(ACCOUNT_SERVER_URL + '/battlepass/state' + qs);
+      if(!res.ok) throw new Error('battlepass state fetch failed');
+      battlePassState = await res.json();
+    }catch(e){
+      return;
+    }
+    renderBattlePass();
+  }
+
+  function openBattlePass(){
+    const menu = lobbyEl('menuMain');
+    const bpMenu = lobbyEl('menuBattlePass');
+    if(!bpMenu) return;
+    if(menu) menu.classList.add('hidden');
+    bpMenu.classList.remove('hidden');
+    fetchBattlePassConfig();
+    fetchBattlePassState();
+  }
+  function closeBattlePass(){
+    const menu = lobbyEl('menuMain');
+    const bpMenu = lobbyEl('menuBattlePass');
+    if(bpMenu) bpMenu.classList.add('hidden');
+    if(menu) menu.classList.remove('hidden');
+  }
+
+  // Maps a non-skin cosmetic reward to a short monospace code + tint --
+  // skins get a real canvas preview (see renderBattlePassRewardTile), but
+  // banners/icons/emotes/kill effects/ability cosmetics/badges don't have
+  // their own art pipeline yet, so a clean, readable code tile (colored
+  // by rarity, same as everywhere else rarity already reads as a glow)
+  // stands in for one rather than a placeholder image.
+  const BP_COSMETIC_CODE = {
+    banner: 'BNR', player_icon: 'ICO', emote: 'EMT',
+    kill_effect: 'KFX', ability_cosmetic: 'ABL', badge: 'BDG'
+  };
+  function bpRarityClass(rarity){
+    return ({
+      common: 'rarity-skin-common', rare: 'rarity-skin-rare', epic: 'rarity-epic',
+      legendary: 'rarity-legendary', mythic: 'rarity-mythic'
+    })[rarity] || 'rarity-skin-common';
+  }
+
+  // Renders ONE reward's tile content (not the surrounding claim-state
+  // card -- see buildBattlePassCard). Currency rewards reuse the exact
+  // glyph the rest of the game already shows Coins/Crystals with
+  // (currencyGlyph); skins get a real hull preview via the same canvas
+  // renderer the Shop uses (renderSkinPreviewCanvas/SKIN_BY_ID) so a
+  // Battle Pass skin looks identical here to how it'll look equipped.
+  function renderBattlePassRewardTile(reward){
+    if(reward.type === 'coins' || reward.type === 'crystals'){
+      return '<div class="bp-reward bp-reward-currency ' + reward.type + '">'
+        + '<div class="bp-reward-glyph">' + currencyGlyph(reward.type) + '</div>'
+        + '<div class="bp-reward-amt">' + reward.amount.toLocaleString() + '</div>'
+      + '</div>';
+    }
+    if(reward.type === 'xp_boost'){
+      return '<div class="bp-reward bp-reward-boost">'
+        + '<div class="bp-reward-glyph">&#9650;</div>'
+        + '<div class="bp-reward-name">XP BOOST</div>'
+      + '</div>';
+    }
+    if(reward.type === 'skin'){
+      return '<div class="bp-reward bp-reward-skin">'
+        + '<canvas class="bp-skin-preview" width="56" height="34" data-skin-id="' + reward.id + '"></canvas>'
+        + '<div class="bp-reward-name">' + reward.name + '</div>'
+      + '</div>';
+    }
+    const code = BP_COSMETIC_CODE[reward.type] || '???';
+    return '<div class="bp-reward bp-reward-cosmetic ' + bpRarityClass(reward.rarity) + '">'
+      + '<div class="bp-reward-code">' + code + '</div>'
+      + '<div class="bp-reward-name">' + reward.name + '</div>'
+    + '</div>';
+  }
+
+  // Paints every '.bp-skin-preview' canvas just inserted -- has to run
+  // AFTER the HTML above lands in the DOM (canvas elements can't be
+  // drawn to until they exist), same two-step shape buildSkinRow uses.
+  function paintBattlePassSkinPreviews(container){
+    container.querySelectorAll('.bp-skin-preview').forEach(canvas=>{
+      const skinDef = SKIN_BY_ID[canvas.dataset.skinId];
+      if(skinDef) renderSkinPreviewCanvas(canvas, skinDef);
+    });
+  }
+
+  function bpOwnsReward(reward){
+    if(reward.type === 'skin') return ownedSkins.has(reward.id);
+    if(reward.type === 'banner') return ownedBanners.has(reward.id);
+    if(reward.type === 'player_icon') return ownedPlayerIcons.has(reward.id);
+    if(reward.type === 'emote') return ownedEmotes.has(reward.id);
+    if(reward.type === 'kill_effect') return ownedKillEffects.has(reward.id);
+    if(reward.type === 'ability_cosmetic') return ownedAbilityCosmetics.has(reward.id);
+    if(reward.type === 'badge') return ownedBadges.has(reward.id);
+    return false; // coins/crystals/xp_boost aren't "owned" -- they're spent/consumed on grant
+  }
+
+  function buildBattlePassCard(tierDef, track){
+    const tierNum = tierDef.tier;
+    const rewards = track === 'premium' ? tierDef.premium : tierDef.free;
+    const st = battlePassState || { tier: 0, premium: false, claimedFree: {}, claimedPremium: {} };
+    const reached = st.tier >= tierNum;
+    const claimedMap = track === 'premium' ? (st.claimedPremium || {}) : (st.claimedFree || {});
+    const claimed = !!claimedMap[tierNum];
+    const premiumLocked = track === 'premium' && !st.premium;
+
+    let stateClass = 'locked';
+    if(claimed) stateClass = 'claimed';
+    else if(reached && !premiumLocked) stateClass = 'ready';
+    else if(reached && premiumLocked) stateClass = 'premium-locked';
+
+    const card = document.createElement('div');
+    card.className = 'bp-card bp-card-' + track + ' ' + stateClass + (tierNum === (battlePassConfig ? battlePassConfig.tierCount : 50) ? ' bp-card-finale' : '');
+    card.dataset.tier = tierNum;
+    card.dataset.track = track;
+
+    let btnLabel = 'LOCKED';
+    if(claimed) btnLabel = 'CLAIMED';
+    else if(premiumLocked) btnLabel = 'PREMIUM';
+    else if(reached) btnLabel = 'CLAIM';
+
+    card.innerHTML = '<div class="bp-card-tiernum">' + tierNum + '</div>'
+      + rewards.map(renderBattlePassRewardTile).join('')
+      + '<button class="bp-claim-btn" type="button"' + (stateClass === 'ready' ? '' : ' disabled') + '>' + btnLabel + '</button>';
+
+    if(stateClass === 'ready'){
+      card.querySelector('.bp-claim-btn').addEventListener('click', ()=> claimBattlePassReward(tierNum, track));
+    } else if(stateClass === 'premium-locked'){
+      card.querySelector('.bp-claim-btn').addEventListener('click', ()=>{
+        document.getElementById('btnUnlockPremium').scrollIntoView({ behavior:'smooth', block:'center' });
+        lobbyToast('UNLOCK PREMIUM TO CLAIM THIS REWARD');
+      });
+    }
+    return card;
+  }
+
+  function formatBattlePassCountdown(season){
+    if(!season || !season.endsAt) return '—';
+    const msLeft = season.endsAt - Date.now();
+    if(msLeft <= 0) return 'SEASON ENDED';
+    const days = Math.floor(msLeft / 86400000);
+    const hours = Math.floor((msLeft % 86400000) / 3600000);
+    return days > 0 ? (days + 'D ' + hours + 'H LEFT') : (hours + 'H LEFT');
+  }
+
+  function renderBattlePass(){
+    const scrollInner = document.getElementById('bpScrollInner');
+    if(!scrollInner) return;
+    if(!battlePassConfig){
+      return; // wait for config -- nothing meaningful to draw yet
+    }
+    const season = battlePassConfig.season;
+    const st = battlePassState || { xp:0, tier:0, xpIntoTier:0, xpForNextTier: battlePassConfig.xpPerTier, premium:false, signedIn:false };
+
+    setTxtEl('bpSeasonName', (season && season.name || 'SEASON').toUpperCase());
+    setTxtEl('bpCountdown', formatBattlePassCountdown(season));
+    setTxtEl('bpTierNum', st.tier);
+
+    const pct = st.xpForNextTier > 0 ? Math.round((st.xpIntoTier / st.xpForNextTier) * 100) : 100;
+    const xpFill = document.getElementById('bpXpFill');
+    if(xpFill) xpFill.style.width = pct + '%';
+    setTxtEl('bpXpLabel', st.tier >= battlePassConfig.tierCount
+      ? 'MAX TIER REACHED'
+      : (st.xpIntoTier + ' / ' + st.xpForNextTier + ' BP XP'));
+
+    const cta = document.getElementById('bpPremiumCta');
+    if(cta) cta.classList.toggle('hidden', !!st.premium);
+
+    const boostBox = document.getElementById('bpBoostBox');
+    if(boostBox){
+      const charges = st.boostCharges || 0;
+      const activeUntil = st.boostActiveUntil || 0;
+      const active = activeUntil > Date.now();
+      boostBox.classList.toggle('hidden', charges <= 0 && !active);
+      setTxtEl('bpBoostChargesText', active
+        ? 'BOOST ACTIVE (2x)'
+        : (charges + ' XP BOOST' + (charges === 1 ? '' : 'S')));
+      const boostBtn = document.getElementById('btnUseBoost');
+      if(boostBtn) boostBtn.disabled = active || charges <= 0;
+    }
+
+    const premiumRow = document.getElementById('bpPremiumRow');
+    const freeRow = document.getElementById('bpFreeRow');
+    const ruler = document.getElementById('bpTierRuler');
+    if(premiumRow && freeRow && ruler){
+      premiumRow.innerHTML = '';
+      freeRow.innerHTML = '';
+      ruler.innerHTML = '';
+      battlePassConfig.tiers.forEach(tierDef=>{
+        premiumRow.appendChild(buildBattlePassCard(tierDef, 'premium'));
+        freeRow.appendChild(buildBattlePassCard(tierDef, 'free'));
+        const tick = document.createElement('div');
+        tick.className = 'bp-tier-tick' + (tierDef.tier === battlePassConfig.tierCount ? ' bp-tier-tick-finale' : '');
+        tick.textContent = tierDef.tier;
+        ruler.appendChild(tick);
+      });
+      paintBattlePassSkinPreviews(premiumRow);
+      paintBattlePassSkinPreviews(freeRow);
+    }
+
+    const unlockBtn = document.getElementById('btnUnlockPremium');
+    if(unlockBtn) unlockBtn.textContent = '◆ ' + battlePassConfig.priceCrystals + ' — UNLOCK PREMIUM';
+  }
+
+  function setTxtEl(id, val){
+    const el = document.getElementById(id);
+    if(el) el.textContent = val;
+  }
+
+  async function claimBattlePassReward(tier, track){
+    if(battlePassClaimInFlight) return;
+    if(!loggedIn || !sessionToken){
+      lobbyToast('SIGN IN TO CLAIM BATTLE PASS REWARDS');
+      return;
+    }
+    battlePassClaimInFlight = true;
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/battlepass/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionToken: sessionToken, tier: tier, track: track })
+      });
+      const data = await res.json().catch(()=>({}));
+      if(!res.ok){
+        lobbyToast(data.error || 'COULD NOT CLAIM REWARD');
+        fetchBattlePassState(); // resync -- local view may be stale (another tab, etc.)
+        return;
+      }
+      // Sync every local inventory/currency the reward could have
+      // touched from what the server actually granted -- never assume
+      // locally, exactly like buyShopItem/claimDailyChallenge.
+      coins = data.newCoins;
+      crystals = data.newCrystals;
+      (data.rewards || []).forEach(r=>{
+        if(r.type === 'skin') ownedSkins.add(r.id);
+        else if(r.type === 'banner') ownedBanners.add(r.id);
+        else if(r.type === 'player_icon') ownedPlayerIcons.add(r.id);
+        else if(r.type === 'emote') ownedEmotes.add(r.id);
+        else if(r.type === 'kill_effect') ownedKillEffects.add(r.id);
+        else if(r.type === 'ability_cosmetic') ownedAbilityCosmetics.add(r.id);
+        else if(r.type === 'badge') ownedBadges.add(r.id);
+      });
+      battlePassState = Object.assign({}, battlePassState, {
+        claimedFree: data.battlePass.claimedFree,
+        claimedPremium: data.battlePass.claimedPremium,
+        boostCharges: data.battlePass.boostCharges
+      });
+      updateCurrencyDisplay();
+      renderBattlePass();
+      lobbyToast('TIER ' + tier + ' ' + track.toUpperCase() + ' REWARD CLAIMED');
+    }catch(e){
+      lobbyToast('COULD NOT REACH THE SERVER');
+    }finally{
+      battlePassClaimInFlight = false;
+    }
+  }
+
+  async function purchaseBattlePassPremium(){
+    if(battlePassPurchaseInFlight) return;
+    if(!loggedIn || !sessionToken){
+      lobbyToast('SIGN IN TO UNLOCK PREMIUM');
+      return;
+    }
+    const price = battlePassConfig ? battlePassConfig.priceCrystals : 499;
+    if(crystals < price){
+      lobbyToast('NOT ENOUGH CRYSTALS — ' + (price - crystals) + ' MORE NEEDED');
+      closeBattlePass(); // menuBattlePass and menuShop are both full-screen overlays -- close this one before opening the other, or both would sit open at once
+      openCrystalShop();
+      return;
+    }
+    battlePassPurchaseInFlight = true;
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/battlepass/purchase-premium', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionToken: sessionToken })
+      });
+      const data = await res.json().catch(()=>({}));
+      if(!res.ok){
+        lobbyToast(data.error || 'COULD NOT UNLOCK PREMIUM');
+        return;
+      }
+      crystals = data.newBalance;
+      battlePassState = Object.assign({}, battlePassState, { premium: true });
+      updateCurrencyDisplay();
+      renderBattlePass();
+      lobbyToast('PREMIUM UNLOCKED — CLAIM YOUR REWARDS');
+    }catch(e){
+      lobbyToast('COULD NOT REACH THE SERVER');
+    }finally{
+      battlePassPurchaseInFlight = false;
+    }
+  }
+
+  async function useBattlePassBoost(){
+    if(!loggedIn || !sessionToken){
+      lobbyToast('SIGN IN TO USE AN XP BOOST');
+      return;
+    }
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/battlepass/useboost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionToken: sessionToken })
+      });
+      const data = await res.json().catch(()=>({}));
+      if(!res.ok){
+        lobbyToast(data.error || 'COULD NOT ACTIVATE BOOST');
+        return;
+      }
+      battlePassState = Object.assign({}, battlePassState, {
+        boostCharges: data.battlePass.boostCharges,
+        boostActiveUntil: data.battlePass.boostActiveUntil
+      });
+      renderBattlePass();
+      lobbyToast('XP BOOST ACTIVE — 2x BATTLE PASS XP FOR 1 HOUR');
+    }catch(e){
+      lobbyToast('COULD NOT REACH THE SERVER');
+    }
   }
 
   let mouseX = W/2, mouseY = H/2;
@@ -10994,6 +11649,25 @@ if(tutorialActive) tutorialUpdate(dt);
           c.beginPath(); c.arc(x,y,0.8,0,Math.PI*2); c.fill();
         });
         break;
+      case 'ascendant': { // Ascendant Zero -- Battle Pass Tier 50 Mythic.
+        // A layered radial core (echoes 'core') plus three ring arcs at
+        // staggered radii/colors -- the same rainbow trio the mythic/
+        // ascendant rarity badges already cycle through (see
+        // .rarity-badge.rarity-mythic's keyframes), so the hull itself
+        // reads as an extension of that glow rather than a separate effect.
+        const g = c.createRadialGradient(0,0,0, 0,0,9);
+        g.addColorStop(0,'#ffffff'); g.addColorStop(0.4,accent); g.addColorStop(1,'rgba(0,0,0,0)');
+        c.fillStyle = g;
+        c.beginPath(); c.arc(0,0,9,0,Math.PI*2); c.fill();
+        c.lineWidth = 0.9;
+        [['#3fd0ff',5.5,0.2],['#ff5fc4',8,0.75],['#ffd23f',10.5,1.3]].forEach(([ringColor,r,rot])=>{
+          c.strokeStyle = ringColor;
+          c.globalAlpha = 0.8;
+          c.beginPath(); c.arc(0,0,r,rot,rot+2.4); c.stroke();
+        });
+        c.globalAlpha = 1;
+        break;
+      }
     }
   }
 
@@ -11558,6 +12232,13 @@ if(tutorialActive) tutorialUpdate(dt);
     menuShop.classList.add('hidden');
     menuMain.classList.remove('hidden');
   });
+
+  const btnBackBattlePass = document.getElementById('btnBackBattlePass');
+  if(btnBackBattlePass) btnBackBattlePass.addEventListener('click', closeBattlePass);
+  const btnUnlockPremium = document.getElementById('btnUnlockPremium');
+  if(btnUnlockPremium) btnUnlockPremium.addEventListener('click', purchaseBattlePassPremium);
+  const btnUseBoost = document.getElementById('btnUseBoost');
+  if(btnUseBoost) btnUseBoost.addEventListener('click', useBattlePassBoost);
   tabSkins.addEventListener('click', ()=> selectShopTab('skins'));
   tabPowers.addEventListener('click', ()=> selectShopTab('powers'));
   tabAbilities.addEventListener('click', ()=> selectShopTab('abilities'));
@@ -12889,6 +13570,8 @@ if(tutorialActive) tutorialUpdate(dt);
     renderLobbyFriends();
     fetchDailyChallenges();
     fetchNews();
+    fetchBattlePassConfig();
+    fetchBattlePassState();
 
     const prev = lobbyEl('lobbyModePrev');
     const next = lobbyEl('lobbyModeNext');
@@ -12929,6 +13612,7 @@ if(tutorialActive) tutorialUpdate(dt);
         }
         else if(act === 'shop')         { lobbyEl('btnShop').click(); }
         else if(act === 'crystalshop')  { openCrystalShop(); }
+        else if(act === 'battlepass')   { openBattlePass(); }
         else if(act === 'leaderboards') { lobbyEl('btnLeaderboard').click(); }
         else if(act === 'settings')     { lobbyEl('btnSettings').click(); }
         else if(act === 'admin')        { lobbyEl('btnAdmin').click(); }

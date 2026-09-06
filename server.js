@@ -53,6 +53,7 @@ const Friends = require("./friends");
 const Chat = require("./chat");
 const Catalog = require("./catalog");
 const Billing = require("./billing");
+const BattlePass = require("./battlepass");
 
 const accounts = {}; // sub -> account record (populated in startServer())
 
@@ -154,7 +155,23 @@ function defaultAccount(name, email) {
         friends: [],
         incomingFriendRequests: [],
         outgoingFriendRequests: [],
-        blocked: []
+        blocked: [],
+        // BATTLE PASS -- season xp/tier/premium-ownership/claim state.
+        // See battlepass.js. Cosmetics it grants live in the
+        // ownedBanners/ownedPlayerIcons/ownedEmotes/ownedKillEffects/
+        // ownedAbilityCosmetics/ownedBadges arrays below (skins land in
+        // the existing ownedSkins) -- those are permanent and NEVER
+        // reset by a season rollover, only battlePass itself is.
+        battlePass: Object.assign(BattlePass.defaultRecord(), { seasonId: BATTLE_PASS_SEASON.id }),
+        ownedBanners: [],
+        ownedPlayerIcons: [],
+        ownedEmotes: [],
+        ownedKillEffects: [],
+        ownedAbilityCosmetics: [],
+        ownedBadges: [],
+        equippedBanner: null,
+        equippedPlayerIcon: null,
+        equippedKillEffect: null
     };
 }
 
@@ -177,6 +194,77 @@ function ensureAccountRanked(sub) {
             console.log("[ranked] failed to persist ranked migration for " + sub + ":", e.message));
     }
     return account.ranked;
+}
+
+// Same lazy-migration shape as ensureAccountRanked: rolls a missing/
+// malformed/previous-season battlePass sub-record to a fresh one valid
+// for the CURRENTLY active season, persists only if something actually
+// changed, and never touches the permanent owned-cosmetic arrays (those
+// are separate fields, granted once by /battlepass/claim and never
+// reset). Also backfills the handful of new cosmetic-inventory fields
+// (ownedBanners, etc.) for any account older than this feature.
+function ensureAccountBattlePass(sub) {
+    const account = accounts[sub];
+    if (!account) return null;
+    let dirty = false;
+
+    const ensured = BattlePass.ensureRecord(account.battlePass, BATTLE_PASS_SEASON.id);
+    if (ensured !== account.battlePass) {
+        account.battlePass = ensured;
+        dirty = true;
+    }
+    const arrayFields = ["ownedBanners", "ownedPlayerIcons", "ownedEmotes", "ownedKillEffects", "ownedAbilityCosmetics", "ownedBadges"];
+    for (const field of arrayFields) {
+        if (!Array.isArray(account[field])) {
+            account[field] = [];
+            dirty = true;
+        }
+    }
+    if (!("equippedBanner" in account)) { account.equippedBanner = null; dirty = true; }
+    if (!("equippedPlayerIcon" in account)) { account.equippedPlayerIcon = null; dirty = true; }
+    if (!("equippedKillEffect" in account)) { account.equippedKillEffect = null; dirty = true; }
+
+    if (dirty) {
+        persistAccount(sub).catch(e =>
+            console.log("[battlepass] failed to persist battlePass migration for " + sub + ":", e.message));
+    }
+    return account.battlePass;
+}
+
+// Grants ONE reward part onto an account's in-memory record. Never
+// persists on its own -- every caller is already inside its own atomic
+// read-modify-write-then-persist-with-rollback block (mirrors /shop/buy
+// crediting a currency field or appending to an owned-item array), so
+// this stays a pure mutation the caller can undo by simply not
+// persisting. Returns nothing; the account object is mutated in place.
+function grantBattlePassReward(account, reward) {
+    if (!reward || typeof reward !== "object") return;
+    if (reward.type === "coins") {
+        account.coins = (account.coins || 0) + (reward.amount || 0);
+    } else if (reward.type === "crystals") {
+        account.crystals = (account.crystals || 0) + (reward.amount || 0);
+    } else if (reward.type === "xp_boost") {
+        account.battlePass.boostCharges = (account.battlePass.boostCharges || 0) + (reward.amount || 1);
+    } else {
+        const ownedField = BattlePass.OWNED_FIELD[reward.type];
+        if (!ownedField || !reward.id) return;
+        const owned = Array.isArray(account[ownedField]) ? account[ownedField] : [];
+        if (owned.indexOf(reward.id) === -1) account[ownedField] = owned.concat([reward.id]);
+    }
+}
+
+// Adds Battle-Pass-only XP to an account already loaded in memory (never
+// persists -- folded into whatever write the caller is already doing,
+// exactly like the ranked_win/ranked_loss XP mutation inside
+// completeRankedMatch does for account.xp). Doubles the gain while a
+// boost is active (and clears an expired one first) -- this multiplier
+// only ever touches battlePass.xp, never account.xp/coins/crystals.
+function addBattlePassXP(account, amount) {
+    if (!account || !account.battlePass || amount <= 0) return;
+    const bp = account.battlePass;
+    if (bp.boostActiveUntil && bp.boostActiveUntil < Date.now()) bp.boostActiveUntil = 0;
+    const boosted = bp.boostActiveUntil && bp.boostActiveUntil > Date.now();
+    bp.xp = (bp.xp || 0) + Math.floor(amount * (boosted ? BattlePass.BOOST_MULTIPLIER : 1));
 }
 
 // Resolves a sessionToken to that player's account record, or null.
@@ -387,12 +475,23 @@ async function awardXP(sub, amount, reason, coinAmount) {
     account.level = derived.level;
     account.coins = previousCoins + coinAmount;
 
+    // Battle Pass XP rides the same events as account XP (every reason
+    // this function is ever called for is already a trustworthy,
+    // server-decided amount) -- see addBattlePassXP. Folded into this
+    // SAME persist rather than a second write, and rolled back together
+    // if it fails, exactly like coins already is above.
+    if (!account.battlePass) account.battlePass = BattlePass.defaultRecord();
+    const previousBattlePass = account.battlePass;
+    account.battlePass = Object.assign({}, previousBattlePass);
+    addBattlePassXP(account, amount);
+
     try {
         await persistAccount(sub);
     } catch (e) {
         account.xp = previousXp; // write failed -- undo the in-memory grant
         account.level = previousLevel;
         account.coins = previousCoins;
+        account.battlePass = previousBattlePass;
         console.log("[xp] failed to persist XP/coin award for " + sub + ":", e.message);
         return null;
     }
@@ -1089,6 +1188,15 @@ function defaultDailyChallenges() {
 
 const RANKED_CONFIG = Ranked.RANKED_CONFIG;
 
+// The currently active Battle Pass season. A plain, server-owned mutable
+// copy of BattlePass.DEFAULT_SEASON (never the module's own object,
+// which would be shared/frozen-by-convention state across requires) --
+// mirrors how RANKED_CONFIG.season is bumped by /admin/ranked and
+// persisted so a restart doesn't snap back to the code default. See
+// startServer() for the boot-time load and /admin/battlepass for the
+// only place this is ever written.
+let BATTLE_PASS_SEASON = Object.assign({}, BattlePass.DEFAULT_SEASON);
+
 // sub -> queue entry. Keyed by ACCOUNT, not by socket, so the same
 // account cannot occupy two queue slots from two tabs.
 const rankedQueue = new Map();
@@ -1448,6 +1556,10 @@ async function completeRankedMatch(match, winnerSlot, reason) {
         const xpDerived = computeLevelFromXP(previousXp + xpAmount);
         account.xp = previousXp + xpAmount;
         account.level = xpDerived.level;
+        // Same Battle Pass XP hook awardXP() has, folded into this same
+        // persist for the same reason the ranked result itself is.
+        if (!account.battlePass) account.battlePass = BattlePass.defaultRecord();
+        addBattlePassXP(account, xpAmount);
         const xpResult = {
             awarded: xpAmount,
             reason: won ? "ranked_win" : "ranked_loss",
@@ -2896,6 +3008,7 @@ const httpServer = http.createServer(async (req, res) => {
                 await persistAccount(accountId);
             }
             ensureAccountXP(accountId);
+            ensureAccountBattlePass(accountId);
 
             const sessionToken = crypto.randomBytes(24).toString("hex");
             await persistSession(sessionToken, accountId);
@@ -3071,6 +3184,7 @@ const httpServer = http.createServer(async (req, res) => {
             // already has valid XP. ensureAccountXP persists on its own
             // if it changed anything, so it's not folded into `dirty`.
             ensureAccountXP(sub);
+            ensureAccountBattlePass(sub);
             // Same lazy migration for a pre-tutorial-feature account --
             // an EXISTING player who predates this field must never be
             // treated as "not yet completed" by omission (that would
@@ -3348,7 +3462,39 @@ const httpServer = http.createServer(async (req, res) => {
                 friends: Array.isArray(existing.friends) ? existing.friends : [],
                 incomingFriendRequests: Array.isArray(existing.incomingFriendRequests) ? existing.incomingFriendRequests : [],
                 outgoingFriendRequests: Array.isArray(existing.outgoingFriendRequests) ? existing.outgoingFriendRequests : [],
-                blocked: Array.isArray(existing.blocked) ? existing.blocked : []
+                blocked: Array.isArray(existing.blocked) ? existing.blocked : [],
+                // BATTLE PASS IS DELIBERATELY NOT READ FROM `body`, for the
+                // exact same reason ranked/friends aren't: this handler
+                // rebuilds the account field-by-field, so xp/tier/premium/
+                // claimed state MUST be carried from the stored record or
+                // it is wiped by the very next /save (which every match
+                // already triggers via saveProgress()). A client POSTing
+                // {battlePass:{premium:true}} here has no effect at all --
+                // premium ownership only ever changes inside
+                // /battlepass/purchase-premium, and xp only inside
+                // awardXP()/completeRankedMatch()/the daily-challenge bonus.
+                battlePass: BattlePass.ensureRecord(existing.battlePass, BATTLE_PASS_SEASON.id),
+                // The cosmetics a Battle Pass reward grants are permanent,
+                // server-only-growable inventories -- exactly like
+                // ownedSkins/ownedPowers/ownedAbilities above, carried
+                // ONLY from the stored record, never from the request.
+                ownedBanners: Array.isArray(existing.ownedBanners) ? existing.ownedBanners : [],
+                ownedPlayerIcons: Array.isArray(existing.ownedPlayerIcons) ? existing.ownedPlayerIcons : [],
+                ownedEmotes: Array.isArray(existing.ownedEmotes) ? existing.ownedEmotes : [],
+                ownedKillEffects: Array.isArray(existing.ownedKillEffects) ? existing.ownedKillEffects : [],
+                ownedAbilityCosmetics: Array.isArray(existing.ownedAbilityCosmetics) ? existing.ownedAbilityCosmetics : [],
+                ownedBadges: Array.isArray(existing.ownedBadges) ? existing.ownedBadges : [],
+                // Equip picks cost nothing (same tier as p1SkinId/p2SkinId
+                // above) so they ARE accepted from the client, but only as
+                // a choice among cosmetics this account's OWN stored
+                // owned-list already contains -- never body's own claim of
+                // what it owns.
+                equippedBanner: (typeof body.equippedBanner === "string" && Array.isArray(existing.ownedBanners) && existing.ownedBanners.indexOf(body.equippedBanner) !== -1)
+                    ? body.equippedBanner : (body.equippedBanner === null ? null : (existing.equippedBanner || null)),
+                equippedPlayerIcon: (typeof body.equippedPlayerIcon === "string" && Array.isArray(existing.ownedPlayerIcons) && existing.ownedPlayerIcons.indexOf(body.equippedPlayerIcon) !== -1)
+                    ? body.equippedPlayerIcon : (body.equippedPlayerIcon === null ? null : (existing.equippedPlayerIcon || null)),
+                equippedKillEffect: (typeof body.equippedKillEffect === "string" && Array.isArray(existing.ownedKillEffects) && existing.ownedKillEffects.indexOf(body.equippedKillEffect) !== -1)
+                    ? body.equippedKillEffect : (body.equippedKillEffect === null ? null : (existing.equippedKillEffect || null))
             };
             try {
                 await persistAccount(sub);
@@ -3459,11 +3605,20 @@ const httpServer = http.createServer(async (req, res) => {
                 progress: dc.progress,
                 claimed: Object.assign({}, dc.claimed, { [body.challengeId]: true })
             };
+            // Daily Challenges never route through awardXP() (they only
+            // ever paid Coins) -- this is the one place a Daily Challenge
+            // also feeds Battle Pass progress. Folded into the same
+            // persist/rollback as the coins grant just above.
+            if (!target.battlePass) target.battlePass = BattlePass.defaultRecord();
+            const previousBattlePass = target.battlePass;
+            target.battlePass = Object.assign({}, previousBattlePass);
+            addBattlePassXP(target, BattlePass.DAILY_CHALLENGE_BONUS_XP);
             try {
                 await persistAccount(sub);
             } catch (e) {
                 target.coins = previousBalance; // write failed -- undo the in-memory grant
                 target.dailyChallenges = previousDC;
+                target.battlePass = previousBattlePass;
                 sendJson(res, 503, { error: "Could not save reward -- try again" });
                 return;
             }
@@ -3547,6 +3702,320 @@ const httpServer = http.createServer(async (req, res) => {
                 return;
             }
             sendJson(res, 200, Object.assign({ ok: true }, result));
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // =====================================================================
+    // BATTLE PASS
+    //
+    // Server-authoritative the same way the shop and Daily Challenges
+    // already are: the client never gets to assert its own tier, XP,
+    // premium ownership or claimed state -- every one of those is
+    // re-derived here from the account's own stored battlePass record and
+    // battlepass.js's TIERS table, never from anything the request sends.
+    // =====================================================================
+
+    // ---- GET /battlepass/config ----
+    // Public, unauthenticated -- the season's identity/dates, the price to
+    // unlock Premium, and the full 50-tier reward table. This is the ONE
+    // place that table is defined (see battlepass.js) -- the client fetches
+    // it rather than keeping a second hand-maintained copy.
+    if (req.method === "GET" && req.url === "/battlepass/config") {
+        sendJson(res, 200, {
+            season: BATTLE_PASS_SEASON,
+            priceCrystals: BattlePass.PASS_PRICE_CRYSTALS,
+            tierCount: BattlePass.TIER_COUNT,
+            xpPerTier: BattlePass.XP_PER_TIER,
+            boostDurationMs: BattlePass.BOOST_DURATION_MS,
+            boostMultiplier: BattlePass.BOOST_MULTIPLIER,
+            tiers: BattlePass.TIERS
+        });
+        return;
+    }
+
+    // ---- GET /battlepass/state?sessionToken=... (optional) ----
+    // A guest (no/invalid sessionToken) gets an honest all-zero state
+    // back rather than a 401 -- exactly like /challenges/today -- so the
+    // screen can render "SIGN IN TO TRACK PROGRESS" instead of an error.
+    if (req.method === "GET" && req.url.startsWith("/battlepass/state")) {
+        const urlObj = new URL(req.url, "http://x");
+        const sessionToken = urlObj.searchParams.get("sessionToken");
+        const sub = sessionToken ? sessions[sessionToken] : null;
+        const account = sub ? accounts[sub] : null;
+
+        let bp = BattlePass.defaultRecord();
+        if (account) {
+            bp = ensureAccountBattlePass(sub);
+        }
+        const derived = BattlePass.tierFromXP(bp.xp);
+        sendJson(res, 200, {
+            signedIn: !!account,
+            xp: bp.xp,
+            tier: derived.tier,
+            xpIntoTier: derived.xpIntoTier,
+            xpForNextTier: derived.xpForNextTier,
+            premium: !!bp.premium,
+            claimedFree: bp.claimedFree,
+            claimedPremium: bp.claimedPremium,
+            boostCharges: bp.boostCharges || 0,
+            boostActiveUntil: bp.boostActiveUntil || 0
+        });
+        return;
+    }
+
+    // ---- POST /battlepass/purchase-premium ---- body: { sessionToken }
+    // Spends Crystals to unlock the Premium track for the CURRENT season.
+    // Same atomic decrement-then-persist-with-rollback shape as
+    // /shop/buy; the price is read from battlepass.js, never the client.
+    // Idempotent by construction: already-premium is rejected outright,
+    // so a double click (or a replayed request) can never charge twice.
+    if (req.method === "POST" && req.url === "/battlepass/purchase-premium") {
+        try {
+            const body = await readJsonBody(req);
+            const sub = sessions[body.sessionToken];
+            if (!sub) { sendJson(res, 401, { error: "Not signed in" }); return; }
+            const target = accounts[sub];
+            if (!target) { sendJson(res, 409, { error: "Account not loaded -- sign in again" }); return; }
+
+            const bp = ensureAccountBattlePass(sub);
+            if (bp.premium) {
+                sendJson(res, 409, { error: "Premium is already unlocked this season" });
+                return;
+            }
+            const price = BattlePass.PASS_PRICE_CRYSTALS;
+            const previousBalance = target.crystals || 0;
+            if (previousBalance < price) {
+                sendJson(res, 400, { error: "Not enough crystals" });
+                return;
+            }
+
+            const previousBattlePass = bp;
+            target.crystals = previousBalance - price;
+            target.battlePass = Object.assign({}, bp, { premium: true });
+            try {
+                await persistAccount(sub);
+            } catch (e) {
+                target.crystals = previousBalance;
+                target.battlePass = previousBattlePass;
+                sendJson(res, 503, { error: "Could not save purchase -- try again" });
+                return;
+            }
+
+            sendJson(res, 200, {
+                ok: true,
+                newBalance: target.crystals,
+                premium: true
+            });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // ---- POST /battlepass/claim ---- body: { sessionToken, tier, track }
+    // The ONLY way a Battle Pass reward's Coins/Crystals/cosmetic actually
+    // reaches an account. Re-derives the account's OWN current tier from
+    // its OWN stored xp (never a client-sent tier), re-looks-up the
+    // reward from battlepass.js (never a client-sent reward), and checks
+    // the claimed-map before granting -- the exact same
+    // read-verify-mutate-persist-with-rollback shape as
+    // /challenges/claim.
+    if (req.method === "POST" && req.url === "/battlepass/claim") {
+        try {
+            const body = await readJsonBody(req);
+            const sub = sessions[body.sessionToken];
+            if (!sub) { sendJson(res, 401, { error: "Not signed in" }); return; }
+            const target = accounts[sub];
+            if (!target) { sendJson(res, 409, { error: "Account not loaded -- sign in again" }); return; }
+
+            const tierNumber = Number(body.tier);
+            const track = body.track;
+            if (!Number.isInteger(tierNumber) || tierNumber < 1 || tierNumber > BattlePass.TIER_COUNT) {
+                sendJson(res, 400, { error: "Invalid tier" });
+                return;
+            }
+            if (!BattlePass.isValidTrack(track)) {
+                sendJson(res, 400, { error: "Invalid track" });
+                return;
+            }
+            const def = BattlePass.tierDef(tierNumber);
+            if (!def) { sendJson(res, 400, { error: "Invalid tier" }); return; }
+
+            const bp = ensureAccountBattlePass(sub);
+            const derived = BattlePass.tierFromXP(bp.xp);
+            if (derived.tier < tierNumber) {
+                sendJson(res, 400, { error: "This tier hasn't been reached yet" });
+                return;
+            }
+            if (track === "premium" && !bp.premium) {
+                sendJson(res, 403, { error: "Unlock Premium to claim this reward" });
+                return;
+            }
+            const claimedMap = track === "premium" ? bp.claimedPremium : bp.claimedFree;
+            if (claimedMap[tierNumber]) {
+                sendJson(res, 409, { error: "Already claimed" });
+                return;
+            }
+
+            const rewards = track === "premium" ? def.premium : def.free;
+
+            // Snapshot every field grantBattlePassReward can touch so a
+            // failed persist can put all of them back exactly as they
+            // were -- a claim can grant a currency AND a cosmetic AND a
+            // boost charge in one call (see Tier 50 Premium's bundle).
+            const previousBattlePass = target.battlePass;
+            const previousCoins = target.coins;
+            const previousCrystals = target.crystals;
+            const ownedFieldsTouched = {};
+            for (const r of rewards) {
+                const field = BattlePass.OWNED_FIELD[r.type];
+                if (field && !(field in ownedFieldsTouched)) ownedFieldsTouched[field] = target[field];
+            }
+
+            target.battlePass = Object.assign({}, bp, {
+                claimedFree: track === "free" ? Object.assign({}, bp.claimedFree, { [tierNumber]: true }) : bp.claimedFree,
+                claimedPremium: track === "premium" ? Object.assign({}, bp.claimedPremium, { [tierNumber]: true }) : bp.claimedPremium
+            });
+            rewards.forEach(r => grantBattlePassReward(target, r));
+
+            try {
+                await persistAccount(sub);
+            } catch (e) {
+                target.battlePass = previousBattlePass;
+                target.coins = previousCoins;
+                target.crystals = previousCrystals;
+                for (const field of Object.keys(ownedFieldsTouched)) target[field] = ownedFieldsTouched[field];
+                sendJson(res, 503, { error: "Could not save reward -- try again" });
+                return;
+            }
+
+            sendJson(res, 200, {
+                ok: true,
+                tier: tierNumber,
+                track: track,
+                rewards: rewards,
+                newCoins: target.coins,
+                newCrystals: target.crystals,
+                battlePass: target.battlePass
+            });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // ---- POST /battlepass/useboost ---- body: { sessionToken } ----
+    // Activates one XP Boost charge. Never stacks: rejected outright while
+    // one is already running, so a charge can't be silently wasted on top
+    // of an active window, and can't be used to multiply the multiplier.
+    if (req.method === "POST" && req.url === "/battlepass/useboost") {
+        try {
+            const body = await readJsonBody(req);
+            const sub = sessions[body.sessionToken];
+            if (!sub) { sendJson(res, 401, { error: "Not signed in" }); return; }
+            const target = accounts[sub];
+            if (!target) { sendJson(res, 409, { error: "Account not loaded -- sign in again" }); return; }
+
+            const bp = ensureAccountBattlePass(sub);
+            const now = Date.now();
+            if (bp.boostActiveUntil && bp.boostActiveUntil > now) {
+                sendJson(res, 409, { error: "A boost is already active" });
+                return;
+            }
+            if (!bp.boostCharges || bp.boostCharges < 1) {
+                sendJson(res, 400, { error: "No XP Boost charges available" });
+                return;
+            }
+
+            const previousBattlePass = bp;
+            target.battlePass = Object.assign({}, bp, {
+                boostCharges: bp.boostCharges - 1,
+                boostActiveUntil: now + BattlePass.BOOST_DURATION_MS
+            });
+            try {
+                await persistAccount(sub);
+            } catch (e) {
+                target.battlePass = previousBattlePass;
+                sendJson(res, 503, { error: "Could not save -- try again" });
+                return;
+            }
+
+            sendJson(res, 200, { ok: true, battlePass: target.battlePass });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // ---- POST /admin/battlepass ---- body: { sessionToken, action, ... }
+    // Admin Battle Pass season control. Mirrors /admin/ranked's
+    // action:"startSeason" exactly: archives nothing (cosmetics already
+    // granted live in permanent owned-item arrays, untouched by this),
+    // resets every account's progress/claims/premium for the new season,
+    // persists the new season doc so a restart doesn't revert it, and
+    // logs the action.
+    if (req.method === "POST" && req.url === "/admin/battlepass") {
+        try {
+            const body = await readJsonBody(req);
+            if (!isAdminSession(body.sessionToken)) {
+                sendJson(res, 403, { error: "Forbidden -- admin access required" });
+                return;
+            }
+            const adminAccount = getAccountForSession(body.sessionToken);
+
+            if (body.action === "startSeason") {
+                const newId = String(body.seasonId || "").trim();
+                if (!newId || newId.length > 32) {
+                    sendJson(res, 400, { error: "Invalid season id" });
+                    return;
+                }
+                if (newId === BATTLE_PASS_SEASON.id) {
+                    sendJson(res, 400, { error: "That season is already active" });
+                    return;
+                }
+                const days = Number.isFinite(Number(body.days)) && Number(body.days) > 0
+                    ? Math.floor(Number(body.days)) : 42;
+
+                const previous = BATTLE_PASS_SEASON.id;
+                const now = Date.now();
+                BATTLE_PASS_SEASON = {
+                    id: newId,
+                    name: String(body.seasonName || ("Season " + newId)).slice(0, 48),
+                    startedAt: now,
+                    endsAt: now + days * 24 * 60 * 60 * 1000
+                };
+
+                let rolled = 0;
+                for (const sub of Object.keys(accounts)) {
+                    const account = accounts[sub];
+                    if (!account.battlePass || account.battlePass.seasonId === newId) continue;
+                    account.battlePass = BattlePass.defaultRecord();
+                    account.battlePass.seasonId = newId;
+                    try {
+                        await persistAccount(sub);
+                        rolled++;
+                    } catch (e) {
+                        console.log("[battlepass] season rollover failed to save " + sub + ":", e.message);
+                    }
+                }
+                await store.saveDoc("battlePassSeason", BATTLE_PASS_SEASON)
+                    .catch(e => console.log("[battlepass] failed to persist season:", e.message));
+
+                pushAdminLog({
+                    admin: adminAccount ? adminAccount.name : "unknown",
+                    type: "battlePassSeasonStart",
+                    fromSeason: previous,
+                    toSeason: newId,
+                    accountsRolled: rolled
+                });
+                sendJson(res, 200, { ok: true, season: BATTLE_PASS_SEASON, accountsRolled: rolled });
+                return;
+            }
+
+            sendJson(res, 400, { error: "Unknown action" });
         } catch (e) {
             sendJson(res, 400, { error: "Bad request" });
         }
@@ -5538,6 +6007,14 @@ async function startServer() {
                 const v = storedRankedCfg[key];
                 if (Number.isInteger(v)) RANKED_CONFIG[key] = v;
             }
+        }
+
+        // Battle Pass: the live season is admin-editable at runtime (see
+        // /admin/battlepass) and so must survive a restart rather than
+        // snapping back to battlepass.js's code default.
+        const storedBPSeason = await store.loadDoc("battlePassSeason", null);
+        if (storedBPSeason && typeof storedBPSeason.id === "string" && storedBPSeason.id) {
+            BATTLE_PASS_SEASON = storedBPSeason;
         }
         // The queue and live matches are in-memory only and are simply
         // GONE after a restart -- which is the correct outcome. Nothing
