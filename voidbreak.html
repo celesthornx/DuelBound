@@ -339,6 +339,9 @@ input[type=range]{width:180px;accent-color:var(--cy)}
     <div class="tdesc">Dash grants invulnerability — dodge through bullet rings, hazard zones and gravity fields.<br>
     When a guardian shows a gold ring, he is VULNERABLE — unload on him.<br>
     Beat THE COLLAPSED ARCHON to unlock the VOID CANNON · beat THE DEPTHS to unlock the GRAVITY ANCHOR upgrade.<br>
+    THE SENTINEL (Level 6) telegraphs its dash — watch the streaking line and dodge sideways, not backward.<br>
+    THE ECLIPSE (Level 7) blinks near you and fires on arrival — keep moving so its landing spot isn't yours.<br>
+    THE ORIGIN (Level 8), like THE DEPTHS, opens when its core destabilizes — that's your window to attack.<br>
     Upgrades stack: build crit + explode, or pierce + burn, or pure speed. Every run is different.</div>
   </div>
   <div class="ovnav"><button class="btn" id="howtoBack">BACK</button></div>
@@ -865,8 +868,53 @@ const LEVELS=[
     env:{floor:'rgba(6,8,20,0.82)',grid:'rgba(90,110,255,0.05)',border:[90,120,255],
       neb:[[60,60,230],[130,40,140]],ambient:[[90,120,255],[170,120,255],[255,80,130]],
       cracks:true,debris:true,debrisBig:true,glitch:true,pillars:true,pillarsN:7,pillarC:[85,95,255],channels:true,pressure:true}},
+  {id:6,name:'THE RIFT',diff:1.62,depth:10,boss:'sentinel',completionBonus:700,
+    waveOpts:[['swarm',5,2,1],['drone',2,2,1],['sniper',3,2,2],['chaser',3,2,1],['brute',7,1,2],
+      ['phantom',4,2,2],['fdrone',3,2,1],['leaper',4,2,2],['core',4,2,2],['stalker',4,2,2],['orb',3,2,2],
+      ['hunter',4,2,2],['leech',4,1,2]],
+    combos:[[['chaser',3],['fdrone',2]],[['stalker',1],['orb',1],['hunter',2]],
+      [['leech',1],['sniper',2]],[['core',2],['leaper',2]],
+      [['hunter',2],['stalker',2]],[['leech',1],['brute',1],['swarm',4]],[['leaper',3],['orb',2]]],
+    elitePool:[['drone',1],['sniper',1],['chaser',1],['brute',2],['ravager',2],['shattered',2],
+      ['guardian',2],['singularity',3],['singularity',3]],
+    eliteSupport:'hunter',
+    secondElite:['singularity','guardian','shattered','ravager'],
+    secondSupport:'stalker',secondSupportCount:2,
+    env:{floor:'rgba(20,10,8,0.82)',grid:'rgba(255,170,90,0.05)',border:[255,150,80],
+      neb:[[255,120,60],[80,90,255]],ambient:[[255,150,80],[80,110,255],[255,90,90]],
+      cracks:true,debris:true,debrisBig:true,glitch:true,pillars:true,pillarsN:6,pillarC:[255,140,80],channels:true,pressure:true}},
+  {id:7,name:'THE HOLLOW',diff:1.72,depth:10,boss:'eclipse',completionBonus:800,
+    waveOpts:[['swarm',5,2,1],['drone',2,2,1],['sniper',3,2,2],['chaser',3,2,1],['brute',7,1,2],
+      ['phantom',4,2,2],['fdrone',3,2,1],['leaper',4,2,2],['core',4,2,2],['stalker',4,2,2],['orb',3,2,2],
+      ['hunter',4,2,2],['leech',4,1,2]],
+    combos:[[['leech',2],['hunter',2]],[['singularity',1],['drone',3]],
+      [['leech',1],['stalker',2]],[['core',2],['orb',2]],
+      [['hunter',2],['leaper',2]],[['leech',1],['brute',1],['chaser',3]],[['stalker',2],['orb',2]]],
+    elitePool:[['drone',1],['sniper',1],['chaser',1],['brute',2],['ravager',2],['shattered',2],
+      ['guardian',2],['singularity',3],['singularity',3]],
+    eliteSupport:'leech',
+    secondElite:['singularity','guardian','shattered','ravager'],
+    secondSupport:'hunter',secondSupportCount:2,
+    env:{floor:'rgba(6,4,16,0.86)',grid:'rgba(140,80,255,0.05)',border:[130,70,255],
+      neb:[[110,40,220],[10,10,40]],ambient:[[130,80,255],[60,30,140],[200,80,255]],
+      cracks:true,debris:true,debrisBig:true,glitch:true,pillars:true,pillarsN:8,pillarC:[110,60,220],channels:true,pressure:true}},
+  {id:8,name:'THE ORIGIN',diff:1.85,depth:10,boss:'origin',completionBonus:1000,
+    waveOpts:[['swarm',5,2,1],['drone',2,2,1],['sniper',3,2,2],['chaser',3,2,1],['brute',7,1,2],
+      ['phantom',4,2,2],['fdrone',3,2,1],['leaper',4,2,2],['core',4,2,2],['stalker',4,2,2],['orb',3,2,2],
+      ['hunter',4,2,2],['leech',4,1,2]],
+    combos:[[['singularity',1],['hunter',2]],[['shattered',1],['stalker',2]],
+      [['leech',1],['leaper',2]],[['core',2],['chaser',2]],
+      [['hunter',2],['orb',2]],[['leech',1],['brute',1],['drone',3]],[['stalker',2],['leaper',2]]],
+    elitePool:[['drone',1],['sniper',1],['chaser',1],['brute',1],['ravager',2],['shattered',2],
+      ['guardian',2],['singularity',2],['singularity',2]],
+    eliteSupport:'hunter',
+    secondElite:['singularity','singularity','guardian','shattered'],
+    secondSupport:'leech',secondSupportCount:2,
+    env:{floor:'rgba(10,10,22,0.88)',grid:'rgba(255,255,255,0.04)',border:[220,220,255],
+      neb:[[100,140,255],[255,100,120]],ambient:[[170,110,255],[255,100,120],[255,255,255]],
+      cracks:true,debris:true,debrisBig:true,glitch:true,pillars:true,pillarsN:9,pillarC:[200,200,255],channels:true,pressure:true}},
 ];
-const FUTURE_SLOTS=6;
+const FUTURE_SLOTS=9;
 let selectedLevel=0;
 const curEnv=()=>run?run.level.env:LEVELS[0].env;
 
@@ -1797,6 +1845,18 @@ const BOSSMETA={
     thresholds:[0.65,0.30],ph2:'THE DESCENT QUICKENS',ph3:'THE CORE AWAKENS',
     on2:()=>{summonEnemies('leech',2,2);},
     on3:()=>{summonEnemies('hunter',2,2);if(boss){boss.coreMode='closed';boss.coreT=3.5;}}},
+  sentinel:{name:'THE SENTINEL',introSub:'BLADE OF THE RIFT',color:[255,150,80],
+    thresholds:[0.65,0.30],ph2:'THE RIFT WIDENS',ph3:'SENTINEL UNLEASHED',
+    on2:()=>{summonEnemies('stalker',2,3);},
+    on3:()=>{summonEnemies('shattered',1,2);summonEnemies('chaser',2,4);}},
+  eclipse:{name:'THE ECLIPSE',introSub:'VOID GIVEN SHADOW',color:[150,80,255],
+    thresholds:[0.65,0.30],ph2:'THE LIGHT FADES',ph3:'TOTAL ECLIPSE',
+    on2:()=>{summonEnemies('leech',2,3);},
+    on3:()=>{summonEnemies('singularity',1,2);summonEnemies('hunter',2,3);}},
+  origin:{name:'THE ORIGIN',introSub:'THE FIRST GUARDIAN, THE LAST WALL',color:[100,140,255],
+    thresholds:[0.62,0.28],ph2:'THE ORIGIN OPENS',ph3:'THE SOURCE UNBOUND',
+    on2:()=>{summonEnemies('guardian',1,2);summonEnemies('stalker',2,3);},
+    on3:()=>{summonEnemies('singularity',1,2);summonEnemies('shattered',1,2);}},
 };
 function summonEnemies(type,n,cap){
   if(cap!==undefined&&enemies.filter(e=>e.type===type&&!e.dead).length>=cap)return;
@@ -1826,6 +1886,21 @@ function createBoss(kind){
       vx:0,vy:0,dead:false,dying:0,
       tRadial:3.2,tVolley:2.4,tSummon:8.5,tSlam:4.6,tSweep:3.0,tHazard:4.2,tShatter:6.5,
       sweep:null,shatter:null,slam:null,charge:null,vulnT:0,summonFlags:{}};
+  }else if(kind==='sentinel'){
+    boss={kind:'sentinel',x:0,y:-340,r:70,hp:12600,maxhp:12600,phase:1,t:0,invuln:0,hitFlash:0,eye:0,
+      vx:0,vy:0,dead:false,dying:0,
+      tRadial:3.2,tVolley:2.5,tSlam:4.4,tCharge:5.2,tHazard:5.5,tSummon:9.5,
+      slam:null,charge:null,vulnT:0,chainCount:0,summonFlags:{}};
+  }else if(kind==='eclipse'){
+    boss={kind:'eclipse',x:0,y:-340,r:72,hp:14000,maxhp:14000,phase:1,t:0,invuln:0,hitFlash:0,eye:0,
+      vx:0,vy:0,dead:false,dying:0,
+      tRadial:3.0,tVolley:2.3,tTp:5.6,tGrav:7.5,tNova:7.0,tZone:5.0,tSummon:9.0,
+      tp:null,nova:null,vulnT:0,blinkChain:0,summonFlags:{}};
+  }else if(kind==='origin'){
+    boss={kind:'origin',x:0,y:-360,r:88,hp:16500,maxhp:16500,phase:1,t:0,invuln:0,hitFlash:0,eye:0,
+      vx:0,vy:0,dead:false,dying:0,
+      tRadial:2.8,tVolley:2.1,tSpire:4.2,tGrav:7.0,tZone:4.6,tSummon:8.5,
+      coreMode:'closed',coreT:6.5,vulnT:0,summonFlags:{}};
   }else{
     boss={kind:'null',x:0,y:-300,r:56,hp:5200,maxhp:5200,phase:1,t:0,invuln:0,hitFlash:0,eye:0,
       vx:0,vy:0,dead:false,dying:0,
@@ -1863,6 +1938,9 @@ function updateBoss(dt){
   else if(boss.kind==='warden')updateWarden(dt);
   else if(boss.kind==='archon')updateArchon(dt);
   else if(boss.kind==='king')updateKing(dt);
+  else if(boss.kind==='sentinel')updateSentinel(dt);
+  else if(boss.kind==='eclipse')updateEclipse(dt);
+  else if(boss.kind==='origin')updateOrigin(dt);
   else updateNull(dt);
 }
 /* --- Level 1 guardian: THE NULL (unchanged) --- */
@@ -2456,6 +2534,337 @@ function updateDepths(dt){
   if(b.y<-hh){b.y=-hh;b.vy=Math.abs(b.vy)*0.3;}if(b.y>hh){b.y=hh;b.vy=-Math.abs(b.vy)*0.3;}
   if(!p.dead&&d<b.r+p.r+2)hurtPlayer(26,b.x,b.y);
 }
+/* --- Level 6 guardian: THE SENTINEL ---
+   Twin-blade construct: radial bursts, aimed volleys, a
+   telegraphed ground SLAM, and a fast dash CHARGE (the same
+   primitive THE NULL uses). From phase 3 it chains a second
+   charge right out of the first's recovery window (BLADE STORM),
+   opening a brief VULNERABLE window once the chain ends. */
+function updateSentinel(dt){
+  const b=boss;if(!b)return;
+  const p=player;
+  b.t+=dt;b.hitFlash-=dt;b.invuln-=dt;b.eye-=dt;b.vulnT-=dt;
+  if(b.dying>0){
+    b.dying-=dt;
+    if(Math.random()<dt*14){
+      const bx=b.x+rand(-b.r,b.r),by=b.y+rand(-b.r,b.r);
+      burstFX(bx,by,pick([[255,150,80],[255,255,255],[255,90,90]]),12,320);addShake(6);SFX.explosion();}
+    if(b.dying<=0){bossFinalBlast();return;}
+    return;
+  }
+  const dx=p.x-b.x,dy=p.y-b.y,d=Math.hypot(dx,dy)||1,a=Math.atan2(dy,dx);
+  if(b.charge){
+    const c=b.charge;
+    if(c.phase==='wind'){c.t-=dt;b.vx*=Math.pow(0.02,dt);b.vy*=Math.pow(0.02,dt);
+      part({x:b.x+Math.cos(c.ang)*-b.r,y:b.y+Math.sin(c.ang)*-b.r,life:0.3,ml:0.3,size:9,c:[255,150,80],type:'glow'});
+      if(c.t<=0){c.phase='move';c.t=0.32;b.vx=Math.cos(c.ang)*1150;b.vy=Math.sin(c.ang)*1150;SFX.charge();addShake(8);}}
+    else if(c.phase==='move'){c.t-=dt;
+      part({x:b.x,y:b.y,life:0.25,ml:0.25,size:13,c:[255,150,80],type:'glow'});
+      if(c.t<=0){
+        c.phase='rec';c.t=0.5;b.vx*=0.15;b.vy*=0.15;
+        if(b.phase>=3&&b.chainCount<1){b.chainCount++;c.phase='wind';c.t=0.4;c.ang=angTo(b.x,b.y,p.x,p.y);}
+      }}
+    else{c.t-=dt;if(c.t<=0){
+      b.charge=null;
+      if(b.phase>=3){b.vulnT=1.3;dmgNum(b.x,b.y-b.r-16,'VULNERABLE','#ffc95c',17);}
+      b.chainCount=0;b.tCharge=b.phase===2?5.6:4.6;
+    }}
+  }
+  if(b.slam){b.slam.t-=dt;
+    if(b.slam.t<=0){
+      const s=b.slam;
+      ringFX(s.x,s.y,[255,150,80],185,0.4);burstFX(s.x,s.y,[255,150,80],22,380);
+      addShake(16);SFX.explosion();
+      if(!p.dead&&dist(s.x,s.y,p.x,p.y)<175)hurtPlayer(28,s.x,s.y);
+      b.slam=null;}}
+  if(!b.charge&&b.invuln<=0){
+    if(b.phase===1){
+      const tx=Math.cos(b.t*0.4)*300,ty=Math.sin(b.t*0.3)*190;
+      const ta=angTo(b.x,b.y,tx,ty),spd=115;
+      b.vx=lerp(b.vx,Math.cos(ta)*spd,clamp(2*dt,0,1));
+      b.vy=lerp(b.vy,Math.sin(ta)*spd,clamp(2*dt,0,1));
+    }else{
+      const spd=(b.phase===2?175:235)*(b.vulnT>0?0.25:1);
+      const tvx=Math.cos(a)*spd*(d>200?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.8)*85;
+      const tvy=Math.sin(a)*spd*(d>200?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.8)*85;
+      b.vx=lerp(b.vx,tvx,clamp(2.5*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.5*dt,0,1));
+    }
+  }else{b.vx*=Math.pow(0.05,dt);b.vy*=Math.pow(0.05,dt);}
+  if(!b.charge&&b.invuln<=0&&b.vulnT<=0){
+    b.tRadial-=dt;
+    if(b.tRadial<=0){b.tRadial=b.phase===1?3.4:b.phase===2?2.8:2.3;
+      const n=b.phase===1?14:b.phase===2?18:22;
+      for(let i=0;i<n;i++)bossShot(b.x,b.y,i/n*TAU+b.t*0.6,250+b.phase*20,10);
+      b.eye=0.3;SFX.bossShot();}
+    b.tVolley-=dt;
+    if(b.tVolley<=0){b.tVolley=b.phase===1?2.6:b.phase===2?2.2:1.8;
+      const n=b.phase===3?7:5,sp=(n-1)*0.15;
+      for(let i=0;i<n;i++)bossShot(b.x,b.y,a-lerp(-sp/2,sp/2,i/(n-1)),380+b.phase*16,12);
+      b.eye=0.3;SFX.bossShot();}
+    b.tSlam-=dt;
+    if(b.tSlam<=0){b.tSlam=b.phase===1?4.8:4.0;b.slam={x:p.x,y:p.y,t:1.0};b.eye=0.4;SFX.warn();}
+    if(b.phase>=2){
+      b.tCharge-=dt;
+      if(b.tCharge<=0){b.charge={phase:'wind',t:0.65,ang:a};b.chainCount=0;b.eye=0.45;SFX.warn();}
+      b.tHazard-=dt;
+      if(b.tHazard<=0){b.tHazard=5.4;
+        const n=2+randi(0,2);
+        for(let i=0;i<n;i++){
+          const hx=clamp(p.x+rand(-300,300),-room.w/2+70,room.w/2-70);
+          const hy=clamp(p.y+rand(-300,300),-room.h/2+70,room.h/2-70);
+          hazards.push({x:hx,y:hy,r:88,t:1.15});}
+        b.eye=0.4;SFX.warn();}
+    }
+    b.tSummon-=dt;
+    if(b.tSummon<=0){
+      b.tSummon=b.phase===1?10:b.phase===2?8.5:7.0;
+      if(b.phase===1)summonEnemies('chaser',3,5);
+      else if(b.phase===2){summonEnemies('stalker',2,3);summonEnemies('fdrone',2,5);}
+      else{summonEnemies('stalker',2,3);summonEnemies('chaser',2,5);}
+    }
+  }
+  b.x+=b.vx*dt;b.y+=b.vy*dt;
+  const hw=room.w/2-b.r,hh=room.h/2-b.r;
+  if(b.x<-hw){b.x=-hw;b.vx=Math.abs(b.vx)*0.3;}if(b.x>hw){b.x=hw;b.vx=-Math.abs(b.vx)*0.3;}
+  if(b.y<-hh){b.y=-hh;b.vy=Math.abs(b.vy)*0.3;}if(b.y>hh){b.y=hh;b.vy=-Math.abs(b.vy)*0.3;}
+  if(!p.dead&&d<b.r+p.r+2)hurtPlayer(b.charge&&b.charge.phase==='move'?32:24,b.x,b.y);
+}
+/* --- Level 7 guardian: THE ECLIPSE ---
+   Radial bursts, aimed volleys, blink TELEPORTS paired with
+   gravity fields (borrowing THE DEPTHS' gravFields alongside the
+   WARDEN/ARCHON's tp — a combination no earlier guardian uses),
+   and a blinding NOVA from phase 3. Phase 3 also chains a second
+   blink — with a ring of shots on arrival both times — before it
+   settles into its normal attack loop. */
+function updateEclipse(dt){
+  const b=boss;if(!b)return;
+  const p=player;
+  b.t+=dt;b.hitFlash-=dt;b.invuln-=dt;b.eye-=dt;b.vulnT-=dt;
+  if(b.dying>0){
+    b.dying-=dt;
+    if(Math.random()<dt*14){
+      const bx=b.x+rand(-b.r,b.r),by=b.y+rand(-b.r,b.r);
+      burstFX(bx,by,pick([[150,80,255],[20,10,40],[255,255,255]]),12,320);addShake(6);SFX.explosion();}
+    if(b.dying<=0){bossFinalBlast();return;}
+    return;
+  }
+  const dx=p.x-b.x,dy=p.y-b.y,d=Math.hypot(dx,dy)||1,a=Math.atan2(dy,dx);
+  if(b.nova){
+    b.nova.t-=dt;b.vx*=Math.pow(0.02,dt);b.vy*=Math.pow(0.02,dt);
+    if(b.nova.t<=0){
+      const s=b.nova;
+      ringFX(s.x,s.y,[150,80,255],370,0.6);ringFX(s.x,s.y,[255,255,255],250,0.45);
+      burstFX(s.x,s.y,[150,80,255],40,560);
+      addShake(24);camPunch(0.12);SFX.explosion();
+      if(!p.dead&&dist(s.x,s.y,p.x,p.y)<320)hurtPlayer(30,s.x,s.y);
+      const n=22;
+      for(let i=0;i<n;i++)bossShot(b.x,b.y,i/n*TAU,300,11,6);
+      b.nova=null;b.vulnT=2.1;
+      dmgNum(b.x,b.y-b.r-16,'VULNERABLE','#ffc95c',17);
+    }
+  }else if(b.tp){
+    b.tp.t-=dt;b.vx*=Math.pow(0.05,dt);b.vy*=Math.pow(0.05,dt);
+    if(b.tp.t<=0){
+      burstFX(b.x,b.y,[150,80,255],16,320);
+      b.x=b.tp.tx;b.y=b.tp.ty;b.vx=0;b.vy=0;
+      burstFX(b.x,b.y,[150,80,255],16,320);ringFX(b.x,b.y,[150,80,255],120,0.4);
+      addShake(6);SFX.phase();
+      const n=b.phase===3?9:6;
+      for(let i=0;i<n;i++)bossShot(b.x,b.y,i/n*TAU,260,10);
+      if(b.phase>=3&&b.blinkChain<1){b.blinkChain++;
+        const ta2=rand(0,TAU),td=rand(260,360);
+        b.tp={t:0.5,
+          tx:clamp(p.x+Math.cos(ta2)*td,-room.w/2+b.r+20,room.w/2-b.r-20),
+          ty:clamp(p.y+Math.sin(ta2)*td,-room.h/2+b.r+20,room.h/2-b.r-20)};
+      }else{b.tp=null;b.blinkChain=0;}
+    }
+  }
+  if(!b.nova&&!b.tp&&b.invuln<=0){
+    if(b.phase===1){
+      const tx=Math.cos(b.t*0.38)*310,ty=Math.sin(b.t*0.27)*195;
+      const ta=angTo(b.x,b.y,tx,ty),spd=110;
+      b.vx=lerp(b.vx,Math.cos(ta)*spd,clamp(2*dt,0,1));
+      b.vy=lerp(b.vy,Math.sin(ta)*spd,clamp(2*dt,0,1));
+    }else{
+      const spd=(b.phase===2?160:220)*(b.vulnT>0?0.25:1);
+      const tvx=Math.cos(a)*spd*(d>210?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.7)*80;
+      const tvy=Math.sin(a)*spd*(d>210?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.7)*80;
+      b.vx=lerp(b.vx,tvx,clamp(2.5*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.5*dt,0,1));
+    }
+  }else{b.vx*=Math.pow(0.05,dt);b.vy*=Math.pow(0.05,dt);}
+  if(!b.nova&&!b.tp&&b.invuln<=0&&b.vulnT<=0){
+    b.tRadial-=dt;
+    if(b.tRadial<=0){b.tRadial=b.phase===1?3.6:b.phase===2?2.9:2.4;
+      const n=b.phase===1?14:b.phase===2?18:24;
+      for(let i=0;i<n;i++)bossShot(b.x,b.y,i/n*TAU+b.t*0.55,240+b.phase*20,10);
+      b.eye=0.3;SFX.bossShot();}
+    b.tVolley-=dt;
+    if(b.tVolley<=0){b.tVolley=b.phase===1?2.7:b.phase===2?2.3:1.8;
+      const n=b.phase===3?7:5,sp=(n-1)*0.15;
+      for(let i=0;i<n;i++)bossShot(b.x,b.y,a-lerp(-sp/2,sp/2,i/(n-1)),370+b.phase*16,12);
+      b.eye=0.3;SFX.bossShot();}
+    b.tZone-=dt;
+    if(b.tZone<=0){b.tZone=b.phase===1?5.0:b.phase===2?4.0:3.3;
+      const n=b.phase===1?2:b.phase===2?3:4;
+      for(let i=0;i<n;i++){
+        const hx=clamp(p.x+rand(-300,300),-room.w/2+70,room.w/2-70);
+        const hy=clamp(p.y+rand(-300,300),-room.h/2+70,room.h/2-70);
+        hazards.push({x:hx,y:hy,r:88,t:1.15});}
+      b.eye=0.4;SFX.warn();}
+    if(b.phase>=2){
+      b.tTp-=dt;
+      if(b.tTp<=0){b.tTp=5.6;b.blinkChain=0;
+        const ta2=rand(0,TAU),td=rand(280,380);
+        b.tp={t:0.6,
+          tx:clamp(p.x+Math.cos(ta2)*td,-room.w/2+b.r+20,room.w/2-b.r-20),
+          ty:clamp(p.y+Math.sin(ta2)*td,-room.h/2+b.r+20,room.h/2-b.r-20)};
+        b.eye=0.45;SFX.warn();}
+      b.tGrav-=dt;
+      if(b.tGrav<=0){b.tGrav=b.phase===2?7.8:6.2;
+        for(let i=0;i<2;i++){
+          const gx=clamp(p.x+rand(-330,330),-room.w/2+70,room.w/2-70);
+          const gy=clamp(p.y+rand(-330,330),-room.h/2+70,room.h/2-70);
+          gravFields.push({src:null,x:gx,y:gy,r:rand(180,220),power:220,t:1.2,warn:1.2,dur:4.0,st:'warn',c:[150,80,255]});}
+        b.eye=0.4;SFX.warn();}
+    }
+    if(b.phase>=3){
+      b.tNova-=dt;
+      if(b.tNova<=0){b.tNova=7.4;b.nova={x:p.x,y:p.y,t:1.4};b.eye=0.5;SFX.warn();SFX.charge();}
+    }
+    b.tSummon-=dt;
+    if(b.tSummon<=0){
+      b.tSummon=b.phase===1?10:b.phase===2?8.5:7.0;
+      if(b.phase===1)summonEnemies('leech',2,3);
+      else if(b.phase===2){summonEnemies('hunter',2,3);summonEnemies('leech',1,3);}
+      else{summonEnemies('hunter',2,3);summonEnemies('leech',2,3);}
+    }
+  }
+  b.x+=b.vx*dt;b.y+=b.vy*dt;
+  const hw=room.w/2-b.r,hh=room.h/2-b.r;
+  if(b.x<-hw){b.x=-hw;b.vx=Math.abs(b.vx)*0.3;}if(b.x>hw){b.x=hw;b.vx=-Math.abs(b.vx)*0.3;}
+  if(b.y<-hh){b.y=-hh;b.vy=Math.abs(b.vy)*0.3;}if(b.y>hh){b.y=hh;b.vy=-Math.abs(b.vy)*0.3;}
+  if(!p.dead&&d<b.r+p.r+2)hurtPlayer(26,b.x,b.y);
+}
+/* --- Level 8 guardian: THE ORIGIN — biggest guardian, the
+   culmination of the run. Radial bursts, aimed volleys, a unique
+   SPIRE BARRAGE (fired from each of its six spire tips, matching
+   the hex frame it's drawn with), gravity fields, and — from
+   phase 2 onward — a CORE cycle with an extra CHARGE stage before
+   it destabilizes and opens (closed -> charge -> tele -> open ->
+   closed), the reward window where it takes 50% extra damage
+   (same bonus THE DEPTHS' core grants, via damageBoss's shared
+   vulnT check). */
+function updateOrigin(dt){
+  const b=boss;if(!b)return;
+  const p=player;
+  b.t+=dt;b.hitFlash-=dt;b.invuln-=dt;b.eye-=dt;b.vulnT-=dt;
+  if(b.dying>0){
+    b.dying-=dt;
+    if(Math.random()<dt*15){
+      const bx=b.x+rand(-b.r,b.r),by=b.y+rand(-b.r,b.r);
+      burstFX(bx,by,pick([[100,140,255],[170,110,255],[255,100,120],[255,255,255]]),13,340);addShake(7);SFX.explosion();}
+    if(b.dying<=0){bossFinalBlast();return;}
+    return;
+  }
+  const dx=p.x-b.x,dy=p.y-b.y,d=Math.hypot(dx,dy)||1,a=Math.atan2(dy,dx);
+  if(b.phase>=2){
+    if(b.coreMode==='closed'){
+      b.coreT-=dt;
+      if(b.coreT<=0){b.coreMode='charge';b.coreT=1.2;SFX.charge();
+        dmgNum(b.x,b.y-b.r-18,'CORE CHARGING','#7fd4ff',15);}
+    }else if(b.coreMode==='charge'){
+      b.coreT-=dt;
+      if(b.coreT<=0){b.coreMode='tele';b.coreT=0.7;SFX.warn();
+        dmgNum(b.x,b.y-b.r-18,'CORE DESTABILIZING','#ffc95c',15);}
+    }else if(b.coreMode==='tele'){
+      b.coreT-=dt;
+      if(b.coreT<=0){
+        b.coreMode='open';b.vulnT=2.6;
+        ringFX(b.x,b.y,[255,255,255],b.r+80,0.55);burstFX(b.x,b.y,[255,255,255],30,460);
+        SFX.phase();addShake(12);camPunch(0.07);
+        dmgNum(b.x,b.y-b.r-18,'CORE EXPOSED — ATTACK','#ffc95c',18);
+      }
+    }else if(b.coreMode==='open'&&b.vulnT<=0){
+      b.coreMode='closed';b.coreT=b.phase===2?6.4:5.0;
+      dmgNum(b.x,b.y-b.r-18,'CORE SEALED','#7ea4b5',13);SFX.block();
+    }
+  }
+  if(b.invuln<=0){
+    if(b.phase===1){
+      const tx=Math.cos(b.t*0.32)*310,ty=Math.sin(b.t*0.24)*195;
+      const ta=angTo(b.x,b.y,tx,ty),spd=95;
+      b.vx=lerp(b.vx,Math.cos(ta)*spd,clamp(2*dt,0,1));
+      b.vy=lerp(b.vy,Math.sin(ta)*spd,clamp(2*dt,0,1));
+    }else{
+      const spd=(b.phase===2?150:205)*(b.vulnT>0?0.22:1);
+      const tvx=Math.cos(a)*spd*(d>230?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.6)*75;
+      const tvy=Math.sin(a)*spd*(d>230?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.6)*75;
+      b.vx=lerp(b.vx,tvx,clamp(2.2*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.2*dt,0,1));
+    }
+  }else{b.vx*=Math.pow(0.05,dt);b.vy*=Math.pow(0.05,dt);}
+  if(b.invuln<=0&&b.vulnT<=0){
+    b.tRadial-=dt;
+    if(b.tRadial<=0){
+      b.tRadial=b.phase===1?3.6:b.phase===2?2.9:2.3;
+      const n=b.phase===1?14:b.phase===2?18:24;
+      for(let i=0;i<n;i++)bossShot(b.x,b.y,i/n*TAU+b.t*0.5,220+b.phase*18,10);
+      b.eye=0.3;SFX.bossShot();
+    }
+    b.tVolley-=dt;
+    if(b.tVolley<=0){
+      b.tVolley=b.phase===1?2.8:b.phase===2?2.3:1.8;
+      const n=b.phase===3?7:5,sp=(n-1)*0.15;
+      for(let i=0;i<n;i++)bossShot(b.x,b.y,a-lerp(-sp/2,sp/2,i/(n-1)),380+b.phase*16,12);
+      b.eye=0.3;SFX.bossShot();
+    }
+    b.tSpire-=dt;
+    if(b.tSpire<=0){
+      b.tSpire=b.phase===1?5.2:b.phase===2?4.3:3.5;
+      const rot=b.t*0.5;
+      for(let i=0;i<6;i++){
+        const aa=i/6*TAU+rot*0.3+Math.PI/6;
+        const sx=b.x+Math.cos(aa)*(b.r+40),sy=b.y+Math.sin(aa)*(b.r+40);
+        bossShot(sx,sy,angTo(sx,sy,p.x,p.y),340+b.phase*15,11,6);
+      }
+      b.eye=0.4;SFX.warn();
+    }
+    b.tZone-=dt;
+    if(b.tZone<=0){
+      b.tZone=b.phase===1?4.8:b.phase===2?3.8:3.1;
+      const n=b.phase===1?2:b.phase===2?3:4;
+      for(let i=0;i<n;i++){
+        const hx=clamp(p.x+rand(-300,300),-room.w/2+70,room.w/2-70);
+        const hy=clamp(p.y+rand(-300,300),-room.h/2+70,room.h/2-70);
+        hazards.push({x:hx,y:hy,r:92,t:1.2});
+      }
+      b.eye=0.4;SFX.warn();
+    }
+    if(b.phase>=2){
+      b.tGrav-=dt;
+      if(b.tGrav<=0){
+        b.tGrav=b.phase===2?7.5:6.0;
+        for(let i=0;i<2;i++){
+          const gx=clamp(p.x+rand(-330,330),-room.w/2+70,room.w/2-70);
+          const gy=clamp(p.y+rand(-330,330),-room.h/2+70,room.h/2-70);
+          gravFields.push({src:null,x:gx,y:gy,r:rand(190,235),power:225,t:1.2,warn:1.2,dur:4.2,st:'warn',c:[130,150,255]});
+        }
+        b.eye=0.4;SFX.warn();
+      }
+    }
+    b.tSummon-=dt;
+    if(b.tSummon<=0){
+      b.tSummon=b.phase===1?10.5:b.phase===2?9:7.5;
+      if(b.phase===1)summonEnemies('guardian',1,2);
+      else if(b.phase===2){summonEnemies('shattered',1,2);summonEnemies('stalker',2,3);}
+      else{summonEnemies('singularity',1,2);summonEnemies('shattered',1,2);}
+    }
+  }
+  b.x+=b.vx*dt;b.y+=b.vy*dt;
+  const hw=room.w/2-b.r,hh=room.h/2-b.r;
+  if(b.x<-hw){b.x=-hw;b.vx=Math.abs(b.vx)*0.3;}if(b.x>hw){b.x=hw;b.vx=-Math.abs(b.vx)*0.3;}
+  if(b.y<-hh){b.y=-hh;b.vy=Math.abs(b.vy)*0.3;}if(b.y>hh){b.y=hh;b.vy=-Math.abs(b.vy)*0.3;}
+  if(!p.dead&&d<b.r+p.r+2)hurtPlayer(30,b.x,b.y);
+}
 function updateHazards(dt){
   for(let i=hazards.length-1;i>=0;i--){const hz=hazards[i];
     hz.t-=dt;
@@ -2994,13 +3403,17 @@ function victory(){
   run.roomsCleared=run.totalDepth;
   Music.set(null);SFX.victory();
   fillEndStats('vic');
-  el('vicTitle').textContent=['NULL BROKEN','FRACTURE BROKEN','ARCHON BROKEN','WARDEN BROKEN','THE DEPTHS DEFEATED'][lv.id-1]||'GUARDIAN BROKEN';
+  el('vicTitle').textContent=['NULL BROKEN','FRACTURE BROKEN','ARCHON BROKEN','WARDEN BROKEN','THE DEPTHS DEFEATED',
+    'THE SENTINEL FELLED','THE ECLIPSE BROKEN','THE ORIGIN SEALED'][lv.id-1]||'GUARDIAN BROKEN';
   el('vicSub').textContent=[
     'THE NULL IS SHATTERED. BUT SOMETHING STIRS DEEPER.',
     'THE FRACTURE COLLAPSES. SOMETHING VAST STIRS BENEATH.',
     'THE ARCHON FALLS. THE VOID GIVES WAY — INTO THE ABYSS.',
     'THE WARDEN SINKS. LIGHT BLEEDS THROUGH THE DEEP VOID.',
-    'THE DEPTHS COLLAPSE INTO SILENCE. THE VOID LIES STILL — FOR NOW.'][lv.id-1]||'THE GUARDIAN FALLS.';
+    'THE DEPTHS COLLAPSE INTO SILENCE. THE VOID LIES STILL — FOR NOW.',
+    'THE SENTINEL SHATTERS. THE RIFT WIDENS INTO SOMETHING DARKER.',
+    'THE ECLIPSE BREAKS. LIGHT FLOODS BACK INTO THE HOLLOW.',
+    'THE ORIGIN SEALS ITSELF SHUT. THE VOID REMEMBERS WHERE IT BEGAN.'][lv.id-1]||'THE GUARDIAN FALLS.';
   let ut='';
   if(next)ut=firstClear?'◆ LEVEL '+next.id+' UNLOCKED — '+next.name:'LEVEL '+next.id+' AVAILABLE — '+next.name;
   else ut=firstClear?'◆ LEVEL '+(lv.id+1)+' UNLOCKED — IN DEVELOPMENT':'ALL CURRENT SECTORS CLEARED';
@@ -3352,6 +3765,9 @@ function renderWorld(){
     else if(boss.kind==='warden')drawWarden();
     else if(boss.kind==='archon')drawArchon();
     else if(boss.kind==='king')drawKing();
+    else if(boss.kind==='sentinel')drawSentinel();
+    else if(boss.kind==='eclipse')drawEclipse();
+    else if(boss.kind==='origin')drawOrigin();
     else drawNullBoss();
   }
   if(player&&!player.dead&&!vicWarped&&
@@ -4127,6 +4543,219 @@ function drawDepths(){
     ctx.beginPath();ctx.arc(b.x,b.y,b.r+20,0,TAU);ctx.stroke();
     ctx.strokeStyle='rgba(255,255,255,0.4)';ctx.lineWidth=1.5;
     ctx.beginPath();ctx.arc(b.x,b.y,b.r+27,0,TAU);ctx.stroke();
+  }
+}
+/* THE SENTINEL — twin counter-rotating blade pairs around a
+   compact, hot-amber core. */
+function drawSentinel(){
+  const b=boss;
+  const phC=b.phase===1?[255,170,90]:b.phase===2?[255,120,70]:[255,70,70];
+  const open=b.vulnT>0;
+  ctx.globalCompositeOperation='lighter';
+  drawGlow(b.x,b.y,open?[255,255,255]:phC,b.r*(open?4.2:3.7));
+  ctx.globalCompositeOperation='source-over';
+  ctx.save();ctx.translate(b.x,b.y);
+  const rot=b.t*(b.phase===3?1.4:0.65);
+  ctx.fillStyle=rgba(phC,0.85);
+  for(let k=0;k<2;k++){
+    const aa=rot+k*Math.PI;
+    ctx.save();ctx.rotate(aa);
+    ctx.beginPath();
+    ctx.moveTo(b.r+10,0);ctx.lineTo(b.r+62,-10);ctx.lineTo(b.r+80,0);ctx.lineTo(b.r+62,10);
+    ctx.closePath();ctx.fill();
+    ctx.restore();
+  }
+  ctx.fillStyle=rgba(phC,0.55);
+  for(let k=0;k<2;k++){
+    const aa=-rot*1.3+k*Math.PI+Math.PI/2;
+    ctx.save();ctx.rotate(aa);
+    ctx.beginPath();
+    ctx.moveTo(b.r+6,0);ctx.lineTo(b.r+42,-7);ctx.lineTo(b.r+54,0);ctx.lineTo(b.r+42,7);
+    ctx.closePath();ctx.fill();
+    ctx.restore();
+  }
+  ctx.save();ctx.rotate(-rot*0.5);
+  ctx.strokeStyle=rgba(phC,0.4);ctx.lineWidth=2.5;ctx.setLineDash([20,16]);
+  ctx.beginPath();ctx.arc(0,0,b.r+18,0,TAU);ctx.stroke();
+  ctx.setLineDash([]);ctx.restore();
+  const g=ctx.createRadialGradient(0,0,8,0,0,b.r);
+  g.addColorStop(0,rgb(b.hitFlash>0?[255,255,255]:open?[255,220,180]:[60,26,14]));
+  g.addColorStop(1,rgb(b.hitFlash>0?[235,215,255]:[10,6,4]));
+  ctx.fillStyle=g;
+  ctx.beginPath();ctx.arc(0,0,b.r,0,TAU);ctx.fill();
+  ctx.strokeStyle=rgba(phC,open?1:0.9);ctx.lineWidth=open?5.5:4.5;
+  ctx.beginPath();ctx.arc(0,0,b.r,0,TAU);ctx.stroke();
+  const eyeC=b.eye>0?[255,255,255]:phC;
+  ctx.fillStyle=rgb(eyeC);
+  ctx.beginPath();ctx.arc(0,0,15+Math.sin(b.t*4)*2.5,0,TAU);ctx.fill();
+  ctx.globalCompositeOperation='lighter';
+  drawGlow(0,0,eyeC,46);
+  ctx.globalCompositeOperation='source-over';
+  ctx.restore();
+  if(b.invuln>0){
+    ctx.strokeStyle=`rgba(190,130,255,${0.5+Math.sin(performance.now()*0.02)*0.3})`;
+    ctx.lineWidth=4;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r+20,0,TAU);ctx.stroke();
+  }
+  if(open){
+    ctx.strokeStyle=`rgba(255,201,92,${0.5+Math.sin(performance.now()*0.02)*0.4})`;
+    ctx.lineWidth=3;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r+22,0,TAU);ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,0.4)';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r+29,0,TAU);ctx.stroke();
+  }
+}
+/* THE ECLIPSE — dark disc with a bright eclipse-ring rim and
+   orbiting shadow fragments. */
+function drawEclipse(){
+  const b=boss;
+  const phC=b.phase===1?[150,90,255]:b.phase===2?[120,60,220]:[80,30,180];
+  const open=b.vulnT>0;
+  ctx.globalCompositeOperation='lighter';
+  drawGlow(b.x,b.y,open?[255,255,255]:phC,b.r*(open?4.4:3.9));
+  ctx.globalCompositeOperation='source-over';
+  ctx.save();ctx.translate(b.x,b.y);
+  const rot=b.t*(b.phase===3?1.3:0.5);
+  ctx.fillStyle=rgba([20,10,40],0.85);
+  ctx.strokeStyle=rgba(phC,0.7);ctx.lineWidth=2;
+  for(let i=0;i<7;i++){
+    const aa=rot+i/7*TAU;
+    const ex=b.r+34+Math.sin(b.t*2+i)*6;
+    ctx.save();ctx.rotate(aa);ctx.translate(0,-ex);
+    ctx.beginPath();ctx.arc(0,0,9,0,TAU);ctx.fill();ctx.stroke();
+    ctx.restore();
+  }
+  ctx.save();ctx.rotate(rot*0.4);
+  ctx.strokeStyle=rgba(phC,0.55);ctx.lineWidth=3;ctx.setLineDash([10,14]);
+  ctx.beginPath();ctx.arc(0,0,b.r+16,0,TAU);ctx.stroke();
+  ctx.setLineDash([]);ctx.restore();
+  const g=ctx.createRadialGradient(-b.r*0.25,-b.r*0.25,4,0,0,b.r);
+  if(open){
+    g.addColorStop(0,'rgba(255,255,255,0.95)');
+    g.addColorStop(0.55,rgb(b.hitFlash>0?[255,255,255]:[190,150,255]));
+    g.addColorStop(1,'rgba(10,4,30,0.92)');
+  }else{
+    g.addColorStop(0,rgb(b.hitFlash>0?[255,255,255]:[6,3,16]));
+    g.addColorStop(0.7,rgb(b.hitFlash>0?[235,215,255]:[3,1,10]));
+    g.addColorStop(1,'rgba(0,0,4,0.98)');
+  }
+  ctx.fillStyle=g;
+  ctx.beginPath();ctx.arc(0,0,b.r,0,TAU);ctx.fill();
+  ctx.strokeStyle=rgba(phC,open?1:0.9);ctx.lineWidth=open?5:4;
+  ctx.beginPath();ctx.arc(0,0,b.r,0,TAU);ctx.stroke();
+  const eyeC=b.eye>0?[255,255,255]:phC;
+  ctx.fillStyle=rgb(eyeC);
+  ctx.beginPath();ctx.arc(0,0,13+Math.sin(b.t*4)*2,0,TAU);ctx.fill();
+  ctx.globalCompositeOperation='lighter';
+  drawGlow(0,0,eyeC,48);
+  ctx.globalCompositeOperation='source-over';
+  ctx.restore();
+  if(b.invuln>0){
+    ctx.strokeStyle=`rgba(190,130,255,${0.5+Math.sin(performance.now()*0.02)*0.3})`;
+    ctx.lineWidth=4;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r+18,0,TAU);ctx.stroke();
+  }
+  if(open){
+    ctx.strokeStyle=`rgba(255,201,92,${0.5+Math.sin(performance.now()*0.02)*0.4})`;
+    ctx.lineWidth=3;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r+20,0,TAU);ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,0.4)';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r+27,0,TAU);ctx.stroke();
+  }
+}
+/* THE ORIGIN — biggest guardian: hex frame, shuttered core, spires */
+function drawOrigin(){
+  const b=boss;
+  const phC=b.phase===1?[100,140,255]:b.phase===2?[170,110,255]:[255,100,120];
+  const open=b.coreMode==='open'&&b.vulnT>0;
+  const charge=b.coreMode==='charge';
+  const tele=b.coreMode==='tele';
+  ctx.globalCompositeOperation='lighter';
+  drawGlow(b.x,b.y,open?[255,255,255]:phC,b.r*(open?4.6:3.8));
+  ctx.globalCompositeOperation='source-over';
+  ctx.save();ctx.translate(b.x,b.y);
+  const rot=b.t*0.5;
+  // outer hex frame
+  ctx.strokeStyle=rgba(phC,0.7);ctx.lineWidth=8;
+  ctx.beginPath();
+  for(let i=0;i<=6;i++){
+    const aa=i/6*TAU+rot*0.3;
+    const x=Math.cos(aa)*(b.r+18),y=Math.sin(aa)*(b.r+18);
+    i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+  }
+  ctx.closePath();ctx.stroke();
+  // inner rotating rings
+  ctx.save();ctx.rotate(-rot);
+  ctx.strokeStyle=rgba(phC,0.5);ctx.lineWidth=3;ctx.setLineDash([28,16]);
+  ctx.beginPath();ctx.arc(0,0,b.r+4,0,TAU);ctx.stroke();
+  ctx.restore();
+  ctx.save();ctx.rotate(rot*0.6);
+  ctx.strokeStyle=rgba(phC,0.3);ctx.lineWidth=2;ctx.setLineDash([14,22]);
+  ctx.beginPath();ctx.arc(0,0,b.r-14,0,TAU);ctx.stroke();
+  ctx.setLineDash([]);ctx.restore();
+  // spires
+  ctx.fillStyle=rgba(phC,0.8);
+  for(let i=0;i<6;i++){
+    const aa=i/6*TAU+rot*0.3+Math.PI/6;
+    ctx.save();ctx.rotate(aa);ctx.translate(0,-(b.r+40));
+    ctx.beginPath();ctx.moveTo(0,-26);ctx.lineTo(10,6);ctx.lineTo(-10,6);ctx.closePath();ctx.fill();
+    ctx.restore();
+  }
+  // body
+  const g=ctx.createRadialGradient(0,0,8,0,0,b.r);
+  if(open){
+    g.addColorStop(0,'rgba(255,255,255,0.97)');
+    g.addColorStop(0.55,rgb(b.hitFlash>0?[255,255,255]:[160,200,255]));
+    g.addColorStop(1,'rgba(16,20,60,0.9)');
+  }else if(charge){
+    g.addColorStop(0,rgb(b.hitFlash>0?[255,255,255]:[40,60,140]));
+    g.addColorStop(1,'rgba(10,12,40,0.95)');
+  }else{
+    g.addColorStop(0,rgb(b.hitFlash>0?[255,255,255]:[16,20,60]));
+    g.addColorStop(1,'rgba(6,8,26,0.96)');
+  }
+  ctx.fillStyle=g;
+  ctx.beginPath();ctx.arc(0,0,b.r,0,TAU);ctx.fill();
+  ctx.strokeStyle=rgba(phC,open?1:0.9);ctx.lineWidth=open?6:4.5;
+  ctx.beginPath();ctx.arc(0,0,b.r,0,TAU);ctx.stroke();
+  // core — shutter petals that open
+  const eyeC=b.eye>0?[255,255,255]:phC;
+  if(open){
+    ctx.fillStyle='#fff';
+    ctx.beginPath();ctx.arc(0,0,26+Math.sin(b.t*6)*3,0,TAU);ctx.fill();
+    ctx.strokeStyle=`rgba(255,255,255,${0.5+Math.sin(performance.now()*0.02)*0.3})`;ctx.lineWidth=3.5;
+    ctx.beginPath();ctx.arc(0,0,b.r+24+Math.sin(b.t*3)*6,0,TAU);ctx.stroke();
+  }else{
+    const openness=charge?0.5:(tele?0.3:0);
+    ctx.fillStyle=rgba(phC,0.85);
+    for(let i=0;i<6;i++){
+      const aa=i/6*TAU+rot;
+      const pr=(0.7+openness)*b.r*0.5;
+      ctx.save();ctx.rotate(aa);
+      ctx.beginPath();
+      ctx.moveTo(pr*0.4,-8);ctx.lineTo(pr,-5);ctx.lineTo(pr,5);ctx.lineTo(pr*0.4,8);ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.fillStyle='rgba(4,6,20,0.95)';
+    ctx.beginPath();ctx.arc(0,0,16,0,TAU);ctx.fill();
+    ctx.strokeStyle=rgba(eyeC,0.5+Math.sin(b.t*3)*0.2);ctx.lineWidth=3;
+    ctx.beginPath();ctx.arc(0,0,16,0,TAU);ctx.stroke();
+    ctx.fillStyle=rgba([190,220,255],0.5+Math.sin(b.t*4)*0.3);
+    ctx.beginPath();ctx.arc(0,0,6,0,TAU);ctx.fill();
+  }
+  ctx.restore();
+  if(b.invuln>0){
+    ctx.strokeStyle=`rgba(190,130,255,${0.5+Math.sin(performance.now()*0.02)*0.3})`;
+    ctx.lineWidth=5;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r+22,0,TAU);ctx.stroke();
+  }
+  if(open){
+    ctx.strokeStyle=`rgba(255,201,92,${0.5+Math.sin(performance.now()*0.02)*0.4})`;
+    ctx.lineWidth=4;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r+24,0,TAU);ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,0.4)';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r+31,0,TAU);ctx.stroke();
   }
 }
 function drawPickup(pk){
