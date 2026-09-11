@@ -5383,6 +5383,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   // and survives page reloads. Playing without signing in still works --
   // coins/crystals/skins/powers just stay session-only, exactly as before.
   let sessionToken = null;
+  let accountId = null; // this account's own stable id -- see the Voidbreak session handshake below
   let accountName = null;
   let loggedIn = false;
   let isAdmin = false; // UX-only flag; every real admin action is re-verified server-side
@@ -5756,6 +5757,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   // the reloaded page to authenticate with.
   function onAuthenticated(data){
     sessionToken = data.sessionToken;
+    accountId = data.accountId || null;
     applyAccount(data.account);
     loggedIn = true;
     setAccountStatus('SIGNED IN AS ' + accountName.toUpperCase());
@@ -6097,6 +6099,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     FRIENDS.myId = null;
     updateFriendsBadge();
     sessionToken = null;
+    accountId = null;
     loggedIn = false;
     accountName = null;
     isAdmin = false;
@@ -13200,6 +13203,25 @@ if(tutorialActive) tutorialUpdate(dt);
     if(!voidbreakFrame || e.source !== voidbreakFrame.contentWindow) return;
     if(e.data && e.data.type === 'voidbreak_complete'){
       reportXP('voidbreak_complete');
+    }
+    // Voidbreak's own progress used to live ONLY in that iframe's
+    // localStorage -- tied to the device, not the signed-in account,
+    // which is exactly the cross-device sync bug this handshake fixes.
+    // Voidbreak posts 'voidbreak_ready' once its own message listener is
+    // attached (see voidbreak.html's boot sequence); this is the ONLY
+    // reply, and it hands over EXACTLY what Voidbreak needs to load/save
+    // its own cloud save -- the live sessionToken (or null for a guest,
+    // so Voidbreak falls back to its original local-only save) and this
+    // account's own stable id (used only to namespace Voidbreak's local
+    // CACHE key, never to grant access -- the actual save endpoints
+    // trust the sessionToken alone, server-side, same as every other
+    // account write in this game).
+    if(e.data && e.data.type === 'voidbreak_ready'){
+      voidbreakFrame.contentWindow.postMessage({
+        type: 'duelarena_session',
+        sessionToken: (loggedIn && sessionToken) ? sessionToken : null,
+        accountId: (loggedIn && accountId) ? accountId : null
+      }, window.location.origin);
     }
   });
 

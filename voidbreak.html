@@ -133,6 +133,16 @@ body.ingame #cv{cursor:none}
 .menu-stats{margin-top:26px;text-align:center;color:#6e93a5;font-size:13px;letter-spacing:2px;display:flex;flex-direction:column;gap:5px}
 .menu-stats b{color:var(--cy);font-family:'Orbitron';font-size:12px}
 .menu-stats i{color:var(--pu);font-style:normal}
+/* Small, deliberately unobtrusive -- one line, no icon animation, just
+   a color that reads at a glance: cyan while connecting, green once
+   synced to the signed-in account's cloud save, gold mid-save, muted
+   for guest/local-only or offline, red only on a genuine sync error. */
+.vb-sync-status{font-size:10px;letter-spacing:2px;font-family:'Orbitron';margin-bottom:2px}
+.vb-sync-connecting{color:var(--cy)}
+.vb-sync-synced{color:var(--gn)}
+.vb-sync-saving{color:var(--gold)}
+.vb-sync-local,.vb-sync-offline{color:#6e93a5}
+.vb-sync-error{color:var(--rd)}
 h2.ovtitle{font-family:'Orbitron';font-weight:700;font-size:24px;letter-spacing:6px;color:#eafcff;
   text-shadow:0 0 14px rgba(0,240,255,.5);margin-bottom:4px;text-align:center}
 .ovsub{text-align:center;color:#7ea4b5;letter-spacing:4px;font-size:13px;margin-bottom:18px}
@@ -270,6 +280,7 @@ input[type=range]{width:180px;accent-color:var(--cy)}
     <button class="btn" id="btnSettings">SETTINGS</button>
   </div>
   <div class="menu-stats">
+    <div class="vb-sync-status vb-sync-connecting" id="vbSyncStatus">SYNCING…</div>
     <div>PROGRESS <span id="menuLevel">LEVEL 1</span></div>
     <div><i>◆</i> <b id="menuShards">0</b> VOID SHARDS</div>
     <div>RUNS <span id="menuRuns">0</span> · BEST SECTOR <span id="menuBest">–</span> · BOSSES SLAIN <span id="menuKills">0</span></div>
@@ -443,24 +454,305 @@ function lerpAng(a,b,t){return a+angDiff(a,b)*t;}
 function fmt(n){return Math.round(n).toLocaleString('en-US');}
 const el=id=>document.getElementById(id);
 
-/* ---------- 02 · SAVE ---------- */
-const SAVE_KEY='voidbreak_save_v1';
+/* ---------- 02 · SAVE ----------
+   CLOUD SYNC OVERVIEW
+   --------------------
+   Progress used to live ONLY here, in this browser's localStorage,
+   completely independent of whatever Duel Arena account (if any) was
+   signed in -- that's what made it a per-DEVICE save instead of a
+   per-ACCOUNT one (survived logout, never appeared on a second
+   device). It still starts exactly that way (GUEST_SAVE_KEY, unchanged
+   shape/behavior) so guest play keeps working byte-for-byte as before.
+   The difference is what happens once the parent page (index.html)
+   tells us, via a postMessage handshake, that a real account is signed
+   in: from that moment on, `save` is loaded from and written to that
+   ACCOUNT's cloud save (server.js's /voidbreak/state and
+   /voidbreak/save, storing account.voidbreak -- see voidbreak.js) with
+   a per-account-id-namespaced localStorage key used only as a local
+   cache/offline fallback for THAT account, never shared with the guest
+   key or any other account. See "03b · CLOUD SESSION" below for the
+   handshake/bootstrap/sync logic itself.
+   `settings` (volume/music/sfx/shake/dmgnum) is deliberately NOT part
+   of the cloud save -- it's a per-device audio/UX preference, not
+   account progression, so it always stays in whichever local key is
+   active and is never uploaded. ---------- */
+const GUEST_SAVE_KEY='voidbreak_save_v1';
+const ACCOUNT_CACHE_PREFIX='voidbreak_cloud_v1_';
 const DEF_SAVE={shards:0,forge:{vit:0,pow:0,swift:0,core:0,drive:0,edge:0},
   weapons:{pulse:true,scatter:false,rail:false,plasma:false,voidb:false,voidc:false},
   lastWeapon:'pulse',runs:0,best:0,kills:0,beaten:{},
   settings:{vol:0.8,music:true,sfx:true,shake:true,dmgnum:true}};
+const FORGE_KEYS=Object.keys(DEF_SAVE.forge);
+// Named SAVE_WEAPON_KEYS (not WEAPON_KEYS) -- a WEAPON_KEYS constant
+// with the identical value already exists further down (used to build
+// the weapon-select/forge UI); this file predates that, so this save-
+// system section gets its own name rather than colliding with it.
+const SAVE_WEAPON_KEYS=Object.keys(DEF_SAVE.weapons);
 let save;
-function loadSave(){
-  try{const s=JSON.parse(localStorage.getItem(SAVE_KEY));
-    save=Object.assign(JSON.parse(JSON.stringify(DEF_SAVE)),s||{});
-    save.forge=Object.assign({},DEF_SAVE.forge,save.forge||{});
-    save.weapons=Object.assign({},DEF_SAVE.weapons,save.weapons||{});
-    save.settings=Object.assign({},DEF_SAVE.settings,save.settings||{});
-  }catch(e){save=JSON.parse(JSON.stringify(DEF_SAVE));}
-  save.beaten=save.beaten||{};
-  if(save.kills>0&&!save.beaten[1])save.beaten[1]=true; // legacy migration
+
+// Fills in missing/malformed fields from a raw parsed blob (or `null`)
+// -- the exact same defaulting logic the original loadSave() always
+// did, just factored out so both the guest key and a cloud-fetched save
+// can be normalized through one path.
+function normalizeSave(s){
+  const out=Object.assign(JSON.parse(JSON.stringify(DEF_SAVE)),s||{});
+  out.forge=Object.assign({},DEF_SAVE.forge,out.forge||{});
+  out.weapons=Object.assign({},DEF_SAVE.weapons,out.weapons||{});
+  out.settings=Object.assign({},DEF_SAVE.settings,out.settings||{});
+  out.beaten=out.beaten||{};
+  if(out.kills>0&&!out.beaten[1])out.beaten[1]=true; // legacy migration
+  return out;
 }
-function saveGame(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(save));}catch(e){}}
+// True only for the untouched starting state -- used to decide whether
+// a save is worth migrating/merging, or is just noise.
+function isDefaultSave(s){
+  if(!s)return true;
+  if(s.shards||s.runs||s.best||s.kills)return false;
+  if(Object.keys(s.beaten||{}).length)return false;
+  for(const k of FORGE_KEYS)if((s.forge||{})[k])return false;
+  for(const k of SAVE_WEAPON_KEYS)if(k!=='pulse'&&(s.weapons||{})[k])return false;
+  return true;
+}
+// Safe merge of two saves: every field is MAX'd or OR'd, NEVER summed --
+// mirrors voidbreak.js's mergeSaveData on the server exactly, so a
+// device's offline progress and an account's existing cloud save can
+// reconcile without either side losing anything or, worse, a naive sum
+// letting the same progress be double-counted by playing on two
+// devices and merging. See voidbreak.js's header comment for the full
+// reasoning; this is a deliberate duplicate of that logic (Voidbreak is
+// its own self-contained document, same as its SKINS/POWERS mirror
+// pattern already used elsewhere in this codebase), not a divergence.
+function mergeSaveData(a,b){
+  a=a||DEF_SAVE;b=b||DEF_SAVE;
+  const forge={};for(const k of FORGE_KEYS)forge[k]=Math.max(a.forge[k]||0,b.forge[k]||0);
+  const weapons={};for(const k of SAVE_WEAPON_KEYS)weapons[k]=!!(a.weapons[k]||b.weapons[k]);
+  const beaten=Object.assign({},a.beaten,b.beaten);
+  const lastWeapon=weapons[a.lastWeapon]?a.lastWeapon:(weapons[b.lastWeapon]?b.lastWeapon:'pulse');
+  return{shards:Math.max(a.shards||0,b.shards||0),forge,weapons,lastWeapon,
+    runs:Math.max(a.runs||0,b.runs||0),best:Math.max(a.best||0,b.best||0),
+    kills:Math.max(a.kills||0,b.kills||0),beaten,
+    settings:Object.assign({},DEF_SAVE.settings,a.settings||{})};
+}
+
+function readGuestSave(){
+  try{const s=JSON.parse(localStorage.getItem(GUEST_SAVE_KEY));return s?normalizeSave(s):null;}catch(e){return null;}
+}
+function writeGuestSave(s){try{localStorage.setItem(GUEST_SAVE_KEY,JSON.stringify(s));}catch(e){}}
+// The per-account cache wraps the save with an updatedAt so a later
+// reconnect can tell whether THIS device made offline changes more
+// recently than the cloud last saw (see bootstrapCloudSave).
+function readAccountCache(accountId){
+  try{
+    const raw=JSON.parse(localStorage.getItem(ACCOUNT_CACHE_PREFIX+accountId));
+    if(!raw||typeof raw!=='object')return null;
+    return{data:normalizeSave(raw.data),updatedAt:Number(raw.updatedAt)||0};
+  }catch(e){return null;}
+}
+function writeAccountCache(accountId,s,updatedAt){
+  try{localStorage.setItem(ACCOUNT_CACHE_PREFIX+accountId,JSON.stringify({data:s,updatedAt:updatedAt||Date.now()}));}catch(e){}
+}
+
+/* ---------- 03b · CLOUD SESSION ----------
+   Identity/session state, filled in by the handshake with index.html
+   (see the 'duelarena_session' listener + BOOT section below). Until
+   that handshake resolves, cloudSyncStatus stays 'connecting' and the
+   menu shows placeholders (see refreshMenuStats) rather than risk
+   flashing a stale/wrong save on screen for a frame. ---------- */
+let cloudSessionToken=null,cloudAccountId=null,cloudSyncEnabled=false,cloudBootstrapped=false;
+let cloudSyncStatus='connecting'; // 'connecting' | 'local' | 'synced' | 'saving' | 'offline' | 'error'
+let cloudSaveTimer=null,cloudSaveInFlight=false,cloudSavePending=false;
+
+function setSyncStatus(s){
+  cloudSyncStatus=s;
+  const el_=document.getElementById('vbSyncStatus');
+  if(!el_)return;
+  const LABELS={connecting:'SYNCING…',local:'GUEST · LOCAL SAVE ONLY',synced:'☁ SYNCED',
+    saving:'☁ SAVING…',offline:'☁ OFFLINE · LOCAL ONLY',error:'☁ SYNC ERROR'};
+  el_.textContent=LABELS[s]||'';
+  el_.className='vb-sync-status vb-sync-'+s;
+}
+
+// Loads `save` from whichever local key is currently active -- the
+// guest key by default (this runs synchronously at script-parse time,
+// before the parent handshake can possibly have arrived yet, so a
+// guest's experience is completely unaffected: same key, same
+// behavior, same timing as before this feature existed), or the
+// signed-in account's own per-device cache once cloudSyncEnabled flips
+// on (see bootstrapCloudSave, which calls this then immediately
+// reconciles against the real cloud state).
+function loadSave(){
+  if(cloudSyncEnabled&&cloudAccountId){
+    const cached=readAccountCache(cloudAccountId);
+    save=cached?cached.data:normalizeSave(null);
+  }else{
+    save=readGuestSave()||normalizeSave(null);
+  }
+}
+function saveGame(){
+  try{
+    if(cloudSyncEnabled&&cloudAccountId)writeAccountCache(cloudAccountId,save,Date.now());
+    else writeGuestSave(save);
+  }catch(e){}
+}
+// The progression-event save path (level unlocks, shard/rewards,
+// purchases, loadout, run completion -- see every call site below).
+// Always writes the local cache immediately (cheap, synchronous,
+// exactly like saveGame() always has), then -- only when signed in --
+// debounces a real network save so gameplay bursts (e.g. several forge
+// purchases in a row) collapse into one request instead of spamming the
+// backend. Settings toggles deliberately keep calling plain saveGame()
+// instead of this, since they're not part of the cloud save.
+function saveGameCloud(){
+  saveGame();
+  if(!cloudSyncEnabled)return;
+  cloudSavePending=true;
+  setSyncStatus('saving');
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer=setTimeout(flushCloudSave,1500);
+}
+async function flushCloudSave(){
+  if(cloudSaveInFlight||!cloudSyncEnabled)return;
+  if(!cloudSavePending)return;
+  cloudSavePending=false;
+  cloudSaveInFlight=true;
+  const payload={shards:save.shards,forge:save.forge,weapons:save.weapons,lastWeapon:save.lastWeapon,
+    runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten};
+  try{
+    const res=await fetch('/voidbreak/save',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({sessionToken:cloudSessionToken,data:payload})});
+    if(res.ok){
+      const data=await res.json().catch(()=>({}));
+      writeAccountCache(cloudAccountId,save,data.updatedAt||Date.now());
+      setSyncStatus('synced');
+    }else if(res.status===401||res.status===409){
+      // The session died mid-run (signed out elsewhere, expired, etc).
+      // Stop trying to sync -- local saves keep working via saveGame()
+      // regardless -- rather than repeatedly failing in the background.
+      cloudSyncEnabled=false;setSyncStatus('error');
+    }else{
+      setSyncStatus('error');
+    }
+  }catch(e){
+    setSyncStatus('offline');
+  }finally{
+    cloudSaveInFlight=false;
+    if(cloudSavePending)flushCloudSave(); // more changes queued while this request was in flight
+  }
+}
+// Immediate (non-debounced) upload -- used only for the one-time
+// bootstrap writes (first-ever cloud save, migration, offline-merge
+// reconciliation) where there's no gameplay burst to collapse and the
+// player is about to see the result on the menu right away.
+async function pushCloudSaveNow(){
+  if(!cloudSyncEnabled)return;
+  setSyncStatus('saving');
+  const payload={shards:save.shards,forge:save.forge,weapons:save.weapons,lastWeapon:save.lastWeapon,
+    runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten};
+  try{
+    const res=await fetch('/voidbreak/save',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({sessionToken:cloudSessionToken,data:payload})});
+    if(res.ok){
+      const data=await res.json().catch(()=>({}));
+      writeAccountCache(cloudAccountId,save,data.updatedAt||Date.now());
+      setSyncStatus('synced');
+    }else{
+      setSyncStatus('error');
+    }
+  }catch(e){
+    setSyncStatus('offline');
+  }
+}
+
+// Handles the ONE handshake reply index.html ever sends (see this
+// file's 'voidbreak_ready' request in the BOOT section, and
+// index.html's own message listener for the other half). `sessionToken`
+// is null for a guest -- in which case nothing changes from the
+// original, device-only behavior at all.
+async function handleSessionHandshake(sessionToken,accountId){
+  if(cloudBootstrapped)return; // only ever bootstrap once per document load
+  cloudBootstrapped=true;
+  if(!sessionToken||!accountId){
+    setSyncStatus('local');
+    refreshMenuStats();
+    return;
+  }
+  cloudSessionToken=sessionToken;
+  cloudAccountId=accountId;
+  cloudSyncEnabled=true;
+  await bootstrapCloudSave();
+}
+
+// The actual "load the account's real progress before treating
+// anything local as authoritative" sequence -- see the module header
+// comment above for the full design. Never lets a local cache silently
+// win over a genuine cloud save; never silently discards local progress
+// either.
+async function bootstrapCloudSave(){
+  setSyncStatus('connecting');
+  const localCache=readAccountCache(cloudAccountId); // this account's OWN cache on THIS device, if any
+
+  let cloudResp=null;
+  try{
+    const res=await fetch('/voidbreak/state?sessionToken='+encodeURIComponent(cloudSessionToken));
+    if(res.ok)cloudResp=await res.json();
+  }catch(e){ /* offline / network failure -- handled below */ }
+
+  if(!cloudResp||!cloudResp.signedIn){
+    // Could not reach the cloud save at all (offline), or the session
+    // died between the handshake and now -- fall back to this
+    // account's own last-known local cache rather than blocking play,
+    // but never touch the guest key and never invent progress.
+    save=localCache?localCache.data:normalizeSave(null);
+    setSyncStatus(cloudResp?'error':'offline');
+    refreshMenuStats();syncSettingsUI();if(actx)applyAudioSettings();
+    return;
+  }
+
+  if(!cloudResp.hasCloudSave){
+    // First time THIS ACCOUNT has ever reached the cloud save system.
+    // Migrate whatever pre-existing progress is worth keeping: this
+    // account's own device cache (rare this early, checked anyway) and
+    // the GENERIC guest key, which is exactly where a pre-existing
+    // player's progress has been sitting since before this fix. Never
+    // silently drop either.
+    const guestSave=readGuestSave();
+    const localHas=localCache&&!isDefaultSave(localCache.data);
+    const guestHas=guestSave&&!isDefaultSave(guestSave);
+    let migrated=null;
+    if(localHas&&guestHas)migrated=mergeSaveData(localCache.data,guestSave);
+    else if(localHas)migrated=localCache.data;
+    else if(guestHas)migrated=guestSave;
+    save=migrated||normalizeSave(null);
+    writeAccountCache(cloudAccountId,save,Date.now());
+    if(guestHas){
+      // Claim the guest progress for this account -- reset the generic
+      // key so a DIFFERENT account signing in later on this same
+      // device is never offered the same progress to migrate again
+      // ("Account A becomes the owner of that progress").
+      writeGuestSave(normalizeSave(null));
+    }
+    await pushCloudSaveNow(); // creates the cloud record immediately, migrated or not
+  }else{
+    const cloudSave=normalizeSave(cloudResp.data);
+    if(localCache&&localCache.updatedAt>cloudResp.updatedAt){
+      // This device saved locally more recently than the cloud has ever
+      // seen (e.g. it was offline when a save attempt failed) -- merge
+      // rather than silently discard either side, then heal the cloud
+      // record so both are reconciled going forward.
+      save=mergeSaveData(localCache.data,cloudSave);
+      writeAccountCache(cloudAccountId,save,Date.now());
+      await pushCloudSaveNow();
+    }else{
+      // The normal case, and the whole point of this feature: whatever
+      // the cloud has IS this account's progress, on any device.
+      save=cloudSave;
+      writeAccountCache(cloudAccountId,save,cloudResp.updatedAt);
+      setSyncStatus('synced');
+    }
+  }
+  refreshMenuStats();syncSettingsUI();if(actx)applyAudioSettings();
+}
+
 loadSave();
 
 /* ---------- 03 · AUDIO ---------- */
@@ -2611,7 +2903,7 @@ function startRun(weapon,levelIdx){
   selectedLevel=levelIdx;
   newRun(levelIdx);
   player=newPlayer(weapon);
-  save.lastWeapon=weapon;saveGame();
+  save.lastWeapon=weapon;saveGameCloud();
   enemies=[];bullets=[];ebullets=[];particles=[];dmgNums=[];pickups=[];portals=[];spawnQueue=[];props=[];swings=[];hurtArcs=[];hazards=[];zones=[];gravFields=[];
   boss=null;bossActive=false;transition=null;deathSeq=null;
   vicT=0;vicWarped=false;runActive=true;
@@ -3025,7 +3317,7 @@ function finalizeRun(victory_){
   save.shards+=run.shards;save.runs++;
   save.best=Math.max(save.best,run.roomsCleared+(victory_?1:0));
   if(victory_)save.kills++;
-  saveGame();
+  saveGameCloud();
 }
 
 /* ---------- 15 · MAIN UPDATE ---------- */
@@ -4405,6 +4697,18 @@ function setPause(v){
   }
 }
 function refreshMenuStats(){
+  // While the cloud handshake/fetch is still in flight, show neutral
+  // placeholders instead of `save` -- at boot `save` is whatever the
+  // (possibly irrelevant, possibly a DIFFERENT account's) local key
+  // happened to hold before bootstrapCloudSave() had a chance to
+  // reconcile it, and briefly displaying that would be exactly the kind
+  // of "wrong account's progress flashes on screen" bug this feature
+  // exists to prevent.
+  if(cloudSyncStatus==='connecting'){
+    setTxt('menuShards','—');setTxt('menuRuns','—');setTxt('menuBest','—');
+    setTxt('menuKills','—');setTxt('menuLevel','SYNCING…');
+    return;
+  }
   setTxt('menuShards',save.shards);
   setTxt('menuRuns',save.runs);
   setTxt('menuBest',save.best>0?save.best+' / 10':'–');
@@ -4564,7 +4868,7 @@ function buildForge(){
     row.querySelector('.fbuy').addEventListener('click',()=>{
       if(lvl>=f.max)return;
       if(save.shards<cost){SFX.error();toast('NOT ENOUGH VOID SHARDS');return;}
-      save.shards-=cost;save.forge[f.id]++;saveGame();SFX.buy();
+      save.shards-=cost;save.forge[f.id]++;saveGameCloud();SFX.buy();
       toast(f.name+' · LEVEL '+save.forge[f.id]);
       buildForge();
     });
@@ -4582,7 +4886,7 @@ function buildForge(){
       <div class="wcost">${owned?'UNLOCKED':gated?'DEFEAT '+gateBoss:'◆ '+w.cost+' SHARDS'}</div>`;
     if(!owned&&!gated)card.addEventListener('click',()=>{
       if(save.shards<w.cost){SFX.error();toast('NOT ENOUGH VOID SHARDS');return;}
-      save.shards-=w.cost;save.weapons[k]=true;saveGame();SFX.buy();
+      save.shards-=w.cost;save.weapons[k]=true;saveGameCloud();SFX.buy();
       toast('UNLOCKED · '+w.name);buildForge();
     });
     else if(gated)card.addEventListener('click',()=>{
@@ -4692,7 +4996,7 @@ el('pauseResume').addEventListener('click',()=>{SFX.ui();setPause(false);});
 el('pauseSettings').addEventListener('click',()=>{SFX.ui();settingsReturn='pause';setPause(false);go('settings');syncSettingsUI();});
 el('pauseQuit').addEventListener('click',()=>{
   SFX.ui();
-  save.shards+=run.shards;save.runs++;save.best=Math.max(save.best,run.roomsCleared);saveGame();
+  save.shards+=run.shards;save.runs++;save.best=Math.max(save.best,run.roomsCleared);saveGameCloud();
   runActive=false;deathSeq=null;
   toast('RUN ABANDONED · +'+run.shards+' SHARDS BANKED');
   Music.set('menu');
@@ -4718,14 +5022,38 @@ let resetArm=false;
 el('btnReset').addEventListener('click',()=>{
   if(!resetArm){resetArm=true;el('btnReset').textContent='CLICK AGAIN TO CONFIRM';
     setTimeout(()=>{resetArm=false;el('btnReset').textContent='RESET ALL DATA';},2500);return;}
-  try{localStorage.removeItem(SAVE_KEY);}catch(e){}
+  try{localStorage.removeItem(GUEST_SAVE_KEY);}catch(e){}
+  if(cloudSyncEnabled&&cloudAccountId)try{localStorage.removeItem(ACCOUNT_CACHE_PREFIX+cloudAccountId);}catch(e){}
   save=JSON.parse(JSON.stringify(DEF_SAVE));resetArm=false;
   el('btnReset').textContent='RESET ALL DATA';
   syncSettingsUI();applyAudioSettings();refreshMenuStats();
+  // A reset must also clear the CLOUD save, or the next load (this
+  // device or any other) would just re-download the old progress and
+  // silently undo the reset -- see pushCloudSaveNow/flushCloudSave,
+  // which both upload the current (now-default) `save` as-is.
+  if(cloudSyncEnabled)pushCloudSaveNow();
   toast('ALL DATA RESET');
 });
 
 /* ---------- 19 · BOOT ---------- */
+// Ask the parent (index.html) who's signed in -- see
+// handleSessionHandshake above and index.html's own 'voidbreak_ready'
+// handler, which replies with 'duelarena_session'. Only a same-origin
+// reply from our actual parent window is trusted, exactly like
+// index.html only trusts 'voidbreak_complete' from its own iframe.
+window.addEventListener('message',(e)=>{
+  if(e.origin!==location.origin||e.source!==window.parent)return;
+  if(e.data&&e.data.type==='duelarena_session'){
+    handleSessionHandshake(e.data.sessionToken||null,e.data.accountId||null);
+  }
+});
+try{window.parent.postMessage({type:'voidbreak_ready'},location.origin);}catch(e){}
+// If no reply ever arrives (opened standalone outside the lobby's
+// iframe, or something blocked the message), don't leave the menu
+// stuck on placeholders forever -- fall back to guest/local-only play,
+// which is always correct even if it turns out a reply was just slow.
+setTimeout(()=>{if(!cloudBootstrapped)handleSessionHandshake(null,null);},3000);
+
 refreshMenuStats();
 syncSettingsUI();
 cam.x=0;cam.y=0;
