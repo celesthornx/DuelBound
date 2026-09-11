@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>VOIDBREAK</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -223,12 +223,145 @@ input[type=range]{width:180px;accent-color:var(--cy)}
 .lvlcard.beaten .lstatus{color:var(--gn)}
 .vicunlock{text-align:center;font-family:'Orbitron';font-size:12px;letter-spacing:2px;color:var(--gn);
   margin:-8px 0 14px;text-shadow:0 0 12px rgba(56,255,156,.4)}
+
+/* ---- difficulty select (main menu, under START RUN) ---- */
+.diff-row{display:flex;gap:6px;width:100%}
+.diff-btn{flex:1 1 0;min-width:0;font-family:'Orbitron';font-weight:700;font-size:9.5px;letter-spacing:1.5px;
+  color:#7ea4b5;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.18);
+  padding:8px 4px;cursor:pointer;transition:all .15s;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.diff-btn:hover{color:#cfeef5;border-color:rgba(255,255,255,.4)}
+.diff-btn .diff-mult{display:block;font-family:'Rajdhani';font-weight:600;font-size:8.5px;letter-spacing:1px;opacity:.75;margin-top:1px}
+.diff-btn[data-diff="normal"].selected{border-color:var(--cy);color:#eafcff;background:rgba(0,240,255,.14);box-shadow:0 0 14px rgba(0,240,255,.25)}
+.diff-btn[data-diff="hard"].selected{border-color:var(--gold);color:#fff6e0;background:rgba(255,201,92,.14);box-shadow:0 0 14px rgba(255,201,92,.25)}
+.diff-btn[data-diff="extreme"].selected{border-color:var(--rd);color:#ffe2e8;background:rgba(255,45,85,.16);box-shadow:0 0 14px rgba(255,45,85,.3)}
+.diff-hint{text-align:center;font-size:10.5px;letter-spacing:1.5px;color:#5f8496;margin:6px 0 2px}
+
+/* ---- rotate gate (portrait suggestion, dismissible -- never a hard block) ---- */
+.rotate-gate{position:fixed;inset:0;z-index:90;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;background:rgba(2,4,12,.96);text-align:center;padding:24px}
+.rotate-gate.hidden{display:none}
+.rotate-icon{font-size:44px;animation:rotateSpin 1.8s ease-in-out infinite}
+@keyframes rotateSpin{0%,100%{transform:rotate(0deg)}50%{transform:rotate(-90deg)}}
+.rotate-title{font-family:'Orbitron';font-weight:900;font-size:20px;letter-spacing:4px;color:#eafcff}
+.rotate-sub{font-size:13px;letter-spacing:2px;color:#7ea4b5;max-width:280px}
+.rotate-gate .btn{width:200px}
+
+/* ---- mobile touch controls ----
+   Fixed, always-visible zones (never hidden/relocated on touch) so the
+   player sees both sticks before ever touching the screen, matching
+   the same proven pattern used in the main Duel Arena game. Sized via
+   CSS custom properties so a device tier (phone vs tablet) is a single
+   swap of --joy-size/--action-size rather than duplicated rules. */
+.mobile-controls{position:fixed;inset:0;z-index:15;pointer-events:none;display:none;
+  --joy-size:92px;--joy-knob-size:42px;--joy-anchor-x:82px;--joy-anchor-y:96px;
+  --action-size:58px;--dash-anchor-x:56px;--dash-anchor-y:206px}
+.mobile-controls.on{display:block}
+.mobile-controls[data-tier="tablet"]{
+  --joy-size:126px;--joy-knob-size:56px;--joy-anchor-x:118px;--joy-anchor-y:120px;
+  --action-size:70px;--dash-anchor-x:70px;--dash-anchor-y:250px}
+.joy-zone{position:absolute;bottom:0;width:52%;height:68%;pointer-events:auto;touch-action:none}
+.joy-zone.joy-move{left:0}
+.joy-zone.joy-aim{right:0}
+.joy-base{position:absolute;width:var(--joy-size);height:var(--joy-size);border-radius:50%;
+  border:2px solid rgba(255,255,255,.26);background:rgba(255,255,255,.05);pointer-events:none;
+  transition:border-color .15s ease,background-color .15s ease}
+.joy-move .joy-base{left:calc(env(safe-area-inset-left,0px) + var(--joy-anchor-x) - var(--joy-size) / 2);
+  bottom:calc(env(safe-area-inset-bottom,0px) + var(--joy-anchor-y) - var(--joy-size) / 2)}
+.joy-aim .joy-base{right:calc(env(safe-area-inset-right,0px) + var(--joy-anchor-x) - var(--joy-size) / 2);
+  bottom:calc(env(safe-area-inset-bottom,0px) + var(--joy-anchor-y) - var(--joy-size) / 2)}
+.joy-base.dragging{border-color:rgba(255,255,255,.55);background:rgba(255,255,255,.12)}
+.joy-knob{position:absolute;width:var(--joy-knob-size);height:var(--joy-knob-size);border-radius:50%;
+  left:50%;top:50%;transform:translate(-50%,-50%);
+  background:rgba(0,240,255,.32);border:2px solid var(--cy);box-shadow:0 0 14px rgba(0,240,255,.5);
+  transition:transform .14s ease-out}
+.joy-base.dragging .joy-knob{transition:none}
+.joy-aim .joy-knob{background:rgba(255,45,85,.32);border-color:var(--rd);box-shadow:0 0 14px rgba(255,45,85,.5)}
+#touchDashBtn{position:absolute;pointer-events:auto;touch-action:none;z-index:16;
+  right:calc(env(safe-area-inset-right,0px) + var(--dash-anchor-x) - var(--action-size) / 2);
+  bottom:calc(env(safe-area-inset-bottom,0px) + var(--dash-anchor-y) - var(--action-size) / 2);
+  width:var(--action-size);height:var(--action-size);border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Orbitron';font-weight:700;font-size:10px;letter-spacing:1px;color:var(--cy);
+  background:rgba(8,12,26,.55);border:2px solid rgba(0,240,255,.45);
+  box-shadow:0 0 10px rgba(0,240,255,.2)}
+#touchDashBtn::before{content:'';position:absolute;inset:-2px;border-radius:50%;pointer-events:none;
+  background:conic-gradient(rgba(255,255,255,.55) calc(var(--cd,0) * 360deg),transparent 0);
+  -webkit-mask:radial-gradient(closed-shape,transparent calc(100% - 4px),#000 calc(100% - 3px));
+  mask:radial-gradient(closed-shape,transparent calc(100% - 4px),#000 calc(100% - 3px))}
+#touchDashBtn.ready{box-shadow:0 0 16px rgba(0,240,255,.55)}
+#touchDashBtn.ready::before{background:none}
+#touchDashBtn.pressed{background:rgba(0,240,255,.22)}
+
+/* ---- responsive: small/short viewports (phones, and tablets in
+   portrait) -- shrink HUD/menu chrome so nothing overlaps the touch
+   controls or runs off-screen. Breakpoint matches the device sizes
+   named in the task (iPhone/iPad) rather than an arbitrary number. */
+@media (max-width:760px), (max-height:520px){
+  .logo{font-size:38px;letter-spacing:5px}
+  .tagline{font-size:11px;letter-spacing:3px;margin:10px 0 18px}
+  .panel{padding:18px 16px;max-width:96vw}
+  .menu-btns{width:min(300px,84vw)}
+  .ovtitle{font-size:19px}
+  .menu-stats{font-size:11px}
+  #hudTop{top:calc(6px + env(safe-area-inset-top,0px))}
+  #sectorLabel{font-size:11px;letter-spacing:2px}
+  #roomType{font-size:11px}
+  #waveLabel{font-size:9px}
+  #shardWrap{top:calc(8px + env(safe-area-inset-top,0px));right:calc(10px + env(safe-area-inset-right,0px));font-size:12px}
+  #bossBarWrap{top:calc(40px + env(safe-area-inset-top,0px));width:70vw;min-width:0}
+  #bossName{font-size:12px;letter-spacing:4px}
+  #hudBottom{bottom:calc(14px + env(safe-area-inset-bottom,0px));
+    left:calc(10px + env(safe-area-inset-left,0px));right:calc(10px + env(safe-area-inset-right,0px))}
+  .barwrap.hp{width:150px;height:15px}
+  .barwrap.en{width:120px;height:6px}
+  #dashBar{width:70px}
+  #buildInfo{display:none}
+  #weaponUI{padding:5px 10px 5px 8px;gap:7px}
+  #weaponIcon{width:24px;height:24px}
+  #weaponName{font-size:10.5px}
+  #weaponStats{font-size:9px}
+  /* The upgrade chip list normally sits mid-left, which is exactly
+     where the move joystick lives on touch -- move it to a compact
+     horizontal row under the sector label instead of hiding it. */
+  #upList{left:50%;top:calc(58px + env(safe-area-inset-top,0px));transform:translateX(-50%);
+    flex-direction:row;flex-wrap:wrap;justify-content:center;max-width:min(94vw,520px);max-height:none}
+  #bannerMain{font-size:26px;letter-spacing:6px}
+  #bannerSub{font-size:12px;letter-spacing:3px}
+  .wgrid{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
+  .endstats{grid-template-columns:1fr}
+  .ucard{width:min(212px,80vw)}
+  .diff-btn{font-size:8.5px;padding:7px 2px}
+}
+/* Landscape phones specifically (short viewport) need the HUD pulled
+   in tighter than a tall-but-narrow portrait tablet would. */
+@media (max-height:420px){
+  #hudTop{top:calc(3px + env(safe-area-inset-top,0px))}
+  .barwrap.hp{height:12px}
+  #banner{top:14%}
+}
 </style>
 </head>
 <body>
 <canvas id="cv"></canvas>
 <div id="vig"></div><div id="scan"></div><div id="dmgflash"></div><div id="lowhp"></div>
 <div id="whiteflash"></div><div id="fade"></div>
+
+<!-- Touch controls: fixed, always-visible left move-stick + right
+     aim/shoot stick + a dash button, shown only on touch devices (see
+     isTouchDevice in the script). Drives the exact same input state
+     (keys/mouse.faceAng/mouse.down/pressed['Space']) desktop already
+     reads, rather than a parallel input path -- see updatePlayer(). -->
+<div class="mobile-controls" id="mobileControls">
+  <div class="joy-zone joy-move" id="joyMoveZone"><div class="joy-base" id="joyMoveBase"><div class="joy-knob"></div></div></div>
+  <div class="joy-zone joy-aim" id="joyAimZone"><div class="joy-base" id="joyAimBase"><div class="joy-knob"></div></div></div>
+  <button type="button" id="touchDashBtn">DASH</button>
+</div>
+<div class="rotate-gate hidden" id="rotateGate">
+  <div class="rotate-icon">⟲</div>
+  <div class="rotate-title">ROTATE YOUR DEVICE</div>
+  <div class="rotate-sub">VOIDBREAK plays best in landscape. You can keep playing in portrait, but the HUD and controls have more room in landscape.</div>
+  <button type="button" class="btn primary" id="rotateGateDismiss">PLAY IN PORTRAIT</button>
+</div>
 
 <div id="hud" class="hidden">
   <div id="hudTop"><div id="sectorWrap">
@@ -265,6 +398,12 @@ input[type=range]{width:180px;accent-color:var(--cy)}
   <div class="tagline">THE DIMENSION IS COLLAPSING. BREAK OUT.</div>
   <div class="menu-btns">
     <button class="btn primary" id="btnStart">START RUN</button>
+    <div class="diff-row" id="diffRow">
+      <button type="button" class="diff-btn" data-diff="normal">NORMAL<span class="diff-mult">1.0×</span></button>
+      <button type="button" class="diff-btn" data-diff="hard">HARD<span class="diff-mult">1.5×</span></button>
+      <button type="button" class="diff-btn" data-diff="extreme">EXTREME<span class="diff-mult">2.0×</span></button>
+    </div>
+    <div class="diff-hint" id="diffHint">NORMAL SELECTED</div>
     <button class="btn" id="btnForge">VOID FORGE</button>
     <button class="btn" id="btnHowto">HOW TO PLAY</button>
     <button class="btn" id="btnSettings">SETTINGS</button>
@@ -450,7 +589,7 @@ const el=id=>document.getElementById(id);
 const SAVE_KEY='voidbreak_save_v1';
 const DEF_SAVE={shards:0,forge:{vit:0,pow:0,swift:0,core:0,drive:0,edge:0},
   weapons:{pulse:true,scatter:false,rail:false,plasma:false,voidb:false,voidc:false},
-  lastWeapon:'pulse',runs:0,best:0,kills:0,beaten:{},
+  lastWeapon:'pulse',lastDifficulty:'normal',runs:0,best:0,kills:0,beaten:{},
   settings:{vol:0.8,music:true,sfx:true,shake:true,dmgnum:true}};
 let save;
 function loadSave(){
@@ -662,12 +801,176 @@ addEventListener('keydown',e=>{
   keys[e.code]=true;initAudio();
 });
 addEventListener('keyup',e=>keys[e.code]=false);
-addEventListener('pointerdown',e=>{if(e.target===cv){mouse.down=e.button===0;}initAudio();});
-addEventListener('pointerup',()=>mouse.down=false);
-addEventListener('pointermove',e=>{mouse.x=e.clientX;mouse.y=e.clientY;});
+// pointerType!=='touch' keeps every line here exactly desktop-only
+// (mouse AND pen still work identically to before) -- on a touch
+// device, aiming/shooting/movement is driven exclusively by the two
+// dedicated stick zones below instead, so a stray tap on open canvas
+// (e.g. the HUD-only strip above the sticks) can't also snap-aim.
+addEventListener('pointerdown',e=>{if(e.target===cv&&e.pointerType!=='touch'){mouse.down=e.button===0;}initAudio();});
+addEventListener('pointerup',e=>{if(e.pointerType!=='touch')mouse.down=false;});
+addEventListener('pointermove',e=>{if(e.pointerType!=='touch'){mouse.x=e.clientX;mouse.y=e.clientY;}});
 addEventListener('contextmenu',e=>e.preventDefault());
 addEventListener('blur',()=>{if(state==='playing'&&!uiOpen&&!paused)setPause(true);});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='playing'&&!uiOpen&&!paused)setPause(true);});
+
+/* ---- mobile / touch controls ----
+   Same technique the main Duel Arena game uses: a fixed, ALWAYS-VISIBLE
+   left move-stick + right aim-stick + a dash button, all of which just
+   drive the exact input state updatePlayer() already reads (ax/ay,
+   p.faceAng, the mouse.down check, pressed['Space']) instead of a
+   parallel input system. Desktop's own listeners above are untouched. */
+const touchPoints=navigator.maxTouchPoints||navigator.msMaxTouchPoints||0;
+const hasTouch=('ontouchstart' in window)||touchPoints>0;
+// Same iPadOS-13+-masquerades-as-Mac workaround the main game uses: a
+// UA claiming "Macintosh" with multi-touch support is never a real Mac.
+const isTabletUA=/iPad/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&hasTouch&&touchPoints>1)||
+  (/Android/.test(navigator.userAgent)&&!/Mobile/.test(navigator.userAgent));
+const isTouchDevice=hasTouch;
+
+let touchMoveX=0,touchMoveY=0;
+let touchAiming=false,touchAimAngle=0;
+const TOUCH_TAP_MAX_DRAG=14,TOUCH_STICK_RADIUS=46;
+
+const mobileControlsEl=el('mobileControls');
+const joyMoveZone=el('joyMoveZone'),joyMoveBase=el('joyMoveBase');
+const joyAimZone=el('joyAimZone'),joyAimBase=el('joyAimBase');
+const touchDashBtn=el('touchDashBtn');
+
+function updateMobileControlsTier(){
+  if(!isTouchDevice)return;
+  const shortSide=Math.min(W,H);
+  mobileControlsEl.dataset.tier=(isTabletUA||shortSide>=600)?'tablet':'phone';
+}
+
+function positionJoyKnob(baseEl,dx,dy){
+  const knob=baseEl.querySelector('.joy-knob');
+  if(knob)knob.style.transform=`translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+}
+function joyBaseCenter(baseEl){
+  const r=baseEl.getBoundingClientRect();
+  return {x:r.left+r.width/2,y:r.top+r.height/2};
+}
+function beginJoyDrag(baseEl){baseEl.classList.add('dragging');positionJoyKnob(baseEl,0,0);}
+function endJoyDrag(baseEl){baseEl.classList.remove('dragging');positionJoyKnob(baseEl,0,0);}
+
+let moveTouchId=null,moveBaseX=0,moveBaseY=0;
+let aimTouchId=null,aimBaseX=0,aimBaseY=0;
+
+joyMoveZone.addEventListener('touchstart',e=>{
+  if(moveTouchId!==null)return;
+  const t=e.changedTouches[0];
+  moveTouchId=t.identifier;
+  const c=joyBaseCenter(joyMoveBase);
+  moveBaseX=c.x;moveBaseY=c.y;
+  beginJoyDrag(joyMoveBase);
+  initAudio();
+  e.preventDefault();
+},{passive:false});
+joyMoveZone.addEventListener('touchmove',e=>{
+  for(const t of e.changedTouches){
+    if(t.identifier!==moveTouchId)continue;
+    const dx=t.clientX-moveBaseX,dy=t.clientY-moveBaseY;
+    const d=Math.hypot(dx,dy);
+    const clamped=Math.min(d,TOUCH_STICK_RADIUS);
+    if(d>0.001)positionJoyKnob(joyMoveBase,dx/d*clamped,dy/d*clamped);
+    if(d>6){touchMoveX=dx/d*(clamped/TOUCH_STICK_RADIUS);touchMoveY=dy/d*(clamped/TOUCH_STICK_RADIUS);}
+    else{touchMoveX=0;touchMoveY=0;}
+  }
+  e.preventDefault();
+},{passive:false});
+function endMoveTouch(e){
+  for(const t of e.changedTouches){
+    if(t.identifier!==moveTouchId)continue;
+    moveTouchId=null;touchMoveX=0;touchMoveY=0;
+    endJoyDrag(joyMoveBase);
+  }
+}
+joyMoveZone.addEventListener('touchend',endMoveTouch);
+joyMoveZone.addEventListener('touchcancel',endMoveTouch);
+
+// Right stick: drag to aim (facing follows live, matching desktop's
+// live mouse-aim rather than a release-to-fire snap-shot), and fires
+// continuously the whole time it's held past the tap threshold --
+// mirrors desktop's own "hold mouse button to fire" feel exactly.
+joyAimZone.addEventListener('touchstart',e=>{
+  if(aimTouchId!==null)return;
+  const t=e.changedTouches[0];
+  aimTouchId=t.identifier;
+  const c=joyBaseCenter(joyAimBase);
+  aimBaseX=c.x;aimBaseY=c.y;
+  beginJoyDrag(joyAimBase);
+  initAudio();
+  e.preventDefault();
+},{passive:false});
+joyAimZone.addEventListener('touchmove',e=>{
+  for(const t of e.changedTouches){
+    if(t.identifier!==aimTouchId)continue;
+    const dx=t.clientX-aimBaseX,dy=t.clientY-aimBaseY;
+    const d=Math.hypot(dx,dy);
+    const clamped=Math.min(d,TOUCH_STICK_RADIUS);
+    if(d>0.001)positionJoyKnob(joyAimBase,dx/d*clamped,dy/d*clamped);
+    if(d>TOUCH_TAP_MAX_DRAG){touchAiming=true;touchAimAngle=Math.atan2(dy,dx);}
+    else touchAiming=false;
+  }
+  e.preventDefault();
+},{passive:false});
+function endAimTouch(e){
+  for(const t of e.changedTouches){
+    if(t.identifier!==aimTouchId)continue;
+    aimTouchId=null;touchAiming=false;
+    endJoyDrag(joyAimBase);
+  }
+}
+joyAimZone.addEventListener('touchend',endAimTouch);
+joyAimZone.addEventListener('touchcancel',endAimTouch);
+
+// Dash button: just sets the same one-frame flag Space already sets,
+// so it flows through updatePlayer()'s existing dash logic (cooldown,
+// energy cost, invulnerability window) completely unchanged.
+touchDashBtn.addEventListener('touchstart',e=>{
+  pressed['Space']=true;
+  touchDashBtn.classList.add('pressed');
+  initAudio();
+  e.preventDefault();
+},{passive:false});
+touchDashBtn.addEventListener('touchend',e=>{touchDashBtn.classList.remove('pressed');e.preventDefault();},{passive:false});
+touchDashBtn.addEventListener('touchcancel',()=>touchDashBtn.classList.remove('pressed'));
+function updateTouchDashButton(){
+  if(!isTouchDevice||!player)return;
+  const ready=player.dashCd<=0;
+  touchDashBtn.classList.toggle('ready',ready);
+  touchDashBtn.style.setProperty('--cd',ready?0:clamp(1-player.dashCd/player.dashCD,0,1));
+}
+
+/* ---- rotate gate: a dismissible suggestion, never a hard block (see
+   task requirement to keep portrait playable) ---- */
+const rotateGateEl=el('rotateGate');
+let rotateGateDismissed=false;
+function updateRotateGate(){
+  if(!isTouchDevice||!rotateGateEl)return;
+  const portrait=innerHeight>innerWidth;
+  if(!portrait)rotateGateDismissed=false; // re-arm for next time they rotate back
+  rotateGateEl.classList.toggle('hidden',!(portrait&&!rotateGateDismissed));
+}
+const rotateGateDismissBtn=el('rotateGateDismiss');
+if(rotateGateDismissBtn)rotateGateDismissBtn.addEventListener('click',()=>{
+  rotateGateDismissed=true;
+  rotateGateEl.classList.add('hidden');
+});
+// Registered here (after isTouchDevice/W/H all exist) rather than
+// inside resize() itself -- resize() runs once synchronously at
+// script load, before this const block below it in source order has
+// executed, so calling these from in there would hit the temporal
+// dead zone. The base resize() (canvas sizing) keeps its own
+// listener above; this just adds the viewport-dependent UI on top of
+// it, plus orientationchange for devices that don't reliably fire
+// 'resize' on rotate.
+function onViewportChange(){updateMobileControlsTier();updateRotateGate();}
+addEventListener('resize',onViewportChange);
+addEventListener('orientationchange',onViewportChange);
+updateMobileControlsTier();
+updateRotateGate();
+
 function handleKey(code){
   if(code==='Escape'||code==='KeyP'){
     if(state==='playing'){
@@ -807,6 +1110,39 @@ const CHOICES={
   elite:{label:'ELITE',risk:'VERY HIGH RISK',desc:'Elite enemy · guaranteed upgrade',stars:5},
   boss:{label:'GUARDIAN',risk:'NO WAY OUT',desc:'The level guardian awaits',stars:5},
 };
+
+/* ---------- DIFFICULTY MODES ----------
+   A run-scoped multiplier set, not a second progression system: it
+   rides on top of the existing level.diff/enemy/boss/shard machinery
+   rather than duplicating it. Each mode is a COMBINATION of modest
+   per-factor multipliers (health, damage taken, enemy speed, spawn
+   volume/elite frequency) that compound into an overall difficulty
+   increase roughly matching the mode's name -- not a single stat
+   multiplied by 1.5/2. shardMult is the one exact, spec'd number
+   (1.0/1.5/2.0) and is applied exactly once per shard grant via
+   addShards() -- see its call sites -- never compounded. */
+const DIFFICULTY_MODES={
+  normal:  {id:'normal',  label:'NORMAL',  shardMult:1.0, hpMult:1.00, dmgMult:1.00, speedMult:1.00, spawnMult:1.00},
+  hard:    {id:'hard',    label:'HARD',    shardMult:1.5, hpMult:1.22, dmgMult:1.25, speedMult:1.08, spawnMult:1.15},
+  extreme: {id:'extreme', label:'EXTREME', shardMult:2.0, hpMult:1.45, dmgMult:1.55, speedMult:1.15, spawnMult:1.30},
+};
+// The difficulty chosen on the main menu, carried into the next run
+// started from the LOADOUT screen (see newRun()). Restored from the
+// last run's choice on load so returning players see what they last
+// picked, same as lastWeapon.
+let pendingDifficulty=(DIFFICULTY_MODES[save&&save.lastDifficulty]?save.lastDifficulty:'normal');
+// The authority for "what difficulty is THIS run": once a run exists,
+// everything reads run.difficulty (set once in newRun() and never
+// reassigned mid-run), so switching pendingDifficulty on the menu
+// mid-run -- not reachable via the UI, but defensively correct anyway
+// -- can never retroactively change an in-progress run.
+function curDiff(){ return DIFFICULTY_MODES[(run&&run.difficulty)||pendingDifficulty]||DIFFICULTY_MODES.normal; }
+// Single call site for every Void Shard grant so the difficulty
+// multiplier is applied exactly once per grant, never compounded (a
+// pickup's value, a coin-room hit, a level's completion bonus are
+// each their own single addShards() call -- none of them ever re-add
+// an already-multiplied number).
+function addShards(n){ run.shards+=Math.round(n*curDiff().shardMult); }
 
 /* ---------- LEVELS — the data-driven progression core ---------- */
 const LEVELS=[
@@ -1002,12 +1338,19 @@ function updatePlayer(dt){
   p.fireTimer-=dt;p.invuln-=dt;p.muzzle-=dt;p.shield-=dt;
   if(p.dashCd>0){p.dashCd-=dt;if(p.dashCd<=0){SFX.dashReady();el('dashUI').classList.add('ready');}}
   p.energy=Math.min(p.maxenergy,p.energy+p.energyRegen*dt);
-  const wx=cam.x+(mouse.x-W/2)/cam.zoom,wy=cam.y+(mouse.y-H/2)/cam.zoom;
-  p.faceAng=angTo(p.x,p.y,wx,wy);
+  // Touch aim (the right stick) drives facing directly from its drag
+  // angle when active; otherwise this is the original mouse-relative-
+  // to-screen-center computation, untouched.
+  if(touchAiming){
+    p.faceAng=touchAimAngle;
+  }else{
+    const wx=cam.x+(mouse.x-W/2)/cam.zoom,wy=cam.y+(mouse.y-H/2)/cam.zoom;
+    p.faceAng=angTo(p.x,p.y,wx,wy);
+  }
   if(pressed['Space']&&p.dashCd<=0&&p.dashDur<=0&&transition===null){
     if(p.energy>=32){
       p.energy-=32;p.dashDur=0.17;p.dashCd=p.dashCD;
-      let ax=(keys['KeyD']?1:0)-(keys['KeyA']?1:0),ay=(keys['KeyS']?1:0)-(keys['KeyW']?1:0);
+      let ax=(keys['KeyD']?1:0)-(keys['KeyA']?1:0)+touchMoveX,ay=(keys['KeyS']?1:0)-(keys['KeyW']?1:0)+touchMoveY;
       p.dashDir=(ax||ay)?Math.atan2(ay,ax):p.faceAng;
       p.invuln=Math.max(p.invuln,0.28);
       p.dashHits=new Set();
@@ -1016,7 +1359,7 @@ function updatePlayer(dt){
       ringFX(p.x,p.y,[0,240,255],46,0.3);
     }else{SFX.error();flashEnergyBar();}
   }
-  let ax=(keys['KeyD']?1:0)-(keys['KeyA']?1:0),ay=(keys['KeyS']?1:0)-(keys['KeyW']?1:0);
+  let ax=(keys['KeyD']?1:0)-(keys['KeyA']?1:0)+touchMoveX,ay=(keys['KeyS']?1:0)-(keys['KeyW']?1:0)+touchMoveY;
   const len=Math.hypot(ax,ay);if(len>0){ax/=len;ay/=len;}
   if(p.dashDur>0){
     p.dashDur-=dt;
@@ -1080,7 +1423,7 @@ function updatePlayer(dt){
     if(p.x<-hw){p.x=-hw;p.vx=0;}if(p.x>hw){p.x=hw;p.vx=0;}
     if(p.y<-hh){p.y=-hh;p.vy=0;}if(p.y>hh){p.y=hh;p.vy=0;}
   }
-  if(mouse.down&&p.fireTimer<=0&&!uiOpen&&!transition)fireWeapon();
+  if((mouse.down||touchAiming)&&p.fireTimer<=0&&!uiOpen&&!transition)fireWeapon();
 }
 function fireWeapon(){
   const p=player,w=WEAPONS[p.weapon];
@@ -1126,6 +1469,11 @@ function hurtPlayer(dmg,sx,sy){
   const p=player;
   if(p.dead||p.invuln>0)return;
   if(p.shield>0){SFX.block();ringFX(p.x,p.y,[0,240,255],54,0.25);return;}
+  // The single point every damage source (enemy contact/shots, boss
+  // attacks, hazards, collapse zones) funnels through, so DM.dmgMult
+  // covers all of them uniformly with one multiplication -- never
+  // applied a second time at any of those call sites.
+  dmg*=curDiff().dmgMult;
   p.hp-=dmg;p.invuln=0.7;hurtFlash=1;
   addShake(9);SFX.hurt();
   dmgNum(p.x,p.y,'-'+Math.round(dmg),'#ff4d6d',17);
@@ -1286,21 +1634,42 @@ function updateEBullets(dt){
 }
 function spawnShards(x,y,n){
   for(let i=0;i<n;i++){const a=rand(0,TAU),s=rand(40,160);
-    pickups.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,type:'shard',t:rand(0,9)});}
+    // magnetT is time-since-spawn for the magnet ramp below -- kept
+    // separate from pk.t, which is a random phase drawShard() uses
+    // purely for its spin animation and must stay untouched.
+    pickups.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,type:'shard',t:rand(0,9),magnetT:0});}
 }
+// Void Shards magnetize to the player immediately on spawn, from any
+// distance in the room -- no more walking onto them. A short initial
+// scatter (the spawnShards() velocity above) still plays so a burst of
+// shards visibly fans out before being pulled in, then the pull ramps
+// up quickly to a capped max speed/accel so it reads as a satisfying
+// "sucked in" snap rather than a sudden teleport. Heal pickups are
+// unchanged -- still a short-range (130px) pull, still require
+// walking near them, exactly as before.
+const SHARD_MAGNET_MAX_ACCEL=2600, SHARD_MAGNET_MAX_SPEED=1500, SHARD_MAGNET_RAMP=1800;
 function updatePickups(dt){
   const p=player;
   for(let i=pickups.length-1;i>=0;i--){const pk=pickups[i];
     pk.t+=dt;
-    pk.vx-=pk.vx*5*dt;pk.vy-=pk.vy*5*dt;
     if(!p.dead){
       const d=dist(pk.x,pk.y,p.x,p.y);
-      if(d<130){const a=angTo(pk.x,pk.y,p.x,p.y);
-        pk.vx+=Math.cos(a)*900*dt;pk.vy+=Math.sin(a)*900*dt;}
-      if(d<p.r+10){
-        if(pk.type==='shard'){run.shards++;SFX.shard();
+      if(pk.type==='shard'){
+        pk.magnetT=Math.min(pk.magnetT+dt,5);
+        const a=angTo(pk.x,pk.y,p.x,p.y);
+        const accel=Math.min(SHARD_MAGNET_MAX_ACCEL,300+pk.magnetT*SHARD_MAGNET_RAMP);
+        pk.vx+=Math.cos(a)*accel*dt;pk.vy+=Math.sin(a)*accel*dt;
+        const sp=Math.hypot(pk.vx,pk.vy);
+        if(sp>SHARD_MAGNET_MAX_SPEED){pk.vx*=SHARD_MAGNET_MAX_SPEED/sp;pk.vy*=SHARD_MAGNET_MAX_SPEED/sp;}
+      }else{
+        pk.vx-=pk.vx*5*dt;pk.vy-=pk.vy*5*dt;
+        if(d<130){const a=angTo(pk.x,pk.y,p.x,p.y);
+          pk.vx+=Math.cos(a)*900*dt;pk.vy+=Math.sin(a)*900*dt;}
+      }
+      if(d<p.r+16){
+        if(pk.type==='shard'){addShards(1);SFX.shard();
           el('shardWrap').classList.remove('pop');void el('shardWrap').offsetWidth;el('shardWrap').classList.add('pop');
-          sparks(pk.x,pk.y,[160,92,255],3,120);}
+          sparks(pk.x,pk.y,[160,92,255],5,180);ringFX(pk.x,pk.y,[160,92,255],20,0.25);}
         else{p.hp=Math.min(p.maxhp,p.hp+8);SFX.heal();dmgNum(p.x,p.y,'+8','#38ff9c',15);}
         pickups.splice(i,1);continue;
       }
@@ -1315,9 +1684,16 @@ function createEnemy(type,x,y,elite){
   const ds=lv.diff*(1+(run.depth-1)*0.12);
   const emult=elite?(type==='ravager'?1.9:type==='shattered'?2.2:type==='guardian'?2.1:type==='singularity'?2.0:2.7):1;
   const rmult=elite?(type==='ravager'?1.15:type==='shattered'?1.4:type==='guardian'?1.15:type==='singularity'?1.1:1.35):1;
+  // DM.hpMult/speedMult apply here (creation-time); DM.dmgMult is
+  // deliberately NOT applied to cdmg -- it's applied once, centrally,
+  // in hurtPlayer() when this enemy's attack actually lands, so every
+  // damage source (enemies, bosses, hazards, zones) gets the
+  // difficulty multiplier exactly once rather than enemies getting it
+  // twice.
+  const DM=curDiff();
   const e={type,x,y,r:c.r*rmult,elite:!!elite,color:c.color,c:c.color,
-    hp:c.hp*ds*emult,maxhp:c.hp*ds*emult,
-    speed:c.speed*(elite?1.12:1)*rand(0.92,1.08)*(1+(lv.diff-1)*0.25),
+    hp:c.hp*ds*emult*DM.hpMult,maxhp:c.hp*ds*emult*DM.hpMult,
+    speed:c.speed*(elite?1.12:1)*rand(0.92,1.08)*(1+(lv.diff-1)*0.25)*DM.speedMult,
     cdmg:c.cdmg*(elite?1.35:1)*(1+(run.depth-1)*0.05)*lv.diff,
     shards:c.shards,t:rand(0,10),hitFlash:0,dead:false,noHit:false,faceAng:0,
     shootT:rand(0.6,1.6),burst:0,burstT:0,windup:0,orbitDir:pick([-1,1]),strafeDir:pick([-1,1]),
@@ -1907,6 +2283,11 @@ function createBoss(kind){
       tRadial:3.0,tVolley:2.2,tRing:0,tSlam:0,tCharge:0,tSummon:9,tSpiral:0,
       spiral:null,charge:null,slam:null,summonFlags:{}};
   }
+  // Single point for boss HP scaling by difficulty (contact/attack
+  // damage is scaled once, centrally, in hurtPlayer() instead -- see
+  // its comment -- so this only ever touches HP).
+  const bhp=Math.round(boss.hp*curDiff().hpMult);
+  boss.hp=bhp;boss.maxhp=bhp;
 }
 function bossIntro(dt){
   bossIntroT+=dt;
@@ -1967,7 +2348,7 @@ function updateNull(dt){
       if(c.t<=0){c.phase='rec';c.t=0.55;b.vx*=0.15;b.vy*=0.15;}}
     else{c.t-=dt;if(c.t<=0)b.charge=null;}
   }else if(b.invuln<=0){
-    const spd=b.phase===1?95:b.phase===2?170:245;
+    const spd=(b.phase===1?95:b.phase===2?170:245)*curDiff().speedMult;
     const tvx=Math.cos(a)*spd*(d>170?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.7)*70;
     const tvy=Math.sin(a)*spd*(d>170?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.7)*70;
     b.vx=lerp(b.vx,tvx,clamp(2.5*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.5*dt,0,1));
@@ -2077,7 +2458,7 @@ function updateKing(dt){
       if(!p.dead&&dist(s.x,s.y,p.x,p.y)<170)hurtPlayer(26,s.x,s.y);
       b.slam=null;}}
   if(!b.shatter&&b.invuln<=0){
-    const spd=(b.phase===1?105:b.phase===2?185:255)*(b.vulnT>0?0.25:1)*(b.sweep?0.45:1);
+    const spd=(b.phase===1?105:b.phase===2?185:255)*(b.vulnT>0?0.25:1)*(b.sweep?0.45:1)*curDiff().speedMult;
     const tvx=Math.cos(a)*spd*(d>190?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.8)*80;
     const tvy=Math.sin(a)*spd*(d>190?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.8)*80;
     b.vx=lerp(b.vx,tvx,clamp(2.5*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.5*dt,0,1));
@@ -2183,7 +2564,7 @@ function updateArchon(dt){
       b.vx=lerp(b.vx,Math.cos(ta)*spd,clamp(2*dt,0,1));
       b.vy=lerp(b.vy,Math.sin(ta)*spd,clamp(2*dt,0,1));
     }else{
-      const spd=(b.phase===2?150:215)*(b.vulnT>0?0.25:1)*(b.sweep?0.45:1);
+      const spd=(b.phase===2?150:215)*(b.vulnT>0?0.25:1)*(b.sweep?0.45:1)*curDiff().speedMult;
       const tvx=Math.cos(a)*spd*(d>200?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.75)*85;
       const tvy=Math.sin(a)*spd*(d>200?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.75)*85;
       b.vx=lerp(b.vx,tvx,clamp(2.5*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.5*dt,0,1));
@@ -2310,7 +2691,7 @@ function updateWarden(dt){
       b.vx=lerp(b.vx,Math.cos(ta)*spd,clamp(2*dt,0,1));
       b.vy=lerp(b.vy,Math.sin(ta)*spd,clamp(2*dt,0,1));
     }else{
-      const spd=(b.phase===2?165:225)*(b.vulnT>0?0.25:1)*(b.sweep?0.45:1);
+      const spd=(b.phase===2?165:225)*(b.vulnT>0?0.25:1)*(b.sweep?0.45:1)*curDiff().speedMult;
       const tvx=Math.cos(a)*spd*(d>200?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.75)*85;
       const tvy=Math.sin(a)*spd*(d>200?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.75)*85;
       b.vx=lerp(b.vx,tvx,clamp(2.5*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.5*dt,0,1));
@@ -2444,7 +2825,7 @@ function updateDepths(dt){
       b.vx=lerp(b.vx,Math.cos(ta)*spd,clamp(2*dt,0,1));
       b.vy=lerp(b.vy,Math.sin(ta)*spd,clamp(2*dt,0,1));
     }else{
-      const spd=(b.phase===2?160:215)*(b.vulnT>0?0.25:1);
+      const spd=(b.phase===2?160:215)*(b.vulnT>0?0.25:1)*curDiff().speedMult;
       const tvx=Math.cos(a)*spd*(d>220?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.7)*80;
       const tvy=Math.sin(a)*spd*(d>220?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.7)*80;
       b.vx=lerp(b.vx,tvx,clamp(2.5*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.5*dt,0,1));
@@ -2584,7 +2965,7 @@ function updateSentinel(dt){
       b.vx=lerp(b.vx,Math.cos(ta)*spd,clamp(2*dt,0,1));
       b.vy=lerp(b.vy,Math.sin(ta)*spd,clamp(2*dt,0,1));
     }else{
-      const spd=(b.phase===2?175:235)*(b.vulnT>0?0.25:1);
+      const spd=(b.phase===2?175:235)*(b.vulnT>0?0.25:1)*curDiff().speedMult;
       const tvx=Math.cos(a)*spd*(d>200?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.8)*85;
       const tvy=Math.sin(a)*spd*(d>200?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.8)*85;
       b.vx=lerp(b.vx,tvx,clamp(2.5*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.5*dt,0,1));
@@ -2686,7 +3067,7 @@ function updateEclipse(dt){
       b.vx=lerp(b.vx,Math.cos(ta)*spd,clamp(2*dt,0,1));
       b.vy=lerp(b.vy,Math.sin(ta)*spd,clamp(2*dt,0,1));
     }else{
-      const spd=(b.phase===2?160:220)*(b.vulnT>0?0.25:1);
+      const spd=(b.phase===2?160:220)*(b.vulnT>0?0.25:1)*curDiff().speedMult;
       const tvx=Math.cos(a)*spd*(d>210?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.7)*80;
       const tvy=Math.sin(a)*spd*(d>210?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.7)*80;
       b.vx=lerp(b.vx,tvx,clamp(2.5*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.5*dt,0,1));
@@ -2796,7 +3177,7 @@ function updateOrigin(dt){
       b.vx=lerp(b.vx,Math.cos(ta)*spd,clamp(2*dt,0,1));
       b.vy=lerp(b.vy,Math.sin(ta)*spd,clamp(2*dt,0,1));
     }else{
-      const spd=(b.phase===2?150:205)*(b.vulnT>0?0.22:1);
+      const spd=(b.phase===2?150:205)*(b.vulnT>0?0.22:1)*curDiff().speedMult;
       const tvx=Math.cos(a)*spd*(d>230?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.6)*75;
       const tvy=Math.sin(a)*spd*(d>230?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.6)*75;
       b.vx=lerp(b.vx,tvx,clamp(2.2*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.2*dt,0,1));
@@ -3013,7 +3394,14 @@ function updateBossBar(){
 /* ---------- 13 · ROOMS, CHOICES & RUN FLOW ---------- */
 function newRun(levelIdx){
   const lv=LEVELS[levelIdx];
+  // Captured once, here, from whatever was chosen on the main menu --
+  // run.difficulty then never changes for the rest of this run (level
+  // transitions, boss fights, room choices, room restarts all reuse
+  // this same run object), which is what makes curDiff() correct
+  // everywhere without threading a difficulty parameter through every
+  // enemy/boss/room function.
   run={level:lv,levelIdx,depth:1,totalDepth:lv.depth,shards:0,kills:0,roomsCleared:0,damage:0,time:0,
+    difficulty:pendingDifficulty,
     upgrades:{},typeCounts:{combat:0,elite:0,coin:0,treasure:0,upgrade:0,heal:0},hadElite:false,victoryBonus:0};
 }
 function startRun(weapon,levelIdx){
@@ -3041,7 +3429,10 @@ function roomOptions(){
   const add=(t,w)=>{for(let i=0;i<w;i++)pool.push(t);};
   add('combat',44);
   add('coin',(tc.coin||0)<3?13:0);
-  add('elite',run.depth>=3?20:0);
+  // Elite rooms come up more often on Hard/Extreme (spawnMult) -- one
+  // of the "combination of factors" behind the higher difficulty tiers
+  // rather than a flat per-enemy stat multiplier.
+  add('elite',run.depth>=3?Math.round(20*curDiff().spawnMult):0);
   add('treasure',tc.treasure<2?13:0);add('upgrade',tc.upgrade<3?11:0);
   add('heal',(tc.heal<2?10:0)*(hpFrac<0.55?2:hpFrac>0.92?0.25:1));
   const n=Math.random()<0.25?3:2;
@@ -3062,7 +3453,11 @@ function makeWaves(){
       waves.push(combo.map(([type,count])=>({type,count,elite:false})));
       continue;
     }
-    let budget=(7+depth*3.2)*(w===nW-1?1.25:0.85);
+    // Spawn intensity (more enemies per wave, not faster/stronger
+    // individual enemies) is DM.spawnMult's main lever -- more bullets
+    // on screen at once reads as "harder" without touching any single
+    // enemy's own numbers a second time.
+    let budget=(7+depth*3.2)*(w===nW-1?1.25:0.85)*curDiff().spawnMult;
     const wave=[];
     const opts=lv.waveOpts;
     let guard=0;
@@ -3233,9 +3628,9 @@ function coinTargetHit(tg){
   c.bestCombo=Math.max(c.bestCombo,c.combo);
   const comboBonus=Math.floor(c.combo/5)*2;
   const reward=(tg.golden?10:2)+comboBonus;
-  c.coins+=reward;run.shards+=reward;
+  c.coins+=reward;addShards(reward);
   const col=tg.golden?'#ff7dff':'#ffc95c';
-  dmgNum(tg.x,tg.y,'+'+reward+' ◆',col,tg.golden?18:15);
+  dmgNum(tg.x,tg.y,'+'+Math.round(reward*curDiff().shardMult)+' ◆',col,tg.golden?18:15);
   burstFX(tg.x,tg.y,tg.golden?[255,120,255]:[255,201,92],tg.golden?14:8,260);
   ringFX(tg.x,tg.y,[255,255,255],40,0.25);
   SFX.targetHit(tg.golden);
@@ -3385,7 +3780,7 @@ function victory(){
   const lv=run.level;
   const next=LEVELS[lv.levelIdx+1];
   const firstClear=!save.beaten[lv.id];
-  run.victoryBonus=lv.completionBonus;run.shards+=lv.completionBonus;
+  run.victoryBonus=Math.round(lv.completionBonus*curDiff().shardMult);addShards(lv.completionBonus);
   // Tells the Duel Arena lobby (this always runs inside its iframe --
   // see launchVoidbreak() in index.html) that a level was beaten for
   // the FIRST time, so it can report it for the main account's XP
@@ -3506,7 +3901,7 @@ function frame(now){
   el('dmgflash').style.opacity=hurtFlash;
   if(state==='playing'&&player&&!player.dead)el('lowhp').style.opacity=player.hp<player.maxhp*0.3?(0.35+Math.sin(now*0.006)*0.2):0;
   render();
-  if(state==='playing')updateHUD();
+  if(state==='playing'){updateHUD();if(isTouchDevice)updateTouchDashButton();}
   for(const k in pressed)pressed[k]=false;
   frameCount++;
 }
@@ -4995,7 +5390,7 @@ function go(s){
   state=s;paused=false;uiOpen=false;curUI=null;
   if(s==='weapons')launching=false;
   hideAllOverlays();
-  if(s==='menu'){el('ov-menu').classList.add('on');Music.set('menu');refreshMenuStats();}
+  if(s==='menu'){el('ov-menu').classList.add('on');Music.set('menu');refreshMenuStats();syncDifficultyUI();}
   else if(s==='howto')el('ov-howto').classList.add('on');
   else if(s==='settings')el('ov-settings').classList.add('on');
   else if(s==='forge'){el('ov-forge').classList.add('on');buildForge();}
@@ -5003,10 +5398,14 @@ function go(s){
   else if(s==='weapons'){
     el('ov-weapons').classList.add('on');buildWeaponSelect();
     const lv=LEVELS[selectedLevel];
-    el('wsSub').textContent='LEVEL '+lv.id+' — '+lv.name+' · CLICK A WEAPON, THEN CLICK IT AGAIN TO LAUNCH';
+    el('wsSub').textContent='LEVEL '+lv.id+' — '+lv.name+' · CLICK A WEAPON, THEN CLICK IT AGAIN TO LAUNCH'+
+      ' · '+DIFFICULTY_MODES[pendingDifficulty].label+' MODE';
   }
   else if(s==='playing'){el('hud').classList.remove('hidden');}
   document.body.classList.toggle('ingame',s==='playing');
+  // Touch controls only make sense over actual gameplay -- everywhere
+  // else they'd just sit on top of menu buttons.
+  if(isTouchDevice)mobileControlsEl.classList.toggle('on',s==='playing');
   if(s!=='playing'){el('hud').classList.add('hidden');
     if(s!=='gameover'&&s!=='victory')el('bossBarWrap').classList.add('hidden');}
 }
@@ -5307,6 +5706,24 @@ function applyAudioSettings(){
 }
 /* --- wire buttons --- */
 el('btnStart').addEventListener('click',()=>{SFX.ui();go('levels');});
+/* ---- difficulty select ---- */
+function syncDifficultyUI(){
+  document.querySelectorAll('#diffRow .diff-btn').forEach(b=>{
+    b.classList.toggle('selected',b.dataset.diff===pendingDifficulty);
+  });
+  el('diffHint').textContent=DIFFICULTY_MODES[pendingDifficulty].label+' SELECTED';
+}
+document.querySelectorAll('#diffRow .diff-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const d=btn.dataset.diff;
+    if(!DIFFICULTY_MODES[d]||d===pendingDifficulty)return;
+    pendingDifficulty=d;
+    save.lastDifficulty=d;saveGame();
+    syncDifficultyUI();
+    SFX.ui();
+  });
+});
+syncDifficultyUI();
 el('btnForge').addEventListener('click',()=>{SFX.ui();settingsReturn='menu';go('forge');});
 el('btnHowto').addEventListener('click',()=>{SFX.ui();go('howto');});
 el('btnSettings').addEventListener('click',()=>{SFX.ui();settingsReturn='menu';go('settings');syncSettingsUI();});
