@@ -54,6 +54,7 @@ const Chat = require("./chat");
 const Catalog = require("./catalog");
 const Billing = require("./billing");
 const BattlePass = require("./battlepass");
+const Voidbreak = require("./voidbreak");
 
 const accounts = {}; // sub -> account record (populated in startServer())
 
@@ -171,7 +172,12 @@ function defaultAccount(name, email) {
         ownedBadges: [],
         equippedBanner: null,
         equippedPlayerIcon: null,
-        equippedKillEffect: null
+        equippedKillEffect: null,
+        // VOIDBREAK CLOUD SAVE -- null means "this account has never
+        // saved Voidbreak progress to the cloud yet" (distinct from an
+        // all-zero save, which is a real save that just hasn't earned
+        // anything). See voidbreak.js and the /voidbreak/* endpoints.
+        voidbreak: null
     };
 }
 
@@ -2942,6 +2948,7 @@ const httpServer = http.createServer(async (req, res) => {
             console.log("[auth] new password account registered: " + u.username);
             sendJson(res, 200, {
                 sessionToken: sessionToken,
+                accountId: accountId,
                 account: publicAccount(account),
                 isAdmin: false,
                 // The one and only time this leaves the server. It is
@@ -3015,6 +3022,7 @@ const httpServer = http.createServer(async (req, res) => {
 
             sendJson(res, 200, {
                 sessionToken: sessionToken,
+                accountId: accountId,
                 account: publicAccount(account),
                 // Admin is derived from the stored account, never from
                 // the login method or the username.
@@ -3210,6 +3218,7 @@ const httpServer = http.createServer(async (req, res) => {
 
             sendJson(res, 200, {
                 sessionToken: sessionToken,
+                accountId: sub,
                 account: publicAccount(accounts[sub]),
                 isAdmin: isAdminSession(sessionToken)
             });
@@ -3267,6 +3276,14 @@ const httpServer = http.createServer(async (req, res) => {
         sendJson(res, 200, {
             ok: true,
             sessionToken: sessionToken,
+            // Same field the other three /auth/* endpoints already
+            // return (see /auth/register, /auth/login, /auth/google) --
+            // the client's onAuthenticated() reads it unconditionally
+            // (see the Voidbreak cloud-save handshake in index.html),
+            // and a resumed session has to hand it over exactly like a
+            // fresh login does, or Voidbreak silently falls back to a
+            // guest/device-local save the moment a page is refreshed.
+            accountId: sub,
             account: publicAccount(account),
             isAdmin: isAdminSession(sessionToken)
         });
@@ -3547,7 +3564,15 @@ const httpServer = http.createServer(async (req, res) => {
                 equippedPlayerIcon: (typeof body.equippedPlayerIcon === "string" && Array.isArray(existing.ownedPlayerIcons) && existing.ownedPlayerIcons.indexOf(body.equippedPlayerIcon) !== -1)
                     ? body.equippedPlayerIcon : (body.equippedPlayerIcon === null ? null : (existing.equippedPlayerIcon || null)),
                 equippedKillEffect: (typeof body.equippedKillEffect === "string" && Array.isArray(existing.ownedKillEffects) && existing.ownedKillEffects.indexOf(body.equippedKillEffect) !== -1)
-                    ? body.equippedKillEffect : (body.equippedKillEffect === null ? null : (existing.equippedKillEffect || null))
+                    ? body.equippedKillEffect : (body.equippedKillEffect === null ? null : (existing.equippedKillEffect || null)),
+                // VOIDBREAK CLOUD SAVE IS DELIBERATELY NOT READ FROM
+                // `body` -- same reason as ranked/battlePass above: this
+                // handler rebuilds the account field-by-field, so
+                // anything not carried here is destroyed by the next
+                // routine save (and Duel Arena's own saveProgress() runs
+                // after every match). Voidbreak's progress only ever
+                // changes inside /voidbreak/save.
+                voidbreak: existing.voidbreak || null
             };
             try {
                 await persistAccount(sub);
@@ -4069,6 +4094,105 @@ const httpServer = http.createServer(async (req, res) => {
             }
 
             sendJson(res, 400, { error: "Unknown action" });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // =====================================================================
+    // VOIDBREAK CLOUD SAVE
+    //
+    // The account's own stored `voidbreak` field (see defaultAccount(),
+    // /save's carry-forward above, and voidbreak.js) is the ONLY place
+    // this progress lives server-side. Identity comes from the session
+    // token exactly like every other account endpoint -- a client can
+    // never ask to load or write a DIFFERENT account's save; there is no
+    // "which account" parameter anywhere below, only "which SESSION".
+    // =====================================================================
+
+    // ---- GET /voidbreak/state?sessionToken=... ----
+    // A guest (no/invalid sessionToken) gets an honest "not signed in"
+    // response, not a 401 -- the client (voidbreak.html) uses this to
+    // decide "stay on the local guest save" rather than treating it as
+    // an error. Signed in with no cloud save yet is equally normal (a
+    // brand-new account, or an existing account that never played
+    // Voidbreak before this feature) -- see hasCloudSave.
+    if (req.method === "GET" && req.url.startsWith("/voidbreak/state")) {
+        const urlObj = new URL(req.url, "http://x");
+        const sessionToken = urlObj.searchParams.get("sessionToken");
+        const sub = sessionToken ? sessions[sessionToken] : null;
+        const account = sub ? accounts[sub] : null;
+
+        if (!account) {
+            sendJson(res, 200, { signedIn: false, hasCloudSave: false, data: null, updatedAt: 0, version: 0 });
+            return;
+        }
+        const vb = account.voidbreak;
+        sendJson(res, 200, {
+            signedIn: true,
+            hasCloudSave: !!vb,
+            data: vb ? vb.data : null,
+            updatedAt: vb ? vb.updatedAt : 0,
+            version: vb ? vb.version : 0
+        });
+        return;
+    }
+
+    // ---- POST /voidbreak/save ---- body: { sessionToken, data } ----
+    // Sanitizes and stores a Voidbreak save. This is the client-
+    // authoritative trust tier Daily Challenges' progress and /save's
+    // kills/wins already sit at (see the big comment above
+    // DAILY_CHALLENGE_POOL) -- Voidbreak has no server-side game
+    // simulation to check "did this player really earn 500 shards"
+    // against, so this endpoint's job is shape/bounds sanitization
+    // (voidbreak.js's sanitizeSaveData -- wrong types, unknown keys and
+    // absurd numbers are clamped or dropped), not gameplay validation.
+    // What IS real here: only the authenticated account's OWN save can
+    // ever be written (from `sessions[body.sessionToken]`, never a
+    // client-supplied account id), and a save can only ever come from
+    // this one endpoint -- a client can't smuggle progress in through
+    // /save, which explicitly refuses to read `voidbreak` from its body.
+    //
+    // Merging two saves (e.g. a device's offline/local progress against
+    // an account's existing cloud save) is deliberately done by the
+    // CLIENT before calling this endpoint (fetch /voidbreak/state, merge
+    // locally with voidbreak.js's same mergeSaveData logic mirrored in
+    // voidbreak.html, then POST the resolved result) -- this endpoint
+    // itself always just accepts, sanitizes and stores whatever it's
+    // given as the new authoritative save, exactly like /shop/buy trusts
+    // its own price lookup rather than re-deriving intent from history.
+    if (req.method === "POST" && req.url === "/voidbreak/save") {
+        try {
+            const body = await readJsonBody(req);
+            const sub = sessions[body.sessionToken];
+            if (!sub) { sendJson(res, 401, { error: "Not signed in" }); return; }
+            const target = accounts[sub];
+            if (!target) { sendJson(res, 409, { error: "Account not loaded -- sign in again" }); return; }
+
+            const clean = Voidbreak.sanitizeSaveData(body.data);
+            if (!clean) { sendJson(res, 400, { error: "Invalid save data" }); return; }
+
+            const previousVoidbreak = target.voidbreak;
+            const previousVersion = previousVoidbreak ? previousVoidbreak.version : 0;
+            target.voidbreak = {
+                data: clean,
+                updatedAt: Date.now(), // the SERVER's clock, never a client-supplied timestamp
+                version: previousVersion + 1
+            };
+            try {
+                await persistAccount(sub);
+            } catch (e) {
+                target.voidbreak = previousVoidbreak; // write failed -- undo the in-memory grant
+                sendJson(res, 503, { error: "Could not save progress -- try again" });
+                return;
+            }
+
+            sendJson(res, 200, {
+                ok: true,
+                updatedAt: target.voidbreak.updatedAt,
+                version: target.voidbreak.version
+            });
         } catch (e) {
             sendJson(res, 400, { error: "Bad request" });
         }

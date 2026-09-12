@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>VOIDBREAK</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -133,6 +133,16 @@ body.ingame #cv{cursor:none}
 .menu-stats{margin-top:26px;text-align:center;color:#6e93a5;font-size:13px;letter-spacing:2px;display:flex;flex-direction:column;gap:5px}
 .menu-stats b{color:var(--cy);font-family:'Orbitron';font-size:12px}
 .menu-stats i{color:var(--pu);font-style:normal}
+/* Small, deliberately unobtrusive -- one line, no icon animation, just
+   a color that reads at a glance: cyan while connecting, green once
+   synced to the signed-in account's cloud save, gold mid-save, muted
+   for guest/local-only or offline, red only on a genuine sync error. */
+.vb-sync-status{font-size:10px;letter-spacing:2px;font-family:'Orbitron';margin-bottom:2px}
+.vb-sync-connecting{color:var(--cy)}
+.vb-sync-synced{color:var(--gn)}
+.vb-sync-saving{color:var(--gold)}
+.vb-sync-local,.vb-sync-offline{color:#6e93a5}
+.vb-sync-error{color:var(--rd)}
 h2.ovtitle{font-family:'Orbitron';font-weight:700;font-size:24px;letter-spacing:6px;color:#eafcff;
   text-shadow:0 0 14px rgba(0,240,255,.5);margin-bottom:4px;text-align:center}
 .ovsub{text-align:center;color:#7ea4b5;letter-spacing:4px;font-size:13px;margin-bottom:18px}
@@ -223,12 +233,145 @@ input[type=range]{width:180px;accent-color:var(--cy)}
 .lvlcard.beaten .lstatus{color:var(--gn)}
 .vicunlock{text-align:center;font-family:'Orbitron';font-size:12px;letter-spacing:2px;color:var(--gn);
   margin:-8px 0 14px;text-shadow:0 0 12px rgba(56,255,156,.4)}
+
+/* ---- difficulty select (main menu, under START RUN) ---- */
+.diff-row{display:flex;gap:6px;width:100%}
+.diff-btn{flex:1 1 0;min-width:0;font-family:'Orbitron';font-weight:700;font-size:9.5px;letter-spacing:1.5px;
+  color:#7ea4b5;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.18);
+  padding:8px 4px;cursor:pointer;transition:all .15s;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.diff-btn:hover{color:#cfeef5;border-color:rgba(255,255,255,.4)}
+.diff-btn .diff-mult{display:block;font-family:'Rajdhani';font-weight:600;font-size:8.5px;letter-spacing:1px;opacity:.75;margin-top:1px}
+.diff-btn[data-diff="normal"].selected{border-color:var(--cy);color:#eafcff;background:rgba(0,240,255,.14);box-shadow:0 0 14px rgba(0,240,255,.25)}
+.diff-btn[data-diff="hard"].selected{border-color:var(--gold);color:#fff6e0;background:rgba(255,201,92,.14);box-shadow:0 0 14px rgba(255,201,92,.25)}
+.diff-btn[data-diff="extreme"].selected{border-color:var(--rd);color:#ffe2e8;background:rgba(255,45,85,.16);box-shadow:0 0 14px rgba(255,45,85,.3)}
+.diff-hint{text-align:center;font-size:10.5px;letter-spacing:1.5px;color:#5f8496;margin:6px 0 2px}
+
+/* ---- rotate gate (portrait suggestion, dismissible -- never a hard block) ---- */
+.rotate-gate{position:fixed;inset:0;z-index:90;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;background:rgba(2,4,12,.96);text-align:center;padding:24px}
+.rotate-gate.hidden{display:none}
+.rotate-icon{font-size:44px;animation:rotateSpin 1.8s ease-in-out infinite}
+@keyframes rotateSpin{0%,100%{transform:rotate(0deg)}50%{transform:rotate(-90deg)}}
+.rotate-title{font-family:'Orbitron';font-weight:900;font-size:20px;letter-spacing:4px;color:#eafcff}
+.rotate-sub{font-size:13px;letter-spacing:2px;color:#7ea4b5;max-width:280px}
+.rotate-gate .btn{width:200px}
+
+/* ---- mobile touch controls ----
+   Fixed, always-visible zones (never hidden/relocated on touch) so the
+   player sees both sticks before ever touching the screen, matching
+   the same proven pattern used in the main Duel Arena game. Sized via
+   CSS custom properties so a device tier (phone vs tablet) is a single
+   swap of --joy-size/--action-size rather than duplicated rules. */
+.mobile-controls{position:fixed;inset:0;z-index:15;pointer-events:none;display:none;
+  --joy-size:92px;--joy-knob-size:42px;--joy-anchor-x:82px;--joy-anchor-y:96px;
+  --action-size:58px;--dash-anchor-x:56px;--dash-anchor-y:206px}
+.mobile-controls.on{display:block}
+.mobile-controls[data-tier="tablet"]{
+  --joy-size:126px;--joy-knob-size:56px;--joy-anchor-x:118px;--joy-anchor-y:120px;
+  --action-size:70px;--dash-anchor-x:70px;--dash-anchor-y:250px}
+.joy-zone{position:absolute;bottom:0;width:52%;height:68%;pointer-events:auto;touch-action:none}
+.joy-zone.joy-move{left:0}
+.joy-zone.joy-aim{right:0}
+.joy-base{position:absolute;width:var(--joy-size);height:var(--joy-size);border-radius:50%;
+  border:2px solid rgba(255,255,255,.26);background:rgba(255,255,255,.05);pointer-events:none;
+  transition:border-color .15s ease,background-color .15s ease}
+.joy-move .joy-base{left:calc(env(safe-area-inset-left,0px) + var(--joy-anchor-x) - var(--joy-size) / 2);
+  bottom:calc(env(safe-area-inset-bottom,0px) + var(--joy-anchor-y) - var(--joy-size) / 2)}
+.joy-aim .joy-base{right:calc(env(safe-area-inset-right,0px) + var(--joy-anchor-x) - var(--joy-size) / 2);
+  bottom:calc(env(safe-area-inset-bottom,0px) + var(--joy-anchor-y) - var(--joy-size) / 2)}
+.joy-base.dragging{border-color:rgba(255,255,255,.55);background:rgba(255,255,255,.12)}
+.joy-knob{position:absolute;width:var(--joy-knob-size);height:var(--joy-knob-size);border-radius:50%;
+  left:50%;top:50%;transform:translate(-50%,-50%);
+  background:rgba(0,240,255,.32);border:2px solid var(--cy);box-shadow:0 0 14px rgba(0,240,255,.5);
+  transition:transform .14s ease-out}
+.joy-base.dragging .joy-knob{transition:none}
+.joy-aim .joy-knob{background:rgba(255,45,85,.32);border-color:var(--rd);box-shadow:0 0 14px rgba(255,45,85,.5)}
+#touchDashBtn{position:absolute;pointer-events:auto;touch-action:none;z-index:16;
+  right:calc(env(safe-area-inset-right,0px) + var(--dash-anchor-x) - var(--action-size) / 2);
+  bottom:calc(env(safe-area-inset-bottom,0px) + var(--dash-anchor-y) - var(--action-size) / 2);
+  width:var(--action-size);height:var(--action-size);border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Orbitron';font-weight:700;font-size:10px;letter-spacing:1px;color:var(--cy);
+  background:rgba(8,12,26,.55);border:2px solid rgba(0,240,255,.45);
+  box-shadow:0 0 10px rgba(0,240,255,.2)}
+#touchDashBtn::before{content:'';position:absolute;inset:-2px;border-radius:50%;pointer-events:none;
+  background:conic-gradient(rgba(255,255,255,.55) calc(var(--cd,0) * 360deg),transparent 0);
+  -webkit-mask:radial-gradient(closed-shape,transparent calc(100% - 4px),#000 calc(100% - 3px));
+  mask:radial-gradient(closed-shape,transparent calc(100% - 4px),#000 calc(100% - 3px))}
+#touchDashBtn.ready{box-shadow:0 0 16px rgba(0,240,255,.55)}
+#touchDashBtn.ready::before{background:none}
+#touchDashBtn.pressed{background:rgba(0,240,255,.22)}
+
+/* ---- responsive: small/short viewports (phones, and tablets in
+   portrait) -- shrink HUD/menu chrome so nothing overlaps the touch
+   controls or runs off-screen. Breakpoint matches the device sizes
+   named in the task (iPhone/iPad) rather than an arbitrary number. */
+@media (max-width:760px), (max-height:520px){
+  .logo{font-size:38px;letter-spacing:5px}
+  .tagline{font-size:11px;letter-spacing:3px;margin:10px 0 18px}
+  .panel{padding:18px 16px;max-width:96vw}
+  .menu-btns{width:min(300px,84vw)}
+  .ovtitle{font-size:19px}
+  .menu-stats{font-size:11px}
+  #hudTop{top:calc(6px + env(safe-area-inset-top,0px))}
+  #sectorLabel{font-size:11px;letter-spacing:2px}
+  #roomType{font-size:11px}
+  #waveLabel{font-size:9px}
+  #shardWrap{top:calc(8px + env(safe-area-inset-top,0px));right:calc(10px + env(safe-area-inset-right,0px));font-size:12px}
+  #bossBarWrap{top:calc(40px + env(safe-area-inset-top,0px));width:70vw;min-width:0}
+  #bossName{font-size:12px;letter-spacing:4px}
+  #hudBottom{bottom:calc(14px + env(safe-area-inset-bottom,0px));
+    left:calc(10px + env(safe-area-inset-left,0px));right:calc(10px + env(safe-area-inset-right,0px))}
+  .barwrap.hp{width:150px;height:15px}
+  .barwrap.en{width:120px;height:6px}
+  #dashBar{width:70px}
+  #buildInfo{display:none}
+  #weaponUI{padding:5px 10px 5px 8px;gap:7px}
+  #weaponIcon{width:24px;height:24px}
+  #weaponName{font-size:10.5px}
+  #weaponStats{font-size:9px}
+  /* The upgrade chip list normally sits mid-left, which is exactly
+     where the move joystick lives on touch -- move it to a compact
+     horizontal row under the sector label instead of hiding it. */
+  #upList{left:50%;top:calc(58px + env(safe-area-inset-top,0px));transform:translateX(-50%);
+    flex-direction:row;flex-wrap:wrap;justify-content:center;max-width:min(94vw,520px);max-height:none}
+  #bannerMain{font-size:26px;letter-spacing:6px}
+  #bannerSub{font-size:12px;letter-spacing:3px}
+  .wgrid{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
+  .endstats{grid-template-columns:1fr}
+  .ucard{width:min(212px,80vw)}
+  .diff-btn{font-size:8.5px;padding:7px 2px}
+}
+/* Landscape phones specifically (short viewport) need the HUD pulled
+   in tighter than a tall-but-narrow portrait tablet would. */
+@media (max-height:420px){
+  #hudTop{top:calc(3px + env(safe-area-inset-top,0px))}
+  .barwrap.hp{height:12px}
+  #banner{top:14%}
+}
 </style>
 </head>
 <body>
 <canvas id="cv"></canvas>
 <div id="vig"></div><div id="scan"></div><div id="dmgflash"></div><div id="lowhp"></div>
 <div id="whiteflash"></div><div id="fade"></div>
+
+<!-- Touch controls: fixed, always-visible left move-stick + right
+     aim/shoot stick + a dash button, shown only on touch devices (see
+     isTouchDevice in the script). Drives the exact same input state
+     (keys/mouse.faceAng/mouse.down/pressed['Space']) desktop already
+     reads, rather than a parallel input path -- see updatePlayer(). -->
+<div class="mobile-controls" id="mobileControls">
+  <div class="joy-zone joy-move" id="joyMoveZone"><div class="joy-base" id="joyMoveBase"><div class="joy-knob"></div></div></div>
+  <div class="joy-zone joy-aim" id="joyAimZone"><div class="joy-base" id="joyAimBase"><div class="joy-knob"></div></div></div>
+  <button type="button" id="touchDashBtn">DASH</button>
+</div>
+<div class="rotate-gate hidden" id="rotateGate">
+  <div class="rotate-icon">⟲</div>
+  <div class="rotate-title">ROTATE YOUR DEVICE</div>
+  <div class="rotate-sub">VOIDBREAK plays best in landscape. You can keep playing in portrait, but the HUD and controls have more room in landscape.</div>
+  <button type="button" class="btn primary" id="rotateGateDismiss">PLAY IN PORTRAIT</button>
+</div>
 
 <div id="hud" class="hidden">
   <div id="hudTop"><div id="sectorWrap">
@@ -265,11 +408,18 @@ input[type=range]{width:180px;accent-color:var(--cy)}
   <div class="tagline">THE DIMENSION IS COLLAPSING. BREAK OUT.</div>
   <div class="menu-btns">
     <button class="btn primary" id="btnStart">START RUN</button>
+    <div class="diff-row" id="diffRow">
+      <button type="button" class="diff-btn" data-diff="normal">NORMAL<span class="diff-mult">1.0×</span></button>
+      <button type="button" class="diff-btn" data-diff="hard">HARD<span class="diff-mult">1.5×</span></button>
+      <button type="button" class="diff-btn" data-diff="extreme">EXTREME<span class="diff-mult">2.0×</span></button>
+    </div>
+    <div class="diff-hint" id="diffHint">NORMAL SELECTED</div>
     <button class="btn" id="btnForge">VOID FORGE</button>
     <button class="btn" id="btnHowto">HOW TO PLAY</button>
     <button class="btn" id="btnSettings">SETTINGS</button>
   </div>
   <div class="menu-stats">
+    <div class="vb-sync-status vb-sync-connecting" id="vbSyncStatus">SYNCING…</div>
     <div>PROGRESS <span id="menuLevel">LEVEL 1</span></div>
     <div><i>◆</i> <b id="menuShards">0</b> VOID SHARDS</div>
     <div>RUNS <span id="menuRuns">0</span> · BEST SECTOR <span id="menuBest">–</span> · BOSSES SLAIN <span id="menuKills">0</span></div>
@@ -446,24 +596,305 @@ function lerpAng(a,b,t){return a+angDiff(a,b)*t;}
 function fmt(n){return Math.round(n).toLocaleString('en-US');}
 const el=id=>document.getElementById(id);
 
-/* ---------- 02 · SAVE ---------- */
-const SAVE_KEY='voidbreak_save_v1';
+/* ---------- 02 · SAVE ----------
+   CLOUD SYNC OVERVIEW
+   --------------------
+   Progress used to live ONLY here, in this browser's localStorage,
+   completely independent of whatever Duel Arena account (if any) was
+   signed in -- that's what made it a per-DEVICE save instead of a
+   per-ACCOUNT one (survived logout, never appeared on a second
+   device). It still starts exactly that way (GUEST_SAVE_KEY, unchanged
+   shape/behavior) so guest play keeps working byte-for-byte as before.
+   The difference is what happens once the parent page (index.html)
+   tells us, via a postMessage handshake, that a real account is signed
+   in: from that moment on, `save` is loaded from and written to that
+   ACCOUNT's cloud save (server.js's /voidbreak/state and
+   /voidbreak/save, storing account.voidbreak -- see voidbreak.js) with
+   a per-account-id-namespaced localStorage key used only as a local
+   cache/offline fallback for THAT account, never shared with the guest
+   key or any other account. See "03b · CLOUD SESSION" below for the
+   handshake/bootstrap/sync logic itself.
+   `settings` (volume/music/sfx/shake/dmgnum) is deliberately NOT part
+   of the cloud save -- it's a per-device audio/UX preference, not
+   account progression, so it always stays in whichever local key is
+   active and is never uploaded. ---------- */
+const GUEST_SAVE_KEY='voidbreak_save_v1';
+const ACCOUNT_CACHE_PREFIX='voidbreak_cloud_v1_';
 const DEF_SAVE={shards:0,forge:{vit:0,pow:0,swift:0,core:0,drive:0,edge:0},
   weapons:{pulse:true,scatter:false,rail:false,plasma:false,voidb:false,voidc:false},
-  lastWeapon:'pulse',runs:0,best:0,kills:0,beaten:{},
+  lastWeapon:'pulse',lastDifficulty:'normal',runs:0,best:0,kills:0,beaten:{},
   settings:{vol:0.8,music:true,sfx:true,shake:true,dmgnum:true}};
+const FORGE_KEYS=Object.keys(DEF_SAVE.forge);
+// Named SAVE_WEAPON_KEYS (not WEAPON_KEYS) -- a WEAPON_KEYS constant
+// with the identical value already exists further down (used to build
+// the weapon-select/forge UI); this file predates that, so this save-
+// system section gets its own name rather than colliding with it.
+const SAVE_WEAPON_KEYS=Object.keys(DEF_SAVE.weapons);
 let save;
-function loadSave(){
-  try{const s=JSON.parse(localStorage.getItem(SAVE_KEY));
-    save=Object.assign(JSON.parse(JSON.stringify(DEF_SAVE)),s||{});
-    save.forge=Object.assign({},DEF_SAVE.forge,save.forge||{});
-    save.weapons=Object.assign({},DEF_SAVE.weapons,save.weapons||{});
-    save.settings=Object.assign({},DEF_SAVE.settings,save.settings||{});
-  }catch(e){save=JSON.parse(JSON.stringify(DEF_SAVE));}
-  save.beaten=save.beaten||{};
-  if(save.kills>0&&!save.beaten[1])save.beaten[1]=true; // legacy migration
+
+// Fills in missing/malformed fields from a raw parsed blob (or `null`)
+// -- the exact same defaulting logic the original loadSave() always
+// did, just factored out so both the guest key and a cloud-fetched save
+// can be normalized through one path.
+function normalizeSave(s){
+  const out=Object.assign(JSON.parse(JSON.stringify(DEF_SAVE)),s||{});
+  out.forge=Object.assign({},DEF_SAVE.forge,out.forge||{});
+  out.weapons=Object.assign({},DEF_SAVE.weapons,out.weapons||{});
+  out.settings=Object.assign({},DEF_SAVE.settings,out.settings||{});
+  out.beaten=out.beaten||{};
+  if(out.kills>0&&!out.beaten[1])out.beaten[1]=true; // legacy migration
+  return out;
 }
-function saveGame(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(save));}catch(e){}}
+// True only for the untouched starting state -- used to decide whether
+// a save is worth migrating/merging, or is just noise.
+function isDefaultSave(s){
+  if(!s)return true;
+  if(s.shards||s.runs||s.best||s.kills)return false;
+  if(Object.keys(s.beaten||{}).length)return false;
+  for(const k of FORGE_KEYS)if((s.forge||{})[k])return false;
+  for(const k of SAVE_WEAPON_KEYS)if(k!=='pulse'&&(s.weapons||{})[k])return false;
+  return true;
+}
+// Safe merge of two saves: every field is MAX'd or OR'd, NEVER summed --
+// mirrors voidbreak.js's mergeSaveData on the server exactly, so a
+// device's offline progress and an account's existing cloud save can
+// reconcile without either side losing anything or, worse, a naive sum
+// letting the same progress be double-counted by playing on two
+// devices and merging. See voidbreak.js's header comment for the full
+// reasoning; this is a deliberate duplicate of that logic (Voidbreak is
+// its own self-contained document, same as its SKINS/POWERS mirror
+// pattern already used elsewhere in this codebase), not a divergence.
+function mergeSaveData(a,b){
+  a=a||DEF_SAVE;b=b||DEF_SAVE;
+  const forge={};for(const k of FORGE_KEYS)forge[k]=Math.max(a.forge[k]||0,b.forge[k]||0);
+  const weapons={};for(const k of SAVE_WEAPON_KEYS)weapons[k]=!!(a.weapons[k]||b.weapons[k]);
+  const beaten=Object.assign({},a.beaten,b.beaten);
+  const lastWeapon=weapons[a.lastWeapon]?a.lastWeapon:(weapons[b.lastWeapon]?b.lastWeapon:'pulse');
+  return{shards:Math.max(a.shards||0,b.shards||0),forge,weapons,lastWeapon,
+    runs:Math.max(a.runs||0,b.runs||0),best:Math.max(a.best||0,b.best||0),
+    kills:Math.max(a.kills||0,b.kills||0),beaten,
+    settings:Object.assign({},DEF_SAVE.settings,a.settings||{})};
+}
+
+function readGuestSave(){
+  try{const s=JSON.parse(localStorage.getItem(GUEST_SAVE_KEY));return s?normalizeSave(s):null;}catch(e){return null;}
+}
+function writeGuestSave(s){try{localStorage.setItem(GUEST_SAVE_KEY,JSON.stringify(s));}catch(e){}}
+// The per-account cache wraps the save with an updatedAt so a later
+// reconnect can tell whether THIS device made offline changes more
+// recently than the cloud last saw (see bootstrapCloudSave).
+function readAccountCache(accountId){
+  try{
+    const raw=JSON.parse(localStorage.getItem(ACCOUNT_CACHE_PREFIX+accountId));
+    if(!raw||typeof raw!=='object')return null;
+    return{data:normalizeSave(raw.data),updatedAt:Number(raw.updatedAt)||0};
+  }catch(e){return null;}
+}
+function writeAccountCache(accountId,s,updatedAt){
+  try{localStorage.setItem(ACCOUNT_CACHE_PREFIX+accountId,JSON.stringify({data:s,updatedAt:updatedAt||Date.now()}));}catch(e){}
+}
+
+/* ---------- 03b · CLOUD SESSION ----------
+   Identity/session state, filled in by the handshake with index.html
+   (see the 'duelarena_session' listener + BOOT section below). Until
+   that handshake resolves, cloudSyncStatus stays 'connecting' and the
+   menu shows placeholders (see refreshMenuStats) rather than risk
+   flashing a stale/wrong save on screen for a frame. ---------- */
+let cloudSessionToken=null,cloudAccountId=null,cloudSyncEnabled=false,cloudBootstrapped=false;
+let cloudSyncStatus='connecting'; // 'connecting' | 'local' | 'synced' | 'saving' | 'offline' | 'error'
+let cloudSaveTimer=null,cloudSaveInFlight=false,cloudSavePending=false;
+
+function setSyncStatus(s){
+  cloudSyncStatus=s;
+  const el_=document.getElementById('vbSyncStatus');
+  if(!el_)return;
+  const LABELS={connecting:'SYNCING…',local:'GUEST · LOCAL SAVE ONLY',synced:'☁ SYNCED',
+    saving:'☁ SAVING…',offline:'☁ OFFLINE · LOCAL ONLY',error:'☁ SYNC ERROR'};
+  el_.textContent=LABELS[s]||'';
+  el_.className='vb-sync-status vb-sync-'+s;
+}
+
+// Loads `save` from whichever local key is currently active -- the
+// guest key by default (this runs synchronously at script-parse time,
+// before the parent handshake can possibly have arrived yet, so a
+// guest's experience is completely unaffected: same key, same
+// behavior, same timing as before this feature existed), or the
+// signed-in account's own per-device cache once cloudSyncEnabled flips
+// on (see bootstrapCloudSave, which calls this then immediately
+// reconciles against the real cloud state).
+function loadSave(){
+  if(cloudSyncEnabled&&cloudAccountId){
+    const cached=readAccountCache(cloudAccountId);
+    save=cached?cached.data:normalizeSave(null);
+  }else{
+    save=readGuestSave()||normalizeSave(null);
+  }
+}
+function saveGame(){
+  try{
+    if(cloudSyncEnabled&&cloudAccountId)writeAccountCache(cloudAccountId,save,Date.now());
+    else writeGuestSave(save);
+  }catch(e){}
+}
+// The progression-event save path (level unlocks, shard/rewards,
+// purchases, loadout, run completion -- see every call site below).
+// Always writes the local cache immediately (cheap, synchronous,
+// exactly like saveGame() always has), then -- only when signed in --
+// debounces a real network save so gameplay bursts (e.g. several forge
+// purchases in a row) collapse into one request instead of spamming the
+// backend. Settings toggles deliberately keep calling plain saveGame()
+// instead of this, since they're not part of the cloud save.
+function saveGameCloud(){
+  saveGame();
+  if(!cloudSyncEnabled)return;
+  cloudSavePending=true;
+  setSyncStatus('saving');
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer=setTimeout(flushCloudSave,1500);
+}
+async function flushCloudSave(){
+  if(cloudSaveInFlight||!cloudSyncEnabled)return;
+  if(!cloudSavePending)return;
+  cloudSavePending=false;
+  cloudSaveInFlight=true;
+  const payload={shards:save.shards,forge:save.forge,weapons:save.weapons,lastWeapon:save.lastWeapon,
+    runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten};
+  try{
+    const res=await fetch('/voidbreak/save',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({sessionToken:cloudSessionToken,data:payload})});
+    if(res.ok){
+      const data=await res.json().catch(()=>({}));
+      writeAccountCache(cloudAccountId,save,data.updatedAt||Date.now());
+      setSyncStatus('synced');
+    }else if(res.status===401||res.status===409){
+      // The session died mid-run (signed out elsewhere, expired, etc).
+      // Stop trying to sync -- local saves keep working via saveGame()
+      // regardless -- rather than repeatedly failing in the background.
+      cloudSyncEnabled=false;setSyncStatus('error');
+    }else{
+      setSyncStatus('error');
+    }
+  }catch(e){
+    setSyncStatus('offline');
+  }finally{
+    cloudSaveInFlight=false;
+    if(cloudSavePending)flushCloudSave(); // more changes queued while this request was in flight
+  }
+}
+// Immediate (non-debounced) upload -- used only for the one-time
+// bootstrap writes (first-ever cloud save, migration, offline-merge
+// reconciliation) where there's no gameplay burst to collapse and the
+// player is about to see the result on the menu right away.
+async function pushCloudSaveNow(){
+  if(!cloudSyncEnabled)return;
+  setSyncStatus('saving');
+  const payload={shards:save.shards,forge:save.forge,weapons:save.weapons,lastWeapon:save.lastWeapon,
+    runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten};
+  try{
+    const res=await fetch('/voidbreak/save',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({sessionToken:cloudSessionToken,data:payload})});
+    if(res.ok){
+      const data=await res.json().catch(()=>({}));
+      writeAccountCache(cloudAccountId,save,data.updatedAt||Date.now());
+      setSyncStatus('synced');
+    }else{
+      setSyncStatus('error');
+    }
+  }catch(e){
+    setSyncStatus('offline');
+  }
+}
+
+// Handles the ONE handshake reply index.html ever sends (see this
+// file's 'voidbreak_ready' request in the BOOT section, and
+// index.html's own message listener for the other half). `sessionToken`
+// is null for a guest -- in which case nothing changes from the
+// original, device-only behavior at all.
+async function handleSessionHandshake(sessionToken,accountId){
+  if(cloudBootstrapped)return; // only ever bootstrap once per document load
+  cloudBootstrapped=true;
+  if(!sessionToken||!accountId){
+    setSyncStatus('local');
+    refreshMenuStats();
+    return;
+  }
+  cloudSessionToken=sessionToken;
+  cloudAccountId=accountId;
+  cloudSyncEnabled=true;
+  await bootstrapCloudSave();
+}
+
+// The actual "load the account's real progress before treating
+// anything local as authoritative" sequence -- see the module header
+// comment above for the full design. Never lets a local cache silently
+// win over a genuine cloud save; never silently discards local progress
+// either.
+async function bootstrapCloudSave(){
+  setSyncStatus('connecting');
+  const localCache=readAccountCache(cloudAccountId); // this account's OWN cache on THIS device, if any
+
+  let cloudResp=null;
+  try{
+    const res=await fetch('/voidbreak/state?sessionToken='+encodeURIComponent(cloudSessionToken));
+    if(res.ok)cloudResp=await res.json();
+  }catch(e){ /* offline / network failure -- handled below */ }
+
+  if(!cloudResp||!cloudResp.signedIn){
+    // Could not reach the cloud save at all (offline), or the session
+    // died between the handshake and now -- fall back to this
+    // account's own last-known local cache rather than blocking play,
+    // but never touch the guest key and never invent progress.
+    save=localCache?localCache.data:normalizeSave(null);
+    setSyncStatus(cloudResp?'error':'offline');
+    refreshMenuStats();syncSettingsUI();if(actx)applyAudioSettings();
+    return;
+  }
+
+  if(!cloudResp.hasCloudSave){
+    // First time THIS ACCOUNT has ever reached the cloud save system.
+    // Migrate whatever pre-existing progress is worth keeping: this
+    // account's own device cache (rare this early, checked anyway) and
+    // the GENERIC guest key, which is exactly where a pre-existing
+    // player's progress has been sitting since before this fix. Never
+    // silently drop either.
+    const guestSave=readGuestSave();
+    const localHas=localCache&&!isDefaultSave(localCache.data);
+    const guestHas=guestSave&&!isDefaultSave(guestSave);
+    let migrated=null;
+    if(localHas&&guestHas)migrated=mergeSaveData(localCache.data,guestSave);
+    else if(localHas)migrated=localCache.data;
+    else if(guestHas)migrated=guestSave;
+    save=migrated||normalizeSave(null);
+    writeAccountCache(cloudAccountId,save,Date.now());
+    if(guestHas){
+      // Claim the guest progress for this account -- reset the generic
+      // key so a DIFFERENT account signing in later on this same
+      // device is never offered the same progress to migrate again
+      // ("Account A becomes the owner of that progress").
+      writeGuestSave(normalizeSave(null));
+    }
+    await pushCloudSaveNow(); // creates the cloud record immediately, migrated or not
+  }else{
+    const cloudSave=normalizeSave(cloudResp.data);
+    if(localCache&&localCache.updatedAt>cloudResp.updatedAt){
+      // This device saved locally more recently than the cloud has ever
+      // seen (e.g. it was offline when a save attempt failed) -- merge
+      // rather than silently discard either side, then heal the cloud
+      // record so both are reconciled going forward.
+      save=mergeSaveData(localCache.data,cloudSave);
+      writeAccountCache(cloudAccountId,save,Date.now());
+      await pushCloudSaveNow();
+    }else{
+      // The normal case, and the whole point of this feature: whatever
+      // the cloud has IS this account's progress, on any device.
+      save=cloudSave;
+      writeAccountCache(cloudAccountId,save,cloudResp.updatedAt);
+      setSyncStatus('synced');
+    }
+  }
+  refreshMenuStats();syncSettingsUI();if(actx)applyAudioSettings();
+}
+
 loadSave();
 
 /* ---------- 03 · AUDIO ---------- */
@@ -662,12 +1093,176 @@ addEventListener('keydown',e=>{
   keys[e.code]=true;initAudio();
 });
 addEventListener('keyup',e=>keys[e.code]=false);
-addEventListener('pointerdown',e=>{if(e.target===cv){mouse.down=e.button===0;}initAudio();});
-addEventListener('pointerup',()=>mouse.down=false);
-addEventListener('pointermove',e=>{mouse.x=e.clientX;mouse.y=e.clientY;});
+// pointerType!=='touch' keeps every line here exactly desktop-only
+// (mouse AND pen still work identically to before) -- on a touch
+// device, aiming/shooting/movement is driven exclusively by the two
+// dedicated stick zones below instead, so a stray tap on open canvas
+// (e.g. the HUD-only strip above the sticks) can't also snap-aim.
+addEventListener('pointerdown',e=>{if(e.target===cv&&e.pointerType!=='touch'){mouse.down=e.button===0;}initAudio();});
+addEventListener('pointerup',e=>{if(e.pointerType!=='touch')mouse.down=false;});
+addEventListener('pointermove',e=>{if(e.pointerType!=='touch'){mouse.x=e.clientX;mouse.y=e.clientY;}});
 addEventListener('contextmenu',e=>e.preventDefault());
 addEventListener('blur',()=>{if(state==='playing'&&!uiOpen&&!paused)setPause(true);});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='playing'&&!uiOpen&&!paused)setPause(true);});
+
+/* ---- mobile / touch controls ----
+   Same technique the main Duel Arena game uses: a fixed, ALWAYS-VISIBLE
+   left move-stick + right aim-stick + a dash button, all of which just
+   drive the exact input state updatePlayer() already reads (ax/ay,
+   p.faceAng, the mouse.down check, pressed['Space']) instead of a
+   parallel input system. Desktop's own listeners above are untouched. */
+const touchPoints=navigator.maxTouchPoints||navigator.msMaxTouchPoints||0;
+const hasTouch=('ontouchstart' in window)||touchPoints>0;
+// Same iPadOS-13+-masquerades-as-Mac workaround the main game uses: a
+// UA claiming "Macintosh" with multi-touch support is never a real Mac.
+const isTabletUA=/iPad/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&hasTouch&&touchPoints>1)||
+  (/Android/.test(navigator.userAgent)&&!/Mobile/.test(navigator.userAgent));
+const isTouchDevice=hasTouch;
+
+let touchMoveX=0,touchMoveY=0;
+let touchAiming=false,touchAimAngle=0;
+const TOUCH_TAP_MAX_DRAG=14,TOUCH_STICK_RADIUS=46;
+
+const mobileControlsEl=el('mobileControls');
+const joyMoveZone=el('joyMoveZone'),joyMoveBase=el('joyMoveBase');
+const joyAimZone=el('joyAimZone'),joyAimBase=el('joyAimBase');
+const touchDashBtn=el('touchDashBtn');
+
+function updateMobileControlsTier(){
+  if(!isTouchDevice)return;
+  const shortSide=Math.min(W,H);
+  mobileControlsEl.dataset.tier=(isTabletUA||shortSide>=600)?'tablet':'phone';
+}
+
+function positionJoyKnob(baseEl,dx,dy){
+  const knob=baseEl.querySelector('.joy-knob');
+  if(knob)knob.style.transform=`translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+}
+function joyBaseCenter(baseEl){
+  const r=baseEl.getBoundingClientRect();
+  return {x:r.left+r.width/2,y:r.top+r.height/2};
+}
+function beginJoyDrag(baseEl){baseEl.classList.add('dragging');positionJoyKnob(baseEl,0,0);}
+function endJoyDrag(baseEl){baseEl.classList.remove('dragging');positionJoyKnob(baseEl,0,0);}
+
+let moveTouchId=null,moveBaseX=0,moveBaseY=0;
+let aimTouchId=null,aimBaseX=0,aimBaseY=0;
+
+joyMoveZone.addEventListener('touchstart',e=>{
+  if(moveTouchId!==null)return;
+  const t=e.changedTouches[0];
+  moveTouchId=t.identifier;
+  const c=joyBaseCenter(joyMoveBase);
+  moveBaseX=c.x;moveBaseY=c.y;
+  beginJoyDrag(joyMoveBase);
+  initAudio();
+  e.preventDefault();
+},{passive:false});
+joyMoveZone.addEventListener('touchmove',e=>{
+  for(const t of e.changedTouches){
+    if(t.identifier!==moveTouchId)continue;
+    const dx=t.clientX-moveBaseX,dy=t.clientY-moveBaseY;
+    const d=Math.hypot(dx,dy);
+    const clamped=Math.min(d,TOUCH_STICK_RADIUS);
+    if(d>0.001)positionJoyKnob(joyMoveBase,dx/d*clamped,dy/d*clamped);
+    if(d>6){touchMoveX=dx/d*(clamped/TOUCH_STICK_RADIUS);touchMoveY=dy/d*(clamped/TOUCH_STICK_RADIUS);}
+    else{touchMoveX=0;touchMoveY=0;}
+  }
+  e.preventDefault();
+},{passive:false});
+function endMoveTouch(e){
+  for(const t of e.changedTouches){
+    if(t.identifier!==moveTouchId)continue;
+    moveTouchId=null;touchMoveX=0;touchMoveY=0;
+    endJoyDrag(joyMoveBase);
+  }
+}
+joyMoveZone.addEventListener('touchend',endMoveTouch);
+joyMoveZone.addEventListener('touchcancel',endMoveTouch);
+
+// Right stick: drag to aim (facing follows live, matching desktop's
+// live mouse-aim rather than a release-to-fire snap-shot), and fires
+// continuously the whole time it's held past the tap threshold --
+// mirrors desktop's own "hold mouse button to fire" feel exactly.
+joyAimZone.addEventListener('touchstart',e=>{
+  if(aimTouchId!==null)return;
+  const t=e.changedTouches[0];
+  aimTouchId=t.identifier;
+  const c=joyBaseCenter(joyAimBase);
+  aimBaseX=c.x;aimBaseY=c.y;
+  beginJoyDrag(joyAimBase);
+  initAudio();
+  e.preventDefault();
+},{passive:false});
+joyAimZone.addEventListener('touchmove',e=>{
+  for(const t of e.changedTouches){
+    if(t.identifier!==aimTouchId)continue;
+    const dx=t.clientX-aimBaseX,dy=t.clientY-aimBaseY;
+    const d=Math.hypot(dx,dy);
+    const clamped=Math.min(d,TOUCH_STICK_RADIUS);
+    if(d>0.001)positionJoyKnob(joyAimBase,dx/d*clamped,dy/d*clamped);
+    if(d>TOUCH_TAP_MAX_DRAG){touchAiming=true;touchAimAngle=Math.atan2(dy,dx);}
+    else touchAiming=false;
+  }
+  e.preventDefault();
+},{passive:false});
+function endAimTouch(e){
+  for(const t of e.changedTouches){
+    if(t.identifier!==aimTouchId)continue;
+    aimTouchId=null;touchAiming=false;
+    endJoyDrag(joyAimBase);
+  }
+}
+joyAimZone.addEventListener('touchend',endAimTouch);
+joyAimZone.addEventListener('touchcancel',endAimTouch);
+
+// Dash button: just sets the same one-frame flag Space already sets,
+// so it flows through updatePlayer()'s existing dash logic (cooldown,
+// energy cost, invulnerability window) completely unchanged.
+touchDashBtn.addEventListener('touchstart',e=>{
+  pressed['Space']=true;
+  touchDashBtn.classList.add('pressed');
+  initAudio();
+  e.preventDefault();
+},{passive:false});
+touchDashBtn.addEventListener('touchend',e=>{touchDashBtn.classList.remove('pressed');e.preventDefault();},{passive:false});
+touchDashBtn.addEventListener('touchcancel',()=>touchDashBtn.classList.remove('pressed'));
+function updateTouchDashButton(){
+  if(!isTouchDevice||!player)return;
+  const ready=player.dashCd<=0;
+  touchDashBtn.classList.toggle('ready',ready);
+  touchDashBtn.style.setProperty('--cd',ready?0:clamp(1-player.dashCd/player.dashCD,0,1));
+}
+
+/* ---- rotate gate: a dismissible suggestion, never a hard block (see
+   task requirement to keep portrait playable) ---- */
+const rotateGateEl=el('rotateGate');
+let rotateGateDismissed=false;
+function updateRotateGate(){
+  if(!isTouchDevice||!rotateGateEl)return;
+  const portrait=innerHeight>innerWidth;
+  if(!portrait)rotateGateDismissed=false; // re-arm for next time they rotate back
+  rotateGateEl.classList.toggle('hidden',!(portrait&&!rotateGateDismissed));
+}
+const rotateGateDismissBtn=el('rotateGateDismiss');
+if(rotateGateDismissBtn)rotateGateDismissBtn.addEventListener('click',()=>{
+  rotateGateDismissed=true;
+  rotateGateEl.classList.add('hidden');
+});
+// Registered here (after isTouchDevice/W/H all exist) rather than
+// inside resize() itself -- resize() runs once synchronously at
+// script load, before this const block below it in source order has
+// executed, so calling these from in there would hit the temporal
+// dead zone. The base resize() (canvas sizing) keeps its own
+// listener above; this just adds the viewport-dependent UI on top of
+// it, plus orientationchange for devices that don't reliably fire
+// 'resize' on rotate.
+function onViewportChange(){updateMobileControlsTier();updateRotateGate();}
+addEventListener('resize',onViewportChange);
+addEventListener('orientationchange',onViewportChange);
+updateMobileControlsTier();
+updateRotateGate();
+
 function handleKey(code){
   if(code==='Escape'||code==='KeyP'){
     if(state==='playing'){
@@ -807,6 +1402,39 @@ const CHOICES={
   elite:{label:'ELITE',risk:'VERY HIGH RISK',desc:'Elite enemy · guaranteed upgrade',stars:5},
   boss:{label:'GUARDIAN',risk:'NO WAY OUT',desc:'The level guardian awaits',stars:5},
 };
+
+/* ---------- DIFFICULTY MODES ----------
+   A run-scoped multiplier set, not a second progression system: it
+   rides on top of the existing level.diff/enemy/boss/shard machinery
+   rather than duplicating it. Each mode is a COMBINATION of modest
+   per-factor multipliers (health, damage taken, enemy speed, spawn
+   volume/elite frequency) that compound into an overall difficulty
+   increase roughly matching the mode's name -- not a single stat
+   multiplied by 1.5/2. shardMult is the one exact, spec'd number
+   (1.0/1.5/2.0) and is applied exactly once per shard grant via
+   addShards() -- see its call sites -- never compounded. */
+const DIFFICULTY_MODES={
+  normal:  {id:'normal',  label:'NORMAL',  shardMult:1.0, hpMult:1.00, dmgMult:1.00, speedMult:1.00, spawnMult:1.00},
+  hard:    {id:'hard',    label:'HARD',    shardMult:1.5, hpMult:1.22, dmgMult:1.25, speedMult:1.08, spawnMult:1.15},
+  extreme: {id:'extreme', label:'EXTREME', shardMult:2.0, hpMult:1.45, dmgMult:1.55, speedMult:1.15, spawnMult:1.30},
+};
+// The difficulty chosen on the main menu, carried into the next run
+// started from the LOADOUT screen (see newRun()). Restored from the
+// last run's choice on load so returning players see what they last
+// picked, same as lastWeapon.
+let pendingDifficulty=(DIFFICULTY_MODES[save&&save.lastDifficulty]?save.lastDifficulty:'normal');
+// The authority for "what difficulty is THIS run": once a run exists,
+// everything reads run.difficulty (set once in newRun() and never
+// reassigned mid-run), so switching pendingDifficulty on the menu
+// mid-run -- not reachable via the UI, but defensively correct anyway
+// -- can never retroactively change an in-progress run.
+function curDiff(){ return DIFFICULTY_MODES[(run&&run.difficulty)||pendingDifficulty]||DIFFICULTY_MODES.normal; }
+// Single call site for every Void Shard grant so the difficulty
+// multiplier is applied exactly once per grant, never compounded (a
+// pickup's value, a coin-room hit, a level's completion bonus are
+// each their own single addShards() call -- none of them ever re-add
+// an already-multiplied number).
+function addShards(n){ run.shards+=Math.round(n*curDiff().shardMult); }
 
 /* ---------- LEVELS — the data-driven progression core ---------- */
 const LEVELS=[
@@ -1002,12 +1630,19 @@ function updatePlayer(dt){
   p.fireTimer-=dt;p.invuln-=dt;p.muzzle-=dt;p.shield-=dt;
   if(p.dashCd>0){p.dashCd-=dt;if(p.dashCd<=0){SFX.dashReady();el('dashUI').classList.add('ready');}}
   p.energy=Math.min(p.maxenergy,p.energy+p.energyRegen*dt);
-  const wx=cam.x+(mouse.x-W/2)/cam.zoom,wy=cam.y+(mouse.y-H/2)/cam.zoom;
-  p.faceAng=angTo(p.x,p.y,wx,wy);
+  // Touch aim (the right stick) drives facing directly from its drag
+  // angle when active; otherwise this is the original mouse-relative-
+  // to-screen-center computation, untouched.
+  if(touchAiming){
+    p.faceAng=touchAimAngle;
+  }else{
+    const wx=cam.x+(mouse.x-W/2)/cam.zoom,wy=cam.y+(mouse.y-H/2)/cam.zoom;
+    p.faceAng=angTo(p.x,p.y,wx,wy);
+  }
   if(pressed['Space']&&p.dashCd<=0&&p.dashDur<=0&&transition===null){
     if(p.energy>=32){
       p.energy-=32;p.dashDur=0.17;p.dashCd=p.dashCD;
-      let ax=(keys['KeyD']?1:0)-(keys['KeyA']?1:0),ay=(keys['KeyS']?1:0)-(keys['KeyW']?1:0);
+      let ax=(keys['KeyD']?1:0)-(keys['KeyA']?1:0)+touchMoveX,ay=(keys['KeyS']?1:0)-(keys['KeyW']?1:0)+touchMoveY;
       p.dashDir=(ax||ay)?Math.atan2(ay,ax):p.faceAng;
       p.invuln=Math.max(p.invuln,0.28);
       p.dashHits=new Set();
@@ -1016,7 +1651,7 @@ function updatePlayer(dt){
       ringFX(p.x,p.y,[0,240,255],46,0.3);
     }else{SFX.error();flashEnergyBar();}
   }
-  let ax=(keys['KeyD']?1:0)-(keys['KeyA']?1:0),ay=(keys['KeyS']?1:0)-(keys['KeyW']?1:0);
+  let ax=(keys['KeyD']?1:0)-(keys['KeyA']?1:0)+touchMoveX,ay=(keys['KeyS']?1:0)-(keys['KeyW']?1:0)+touchMoveY;
   const len=Math.hypot(ax,ay);if(len>0){ax/=len;ay/=len;}
   if(p.dashDur>0){
     p.dashDur-=dt;
@@ -1080,7 +1715,7 @@ function updatePlayer(dt){
     if(p.x<-hw){p.x=-hw;p.vx=0;}if(p.x>hw){p.x=hw;p.vx=0;}
     if(p.y<-hh){p.y=-hh;p.vy=0;}if(p.y>hh){p.y=hh;p.vy=0;}
   }
-  if(mouse.down&&p.fireTimer<=0&&!uiOpen&&!transition)fireWeapon();
+  if((mouse.down||touchAiming)&&p.fireTimer<=0&&!uiOpen&&!transition)fireWeapon();
 }
 function fireWeapon(){
   const p=player,w=WEAPONS[p.weapon];
@@ -1126,6 +1761,11 @@ function hurtPlayer(dmg,sx,sy){
   const p=player;
   if(p.dead||p.invuln>0)return;
   if(p.shield>0){SFX.block();ringFX(p.x,p.y,[0,240,255],54,0.25);return;}
+  // The single point every damage source (enemy contact/shots, boss
+  // attacks, hazards, collapse zones) funnels through, so DM.dmgMult
+  // covers all of them uniformly with one multiplication -- never
+  // applied a second time at any of those call sites.
+  dmg*=curDiff().dmgMult;
   p.hp-=dmg;p.invuln=0.7;hurtFlash=1;
   addShake(9);SFX.hurt();
   dmgNum(p.x,p.y,'-'+Math.round(dmg),'#ff4d6d',17);
@@ -1286,21 +1926,42 @@ function updateEBullets(dt){
 }
 function spawnShards(x,y,n){
   for(let i=0;i<n;i++){const a=rand(0,TAU),s=rand(40,160);
-    pickups.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,type:'shard',t:rand(0,9)});}
+    // magnetT is time-since-spawn for the magnet ramp below -- kept
+    // separate from pk.t, which is a random phase drawShard() uses
+    // purely for its spin animation and must stay untouched.
+    pickups.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,type:'shard',t:rand(0,9),magnetT:0});}
 }
+// Void Shards magnetize to the player immediately on spawn, from any
+// distance in the room -- no more walking onto them. A short initial
+// scatter (the spawnShards() velocity above) still plays so a burst of
+// shards visibly fans out before being pulled in, then the pull ramps
+// up quickly to a capped max speed/accel so it reads as a satisfying
+// "sucked in" snap rather than a sudden teleport. Heal pickups are
+// unchanged -- still a short-range (130px) pull, still require
+// walking near them, exactly as before.
+const SHARD_MAGNET_MAX_ACCEL=2600, SHARD_MAGNET_MAX_SPEED=1500, SHARD_MAGNET_RAMP=1800;
 function updatePickups(dt){
   const p=player;
   for(let i=pickups.length-1;i>=0;i--){const pk=pickups[i];
     pk.t+=dt;
-    pk.vx-=pk.vx*5*dt;pk.vy-=pk.vy*5*dt;
     if(!p.dead){
       const d=dist(pk.x,pk.y,p.x,p.y);
-      if(d<130){const a=angTo(pk.x,pk.y,p.x,p.y);
-        pk.vx+=Math.cos(a)*900*dt;pk.vy+=Math.sin(a)*900*dt;}
-      if(d<p.r+10){
-        if(pk.type==='shard'){run.shards++;SFX.shard();
+      if(pk.type==='shard'){
+        pk.magnetT=Math.min(pk.magnetT+dt,5);
+        const a=angTo(pk.x,pk.y,p.x,p.y);
+        const accel=Math.min(SHARD_MAGNET_MAX_ACCEL,300+pk.magnetT*SHARD_MAGNET_RAMP);
+        pk.vx+=Math.cos(a)*accel*dt;pk.vy+=Math.sin(a)*accel*dt;
+        const sp=Math.hypot(pk.vx,pk.vy);
+        if(sp>SHARD_MAGNET_MAX_SPEED){pk.vx*=SHARD_MAGNET_MAX_SPEED/sp;pk.vy*=SHARD_MAGNET_MAX_SPEED/sp;}
+      }else{
+        pk.vx-=pk.vx*5*dt;pk.vy-=pk.vy*5*dt;
+        if(d<130){const a=angTo(pk.x,pk.y,p.x,p.y);
+          pk.vx+=Math.cos(a)*900*dt;pk.vy+=Math.sin(a)*900*dt;}
+      }
+      if(d<p.r+16){
+        if(pk.type==='shard'){addShards(1);SFX.shard();
           el('shardWrap').classList.remove('pop');void el('shardWrap').offsetWidth;el('shardWrap').classList.add('pop');
-          sparks(pk.x,pk.y,[160,92,255],3,120);}
+          sparks(pk.x,pk.y,[160,92,255],5,180);ringFX(pk.x,pk.y,[160,92,255],20,0.25);}
         else{p.hp=Math.min(p.maxhp,p.hp+8);SFX.heal();dmgNum(p.x,p.y,'+8','#38ff9c',15);}
         pickups.splice(i,1);continue;
       }
@@ -1315,9 +1976,16 @@ function createEnemy(type,x,y,elite){
   const ds=lv.diff*(1+(run.depth-1)*0.12);
   const emult=elite?(type==='ravager'?1.9:type==='shattered'?2.2:type==='guardian'?2.1:type==='singularity'?2.0:2.7):1;
   const rmult=elite?(type==='ravager'?1.15:type==='shattered'?1.4:type==='guardian'?1.15:type==='singularity'?1.1:1.35):1;
+  // DM.hpMult/speedMult apply here (creation-time); DM.dmgMult is
+  // deliberately NOT applied to cdmg -- it's applied once, centrally,
+  // in hurtPlayer() when this enemy's attack actually lands, so every
+  // damage source (enemies, bosses, hazards, zones) gets the
+  // difficulty multiplier exactly once rather than enemies getting it
+  // twice.
+  const DM=curDiff();
   const e={type,x,y,r:c.r*rmult,elite:!!elite,color:c.color,c:c.color,
-    hp:c.hp*ds*emult,maxhp:c.hp*ds*emult,
-    speed:c.speed*(elite?1.12:1)*rand(0.92,1.08)*(1+(lv.diff-1)*0.25),
+    hp:c.hp*ds*emult*DM.hpMult,maxhp:c.hp*ds*emult*DM.hpMult,
+    speed:c.speed*(elite?1.12:1)*rand(0.92,1.08)*(1+(lv.diff-1)*0.25)*DM.speedMult,
     cdmg:c.cdmg*(elite?1.35:1)*(1+(run.depth-1)*0.05)*lv.diff,
     shards:c.shards,t:rand(0,10),hitFlash:0,dead:false,noHit:false,faceAng:0,
     shootT:rand(0.6,1.6),burst:0,burstT:0,windup:0,orbitDir:pick([-1,1]),strafeDir:pick([-1,1]),
@@ -1907,6 +2575,11 @@ function createBoss(kind){
       tRadial:3.0,tVolley:2.2,tRing:0,tSlam:0,tCharge:0,tSummon:9,tSpiral:0,
       spiral:null,charge:null,slam:null,summonFlags:{}};
   }
+  // Single point for boss HP scaling by difficulty (contact/attack
+  // damage is scaled once, centrally, in hurtPlayer() instead -- see
+  // its comment -- so this only ever touches HP).
+  const bhp=Math.round(boss.hp*curDiff().hpMult);
+  boss.hp=bhp;boss.maxhp=bhp;
 }
 function bossIntro(dt){
   bossIntroT+=dt;
@@ -1967,7 +2640,7 @@ function updateNull(dt){
       if(c.t<=0){c.phase='rec';c.t=0.55;b.vx*=0.15;b.vy*=0.15;}}
     else{c.t-=dt;if(c.t<=0)b.charge=null;}
   }else if(b.invuln<=0){
-    const spd=b.phase===1?95:b.phase===2?170:245;
+    const spd=(b.phase===1?95:b.phase===2?170:245)*curDiff().speedMult;
     const tvx=Math.cos(a)*spd*(d>170?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.7)*70;
     const tvy=Math.sin(a)*spd*(d>170?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.7)*70;
     b.vx=lerp(b.vx,tvx,clamp(2.5*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.5*dt,0,1));
@@ -2077,7 +2750,7 @@ function updateKing(dt){
       if(!p.dead&&dist(s.x,s.y,p.x,p.y)<170)hurtPlayer(26,s.x,s.y);
       b.slam=null;}}
   if(!b.shatter&&b.invuln<=0){
-    const spd=(b.phase===1?105:b.phase===2?185:255)*(b.vulnT>0?0.25:1)*(b.sweep?0.45:1);
+    const spd=(b.phase===1?105:b.phase===2?185:255)*(b.vulnT>0?0.25:1)*(b.sweep?0.45:1)*curDiff().speedMult;
     const tvx=Math.cos(a)*spd*(d>190?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.8)*80;
     const tvy=Math.sin(a)*spd*(d>190?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.8)*80;
     b.vx=lerp(b.vx,tvx,clamp(2.5*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.5*dt,0,1));
@@ -2183,7 +2856,7 @@ function updateArchon(dt){
       b.vx=lerp(b.vx,Math.cos(ta)*spd,clamp(2*dt,0,1));
       b.vy=lerp(b.vy,Math.sin(ta)*spd,clamp(2*dt,0,1));
     }else{
-      const spd=(b.phase===2?150:215)*(b.vulnT>0?0.25:1)*(b.sweep?0.45:1);
+      const spd=(b.phase===2?150:215)*(b.vulnT>0?0.25:1)*(b.sweep?0.45:1)*curDiff().speedMult;
       const tvx=Math.cos(a)*spd*(d>200?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.75)*85;
       const tvy=Math.sin(a)*spd*(d>200?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.75)*85;
       b.vx=lerp(b.vx,tvx,clamp(2.5*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.5*dt,0,1));
@@ -2310,7 +2983,7 @@ function updateWarden(dt){
       b.vx=lerp(b.vx,Math.cos(ta)*spd,clamp(2*dt,0,1));
       b.vy=lerp(b.vy,Math.sin(ta)*spd,clamp(2*dt,0,1));
     }else{
-      const spd=(b.phase===2?165:225)*(b.vulnT>0?0.25:1)*(b.sweep?0.45:1);
+      const spd=(b.phase===2?165:225)*(b.vulnT>0?0.25:1)*(b.sweep?0.45:1)*curDiff().speedMult;
       const tvx=Math.cos(a)*spd*(d>200?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.75)*85;
       const tvy=Math.sin(a)*spd*(d>200?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.75)*85;
       b.vx=lerp(b.vx,tvx,clamp(2.5*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.5*dt,0,1));
@@ -2444,7 +3117,7 @@ function updateDepths(dt){
       b.vx=lerp(b.vx,Math.cos(ta)*spd,clamp(2*dt,0,1));
       b.vy=lerp(b.vy,Math.sin(ta)*spd,clamp(2*dt,0,1));
     }else{
-      const spd=(b.phase===2?160:215)*(b.vulnT>0?0.25:1);
+      const spd=(b.phase===2?160:215)*(b.vulnT>0?0.25:1)*curDiff().speedMult;
       const tvx=Math.cos(a)*spd*(d>220?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.7)*80;
       const tvy=Math.sin(a)*spd*(d>220?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.7)*80;
       b.vx=lerp(b.vx,tvx,clamp(2.5*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.5*dt,0,1));
@@ -2584,7 +3257,7 @@ function updateSentinel(dt){
       b.vx=lerp(b.vx,Math.cos(ta)*spd,clamp(2*dt,0,1));
       b.vy=lerp(b.vy,Math.sin(ta)*spd,clamp(2*dt,0,1));
     }else{
-      const spd=(b.phase===2?175:235)*(b.vulnT>0?0.25:1);
+      const spd=(b.phase===2?175:235)*(b.vulnT>0?0.25:1)*curDiff().speedMult;
       const tvx=Math.cos(a)*spd*(d>200?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.8)*85;
       const tvy=Math.sin(a)*spd*(d>200?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.8)*85;
       b.vx=lerp(b.vx,tvx,clamp(2.5*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.5*dt,0,1));
@@ -2686,7 +3359,7 @@ function updateEclipse(dt){
       b.vx=lerp(b.vx,Math.cos(ta)*spd,clamp(2*dt,0,1));
       b.vy=lerp(b.vy,Math.sin(ta)*spd,clamp(2*dt,0,1));
     }else{
-      const spd=(b.phase===2?160:220)*(b.vulnT>0?0.25:1);
+      const spd=(b.phase===2?160:220)*(b.vulnT>0?0.25:1)*curDiff().speedMult;
       const tvx=Math.cos(a)*spd*(d>210?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.7)*80;
       const tvy=Math.sin(a)*spd*(d>210?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.7)*80;
       b.vx=lerp(b.vx,tvx,clamp(2.5*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.5*dt,0,1));
@@ -2796,7 +3469,7 @@ function updateOrigin(dt){
       b.vx=lerp(b.vx,Math.cos(ta)*spd,clamp(2*dt,0,1));
       b.vy=lerp(b.vy,Math.sin(ta)*spd,clamp(2*dt,0,1));
     }else{
-      const spd=(b.phase===2?150:205)*(b.vulnT>0?0.22:1);
+      const spd=(b.phase===2?150:205)*(b.vulnT>0?0.22:1)*curDiff().speedMult;
       const tvx=Math.cos(a)*spd*(d>230?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.6)*75;
       const tvy=Math.sin(a)*spd*(d>230?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.6)*75;
       b.vx=lerp(b.vx,tvx,clamp(2.2*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.2*dt,0,1));
@@ -3013,14 +3686,21 @@ function updateBossBar(){
 /* ---------- 13 · ROOMS, CHOICES & RUN FLOW ---------- */
 function newRun(levelIdx){
   const lv=LEVELS[levelIdx];
+  // Captured once, here, from whatever was chosen on the main menu --
+  // run.difficulty then never changes for the rest of this run (level
+  // transitions, boss fights, room choices, room restarts all reuse
+  // this same run object), which is what makes curDiff() correct
+  // everywhere without threading a difficulty parameter through every
+  // enemy/boss/room function.
   run={level:lv,levelIdx,depth:1,totalDepth:lv.depth,shards:0,kills:0,roomsCleared:0,damage:0,time:0,
+    difficulty:pendingDifficulty,
     upgrades:{},typeCounts:{combat:0,elite:0,coin:0,treasure:0,upgrade:0,heal:0},hadElite:false,victoryBonus:0};
 }
 function startRun(weapon,levelIdx){
   selectedLevel=levelIdx;
   newRun(levelIdx);
   player=newPlayer(weapon);
-  save.lastWeapon=weapon;saveGame();
+  save.lastWeapon=weapon;saveGameCloud();
   enemies=[];bullets=[];ebullets=[];particles=[];dmgNums=[];pickups=[];portals=[];spawnQueue=[];props=[];swings=[];hurtArcs=[];hazards=[];zones=[];gravFields=[];
   boss=null;bossActive=false;transition=null;deathSeq=null;
   vicT=0;vicWarped=false;runActive=true;
@@ -3041,7 +3721,10 @@ function roomOptions(){
   const add=(t,w)=>{for(let i=0;i<w;i++)pool.push(t);};
   add('combat',44);
   add('coin',(tc.coin||0)<3?13:0);
-  add('elite',run.depth>=3?20:0);
+  // Elite rooms come up more often on Hard/Extreme (spawnMult) -- one
+  // of the "combination of factors" behind the higher difficulty tiers
+  // rather than a flat per-enemy stat multiplier.
+  add('elite',run.depth>=3?Math.round(20*curDiff().spawnMult):0);
   add('treasure',tc.treasure<2?13:0);add('upgrade',tc.upgrade<3?11:0);
   add('heal',(tc.heal<2?10:0)*(hpFrac<0.55?2:hpFrac>0.92?0.25:1));
   const n=Math.random()<0.25?3:2;
@@ -3062,7 +3745,11 @@ function makeWaves(){
       waves.push(combo.map(([type,count])=>({type,count,elite:false})));
       continue;
     }
-    let budget=(7+depth*3.2)*(w===nW-1?1.25:0.85);
+    // Spawn intensity (more enemies per wave, not faster/stronger
+    // individual enemies) is DM.spawnMult's main lever -- more bullets
+    // on screen at once reads as "harder" without touching any single
+    // enemy's own numbers a second time.
+    let budget=(7+depth*3.2)*(w===nW-1?1.25:0.85)*curDiff().spawnMult;
     const wave=[];
     const opts=lv.waveOpts;
     let guard=0;
@@ -3233,9 +3920,9 @@ function coinTargetHit(tg){
   c.bestCombo=Math.max(c.bestCombo,c.combo);
   const comboBonus=Math.floor(c.combo/5)*2;
   const reward=(tg.golden?10:2)+comboBonus;
-  c.coins+=reward;run.shards+=reward;
+  c.coins+=reward;addShards(reward);
   const col=tg.golden?'#ff7dff':'#ffc95c';
-  dmgNum(tg.x,tg.y,'+'+reward+' ◆',col,tg.golden?18:15);
+  dmgNum(tg.x,tg.y,'+'+Math.round(reward*curDiff().shardMult)+' ◆',col,tg.golden?18:15);
   burstFX(tg.x,tg.y,tg.golden?[255,120,255]:[255,201,92],tg.golden?14:8,260);
   ringFX(tg.x,tg.y,[255,255,255],40,0.25);
   SFX.targetHit(tg.golden);
@@ -3385,7 +4072,7 @@ function victory(){
   const lv=run.level;
   const next=LEVELS[lv.levelIdx+1];
   const firstClear=!save.beaten[lv.id];
-  run.victoryBonus=lv.completionBonus;run.shards+=lv.completionBonus;
+  run.victoryBonus=Math.round(lv.completionBonus*curDiff().shardMult);addShards(lv.completionBonus);
   // Tells the Duel Arena lobby (this always runs inside its iframe --
   // see launchVoidbreak() in index.html) that a level was beaten for
   // the FIRST time, so it can report it for the main account's XP
@@ -3438,7 +4125,7 @@ function finalizeRun(victory_){
   save.shards+=run.shards;save.runs++;
   save.best=Math.max(save.best,run.roomsCleared+(victory_?1:0));
   if(victory_)save.kills++;
-  saveGame();
+  saveGameCloud();
 }
 
 /* ---------- 15 · MAIN UPDATE ---------- */
@@ -3506,7 +4193,7 @@ function frame(now){
   el('dmgflash').style.opacity=hurtFlash;
   if(state==='playing'&&player&&!player.dead)el('lowhp').style.opacity=player.hp<player.maxhp*0.3?(0.35+Math.sin(now*0.006)*0.2):0;
   render();
-  if(state==='playing')updateHUD();
+  if(state==='playing'){updateHUD();if(isTouchDevice)updateTouchDashButton();}
   for(const k in pressed)pressed[k]=false;
   frameCount++;
 }
@@ -4995,7 +5682,7 @@ function go(s){
   state=s;paused=false;uiOpen=false;curUI=null;
   if(s==='weapons')launching=false;
   hideAllOverlays();
-  if(s==='menu'){el('ov-menu').classList.add('on');Music.set('menu');refreshMenuStats();}
+  if(s==='menu'){el('ov-menu').classList.add('on');Music.set('menu');refreshMenuStats();syncDifficultyUI();}
   else if(s==='howto')el('ov-howto').classList.add('on');
   else if(s==='settings')el('ov-settings').classList.add('on');
   else if(s==='forge'){el('ov-forge').classList.add('on');buildForge();}
@@ -5003,10 +5690,14 @@ function go(s){
   else if(s==='weapons'){
     el('ov-weapons').classList.add('on');buildWeaponSelect();
     const lv=LEVELS[selectedLevel];
-    el('wsSub').textContent='LEVEL '+lv.id+' — '+lv.name+' · CLICK A WEAPON, THEN CLICK IT AGAIN TO LAUNCH';
+    el('wsSub').textContent='LEVEL '+lv.id+' — '+lv.name+' · CLICK A WEAPON, THEN CLICK IT AGAIN TO LAUNCH'+
+      ' · '+DIFFICULTY_MODES[pendingDifficulty].label+' MODE';
   }
   else if(s==='playing'){el('hud').classList.remove('hidden');}
   document.body.classList.toggle('ingame',s==='playing');
+  // Touch controls only make sense over actual gameplay -- everywhere
+  // else they'd just sit on top of menu buttons.
+  if(isTouchDevice)mobileControlsEl.classList.toggle('on',s==='playing');
   if(s!=='playing'){el('hud').classList.add('hidden');
     if(s!=='gameover'&&s!=='victory')el('bossBarWrap').classList.add('hidden');}
 }
@@ -5034,6 +5725,18 @@ function setPause(v){
   }
 }
 function refreshMenuStats(){
+  // While the cloud handshake/fetch is still in flight, show neutral
+  // placeholders instead of `save` -- at boot `save` is whatever the
+  // (possibly irrelevant, possibly a DIFFERENT account's) local key
+  // happened to hold before bootstrapCloudSave() had a chance to
+  // reconcile it, and briefly displaying that would be exactly the kind
+  // of "wrong account's progress flashes on screen" bug this feature
+  // exists to prevent.
+  if(cloudSyncStatus==='connecting'){
+    setTxt('menuShards','—');setTxt('menuRuns','—');setTxt('menuBest','—');
+    setTxt('menuKills','—');setTxt('menuLevel','SYNCING…');
+    return;
+  }
   setTxt('menuShards',save.shards);
   setTxt('menuRuns',save.runs);
   setTxt('menuBest',save.best>0?save.best+' / 10':'–');
@@ -5193,7 +5896,7 @@ function buildForge(){
     row.querySelector('.fbuy').addEventListener('click',()=>{
       if(lvl>=f.max)return;
       if(save.shards<cost){SFX.error();toast('NOT ENOUGH VOID SHARDS');return;}
-      save.shards-=cost;save.forge[f.id]++;saveGame();SFX.buy();
+      save.shards-=cost;save.forge[f.id]++;saveGameCloud();SFX.buy();
       toast(f.name+' · LEVEL '+save.forge[f.id]);
       buildForge();
     });
@@ -5211,7 +5914,7 @@ function buildForge(){
       <div class="wcost">${owned?'UNLOCKED':gated?'DEFEAT '+gateBoss:'◆ '+w.cost+' SHARDS'}</div>`;
     if(!owned&&!gated)card.addEventListener('click',()=>{
       if(save.shards<w.cost){SFX.error();toast('NOT ENOUGH VOID SHARDS');return;}
-      save.shards-=w.cost;save.weapons[k]=true;saveGame();SFX.buy();
+      save.shards-=w.cost;save.weapons[k]=true;saveGameCloud();SFX.buy();
       toast('UNLOCKED · '+w.name);buildForge();
     });
     else if(gated)card.addEventListener('click',()=>{
@@ -5307,6 +6010,24 @@ function applyAudioSettings(){
 }
 /* --- wire buttons --- */
 el('btnStart').addEventListener('click',()=>{SFX.ui();go('levels');});
+/* ---- difficulty select ---- */
+function syncDifficultyUI(){
+  document.querySelectorAll('#diffRow .diff-btn').forEach(b=>{
+    b.classList.toggle('selected',b.dataset.diff===pendingDifficulty);
+  });
+  el('diffHint').textContent=DIFFICULTY_MODES[pendingDifficulty].label+' SELECTED';
+}
+document.querySelectorAll('#diffRow .diff-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const d=btn.dataset.diff;
+    if(!DIFFICULTY_MODES[d]||d===pendingDifficulty)return;
+    pendingDifficulty=d;
+    save.lastDifficulty=d;saveGame();
+    syncDifficultyUI();
+    SFX.ui();
+  });
+});
+syncDifficultyUI();
 el('btnForge').addEventListener('click',()=>{SFX.ui();settingsReturn='menu';go('forge');});
 el('btnHowto').addEventListener('click',()=>{SFX.ui();go('howto');});
 el('btnSettings').addEventListener('click',()=>{SFX.ui();settingsReturn='menu';go('settings');syncSettingsUI();});
@@ -5321,7 +6042,7 @@ el('pauseResume').addEventListener('click',()=>{SFX.ui();setPause(false);});
 el('pauseSettings').addEventListener('click',()=>{SFX.ui();settingsReturn='pause';setPause(false);go('settings');syncSettingsUI();});
 el('pauseQuit').addEventListener('click',()=>{
   SFX.ui();
-  save.shards+=run.shards;save.runs++;save.best=Math.max(save.best,run.roomsCleared);saveGame();
+  save.shards+=run.shards;save.runs++;save.best=Math.max(save.best,run.roomsCleared);saveGameCloud();
   runActive=false;deathSeq=null;
   toast('RUN ABANDONED · +'+run.shards+' SHARDS BANKED');
   Music.set('menu');
@@ -5347,14 +6068,38 @@ let resetArm=false;
 el('btnReset').addEventListener('click',()=>{
   if(!resetArm){resetArm=true;el('btnReset').textContent='CLICK AGAIN TO CONFIRM';
     setTimeout(()=>{resetArm=false;el('btnReset').textContent='RESET ALL DATA';},2500);return;}
-  try{localStorage.removeItem(SAVE_KEY);}catch(e){}
+  try{localStorage.removeItem(GUEST_SAVE_KEY);}catch(e){}
+  if(cloudSyncEnabled&&cloudAccountId)try{localStorage.removeItem(ACCOUNT_CACHE_PREFIX+cloudAccountId);}catch(e){}
   save=JSON.parse(JSON.stringify(DEF_SAVE));resetArm=false;
   el('btnReset').textContent='RESET ALL DATA';
   syncSettingsUI();applyAudioSettings();refreshMenuStats();
+  // A reset must also clear the CLOUD save, or the next load (this
+  // device or any other) would just re-download the old progress and
+  // silently undo the reset -- see pushCloudSaveNow/flushCloudSave,
+  // which both upload the current (now-default) `save` as-is.
+  if(cloudSyncEnabled)pushCloudSaveNow();
   toast('ALL DATA RESET');
 });
 
 /* ---------- 19 · BOOT ---------- */
+// Ask the parent (index.html) who's signed in -- see
+// handleSessionHandshake above and index.html's own 'voidbreak_ready'
+// handler, which replies with 'duelarena_session'. Only a same-origin
+// reply from our actual parent window is trusted, exactly like
+// index.html only trusts 'voidbreak_complete' from its own iframe.
+window.addEventListener('message',(e)=>{
+  if(e.origin!==location.origin||e.source!==window.parent)return;
+  if(e.data&&e.data.type==='duelarena_session'){
+    handleSessionHandshake(e.data.sessionToken||null,e.data.accountId||null);
+  }
+});
+try{window.parent.postMessage({type:'voidbreak_ready'},location.origin);}catch(e){}
+// If no reply ever arrives (opened standalone outside the lobby's
+// iframe, or something blocked the message), don't leave the menu
+// stuck on placeholders forever -- fall back to guest/local-only play,
+// which is always correct even if it turns out a reply was just slow.
+setTimeout(()=>{if(!cloudBootstrapped)handleSessionHandshake(null,null);},3000);
+
 refreshMenuStats();
 syncSettingsUI();
 cam.x=0;cam.y=0;
