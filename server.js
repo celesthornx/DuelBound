@@ -3220,6 +3220,59 @@ const httpServer = http.createServer(async (req, res) => {
         return;
     }
 
+    // ---- GET /auth/session?sessionToken=... ----
+    //
+    // Resumes an EXISTING session -- this is what lets a page refresh
+    // stay signed in. The other /auth/* endpoints above all mint a new
+    // sessionToken because each of them is a fresh authentication event
+    // (a password check, a Google credential verification); this one is
+    // not an authentication event at all, just a lookup of a token the
+    // client already holds, so it returns the SAME token rather than
+    // rotating it.
+    //
+    // Same query-string-carries-sessionToken shape as every other
+    // read-only endpoint in this file (/ranked/me, /friends/list,
+    // /battlepass/state, ...) -- deliberately consistent with the
+    // existing convention rather than inventing a new one.
+    //
+    // getAccountForSession() is the ONLY thing that decides whether this
+    // succeeds: the client cannot claim to be any account, it can only
+    // present a token this server itself issued via a real login. A
+    // missing, expired, or already-logged-out token gets exactly the
+    // same 401 a stale token gets everywhere else, so the client's
+    // existing "session expired" handling (see saveProgress) applies
+    // here unchanged.
+    if (req.method === "GET" && req.url.startsWith("/auth/session")) {
+        const urlObj = new URL(req.url, "http://x");
+        const sessionToken = urlObj.searchParams.get("sessionToken") || "";
+        const account = getAccountForSession(sessionToken);
+        if (!account) {
+            sendJson(res, 401, { error: "Not signed in" });
+            return;
+        }
+        const sub = sessions[sessionToken];
+
+        // Same lazy migrations /auth/login runs, for the same reason: a
+        // session can be resumed after a day boundary (or a feature
+        // deploy) rolled over while the tab was closed, and this is the
+        // first moment that account is touched since.
+        const rolledDC = ensureDailyChallenges(account.dailyChallenges);
+        if (rolledDC !== account.dailyChallenges) {
+            account.dailyChallenges = rolledDC;
+            await persistAccount(sub);
+        }
+        ensureAccountXP(sub);
+        ensureAccountBattlePass(sub);
+
+        sendJson(res, 200, {
+            ok: true,
+            sessionToken: sessionToken,
+            account: publicAccount(account),
+            isAdmin: isAdminSession(sessionToken)
+        });
+        return;
+    }
+
     // ---- POST /shop/buy ----
     // body: { sessionToken, itemType: 'skin'|'power'|'ability', itemId }
     //

@@ -5385,6 +5385,32 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   let sessionToken = null;
   let accountName = null;
   let loggedIn = false;
+
+  // ---- Persistent login (survives refresh / tab close / browser restart) ----
+  //
+  // This localStorage key holds ONLY the opaque sessionToken this server
+  // itself issued at a real login -- the same 24-random-byte bearer
+  // token every authenticated request already sends as `sessionToken`.
+  // It is NOT a Google credential, NOT a password, and NOT proof of
+  // anything by itself: on its own it is just a lookup key. The server
+  // is what decides whether it is still valid and which account (if
+  // any) it names -- see GET /auth/session in server.js, which this
+  // token is only ever redeemed against. A tampered or made-up value
+  // here simply fails to resolve to an account, exactly like a stolen
+  // or expired one does; it can never be used to become anyone.
+  //
+  // Kept in sync with the in-memory `sessionToken` variable at every
+  // place that variable changes (onAuthenticated, signOut, and the
+  // session-expired path in saveProgress) via these two helpers, so
+  // there is exactly one thing to call rather than every call site
+  // remembering the localStorage half itself.
+  const SESSION_TOKEN_KEY = 'duelarena.sessionToken';
+  function saveSessionTokenLocally(){
+    try{ localStorage.setItem(SESSION_TOKEN_KEY, sessionToken); } catch(e){}
+  }
+  function clearSessionTokenLocally(){
+    try{ localStorage.removeItem(SESSION_TOKEN_KEY); } catch(e){}
+  }
   let isAdmin = false; // UX-only flag; every real admin action is re-verified server-side
   let stats = { kills: 0, wins: 0 };
   // XP/Level are ALWAYS server-authoritative -- these three are pure
@@ -5749,13 +5775,20 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   // never drift apart -- there is one account-session path, not two.
   //
   // `data.account` is the server's sanitised view of the account: it
-  // never contains a password hash (see publicAccount in server.js), and
-  // the session token lives only in this variable. It is deliberately
-  // NOT written to localStorage/sessionStorage/a cookie, which is what
-  // makes a page refresh log the player out -- there is nothing left for
-  // the reloaded page to authenticate with.
+  // never contains a password hash (see publicAccount in server.js).
+  // Reached by every sign-in path -- Google, username/password, AND a
+  // resumed session on boot (see resumeSession()) -- so there is one
+  // single place that ever transitions this client into "signed in",
+  // instead of each path repeating (and risking drifting from) the same
+  // dozen lines of setup.
   function onAuthenticated(data){
     sessionToken = data.sessionToken;
+    // Persisted so a page refresh, a closed tab, or a closed browser can
+    // present this same token again and resume -- see resumeSession()
+    // and GET /auth/session in server.js. Only the opaque token is ever
+    // written here, never a password or a Google credential (see the
+    // note on SESSION_TOKEN_KEY above).
+    saveSessionTokenLocally();
     applyAccount(data.account);
     loggedIn = true;
     setAccountStatus('SIGNED IN AS ' + accountName.toUpperCase());
@@ -5796,6 +5829,57 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     connectPresence();
     refreshFriends();
     chatUpdateAvailability();
+  }
+
+  // ====================================================================
+  // PERSISTENT LOGIN -- resume an existing session on page load
+  //
+  // The third way into onAuthenticated(), alongside Google and
+  // username/password: instead of a fresh credential, this redeems the
+  // sessionToken a PREVIOUS load already authenticated and saved (see
+  // saveSessionTokenLocally). It is what makes a refresh, a closed-and-
+  // reopened tab, or a closed-and-reopened browser stay signed in.
+  //
+  // The server -- never this code -- decides whether the token still
+  // names a real, live session (GET /auth/session in server.js). This
+  // function does not and cannot assert an identity; it only asks "is
+  // this token still good", and only ever acts on what the server says
+  // back. A token that has expired, been logged out elsewhere, or been
+  // tampered with in localStorage all fail the exact same way: a 401,
+  // handled below by quietly forgetting it and leaving this load as a
+  // guest -- precisely as if the player had never signed in on this
+  // browser at all.
+  //
+  // Called once at boot (see the IIFE at the bottom of this file).
+  // Fire-and-forget from the caller's point of view: nothing else in
+  // boot waits on it, because onAuthenticated() already re-syncs every
+  // screen that cares (daily challenges, Battle Pass, friends, ranked,
+  // presence) the moment it resolves, exactly like a fresh login does.
+  async function resumeSession(){
+    let stored;
+    try{ stored = localStorage.getItem(SESSION_TOKEN_KEY); } catch(e){ stored = null; }
+    if(!stored) return; // never signed in on this browser, or already logged out -- stay a guest
+
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/auth/session?sessionToken=' + encodeURIComponent(stored));
+      if(!res.ok){
+        // The server does not recognize this token (expired, revoked by
+        // a Logout elsewhere, or invalidated by a password reset). Drop
+        // it locally too -- otherwise every future load would repeat
+        // this same failing round trip forever instead of just landing
+        // in the guest view, which is what should happen here.
+        clearSessionTokenLocally();
+        return;
+      }
+      const data = await res.json();
+      onAuthenticated(data);
+    } catch(e){
+      // Network failure, not a rejection -- the token itself might
+      // still be perfectly valid. Leave it stored and simply proceed as
+      // a guest for THIS load; the next load (or this one, if the
+      // player is still on the lobby and a retry path runs later) gets
+      // another chance to redeem it.
+    }
   }
 
   // ====================================================================
@@ -6079,8 +6163,11 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     disconnectPresence();
     // End the session on the SERVER too, while the token is still
     // valid, so the token is dead even if a copy of it survives
-    // anywhere. Fire-and-forget: the local sign-out below happens
-    // regardless of whether this request lands.
+    // anywhere (including this same browser's localStorage, cleared
+    // below) -- this is what makes an explicit Logout actually final:
+    // a refresh afterward has nothing left that still resolves to an
+    // account, server-side or client-side. Fire-and-forget: the local
+    // sign-out below happens regardless of whether this request lands.
     if(sessionToken){
       const token = sessionToken;
       try{
@@ -6097,6 +6184,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     FRIENDS.myId = null;
     updateFriendsBadge();
     sessionToken = null;
+    clearSessionTokenLocally();
     loggedIn = false;
     accountName = null;
     isAdmin = false;
@@ -6178,8 +6266,14 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       if(res.status === 401 || res.status === 409){
         // The session is no longer valid (expired, or revoked server-side).
         // Say so instead of silently dropping everything from here on.
+        // Clearing the persisted token too is what stops the NEXT
+        // refresh from immediately trying (and failing) to resume this
+        // same dead session -- without it the player would see this
+        // same "expired" message on every reload until they signed in
+        // by hand, instead of just landing as a guest.
         loggedIn = false;
         sessionToken = null;
+        clearSessionTokenLocally();
         setAccountStatus('SESSION EXPIRED — SIGN IN AGAIN TO KEEP SAVING');
         const gBtn = document.getElementById('googleSignInBtn');
         const oBtn = document.getElementById('signOutBtn');
@@ -8910,16 +9004,12 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   // coming back here). All this does is give the player an honest
   // status message. It never sets `crystals` from anything in the URL.
   //
-  // Because this game logs a player out on every page load (see the
-  // account-security notes elsewhere in this file), returning from
-  // Stripe means landing back as a guest, same as any other refresh --
-  // there is no session yet to ask "did it work" with. If this browser
-  // has an active Google session, tryInitGoogle()'s existing silent
-  // sign-in usually completes within a second or two, and THAT path
-  // (once signed in) polls the real purchase status below. A
-  // username/password account has no such silent path and simply needs
-  // to sign back in manually to see the updated balance -- exactly like
-  // it already needs to for anything else after a refresh.
+  // Stripe's redirect back here is a full page load, so it lands as a
+  // brand new boot -- but resumeSession() (see above) is already racing
+  // to sign back in from the token this browser remembers, for BOTH
+  // Google and username/password accounts alike. The poll below simply
+  // waits for `loggedIn`/`sessionToken` to be set, however that
+  // happens, and asks the real purchase status the moment it is.
   // ---------------------------------------------------------------------
   function handleCheckoutReturn(){
     const params = new URLSearchParams(window.location.search);
@@ -12943,19 +13033,21 @@ if(tutorialActive) tutorialUpdate(dt);
     setTimeout(()=>{ try{ passEl.focus(); }catch(e){} }, 50);
   });
 
-  // Best-effort: tell the server to drop the session as the page goes
-  // away, so a closed tab doesn't leave one behind. This is a TIDY-UP
-  // layer, not the security mechanism -- a beacon can be dropped by the
-  // browser and is not relied on. What actually logs the player out on
-  // refresh is that the token lives only in a JS variable and is never
-  // persisted, so a reloaded page has nothing to authenticate with.
-  window.addEventListener('pagehide', ()=>{
-    if(!sessionToken) return;
-    try{
-      const blob = new Blob([JSON.stringify({ sessionToken: sessionToken })], { type: 'application/json' });
-      navigator.sendBeacon(ACCOUNT_SERVER_URL + '/auth/logout', blob);
-    } catch(e){}
-  });
+  // There used to be a `pagehide` handler here that beaconed
+  // /auth/logout on every page unload, so a closed tab "tidied up" its
+  // server-side session. That is exactly what broke persistent login:
+  // `pagehide` fires on an ordinary refresh too (it is the reliable,
+  // bfcache-safe replacement for `unload`), so it was killing the very
+  // session a reload was supposed to resume, moments before the reload
+  // could resume it.
+  //
+  // It is intentionally gone. A session now ends in exactly two ways:
+  // the player clicks Logout (see signOut(), which destroys it on the
+  // server AND clears the local copy), or it simply expires server-side
+  // (SESSION_IDLE_MS / SESSION_TTL_MS in server.js/storage.js already
+  // reap an abandoned session on their own -- an unclosed tab was never
+  // the thing keeping a stale session alive). Closing a tab, or the
+  // whole browser, is no longer a logout.
 
   const signOutBtn = document.getElementById('signOutBtn');
 
@@ -15297,12 +15389,17 @@ if(tutorialActive) tutorialUpdate(dt);
   tryInitGoogle();
   updateCurrencyDisplay();
   handleCheckoutReturn();
+  // Fired as early in boot as possible, in parallel with everything
+  // above -- see resumeSession()'s own comment for why nothing here
+  // needs to wait on it.
+  resumeSession();
   requestAnimationFrame(loop);
-  // Brief delay so a returning player's silent Google sign-in (if any)
-  // has a chance to resolve and call applyAccount() first -- otherwise
-  // a returning player would flash the tutorial for a moment before
-  // their real account's tutorialComplete:true arrives. A guest who
-  // never signs in still gets the offer shortly after landing in the lobby.
+  // Brief delay so a returning player's resumed session (if any -- see
+  // resumeSession() above) has a chance to resolve and call
+  // applyAccount() first -- otherwise a returning player would flash
+  // the tutorial for a moment before their real account's
+  // tutorialComplete:true arrives. A guest who never signs in still
+  // gets the offer shortly after landing in the lobby.
   setTimeout(()=>{ if(typeof tutorialMaybeOfferOnBoot === 'function') tutorialMaybeOfferOnBoot(); }, 1200);
 })();
 </script>
