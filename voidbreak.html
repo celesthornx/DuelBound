@@ -1030,8 +1030,19 @@ async function flushCloudSave(){
   if(!cloudSavePending)return;
   cloudSavePending=false;
   cloudSaveInFlight=true;
+  // `mastery` is client-reported (see voidbreak.js's DEF_SAVE header
+  // comment) exactly like `shards`/`kills` already were -- it belongs in
+  // every ordinary save payload so the server actually learns about XP
+  // earned this session. Leaving it out here (as this payload once did)
+  // meant the server's own stored mastery could never advance past
+  // whatever it was on the account's very first sync: awardMastery()
+  // grows `save.mastery` locally on every kill, the Mastery screen reads
+  // that same local value and correctly shows CLAIM, but
+  // /voidbreak/mastery/claim checks the STORED (still-zero) server
+  // value and refuses with "requirements not met" -- a claim button that
+  // can never actually be pressed successfully.
   const payload={shards:save.shards,forge:save.forge,weapons:save.weapons,lastWeapon:save.lastWeapon,
-    runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten};
+    runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten,mastery:save.mastery};
   try{
     const res=await fetch('/voidbreak/save',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({sessionToken:cloudSessionToken,data:payload})});
@@ -1072,8 +1083,19 @@ async function flushCloudSave(){
 async function pushCloudSaveNow(){
   if(!cloudSyncEnabled)return;
   setSyncStatus('saving');
+  // `mastery` is client-reported (see voidbreak.js's DEF_SAVE header
+  // comment) exactly like `shards`/`kills` already were -- it belongs in
+  // every ordinary save payload so the server actually learns about XP
+  // earned this session. Leaving it out here (as this payload once did)
+  // meant the server's own stored mastery could never advance past
+  // whatever it was on the account's very first sync: awardMastery()
+  // grows `save.mastery` locally on every kill, the Mastery screen reads
+  // that same local value and correctly shows CLAIM, but
+  // /voidbreak/mastery/claim checks the STORED (still-zero) server
+  // value and refuses with "requirements not met" -- a claim button that
+  // can never actually be pressed successfully.
   const payload={shards:save.shards,forge:save.forge,weapons:save.weapons,lastWeapon:save.lastWeapon,
-    runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten};
+    runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten,mastery:save.mastery};
   try{
     const res=await fetch('/voidbreak/save',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({sessionToken:cloudSessionToken,data:payload})});
