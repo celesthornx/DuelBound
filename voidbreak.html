@@ -313,6 +313,26 @@ input[type=range]{width:180px;accent-color:var(--cy)}
 .mrw.claimable:hover{background:rgba(255,201,92,.25)}
 .mrw.claimed{border-color:rgba(56,255,156,.3);color:rgba(56,255,156,.6)}
 
+/* ---- leaderboard ---- */
+.lb-list{display:flex;flex-direction:column;gap:6px;max-height:52vh;overflow-y:auto;padding-right:4px}
+.lb-list::-webkit-scrollbar{width:6px}
+.lb-list::-webkit-scrollbar-thumb{background:rgba(0,240,255,.3)}
+.lb-row{display:flex;align-items:center;gap:12px;border:1px solid rgba(0,240,255,.22);background:rgba(255,255,255,.02);
+  padding:9px 14px}
+.lb-row.top3{border-color:rgba(255,201,92,.5);background:rgba(255,201,92,.05)}
+.lb-row.you{border-color:var(--cy);background:rgba(0,240,255,.08)}
+.lb-pos{font-family:'Orbitron';width:30px;flex:none;text-align:center;color:#7ea4b5;font-size:13px}
+.lb-row.top3 .lb-pos{color:var(--gold)}
+.lb-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-family:'Orbitron';font-size:12.5px;letter-spacing:1px;color:#eafcff}
+.lb-row.you .lb-name{color:var(--cy)}
+.lb-stats{display:flex;gap:16px;flex:none}
+.lb-stat{display:flex;flex-direction:column;align-items:center;min-width:42px}
+.lb-stat b{font-family:'Orbitron';font-size:12px;color:var(--cy)}
+.lb-row.top3 .lb-stat b{color:var(--gold)}
+.lb-stat i{font-size:8px;letter-spacing:1px;color:#6e93a5;font-style:normal}
+.lb-you-row{margin-top:4px;padding-top:10px;border-top:1px solid rgba(0,240,255,.18)}
+
 /* ---- prestige ---- */
 .pr-level{text-align:center;font-family:'Orbitron';font-weight:900;font-size:26px;letter-spacing:5px;
   color:#ff78ff;text-shadow:0 0 18px rgba(255,120,255,.5);margin:2px 0 14px}
@@ -465,6 +485,14 @@ input[type=range]{width:180px;accent-color:var(--cy)}
   .mlv{font-size:10px}
   .mrw{font-size:8px;padding:3px 5px}
   .vb-profile{font-size:10px}
+  .lb-list{max-height:44vh}
+  .lb-row{padding:7px 8px;gap:7px}
+  .lb-pos{width:22px;font-size:11px}
+  .lb-name{font-size:10.5px}
+  .lb-stats{gap:8px}
+  .lb-stat{min-width:32px}
+  .lb-stat b{font-size:10.5px}
+  .lb-stat i{font-size:7px}
 }
 /* Landscape phones specifically (short viewport) need the HUD pulled
    in tighter than a tall-but-narrow portrait tablet would. */
@@ -543,6 +571,7 @@ input[type=range]{width:180px;accent-color:var(--cy)}
       <button type="button" class="btn endgame-btn" id="btnShop">SHOP</button>
       <button type="button" class="btn endgame-btn" id="btnMastery">MASTERY</button>
       <button type="button" class="btn endgame-btn" id="btnPrestige">PRESTIGE</button>
+      <button type="button" class="btn endgame-btn" id="btnLeaderboard">LEADERBOARD</button>
     </div>
     <button class="btn" id="btnHowto">HOW TO PLAY</button>
     <button class="btn" id="btnSettings">SETTINGS</button>
@@ -615,6 +644,19 @@ input[type=range]{width:180px;accent-color:var(--cy)}
     <button class="btn" id="prestigeCancel">CANCEL</button>
     <button class="btn danger" id="prestigeConfirm">YES — PRESTIGE</button>
   </div>
+</div></div>
+
+<!-- ---- VOIDBREAK LEADERBOARD ---- -->
+<div class="overlay" id="ov-leaderboard"><div class="panel eg-panel">
+  <h2 class="ovtitle">VOIDBREAK LEADERBOARD</h2>
+  <div class="ovsub">RANKED BY PRESTIGE · BOSSES SLAIN · WEAPON MASTERY</div>
+  <div class="eg-bar">
+    <div class="eg-bal" id="lbTotal">–</div>
+  </div>
+  <div class="lb-list" id="lbList"></div>
+  <div class="eg-empty" id="lbEmpty"></div>
+  <div class="lb-you-row" id="lbYouRow"></div>
+  <div class="ovnav"><button class="btn" id="lbBack">BACK</button></div>
 </div></div>
 
 <div class="overlay" id="ov-levels"><div class="panel" style="width:560px">
@@ -6178,7 +6220,7 @@ function toast(msg){
 }
 
 /* ---------- 18 · UI / MENUS ---------- */
-const OVERLAYS=['ov-menu','ov-howto','ov-settings','ov-forge','ov-weapons','ov-pause','ov-upgrade','ov-swap','ov-gameover','ov-victory','ov-levels','ov-shop','ov-mastery','ov-prestige','ov-prestige-confirm'];
+const OVERLAYS=['ov-menu','ov-howto','ov-settings','ov-forge','ov-weapons','ov-pause','ov-upgrade','ov-swap','ov-gameover','ov-victory','ov-levels','ov-shop','ov-mastery','ov-prestige','ov-prestige-confirm','ov-leaderboard'];
 function hideAllOverlays(){OVERLAYS.forEach(id=>el(id).classList.remove('on'));}
 function go(s){
   state=s;paused=false;uiOpen=false;curUI=null;
@@ -6191,6 +6233,7 @@ function go(s){
   else if(s==='shop'){el('ov-shop').classList.add('on');buildShop();}
   else if(s==='mastery'){el('ov-mastery').classList.add('on');buildMastery();}
   else if(s==='prestige'){el('ov-prestige').classList.add('on');buildPrestige();}
+  else if(s==='leaderboard'){el('ov-leaderboard').classList.add('on');buildLeaderboard();}
   else if(s==='levels'){el('ov-levels').classList.add('on');buildLevelChain();}
   else if(s==='weapons'){
     el('ov-weapons').classList.add('on');buildWeaponSelect();
@@ -6719,6 +6762,65 @@ async function doPrestige(){
   }
 }
 
+/* ---- LEADERBOARD ----
+   Public read: /voidbreak/leaderboard never requires a session, so
+   guests can browse it exactly like a signed-in player -- sessionToken
+   is only ever attached to learn "your own position", never to gate
+   viewing. Every column the server returns is a lifetime, server-owned
+   or server-bounded stat (see getVoidbreakLeaderboard's comment in
+   server.js); nothing here is computed from local `save`. */
+function lbEscName(str){
+  return String(str).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+function lbRowHtml(r,mine){
+  const cls='lb-row'+(r.position<=3?' top3':'')+(mine?' you':'');
+  const medal=r.position<=3?['🥇','🥈','🥉'][r.position-1]:('#'+r.position);
+  return '<div class="'+cls+'">'
+    +'<div class="lb-pos">'+medal+'</div>'
+    +'<div class="lb-name">'+lbEscName(r.name)+(mine?' <small>(YOU)</small>':'')+'</div>'
+    +'<div class="lb-stats">'
+      +'<div class="lb-stat"><b>P'+r.prestige+'</b><i>PRESTIGE</i></div>'
+      +'<div class="lb-stat"><b>'+r.kills+'</b><i>BOSSES</i></div>'
+      +'<div class="lb-stat"><b>'+r.mastery+'</b><i>MASTERY</i></div>'
+      +'<div class="lb-stat"><b>'+r.best+'</b><i>BEST</i></div>'
+      +'<div class="lb-stat"><b>'+r.runs+'</b><i>RUNS</i></div>'
+    +'</div></div>';
+}
+let lbBusy=false;
+async function buildLeaderboard(){
+  const list=el('lbList'),empty=el('lbEmpty'),youRow=el('lbYouRow'),totalEl=el('lbTotal');
+  if(lbBusy)return;
+  lbBusy=true;
+  list.innerHTML='';youRow.innerHTML='';totalEl.textContent='';
+  empty.textContent='LOADING…';
+  let data=null;
+  try{
+    const qs='?limit=50'+(cloudSessionToken?('&sessionToken='+encodeURIComponent(cloudSessionToken)):'');
+    const res=await fetch('/voidbreak/leaderboard'+qs);
+    data=await res.json().catch(()=>null);
+    if(!res.ok||!data)throw new Error('bad response');
+  }catch(e){
+    lbBusy=false;
+    empty.textContent='COULD NOT REACH THE SERVER';
+    return;
+  }
+  lbBusy=false;
+  if(!data.entries||!data.entries.length){
+    empty.textContent='NO RUNS RECORDED YET — CLEAR A LEVEL TO APPEAR HERE';
+    return;
+  }
+  empty.textContent='';
+  totalEl.textContent=data.total+' RANKED PLAYER'+(data.total===1?'':'S');
+  const yourPos=data.you?data.you.position:-1;
+  list.innerHTML=data.entries.map(r=>lbRowHtml(r,r.position===yourPos)).join('');
+  // Signed in, ranked, but outside the visible page -- pin a second copy
+  // of your own row below the list instead of leaving you to scroll
+  // past everyone ahead of you looking for your name.
+  if(data.you&&yourPos>data.entries.length){
+    youRow.innerHTML=lbRowHtml(data.you,true);
+  }
+}
+
 /* ---- LOADOUT: click = select · click again = launch ---- */
 let selWeapon='pulse',armedWeapon=false,launching=false;
 function buildWeaponSelect(){
@@ -6829,6 +6931,8 @@ el('btnForge').addEventListener('click',()=>{SFX.ui();settingsReturn='menu';go('
 el('btnShop').addEventListener('click',()=>{SFX.ui();go('shop');});
 el('btnMastery').addEventListener('click',()=>{SFX.ui();go('mastery');});
 el('btnPrestige').addEventListener('click',()=>{SFX.ui();go('prestige');});
+el('btnLeaderboard').addEventListener('click',()=>{SFX.ui();go('leaderboard');});
+el('lbBack').addEventListener('click',()=>{SFX.ui();go('menu');});
 el('shopBack').addEventListener('click',()=>{SFX.ui();go('menu');});
 el('masteryBack').addEventListener('click',()=>{SFX.ui();go('menu');});
 el('prestigeBack').addEventListener('click',()=>{SFX.ui();go('menu');});
