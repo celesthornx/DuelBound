@@ -1839,6 +1839,70 @@ function getCasualLeaderboard(sortKey) {
     return rows;
 }
 
+// ---------------------------------------------------------------------
+// VOIDBREAK LEADERBOARD -- same cached-array shape as the two above, and
+// for the same reason (don't sort every account on every request).
+//
+// Ranked by things that can only rise, and only through actually playing
+// the mode -- never by spendable Void Shards (a balance that goes DOWN
+// when spent would make the ladder punish the shop/prestige systems this
+// same feature ships) and never by anything client-reported without a
+// server-side floor under it:
+//   1. prestige level     -- server-owned (voidbreak.js's applyPrestige),
+//                             and by construction requires having finished
+//                             every weapon/upgrade/level at least once.
+//   2. kills (bosses slain) -- lifetime, incremented once per level
+//                             clear, preserved across prestige.
+//   3. mastery total       -- sum of every weapon's mastery LEVEL (not
+//                             raw XP, which is client-reported and only
+//                             rate-limited, not verified) across all six
+//                             weapons; capping the input to a level via
+//                             masteryLevelFromXp bounds how much one
+//                             inflated save can move this column.
+//   4. best (best sector)  -- lifetime deepest single-run clear depth.
+//   5. runs                -- last-resort tiebreak only; more runs alone
+//                             is not a goal, it only separates players
+//                             already tied on every stat above.
+// =====================================================================
+const VOIDBREAK_LB_TTL_MS = 5000;
+let voidbreakLbCache = { at: 0, rows: [] };
+
+function getVoidbreakLeaderboard() {
+    const now = Date.now();
+    if (now - voidbreakLbCache.at < VOIDBREAK_LB_TTL_MS) return voidbreakLbCache.rows;
+
+    const rows = [];
+    for (const sub of Object.keys(accounts)) {
+        const account = accounts[sub];
+        const vb = account && account.voidbreak;
+        const save = vb && vb.data;
+        // Only accounts that have actually played Voidbreak belong on the
+        // ladder -- same "must have played" gate the ranked ladder uses,
+        // just against Voidbreak's own stats instead of ranked games.
+        if (!save) continue;
+        const prestige = (save.prestige || {}).level || 0;
+        if (!((save.runs || 0) > 0 || (save.kills || 0) > 0 || prestige > 0)) continue;
+
+        let mastery = 0;
+        for (const key of Voidbreak.WEAPON_KEYS) {
+            mastery += Voidbreak.masteryLevelFromXp((save.mastery || {})[key] || 0);
+        }
+        rows.push({
+            sub: sub,
+            name: account.name || "Player",
+            prestige: prestige,
+            kills: save.kills || 0,
+            mastery: mastery,
+            best: save.best || 0,
+            runs: save.runs || 0
+        });
+    }
+    rows.sort((a, b) => (b.prestige - a.prestige) || (b.kills - a.kills) || (b.mastery - a.mastery) || (b.best - a.best) || (b.runs - a.runs));
+
+    voidbreakLbCache = { at: now, rows: rows };
+    return rows;
+}
+
 // =====================================================================
 // FRIENDS -- presence, two-sided writes, and real-time events.
 //
@@ -4389,6 +4453,43 @@ const httpServer = http.createServer(async (req, res) => {
         } catch (e) {
             sendJson(res, 400, { error: "Bad request" });
         }
+        return;
+    }
+
+    // ---- GET /voidbreak/leaderboard?sessionToken=...&limit=... ----
+    // Public ladder, same shape and privacy rules as /ranked/leaderboard:
+    // sessionToken is optional and only used to report "your rank is
+    // #N"; the rows themselves never expose `sub` (a player's Google
+    // account id) or anything but the public Voidbreak columns.
+    if (req.method === "GET" && req.url.startsWith("/voidbreak/leaderboard")) {
+        const urlObj = new URL(req.url, "http://x");
+        const limitRaw = parseInt(urlObj.searchParams.get("limit"), 10);
+        const limit = Number.isInteger(limitRaw) ? Math.max(1, Math.min(100, limitRaw)) : 20;
+
+        const rows = getVoidbreakLeaderboard();
+        const sub = sessions[urlObj.searchParams.get("sessionToken")];
+
+        let you = null;
+        if (sub) {
+            for (let i = 0; i < rows.length; i++) {
+                if (rows[i].sub === sub) {
+                    you = {
+                        position: i + 1, name: rows[i].name, prestige: rows[i].prestige,
+                        kills: rows[i].kills, mastery: rows[i].mastery, best: rows[i].best, runs: rows[i].runs
+                    };
+                    break;
+                }
+            }
+        }
+
+        sendJson(res, 200, {
+            total: rows.length,
+            you: you,
+            entries: rows.slice(0, limit).map((r, i) => ({
+                position: i + 1, name: r.name, prestige: r.prestige,
+                kills: r.kills, mastery: r.mastery, best: r.best, runs: r.runs
+            }))
+        });
         return;
     }
 
