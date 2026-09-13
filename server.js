@@ -4134,7 +4134,13 @@ const httpServer = http.createServer(async (req, res) => {
             hasCloudSave: !!vb,
             data: vb ? vb.data : null,
             updatedAt: vb ? vb.updatedAt : 0,
-            version: vb ? vb.version : 0
+            version: vb ? vb.version : 0,
+            // The endgame view (shop catalog with prices/ownership/locks,
+            // mastery progress, prestige eligibility) is resolved HERE,
+            // server-side, from the stored save. The client renders it
+            // and never computes a price, an ownership flag or an
+            // eligibility check of its own.
+            endgame: Voidbreak.endgameView(vb ? vb.data : null)
         });
         return;
     }
@@ -4175,8 +4181,19 @@ const httpServer = http.createServer(async (req, res) => {
 
             const previousVoidbreak = target.voidbreak;
             const previousVersion = previousVoidbreak ? previousVoidbreak.version : 0;
+            // applyClientSave() is what makes the endgame fields safe on
+            // this otherwise client-authoritative endpoint: every
+            // server-owned field (shard spend ledger, owned/equipped
+            // cosmetics, mastery reward claims, prestige level) is taken
+            // from the STORED record and the client's version discarded,
+            // and client-reported mastery XP is forced to be monotonic
+            // and capped per save. So this endpoint still cannot be used
+            // to grant items, refund a purchase, re-claim a reward or
+            // fake a prestige -- only the transactional endpoints below
+            // can touch any of that.
+            const reconciled = Voidbreak.applyClientSave(clean, previousVoidbreak ? previousVoidbreak.data : null);
             target.voidbreak = {
-                data: clean,
+                data: reconciled,
                 updatedAt: Date.now(), // the SERVER's clock, never a client-supplied timestamp
                 version: previousVersion + 1
             };
@@ -4191,7 +4208,183 @@ const httpServer = http.createServer(async (req, res) => {
             sendJson(res, 200, {
                 ok: true,
                 updatedAt: target.voidbreak.updatedAt,
-                version: target.voidbreak.version
+                version: target.voidbreak.version,
+                endgame: Voidbreak.endgameView(target.voidbreak.data)
+            });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // =====================================================================
+    // VOIDBREAK ENDGAME -- Void Shard Shop / Weapon Mastery / Void Prestige
+    //
+    // These four endpoints are the ONLY way the server-owned half of a
+    // Voidbreak save can change (see voidbreak.js's DEF_SAVE comment for
+    // the server-owned vs client-reported split). Each one:
+    //   * identifies the account from the SESSION only, never a
+    //     client-supplied id,
+    //   * reads the CURRENT STORED save as the input to the decision,
+    //     so a stale or forged client view can't influence the outcome,
+    //   * delegates the decision to a pure function in voidbreak.js
+    //     (price, ownership, unlock gate, mastery level reached, claim
+    //     already made, prestige eligibility) -- nothing in the request
+    //     body carries a price, a balance or an entitlement,
+    //   * applies the change to a COPY and only commits it if the
+    //     account write succeeds, rolling back in memory otherwise, so a
+    //     failed persist can never charge a player or half-apply a
+    //     prestige,
+    //   * and is naturally idempotent against refresh / reconnect /
+    //     multi-tab replay, because the duplicate check is against
+    //     stored state rather than against anything in the request
+    //     (buying an owned item, re-claiming a claimed reward, or
+    //     prestiging when no longer eligible all fail closed).
+    // =====================================================================
+    function voidbreakEndgameAuth(body) {
+        const sub = sessions[body.sessionToken];
+        if (!sub) return { error: 401, message: "Not signed in" };
+        const target = accounts[sub];
+        if (!target) return { error: 409, message: "Account not loaded -- sign in again" };
+        return { sub: sub, account: target };
+    }
+
+    // Commits a new save produced by one of voidbreak.js's pure
+    // transaction functions. In-memory rollback on a failed write is
+    // what keeps "charged but didn't get the item" impossible.
+    async function commitVoidbreakSave(sub, account, nextData) {
+        const previous = account.voidbreak;
+        account.voidbreak = {
+            data: nextData,
+            updatedAt: Date.now(),
+            version: (previous ? previous.version : 0) + 1
+        };
+        try {
+            await persistAccount(sub);
+        } catch (e) {
+            account.voidbreak = previous;
+            return false;
+        }
+        return true;
+    }
+
+    // ---- POST /voidbreak/shop/buy ---- body: { sessionToken, itemId } ----
+    if (req.method === "POST" && req.url === "/voidbreak/shop/buy") {
+        try {
+            const body = await readJsonBody(req);
+            const auth = voidbreakEndgameAuth(body);
+            if (auth.error) { sendJson(res, auth.error, { error: auth.message }); return; }
+
+            const current = auth.account.voidbreak ? auth.account.voidbreak.data : Voidbreak.defaultSaveData();
+            // Price, ownership and the unlock gate are all decided in
+            // voidbreak.js against `current` -- the body contributes an
+            // item id and nothing else.
+            const result = Voidbreak.buyCosmetic(current, body.itemId);
+            if (!result.ok) { sendJson(res, result.code || 400, { error: result.error }); return; }
+
+            if (!(await commitVoidbreakSave(auth.sub, auth.account, result.save))) {
+                sendJson(res, 503, { error: "Could not save purchase -- try again" });
+                return;
+            }
+            sendJson(res, 200, {
+                ok: true, itemId: result.item.id, price: result.item.price,
+                endgame: Voidbreak.endgameView(result.save),
+                version: auth.account.voidbreak.version
+            });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // ---- POST /voidbreak/shop/equip ---- body: { sessionToken, itemId } ----
+    if (req.method === "POST" && req.url === "/voidbreak/shop/equip") {
+        try {
+            const body = await readJsonBody(req);
+            const auth = voidbreakEndgameAuth(body);
+            if (auth.error) { sendJson(res, auth.error, { error: auth.message }); return; }
+
+            const current = auth.account.voidbreak ? auth.account.voidbreak.data : Voidbreak.defaultSaveData();
+            const result = Voidbreak.equipCosmetic(current, body.itemId);
+            if (!result.ok) { sendJson(res, result.code || 400, { error: result.error }); return; }
+
+            if (!(await commitVoidbreakSave(auth.sub, auth.account, result.save))) {
+                sendJson(res, 503, { error: "Could not save loadout -- try again" });
+                return;
+            }
+            sendJson(res, 200, {
+                ok: true, itemId: result.item.id,
+                endgame: Voidbreak.endgameView(result.save),
+                version: auth.account.voidbreak.version
+            });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // ---- POST /voidbreak/mastery/claim ---- body: { sessionToken, weapon, level } ----
+    // The mastery LEVEL is recomputed from the stored XP here; a client
+    // asking to claim a level it hasn't reached is refused, and the
+    // claim key makes a replayed request a 409 rather than a second
+    // payout.
+    if (req.method === "POST" && req.url === "/voidbreak/mastery/claim") {
+        try {
+            const body = await readJsonBody(req);
+            const auth = voidbreakEndgameAuth(body);
+            if (auth.error) { sendJson(res, auth.error, { error: auth.message }); return; }
+
+            const current = auth.account.voidbreak ? auth.account.voidbreak.data : Voidbreak.defaultSaveData();
+            const result = Voidbreak.claimMastery(current, body.weapon, body.level);
+            if (!result.ok) { sendJson(res, result.code || 400, { error: result.error }); return; }
+
+            if (!(await commitVoidbreakSave(auth.sub, auth.account, result.save))) {
+                sendJson(res, 503, { error: "Could not save reward -- try again" });
+                return;
+            }
+            sendJson(res, 200, {
+                ok: true, weapon: body.weapon, level: Math.floor(Number(body.level)),
+                reward: result.reward, grantedShards: result.grantedShards,
+                endgame: Voidbreak.endgameView(result.save),
+                version: auth.account.voidbreak.version
+            });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // ---- POST /voidbreak/prestige ---- body: { sessionToken, confirm } ----
+    // `confirm` must be exactly true. That's not security (the server
+    // re-checks eligibility regardless) -- it's a deliberate guard so a
+    // mis-routed or accidental request can never wipe a player's
+    // weapons/forge/levels without the UI having explicitly asked.
+    if (req.method === "POST" && req.url === "/voidbreak/prestige") {
+        try {
+            const body = await readJsonBody(req);
+            const auth = voidbreakEndgameAuth(body);
+            if (auth.error) { sendJson(res, auth.error, { error: auth.message }); return; }
+            if (body.confirm !== true) { sendJson(res, 400, { error: "Prestige must be confirmed" }); return; }
+
+            const current = auth.account.voidbreak ? auth.account.voidbreak.data : Voidbreak.defaultSaveData();
+            // Eligibility is judged against the stored save. A second
+            // (duplicate/replayed) prestige fails here automatically:
+            // the first one reset the very progress the requirements ask
+            // for, so the account is no longer eligible.
+            const result = Voidbreak.applyPrestige(current);
+            if (!result.ok) {
+                sendJson(res, result.code || 400, { error: result.error, requirements: result.requirements || null });
+                return;
+            }
+
+            if (!(await commitVoidbreakSave(auth.sub, auth.account, result.save))) {
+                sendJson(res, 503, { error: "Could not complete prestige -- try again" });
+                return;
+            }
+            sendJson(res, 200, {
+                ok: true, prestigeLevel: result.level,
+                endgame: Voidbreak.endgameView(result.save),
+                version: auth.account.voidbreak.version
             });
         } catch (e) {
             sendJson(res, 400, { error: "Bad request" });
