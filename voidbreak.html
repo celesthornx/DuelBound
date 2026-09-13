@@ -1553,6 +1553,11 @@ let vicT=0,vicWarped=false;
 let glitchT=0,glitchNext=7;
 let player=null,room=null,boss=null,bossActive=false,bossIntroT=0,bossIntroStage=0;
 let enemies=[],bullets=[],ebullets=[],particles=[],dmgNums=[],pickups=[],portals=[],spawnQueue=[],props=[],swings=[],hurtArcs=[],hazards=[],zones=[],gravFields=[];
+// Screen-space Void Shard collection flyers -- see spawnShards()/
+// updateShardFlyers()/drawShardFlyers(). Purely cosmetic (the reward
+// is already granted the instant a shard spawns), so clearing this
+// array on a room/run reset never loses currency.
+let shardFlyers=[];
 let run=null;
 let frameCount=0;
 const u=id=>(run&&run.upgrades[id])||0;
@@ -1924,45 +1929,83 @@ function updateEBullets(dt){
     }
   }
 }
+// Void Shards are granted immediately and exactly once per shard,
+// right here at spawn (never on some later "arrival" event) -- see
+// updateShardFlyers()/drawShardFlyers() below for the purely cosmetic
+// collection animation. This used to instead push a physical pickup
+// that magnetized toward the PLAYER's world position (see git history
+// for the removed updatePickups shard branch): that pursuit constantly
+// re-aimed at the player's current position every frame, and once the
+// player was moving (which is most of the time, mid-fight) a shard's
+// own residual scatter velocity plus a slowly-ramping pull produced a
+// textbook pursuit-curve -- the shard visibly curls/orbits around the
+// moving player instead of converging, for as long as the player kept
+// moving. Flying to a FIXED SCREEN point (the HUD shard counter)
+// instead of a moving world position removes that failure mode
+// entirely: there is nothing left to orbit.
 function spawnShards(x,y,n){
-  for(let i=0;i<n;i++){const a=rand(0,TAU),s=rand(40,160);
-    // magnetT is time-since-spawn for the magnet ramp below -- kept
-    // separate from pk.t, which is a random phase drawShard() uses
-    // purely for its spin animation and must stay untouched.
-    pickups.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,type:'shard',t:rand(0,9),magnetT:0});}
+  addShards(n);
+  SFX.shard();
+  const hudTarget=shardCounterScreenPos();
+  for(let i=0;i<n;i++){
+    const a=rand(0,TAU),s=rand(30,70);
+    shardFlyers.push({
+      wx:x,wy:y,vx:Math.cos(a)*s,vy:Math.sin(a)*s, // brief world-space "pop" before the flight
+      sx:null,sy:null, // resolved to a screen position once the pop phase ends
+      hudX:hudTarget.x,hudY:hudTarget.y,
+      popT:rand(0.06,0.16)+i*0.025, // small stagger so a burst doesn't move as one dot
+      flightT:0,flightDur:rand(0.38,0.5),
+      spin:rand(0,TAU),done:false});
+  }
 }
-// Void Shards magnetize to the player immediately on spawn, from any
-// distance in the room -- no more walking onto them. A short initial
-// scatter (the spawnShards() velocity above) still plays so a burst of
-// shards visibly fans out before being pulled in, then the pull ramps
-// up quickly to a capped max speed/accel so it reads as a satisfying
-// "sucked in" snap rather than a sudden teleport. Heal pickups are
-// unchanged -- still a short-range (130px) pull, still require
-// walking near them, exactly as before.
-const SHARD_MAGNET_MAX_ACCEL=2600, SHARD_MAGNET_MAX_SPEED=1500, SHARD_MAGNET_RAMP=1800;
+// Screen position of the shard HUD counter, read live from the actual
+// DOM element every time -- correct on any layout (desktop, the
+// mobile/responsive breakpoint, safe-area insets, after a resize or
+// orientation change) with no separate position math to keep in sync.
+function shardCounterScreenPos(){
+  const r=el('shardWrap').getBoundingClientRect();
+  return {x:r.left+r.width/2,y:r.top+r.height/2};
+}
+function updateShardFlyers(dt){
+  for(let i=shardFlyers.length-1;i>=0;i--){const f=shardFlyers[i];
+    f.spin+=dt*10;
+    if(f.popT>0){
+      f.popT-=dt;
+      f.wx+=f.vx*dt;f.wy+=f.vy*dt;
+      f.vx-=f.vx*3*dt;f.vy-=f.vy*3*dt;
+      continue;
+    }
+    if(f.sx===null){ // pop phase just ended -- project world pos to screen once, then it's a pure screen-space flight
+      const s=worldToScreen(f.wx,f.wy);
+      f.sx=s.x;f.sy=s.y;
+    }
+    f.flightT+=dt;
+    const t=clamp(f.flightT/f.flightDur,0,1);
+    const e=1-Math.pow(1-t,3); // ease-out: fast start, gentle arrival -- no orbiting, just a direct curve in
+    f.x=lerp(f.sx,f.hudX,e);
+    f.y=lerp(f.sy,f.hudY,e)-Math.sin(t*Math.PI)*36; // small upward arc for readability, not a loop
+    if(t>=1){
+      f.done=true;
+      el('shardWrap').classList.remove('pop');void el('shardWrap').offsetWidth;el('shardWrap').classList.add('pop');
+      sparks(f.hudX,f.hudY,[160,92,255],3,90);
+      shardFlyers.splice(i,1);
+    }
+  }
+}
+function worldToScreen(wx,wy){
+  return {x:(wx-cam.x+cam.sx)*cam.zoom+W/2,y:(wy-cam.y+cam.sy)*cam.zoom+H/2};
+}
 function updatePickups(dt){
   const p=player;
   for(let i=pickups.length-1;i>=0;i--){const pk=pickups[i];
     pk.t+=dt;
     if(!p.dead){
       const d=dist(pk.x,pk.y,p.x,p.y);
-      if(pk.type==='shard'){
-        pk.magnetT=Math.min(pk.magnetT+dt,5);
-        const a=angTo(pk.x,pk.y,p.x,p.y);
-        const accel=Math.min(SHARD_MAGNET_MAX_ACCEL,300+pk.magnetT*SHARD_MAGNET_RAMP);
-        pk.vx+=Math.cos(a)*accel*dt;pk.vy+=Math.sin(a)*accel*dt;
-        const sp=Math.hypot(pk.vx,pk.vy);
-        if(sp>SHARD_MAGNET_MAX_SPEED){pk.vx*=SHARD_MAGNET_MAX_SPEED/sp;pk.vy*=SHARD_MAGNET_MAX_SPEED/sp;}
-      }else{
-        pk.vx-=pk.vx*5*dt;pk.vy-=pk.vy*5*dt;
-        if(d<130){const a=angTo(pk.x,pk.y,p.x,p.y);
-          pk.vx+=Math.cos(a)*900*dt;pk.vy+=Math.sin(a)*900*dt;}
-      }
-      if(d<p.r+16){
-        if(pk.type==='shard'){addShards(1);SFX.shard();
-          el('shardWrap').classList.remove('pop');void el('shardWrap').offsetWidth;el('shardWrap').classList.add('pop');
-          sparks(pk.x,pk.y,[160,92,255],5,180);ringFX(pk.x,pk.y,[160,92,255],20,0.25);}
-        else{p.hp=Math.min(p.maxhp,p.hp+8);SFX.heal();dmgNum(p.x,p.y,'+8','#38ff9c',15);}
+      pk.vx-=pk.vx*5*dt;pk.vy-=pk.vy*5*dt;
+      if(d<130){const a=angTo(pk.x,pk.y,p.x,p.y);
+        pk.vx+=Math.cos(a)*900*dt;pk.vy+=Math.sin(a)*900*dt;}
+      if(d<p.r+10){
+        p.hp=Math.min(p.maxhp,p.hp+8);SFX.heal();dmgNum(p.x,p.y,'+8','#38ff9c',15);
         pickups.splice(i,1);continue;
       }
     }
@@ -3701,7 +3744,7 @@ function startRun(weapon,levelIdx){
   newRun(levelIdx);
   player=newPlayer(weapon);
   save.lastWeapon=weapon;saveGameCloud();
-  enemies=[];bullets=[];ebullets=[];particles=[];dmgNums=[];pickups=[];portals=[];spawnQueue=[];props=[];swings=[];hurtArcs=[];hazards=[];zones=[];gravFields=[];
+  enemies=[];bullets=[];ebullets=[];particles=[];dmgNums=[];pickups=[];portals=[];spawnQueue=[];props=[];swings=[];hurtArcs=[];hazards=[];zones=[];gravFields=[];shardFlyers=[];
   boss=null;bossActive=false;transition=null;deathSeq=null;
   vicT=0;vicWarped=false;runActive=true;
   timeScale=1;tsTarget=1;hurtFlash=0;hitstopT=0;whiteT=0;
@@ -4162,6 +4205,7 @@ function update(dt){
   updateBullets(dt);
   updateEBullets(dt);
   updatePickups(dt);
+  updateShardFlyers(dt);
   updateParticles(dt);
   for(let i=hurtArcs.length-1;i>=0;i--){hurtArcs[i].t-=dt;if(hurtArcs[i].t<=0)hurtArcs.splice(i,1);}
 }
@@ -4235,6 +4279,7 @@ function render(){
     ctx.restore();
     if(state==='playing'&&!paused&&!uiOpen){
       renderScreenFX();
+      drawShardFlyers();
       if(room&&room.type==='coin')renderCoinHUD();
     }
   }else{
@@ -5446,19 +5491,34 @@ function drawOrigin(){
   }
 }
 function drawPickup(pk){
+  // Only heal pickups reach here now -- Void Shards are granted
+  // instantly at spawnShards() and drawn as screen-space flyers
+  // (drawShardFlyers() below) instead of a world pickup.
   ctx.globalCompositeOperation='lighter';
-  drawGlow(pk.x,pk.y,pk.type==='shard'?[160,92,255]:[56,255,156],16);
+  drawGlow(pk.x,pk.y,[56,255,156],16);
   ctx.globalCompositeOperation='source-over';
   ctx.save();ctx.translate(pk.x,pk.y);
-  if(pk.type==='shard'){
-    ctx.rotate(pk.t*2);
-    ctx.fillStyle='#c9a4ff';
-    ctx.beginPath();ctx.moveTo(0,-6);ctx.lineTo(4.5,0);ctx.lineTo(0,6);ctx.lineTo(-4.5,0);ctx.closePath();ctx.fill();
-  }else{
-    ctx.fillStyle='#38ff9c';
-    ctx.fillRect(-2.5,-7,5,14);ctx.fillRect(-7,-2.5,14,5);
-  }
+  ctx.fillStyle='#38ff9c';
+  ctx.fillRect(-2.5,-7,5,14);ctx.fillRect(-7,-2.5,14,5);
   ctx.restore();
+}
+// Screen-space Void Shard collection flyers -- drawn AFTER the camera
+// transform is restored (see render()), in the same raw screen-pixel
+// space as the HUD DOM elements, so this always terminates exactly at
+// the on-screen shard counter regardless of camera pan/zoom.
+function drawShardFlyers(){
+  ctx.globalCompositeOperation='lighter';
+  for(const f of shardFlyers){
+    const x=f.popT>0?worldToScreen(f.wx,f.wy).x:f.x;
+    const y=f.popT>0?worldToScreen(f.wx,f.wy).y:f.y;
+    if(x===undefined||y===undefined)continue;
+    drawGlow(x,y,[160,92,255],14);
+    ctx.save();ctx.translate(x,y);ctx.rotate(f.spin);
+    ctx.fillStyle='#c9a4ff';
+    ctx.beginPath();ctx.moveTo(0,-5);ctx.lineTo(3.5,0);ctx.lineTo(0,5);ctx.lineTo(-3.5,0);ctx.closePath();ctx.fill();
+    ctx.restore();
+  }
+  ctx.globalCompositeOperation='source-over';
 }
 function drawProp(pr){
   const t=performance.now()*0.001;
