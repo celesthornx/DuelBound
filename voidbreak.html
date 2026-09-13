@@ -1030,14 +1030,36 @@ async function flushCloudSave(){
   if(!cloudSavePending)return;
   cloudSavePending=false;
   cloudSaveInFlight=true;
+  // `mastery` is client-reported (see voidbreak.js's DEF_SAVE header
+  // comment) exactly like `shards`/`kills` already were -- it belongs in
+  // every ordinary save payload so the server actually learns about XP
+  // earned this session. Leaving it out here (as this payload once did)
+  // meant the server's own stored mastery could never advance past
+  // whatever it was on the account's very first sync: awardMastery()
+  // grows `save.mastery` locally on every kill, the Mastery screen reads
+  // that same local value and correctly shows CLAIM, but
+  // /voidbreak/mastery/claim checks the STORED (still-zero) server
+  // value and refuses with "requirements not met" -- a claim button that
+  // can never actually be pressed successfully.
   const payload={shards:save.shards,forge:save.forge,weapons:save.weapons,lastWeapon:save.lastWeapon,
-    runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten};
+    runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten,mastery:save.mastery};
   try{
     const res=await fetch('/voidbreak/save',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({sessionToken:cloudSessionToken,data:payload})});
     if(res.ok){
       const data=await res.json().catch(()=>({}));
       writeAccountCache(cloudAccountId,save,data.updatedAt||Date.now());
+      // The response carries a fresh server-resolved endgame view (see
+      // endgamePost, which already does this for shop/mastery/prestige
+      // actions). Without this, spendableShards() -- which the main menu
+      // and every endgame screen read from -- keeps showing whatever
+      // `endgame` last held, so shards earned by THIS save (a level
+      // clear, a boss kill, an abandoned run) stayed invisible and
+      // unspendable in the UI until something else happened to refresh
+      // it (reopening the shop after a purchase, reloading the page).
+      // adoptEndgame() re-renders the menu (and shop/mastery/prestige if
+      // one is currently open) itself, so nothing else is needed here.
+      if(data.endgame)adoptEndgame(data.endgame);
       setSyncStatus('synced');
     }else if(res.status===401||res.status===409){
       // The session died mid-run (signed out elsewhere, expired, etc).
@@ -1061,14 +1083,26 @@ async function flushCloudSave(){
 async function pushCloudSaveNow(){
   if(!cloudSyncEnabled)return;
   setSyncStatus('saving');
+  // `mastery` is client-reported (see voidbreak.js's DEF_SAVE header
+  // comment) exactly like `shards`/`kills` already were -- it belongs in
+  // every ordinary save payload so the server actually learns about XP
+  // earned this session. Leaving it out here (as this payload once did)
+  // meant the server's own stored mastery could never advance past
+  // whatever it was on the account's very first sync: awardMastery()
+  // grows `save.mastery` locally on every kill, the Mastery screen reads
+  // that same local value and correctly shows CLAIM, but
+  // /voidbreak/mastery/claim checks the STORED (still-zero) server
+  // value and refuses with "requirements not met" -- a claim button that
+  // can never actually be pressed successfully.
   const payload={shards:save.shards,forge:save.forge,weapons:save.weapons,lastWeapon:save.lastWeapon,
-    runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten};
+    runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten,mastery:save.mastery};
   try{
     const res=await fetch('/voidbreak/save',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({sessionToken:cloudSessionToken,data:payload})});
     if(res.ok){
       const data=await res.json().catch(()=>({}));
       writeAccountCache(cloudAccountId,save,data.updatedAt||Date.now());
+      if(data.endgame)adoptEndgame(data.endgame); // see the matching comment in flushCloudSave
       setSyncStatus('synced');
     }else{
       setSyncStatus('error');
@@ -1146,7 +1180,7 @@ async function bootstrapCloudSave(){
       // ("Account A becomes the owner of that progress").
       writeGuestSave(normalizeSave(null));
     }
-    await pushCloudSaveNow(); // creates the cloud record immediately, migrated or not
+    await pushCloudSaveNow(); // creates the cloud record immediately, migrated or not -- and (see pushCloudSaveNow) adopts the resulting endgame view itself
   }else{
     const cloudSave=normalizeSave(cloudResp.data);
     if(localCache&&localCache.updatedAt>cloudResp.updatedAt){
@@ -1156,20 +1190,22 @@ async function bootstrapCloudSave(){
       // record so both are reconciled going forward.
       save=mergeSaveData(localCache.data,cloudSave);
       writeAccountCache(cloudAccountId,save,Date.now());
-      await pushCloudSaveNow();
+      await pushCloudSaveNow(); // also adopts the post-merge endgame view
     }else{
       // The normal case, and the whole point of this feature: whatever
-      // the cloud has IS this account's progress, on any device.
+      // the cloud has IS this account's progress, on any device. The
+      // state response fetched above also carries the server-resolved
+      // endgame view (shop catalog with prices/ownership/locks, mastery,
+      // prestige) for this exact save, so fold it in here -- the other
+      // two branches above just adopted a FRESHER one from their own
+      // pushCloudSaveNow() response and must not have it overwritten by
+      // this now-stale cloudResp.endgame (fetched before either push).
       save=cloudSave;
       writeAccountCache(cloudAccountId,save,cloudResp.updatedAt);
       setSyncStatus('synced');
+      if(cloudResp.endgame)adoptEndgame(cloudResp.endgame);
     }
   }
-  // The state response also carries the server-resolved endgame view
-  // (shop catalog with prices/ownership/locks, mastery, prestige). Fold
-  // it in so the three endgame screens have real data from the first
-  // frame, without a second round trip.
-  if(cloudResp.endgame)adoptEndgame(cloudResp.endgame);
   refreshMenuStats();syncSettingsUI();if(actx)applyAudioSettings();
 }
 
