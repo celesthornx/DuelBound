@@ -775,6 +775,251 @@ function mergeSaveData(a, b) {
     };
 }
 
+// =====================================================================
+// PROGRESS SCORING -- which of two saves represents more REAL progress
+//
+// Why this exists
+// ---------------
+// /voidbreak/save used to store whatever the client POSTed, full stop.
+// That made the LAST device to save the winner regardless of how much
+// progress it actually had, which is exactly the reported bug: play on
+// the Mac, then open the iPad, and whichever one wrote last flattened
+// the other. Worse, a device whose cloud fetch FAILED at boot fell back
+// to an empty local save and then uploaded THAT, wiping the account.
+//
+// So the arbitration lives here, on the server, where it holds no
+// matter what any client does -- a buggy, stale, offline or hostile
+// client can no longer talk the account's progress downwards.
+//
+// WHY NOT A TIMESTAMP
+// -------------------
+// "Newest wins" is wrong for this game, and it is what the previous
+// client-side reconciliation leaned on: a device's clock and the server's
+// clock are different clocks (an iPad's can trivially be minutes off),
+// and more importantly an OLDER save can legitimately hold far more
+// progress than a newer one. Time is only ever used here as the final
+// tie-break, once every real progression signal is exactly equal.
+//
+// WHY A VECTOR AND NOT ONE WEIGHTED NUMBER
+// ----------------------------------------
+// Comparison is LEXICOGRAPHIC over an ordered vector of progression
+// signals, most meaningful first. That is what stops the exploit the
+// naive "add it all up" score has: with one weighted total, a big
+// enough currency balance eventually outweighs real level progress, so
+// a save that had beaten nothing could beat a save that had cleared the
+// game. Under a lexicographic compare, shards are only ever consulted
+// when EVERY level/weapon/upgrade/mastery signal is already tied, so
+// currency can never buy its way past actual progression.
+//
+// calculateProgressScore() additionally exposes a single flattened
+// number, but that is for logging and diagnostics only -- compareSaves()
+// is the authority, and nothing in this module decides anything from
+// the flattened value.
+//
+// THE ORDER (highest priority first)
+//   1. prestige level        -- the deepest permanent meta-progression
+//   2. highest level beaten  -- then how many levels in total
+//   3. weapons unlocked
+//   4. total Forge upgrade levels
+//   5. weapon mastery XP     -- then mastery rewards claimed
+//   6. shop cosmetics owned
+//   7. lifetime Void Shards earned (shards is a lifetime counter, not a
+//      spendable balance -- spendable is shards - shardsSpent -- so it
+//      only ever rises and is a legitimate, non-exploitable signal)
+//   8. lifetime runs / bosses / kills
+// =====================================================================
+
+// Ordered, most significant first. Each entry is [name, extractor].
+const PROGRESS_SIGNALS = [
+    ["prestigeLevel",  s => Math.max(0, Math.floor(Number((s.prestige || {}).level) || 0))],
+    ["highestLevel",   s => highestBeatenLevel(s)],
+    ["levelsBeaten",   s => countBeaten(s)],
+    ["weaponsOwned",   s => WEAPON_KEYS.reduce((n, k) => n + ((s.weapons || {})[k] ? 1 : 0), 0)],
+    ["forgeTotal",     s => FORGE_KEYS.reduce((n, k) => n + (Math.max(0, Math.floor(Number((s.forge || {})[k]) || 0))), 0)],
+    ["masteryXp",      s => WEAPON_KEYS.reduce((n, k) => n + Math.max(0, Math.floor(Number((s.mastery || {})[k]) || 0)), 0)],
+    ["masteryClaimed", s => (Array.isArray(s.masteryClaimed) ? s.masteryClaimed.length : 0)],
+    ["shopOwned",      s => (Array.isArray(s.shopOwned) ? s.shopOwned.length : 0)],
+    ["shardsEarned",   s => Math.max(0, Math.floor(Number(s.shards) || 0))],
+    ["runs",           s => Math.max(0, Math.floor(Number(s.runs) || 0))],
+    ["best",           s => Math.max(0, Math.floor(Number(s.best) || 0))],
+    ["kills",          s => Math.max(0, Math.floor(Number(s.kills) || 0))]
+];
+
+function highestBeatenLevel(s) {
+    let highest = 0;
+    for (const key of Object.keys((s && s.beaten) || {})) {
+        if (!s.beaten[key]) continue;
+        const id = Math.floor(Number(key));
+        if (isFinite(id) && id > highest) highest = id;
+    }
+    return highest;
+}
+
+function countBeaten(s) {
+    let n = 0;
+    for (const key of Object.keys((s && s.beaten) || {})) if (s.beaten[key]) n++;
+    return n;
+}
+
+// The per-signal breakdown, the ordered vector compareSaves() actually
+// uses, and a single flattened number for logs/diagnostics only.
+function calculateProgressScore(save) {
+    const s = save || DEF_SAVE;
+    const components = {};
+    const vector = [];
+    for (const [name, extract] of PROGRESS_SIGNALS) {
+        const v = extract(s);
+        components[name] = v;
+        vector.push(v);
+    }
+    // Advisory only -- deliberately NOT the thing any decision is made
+    // from (see the header note on why one weighted number is unsafe
+    // here). Weighted so the ordering usually agrees with the real
+    // lexicographic result, which makes it readable in a log line.
+    const total =
+        components.prestigeLevel  * 1000000000 +
+        components.highestLevel   * 10000000 +
+        components.levelsBeaten   * 1000000 +
+        components.weaponsOwned   * 100000 +
+        components.forgeTotal     * 1000 +
+        components.masteryClaimed * 500 +
+        Math.min(999, Math.floor(components.masteryXp / 100)) +
+        components.shopOwned      * 100 +
+        Math.min(99999, Math.floor(components.shardsEarned / 100));
+    return { components: components, vector: vector, total: total };
+}
+
+// Lexicographic compare of two saves' progress vectors.
+//   > 0  => `a` has more progress
+//   < 0  => `b` has more progress
+//   = 0  => genuinely tied on every progression signal
+function compareSaves(a, b) {
+    const va = calculateProgressScore(a).vector;
+    const vb = calculateProgressScore(b).vector;
+    for (let i = 0; i < va.length; i++) {
+        if (va[i] !== vb[i]) return va[i] > vb[i] ? 1 : -1;
+    }
+    return 0;
+}
+
+// A save from BEFORE a prestige, folded into the post-prestige record.
+//
+// Prestige resets weapons/lastWeapon/forge/beaten/shards/shardsSpent and
+// explicitly KEEPS runs, best, kills, mastery, shop ownership, equipped
+// cosmetics, mastery claims and the prestige record itself (see
+// applyPrestige, whose two halves this mirrors). A device still holding
+// the pre-prestige save therefore has legitimately newer LIFETIME
+// counters -- it kept playing -- while its copy of the reset fields is
+// exactly the progress the prestige consumed. So the kept counters are
+// merged upward and everything the prestige reset is taken from the
+// stored record untouched.
+function mergeKeptAcrossPrestige(stored, incoming) {
+    const out = cloneSave(stored);
+    const a = incoming || DEF_SAVE;
+    out.runs = Math.max(out.runs || 0, a.runs || 0);
+    out.best = Math.max(out.best || 0, a.best || 0);
+    out.kills = Math.max(out.kills || 0, a.kills || 0);
+    const mastery = {};
+    for (const k of WEAPON_KEYS) {
+        const m = Math.max((out.mastery || {})[k] || 0, (a.mastery || {})[k] || 0);
+        if (m > 0) mastery[k] = m;
+    }
+    out.mastery = mastery;
+    return out;
+}
+
+// ---------------------------------------------------------------------
+// THE ARBITER -- decides what a /voidbreak/save request actually stores.
+//
+// `incoming` is the client's sanitized + applyClientSave()'d save;
+// `stored` is what the account already has (or null for a first save).
+// `opts.incomingPredatesPrestige` says the uploading device last read
+// this account's save BEFORE its most recent prestige (the caller works
+// that out from the save version the client echoed back -- see
+// /voidbreak/save).
+// Returns { data, winner, reason, incomingScore, storedScore, changed }.
+//
+// Guarantees, in order:
+//
+//   * A STALE-BY-PRESTIGE upload can never undo a prestige. Prestige
+//     deliberately RESETS weapons/forge/unspent shards/level unlocks, so
+//     a second device still holding the pre-prestige save legitimately
+//     has "more" of those. Merging it back in would resurrect exactly
+//     what the prestige consumed.
+//
+//     There are two ways to be stale by a prestige and both are caught:
+//     an incoming save that still carries a LOWER prestige level is
+//     rejected outright; and -- the case that actually happens, because
+//     /voidbreak/save's reconciliation copies the stored (server-owned)
+//     prestige level onto every upload before it gets here, so the level
+//     always matches -- a save whose device had not yet seen the
+//     prestige keeps only the lifetime counters prestige preserves.
+//   * A DEFAULT (untouched, brand-new) save can never replace a real
+//     one. This is the empty-save wipe: a device whose cloud fetch
+//     failed falls back to a fresh save and uploads it. The client is
+//     fixed not to do that any more, but this is the backstop that
+//     makes it impossible regardless of which client is talking.
+//   * Otherwise the higher-progress side wins -- and the result is the
+//     MERGE of both (every field MAX'd or OR'd, never summed, see
+//     mergeSaveData), so the winner keeps everything it had AND nothing
+//     the loser uniquely had is thrown away. Merging cannot inflate a
+//     total: MAX only ever keeps the higher of two honestly-earned
+//     numbers, it never adds them together.
+// ---------------------------------------------------------------------
+function resolveSaveConflict(incoming, stored, opts) {
+    const options = opts || {};
+    const incomingScore = calculateProgressScore(incoming);
+
+    if (!stored) {
+        return { data: incoming, winner: "incoming", reason: "first-save",
+                 incomingScore: incomingScore, storedScore: null, changed: true };
+    }
+
+    const storedScore = calculateProgressScore(stored);
+
+    // A device that is behind on prestige is holding a save from before
+    // the reset. Never let it write, and never merge it.
+    if (incomingScore.components.prestigeLevel < storedScore.components.prestigeLevel) {
+        return { data: stored, winner: "stored", reason: "incoming-behind-prestige",
+                 incomingScore: incomingScore, storedScore: storedScore, changed: false };
+    }
+
+    // The same staleness, seen from the version the device last read
+    // rather than from the save body. Keep only what prestige preserves.
+    if (options.incomingPredatesPrestige && storedScore.components.prestigeLevel > 0) {
+        const kept = mergeKeptAcrossPrestige(stored, incoming);
+        return { data: kept, winner: "stored", reason: "incoming-predates-prestige",
+                 incomingScore: incomingScore, storedScore: storedScore,
+                 changed: compareSaves(kept, stored) !== 0 };
+    }
+
+    // A brand-new save never beats real progress.
+    if (isDefaultSave(incoming) && !isDefaultSave(stored)) {
+        return { data: stored, winner: "stored", reason: "incoming-is-default",
+                 incomingScore: incomingScore, storedScore: storedScore, changed: false };
+    }
+
+    const cmp = compareSaves(incoming, stored);
+    // The winner is passed FIRST to mergeSaveData, which is what decides
+    // the handful of preference-only fields (lastWeapon, equipped) -- the
+    // progression fields themselves are order-independent (MAX/OR).
+    const merged = cmp >= 0 ? mergeSaveData(incoming, stored) : mergeSaveData(stored, incoming);
+
+    return {
+        data: merged,
+        winner: cmp > 0 ? "incoming" : (cmp < 0 ? "stored" : "tie"),
+        reason: cmp > 0 ? "incoming-has-more" : (cmp < 0 ? "stored-has-more" : "tied"),
+        incomingScore: incomingScore,
+        storedScore: storedScore,
+        // The merge can only ever add to the stored side, so anything
+        // other than a straight "stored already had at least this" is a
+        // real write. Compared on the progress vector rather than the
+        // flattened total, so a change the weighting happens to round
+        // away (a handful of shards, a few mastery XP) still persists.
+        changed: compareSaves(merged, stored) !== 0
+    };
+}
+
 // True if a save is exactly the untouched starting state -- used to
 // decide whether there's anything worth migrating/merging at all.
 function isDefaultSave(s) {
@@ -799,6 +1044,11 @@ module.exports = {
     mergeSaveData,
     isDefaultSave,
     defaultSaveData,
+
+    // save-conflict arbitration (see the PROGRESS SCORING section)
+    calculateProgressScore,
+    compareSaves,
+    resolveSaveConflict,
 
     // endgame: catalog + pure transaction logic (server source of truth)
     COSMETICS,
