@@ -92,7 +92,7 @@ const DEF_SAVE = {
     // every item would be free).
     shardsSpent: 0,
     shopOwned: [],
-    equipped: { skin: "", trail: "", hit: "", theme: "", title: "", badge: "" },
+    equipped: { skin: "", trail: "", hit: "", kill: "", theme: "", title: "", badge: "" },
     equippedWeaponSkins: {}, // { weaponKey: itemId }
     mastery: {},         // { weaponKey: xp }
     masteryClaimed: [],  // ["rail:4", ...] -- one entry per claimed mastery level
@@ -121,8 +121,8 @@ const EQUIP_SLOTS = Object.keys(DEF_SAVE.equipped);
 // Individual prices are what a player actually feels, and they're set
 // against that income: a common is ~1 Level-1 clear, an epic ~1 clear
 // of a mid level, a legendary ~1.5 Level-8 clears. Nothing is priced
-// out of reach of a mid-game player. The catalog TOTAL (53 items,
-// 78,250 shards) is deliberately a long tail rather than a checklist to
+// out of reach of a mid-game player. The catalog TOTAL (60 items,
+// 88,700 shards) is deliberately a long tail rather than a checklist to
 // finish in an evening -- and roughly half of it is mythic tier that
 // can't be bought with shards alone at all, being gated behind mastery
 // 10 or a prestige level, so shard income is never the only thing
@@ -189,6 +189,21 @@ const COSMETICS = [
     item("hit_void", "VOID RUPTURE", "hit", "legendary", { color: [190, 110, 255] }),
     item("hit_prestige", "ASCENDANT RUPTURE", "hit", "mythic", { color: [255, 240, 200], req: { prestige: 3 } }),
 
+    // ---- KILL EFFECTS (enemy death burst color) ----
+    // Recolors killEnemy()'s deathFX -- the sparks/ring/glow burst an
+    // enemy leaves behind -- exactly like `hit` recolors the impact
+    // spark. Purely the burst's color and (via the item's own rarity)
+    // how big/dense that burst is; the kill itself, its shard drop and
+    // its mastery XP are already fully resolved before deathFX ever
+    // runs, so this can't change what a kill is worth.
+    item("kill_default", "STANDARD DETONATION", "kill", "common", { color: [255, 255, 255] }),
+    item("kill_gold", "GILDED DETONATION", "kill", "rare", { color: [255, 201, 92] }),
+    item("kill_plasma", "PLASMA COLLAPSE", "kill", "rare", { color: [120, 200, 255] }),
+    item("kill_venom", "VENOM RUPTURE", "kill", "epic", { color: [110, 255, 160] }),
+    item("kill_void", "VOID COLLAPSE", "kill", "legendary", { color: [190, 110, 255] }),
+    item("kill_mastery", "MASTERWORK DETONATION", "kill", "mythic", { color: [255, 230, 150], req: { mastery: { weapon: "any", level: 9 } } }),
+    item("kill_prestige", "ASCENDANT COLLAPSE", "kill", "mythic", { color: [255, 240, 200], req: { prestige: 2 } }),
+
     // ---- UI THEMES (menu/HUD accent colors) ----
     item("theme_default", "VOID CYAN", "theme", "common", { accent: "#00f0ff", accent2: "#a05cff" }),
     item("theme_ember", "EMBER", "theme", "rare", { accent: "#ff9d3c", accent2: "#ff4d6d" }),
@@ -219,7 +234,7 @@ for (const c of COSMETICS) COSMETICS_BY_ID[c.id] = c;
 
 // Which equip slot a category writes to. weaponSkin is the exception --
 // it equips into the per-weapon map instead of a single slot.
-const CAT_SLOT = { skin: "skin", trail: "trail", hit: "hit", theme: "theme", title: "title", badge: "badge" };
+const CAT_SLOT = { skin: "skin", trail: "trail", hit: "hit", kill: "kill", theme: "theme", title: "title", badge: "badge" };
 
 function findCosmetic(id) {
     return (typeof id === "string" && COSMETICS_BY_ID[id]) || null;
@@ -451,7 +466,7 @@ function sanitizeSaveData(raw) {
         // unwritable by a client.
         shardsSpent: 0,
         shopOwned: [],
-        equipped: { skin: "", trail: "", hit: "", theme: "", title: "", badge: "" },
+        equipped: { skin: "", trail: "", hit: "", kill: "", theme: "", title: "", badge: "" },
         equippedWeaponSkins: {},
         masteryClaimed: [],
         prestige: { level: 0, history: [] }
@@ -478,7 +493,7 @@ function applyClientSave(clean, stored) {
     // ---- server-owned: always the stored value, never the client's ----
     clean.shardsSpent = Math.max(0, Math.floor(Number(prev.shardsSpent) || 0));
     clean.shopOwned = Array.isArray(prev.shopOwned) ? prev.shopOwned.slice() : [];
-    clean.equipped = Object.assign({ skin: "", trail: "", hit: "", theme: "", title: "", badge: "" }, prev.equipped || {});
+    clean.equipped = Object.assign({ skin: "", trail: "", hit: "", kill: "", theme: "", title: "", badge: "" }, prev.equipped || {});
     clean.equippedWeaponSkins = Object.assign({}, prev.equippedWeaponSkins || {});
     clean.masteryClaimed = Array.isArray(prev.masteryClaimed) ? prev.masteryClaimed.slice() : [];
     clean.prestige = {
@@ -767,7 +782,7 @@ function mergeSaveData(a, b) {
         beaten: beaten,
         shardsSpent: Math.max(a.shardsSpent || 0, b.shardsSpent || 0),
         shopOwned: shopOwned,
-        equipped: Object.assign({ skin: "", trail: "", hit: "", theme: "", title: "", badge: "" }, b.equipped || {}, a.equipped || {}),
+        equipped: Object.assign({ skin: "", trail: "", hit: "", kill: "", theme: "", title: "", badge: "" }, b.equipped || {}, a.equipped || {}),
         equippedWeaponSkins: Object.assign({}, b.equippedWeaponSkins || {}, a.equippedWeaponSkins || {}),
         mastery: mastery,
         masteryClaimed: masteryClaimed,

@@ -865,7 +865,7 @@ const DEF_SAVE={shards:0,forge:{vit:0,pow:0,swift:0,core:0,drive:0,edge:0},
   // UI can render offline. Posting them changes nothing -- the server
   // discards the client's copy and keeps its own (applyClientSave).
   mastery:{},shardsSpent:0,shopOwned:[],
-  equipped:{skin:'',trail:'',hit:'',theme:'',title:'',badge:''},
+  equipped:{skin:'',trail:'',hit:'',kill:'',theme:'',title:'',badge:''},
   equippedWeaponSkins:{},masteryClaimed:[],prestige:{level:0,history:[]},
   settings:{vol:0.8,music:true,sfx:true,shake:true,dmgnum:true}};
 const FORGE_KEYS=Object.keys(DEF_SAVE.forge);
@@ -892,7 +892,7 @@ function normalizeSave(s){
   out.mastery=Object.assign({},out.mastery||{});
   out.shardsSpent=Math.max(0,Math.floor(Number(out.shardsSpent)||0));
   out.shopOwned=Array.isArray(out.shopOwned)?out.shopOwned.slice():[];
-  out.equipped=Object.assign({skin:'',trail:'',hit:'',theme:'',title:'',badge:''},out.equipped||{});
+  out.equipped=Object.assign({skin:'',trail:'',hit:'',kill:'',theme:'',title:'',badge:''},out.equipped||{});
   out.equippedWeaponSkins=Object.assign({},out.equippedWeaponSkins||{});
   out.masteryClaimed=Array.isArray(out.masteryClaimed)?out.masteryClaimed.slice():[];
   out.prestige={level:Math.max(0,Math.floor(Number((out.prestige||{}).level)||0)),
@@ -942,7 +942,7 @@ function mergeSaveData(a,b){
     runs:Math.max(a.runs||0,b.runs||0),best:Math.max(a.best||0,b.best||0),
     kills:Math.max(a.kills||0,b.kills||0),beaten,mastery,
     shardsSpent:Math.max(a.shardsSpent||0,b.shardsSpent||0),shopOwned,masteryClaimed,
-    equipped:Object.assign({skin:'',trail:'',hit:'',theme:'',title:'',badge:''},b.equipped||{},a.equipped||{}),
+    equipped:Object.assign({skin:'',trail:'',hit:'',kill:'',theme:'',title:'',badge:''},b.equipped||{},a.equipped||{}),
     equippedWeaponSkins:Object.assign({},b.equippedWeaponSkins||{},a.equippedWeaponSkins||{}),
     prestige:{level:Math.max(aP.level||0,bP.level||0),
       history:((aP.history||[]).length>=(bP.history||[]).length?(aP.history||[]):(bP.history||[])).slice(-50)},
@@ -2073,6 +2073,16 @@ function projectileColor(weaponKey,fallback){
 }
 function trailColor(){const it=equippedItem('trail');return it?it.color:null;}
 function hitColor(fallback){const it=equippedItem('hit');return (it&&it.color)||fallback;}
+function killColor(fallback){const it=equippedItem('kill');return (it&&it.color)||fallback;}
+
+// Rarity of whatever is equipped in a cosmetic slot, as a 0-4 intensity
+// tier (0 = nothing equipped, or a common item). trail/hit/kill FX all
+// read this to scale how BIG the effect is -- density, particle count,
+// ring size -- never anything gameplay-facing (damage, hitboxes, drop
+// rates are untouched). It's what makes a rarer purchase feel like a
+// real upgrade rather than only a different color.
+const FX_RARITY_TIER={common:0,rare:1,epic:2,legendary:3,mythic:4};
+function fxTier(slot){const it=equippedItem(slot);return it?(FX_RARITY_TIER[it.rarity]||0):0;}
 
 // UI theme cosmetic -- rewrites the two CSS accent variables the whole
 // interface is already built on, so one equip restyles every panel,
@@ -2113,7 +2123,7 @@ function adoptEndgame(view){
   endgame=view;
   save.shardsSpent=view.shardsSpent||0;
   save.shopOwned=view.items.filter(i=>i.owned).map(i=>i.id);
-  save.equipped=Object.assign({skin:'',trail:'',hit:'',theme:'',title:'',badge:''},view.equipped||{});
+  save.equipped=Object.assign({skin:'',trail:'',hit:'',kill:'',theme:'',title:'',badge:''},view.equipped||{});
   save.equippedWeaponSkins=Object.assign({},view.equippedWeaponSkins||{});
   save.prestige={level:(view.prestige&&view.prestige.level)||0,
     history:(view.prestige&&view.prestige.history)||[]};
@@ -2273,11 +2283,21 @@ function burstFX(x,y,c,n,spd){
   part({x,y,life:0.35,ml:0.35,size:0,c,type:'ring',r0:6,r1:60});
 }
 function ringFX(x,y,c,r1,dur){part({x,y,life:dur,ml:dur,size:0,c,type:'ring',r0:8,r1});}
-function deathFX(x,y,c,r){
-  sparks(x,y,c,Math.min(26,r*1.4),260+r*4);
-  sparks(x,y,[255,255,255],6,200);
-  part({x,y,life:0.4,ml:0.4,size:0,c,type:'ring',r0:r*0.5,r1:r*3.2});
-  for(let i=0;i<3;i++)part({x:x+rand(-8,8),y:y+rand(-8,8),life:rand(0.3,0.7),ml:0.7,size:rand(6,12),c,type:'glow'});
+// `tier` is the equipped KILL FX cosmetic's rarity (0-4, see fxTier) --
+// omitted (undefined -> 0) for every non-cosmetic caller, in particular
+// the player's own death, so those are unaffected by this. It only
+// scales how BIG the burst is (spark count, ring reach, glow blobs, and
+// -- at legendary/mythic -- a second delayed ring); the enemy's death
+// itself, its shard drop and its mastery payout are already fully
+// resolved by the time this runs, so a fancier detonation is never a
+// stronger one.
+function deathFX(x,y,c,r,tier){
+  tier=tier||0;
+  sparks(x,y,c,Math.min(30,r*1.4+tier*2),260+r*4);
+  sparks(x,y,[255,255,255],6+tier,200);
+  part({x,y,life:0.4,ml:0.4,size:0,c,type:'ring',r0:r*0.5,r1:r*(3.2+tier*0.3)});
+  for(let i=0;i<3+Math.min(2,tier);i++)part({x:x+rand(-8,8),y:y+rand(-8,8),life:rand(0.3,0.7),ml:0.7,size:rand(6,12)+tier,c,type:'glow'});
+  if(tier>=3)part({x,y,life:0.5,ml:0.5,size:0,c,type:'ring',r0:r*0.2,r1:r*2.1});
 }
 function dmgNum(x,y,txt,color,size){
   if(!save.settings.dmgnum)return;
@@ -2449,19 +2469,26 @@ function fireWeapon(){
   const n=w.count+(w.projScale?w.projScale*p.projAdd:p.projAdd);
   if(room&&room.type==='coin'&&room.coin&&!room.coin.ended)room.coin.shots+=n;
   const totalSpread=Math.max(w.spread,(n-1)*(w.spread>0.3?0.16:0.11));
-  // Weapon-skin + trail cosmetics. Both are colour only: `c` is what the
-  // projectile DRAWS as and `trailC` what it leaves behind -- speed,
-  // damage, size, pierce and life all still come from the weapon's own
-  // stats, so a skinned weapon is never a stronger weapon.
+  // Weapon-skin + trail cosmetics. Both are colour (and, via rarity,
+  // intensity) only: `c` is what the projectile DRAWS as, `trailC`/
+  // `trailTier` what it leaves behind, `glowMult` how big its own glow
+  // renders -- speed, damage, size, pierce and life all still come from
+  // the weapon's own stats, so a skinned weapon is never a stronger
+  // weapon. glowMult is read from the equipped WEAPON SKIN's rarity
+  // (not the trail's), so a rare projectile skin visibly reads as rare
+  // even with no trail equipped at all.
   const shotColor=projectileColor(p.weapon,w.color);
-  const trailC=trailColor();
+  const trailC=trailColor(),trailTier=fxTier('trail');
+  const wSkin=equippedWeaponSkin(p.weapon);
+  const glowMult=1+(wSkin?(FX_RARITY_TIER[wSkin.rarity]||0):0)*0.12;
   for(let i=0;i<n;i++){
     const a=p.faceAng+(n>1?lerp(-totalSpread/2,totalSpread/2,i/(n-1)):0)+rand(-w.spread*0.25,w.spread*0.25);
     bullets.push({
       x:p.x+Math.cos(a)*22,y:p.y+Math.sin(a)*22,px:p.x,py:p.y,
       vx:Math.cos(a)*w.speed*p.bSpd,vy:Math.sin(a)*w.speed*p.bSpd,
       dmg:w.dmg*p.dmgMult,crit:roll(),pierce:(w.pierce||0)+p.pierceAdd,
-      size:w.size*(roll()?1.25:1),c:shotColor,trailC:trailC,life:w.life,beam:!!w.beam,explode:w.explode||null,
+      size:w.size*(roll()?1.25:1),c:shotColor,trailC:trailC,trailTier:trailTier,glowMult:glowMult,
+      life:w.life,beam:!!w.beam,explode:w.explode||null,
       kb:w.kb||26,hitSet:new Set()});
   }
   addShake(w.kick*0.7);crossPulse=1;
@@ -2514,11 +2541,22 @@ function updateBullets(dt){
     }
     b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;
     // Projectile trail cosmetic -- a short-lived spark dropped behind
-    // the bullet. Rate-limited to roughly every other frame and only
-    // emitted when a trail is actually equipped, so it costs nothing
-    // for players who own none and can't flood the particle budget.
-    if(b.trailC&&(frameCount&1)===0){
-      part({x:b.px,y:b.py,vx:0,vy:0,life:0.22,ml:0.22,size:b.size*0.5,c:b.trailC,type:'spark',drag:6});
+    // the bullet, only emitted when a trail is actually equipped, so it
+    // costs nothing for players who own none. Rarity (b.trailTier)
+    // scales how much of a wake it leaves: common/rare stay at the
+    // original every-other-frame single spark, epic+ emits every frame
+    // and slightly bigger/longer-lived, legendary/mythic additionally
+    // drop an occasional soft glow puff along the wake. None of this
+    // touches b.size (the bullet's actual hit radius) or its speed/life
+    // -- purely cosmetic density, same guarantee as every other FX slot.
+    if(b.trailC){
+      const t=b.trailTier||0;
+      if(t>=2||(frameCount&1)===0){
+        part({x:b.px,y:b.py,vx:0,vy:0,life:0.22+t*0.02,ml:0.22+t*0.02,size:b.size*(0.5+t*0.08),c:b.trailC,type:'spark',drag:6});
+      }
+      if(t>=3&&(frameCount%3)===0){
+        part({x:b.px,y:b.py,vx:0,vy:0,life:0.18,ml:0.18,size:b.size*1.6,c:b.trailC,type:'glow'});
+      }
     }
     if(room&&(b.x<-room.w/2||b.x>room.w/2||b.y<-room.h/2||b.y>room.h/2)){
       if(b.explode)explodeAt(b.x,b.y,b.explode.r,b.explode.dmg*player.dmgMult,b.c);
@@ -2606,8 +2644,14 @@ function damageEnemy(e,dmg,crit,kx,ky){
   dmgNum(e.x,e.y,Math.round(dmg),crit?'#ffc95c':'#eafcff',crit?20:14);
   // Hit-effect cosmetic recolours the impact spark. Purely the spark's
   // colour -- the damage, knockback and crit above are already resolved
-  // and are not touched by it.
-  sparks(e.x,e.y,hitColor(e.color),crit?9:4,crit?300:180);
+  // and are not touched by it. An epic-or-better hit FX additionally
+  // adds a quick ring flash (also purely cosmetic, same as the shield-
+  // block rings just above) -- the spark count itself still only ever
+  // depends on crit, never on the cosmetic, so this can't be mistaken
+  // for a damage indicator.
+  const hitC=hitColor(e.color),hitT=fxTier('hit');
+  sparks(e.x,e.y,hitC,crit?9:4,crit?300:180);
+  if(hitT>=2)ringFX(e.x,e.y,hitC,e.r+6+hitT*2,0.1+hitT*0.01);
   crit?SFX.crit():SFX.hit();
   addShake(crit?2.5:1);
   const kbf=(e.type==='brute'||e.type==='ravager'||e.type==='guardian'||e.type==='singularity'?0.18:e.type==='core'?0.08:e.elite?0.5:1);
@@ -2622,8 +2666,14 @@ function damageEnemy(e,dmg,crit,kx,ky){
 function killEnemy(e){
   if(e.dead)return;e.dead=true;e.noHit=false;run.kills++;
   if(e.type==='leech'||e.type==='singularity')removeGravOf(e);
-  const c=e.elite?[255,201,92]:e.color;
-  deathFX(e.x,e.y,c,e.r*(e.elite?2:1.4));
+  // Kill-FX cosmetic recolors the death burst, same as hit-FX recolors
+  // the impact spark -- an elite's gold tint is only the FALLBACK when
+  // nothing is equipped, so it still stays visible on an unadorned
+  // account. addShake/camPunch/hitstop below are driven purely by
+  // e.elite, never by the cosmetic, so this can't make a kill feel
+  // mechanically stronger, only look better.
+  const c=killColor(e.elite?[255,201,92]:e.color);
+  deathFX(e.x,e.y,c,e.r*(e.elite?2:1.4),fxTier('kill'));
   addShake(e.elite?9:4);if(e.elite)camPunch(0.05);
   SFX.death();
   if(e.elite){hitstopT=Math.max(hitstopT,0.07);}
@@ -5246,7 +5296,11 @@ function renderWorld(){
   ctx.lineCap='round';
   for(const b of bullets){
     ctx.globalCompositeOperation='lighter';
-    drawGlow(b.x,b.y,b.c,b.size*4.5);
+    // glowMult (from the equipped weapon skin's rarity, see fireWeapon)
+    // only widens the DRAWN glow radius -- b.size itself, which is what
+    // hit detection actually uses, is untouched, so a rarer skin can
+    // never hit anything a stock weapon wouldn't.
+    drawGlow(b.x,b.y,b.c,b.size*4.5*(b.glowMult||1));
     ctx.globalCompositeOperation='source-over';
     ctx.strokeStyle=rgb(b.c);ctx.lineWidth=b.size;
     const tl=b.beam?0.045:0.028;
@@ -6761,6 +6815,7 @@ const SHOP_CATS=[
   {id:'weaponSkin',label:'WEAPON SKINS'},
   {id:'trail',label:'TRAILS'},
   {id:'hit',label:'HIT FX'},
+  {id:'kill',label:'KILL FX'},
   {id:'theme',label:'UI THEMES'},
   {id:'title',label:'TITLES'},
   {id:'badge',label:'BADGES'}
@@ -6803,6 +6858,13 @@ function swatchHtml(it){
   if(it.cat==='weaponSkin'||it.cat==='trail'||it.cat==='hit'){
     const c=it.color?rgb(it.color):'#3a4254';
     return `<div class="eg-swatch" style="background:linear-gradient(90deg,transparent,${c},transparent)"></div>`;
+  }
+  // Kill FX gets its own radial "detonation" preview -- a bright core
+  // fading outward -- rather than the linear streak weaponSkin/trail/hit
+  // share, so the card itself hints at a burst instead of a wake/impact.
+  if(it.cat==='kill'){
+    const c=it.color?rgb(it.color):'#3a4254';
+    return `<div class="eg-swatch" style="background:radial-gradient(circle,#fff,${c} 45%,transparent 75%)"></div>`;
   }
   if(it.cat==='theme')return `<div class="eg-swatch" style="background:linear-gradient(135deg,${it.accent},${it.accent2})"></div>`;
   if(it.cat==='badge')return `<div class="eg-swatch" style="color:${it.color};background:rgba(255,255,255,.04)">${it.glyph||'◆'}</div>`;
