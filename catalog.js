@@ -59,6 +59,7 @@ const SKINS = [
     { id: "celestial", price: 520, currency: "coins" },
     { id: "riftwalker", price: 520, currency: "coins" },
     { id: "overlord", price: 520, currency: "coins" },
+    { id: "tuff", price: 520, currency: "coins" },
 
     { id: "cardboardbox", price: 150, currency: "coins" },
     { id: "rubberduck", price: 150, currency: "coins" },

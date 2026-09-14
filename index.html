@@ -6816,6 +6816,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       color:'#b06bff', grad:['#26123f','#08040f'], accent:'#b06bff', deco:'rift' },
     { id:'overlord',     name:'OVERLORD',       price:520, currency:'coins', rarity:'legendary', rarityClass:'rarity-legendary',
       color:'#ff3b3b', grad:['#240808','#080202'], accent:'#ff3b3b', deco:'spikes' },
+    { id:'tuff',         name:'TUFF',           price:520, currency:'coins', rarity:'legendary', rarityClass:'rarity-legendary',
+      color:'#b06bff', grad:['#3a4150','#141620'], accent:'#c58bff', deco:'cracked' },
 
     { id:'cardboardbox', name:'CARDBOARD BOX',  price:150, currency:'coins', rarity:'meme',      rarityClass:'rarity-meme',
       color:'#c9a876', grad:['#c9a876','#8a6d4a'], accent:'#fff1cf', deco:'box' },
@@ -12021,6 +12023,16 @@ if(tutorialActive) tutorialUpdate(dt);
         c.moveTo(-10.5,-11.25); c.lineTo(-14,-14);
         c.moveTo(-10.5,11.25); c.lineTo(-14,14);
         c.stroke();
+        break;
+      case 'cracked': // Tuff -- jagged fissures veining the stone hull, with glowing crystal nodes where they meet
+        c.lineWidth = 1;
+        c.beginPath();
+        c.moveTo(7,-2); c.lineTo(2,-5); c.lineTo(-2,-2); c.lineTo(-6,-6);
+        c.moveTo(5,3); c.lineTo(0,1); c.lineTo(-4,5);
+        c.stroke();
+        [[7,-2],[-2,-2],[0,1]].forEach(([x,y])=>{
+          c.beginPath(); c.arc(x,y,1,0,Math.PI*2); c.fill();
+        });
         break;
       case 'box': // Cardboard Box
         c.lineWidth = 1;
