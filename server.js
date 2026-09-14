@@ -2694,6 +2694,12 @@ function isValidCurrencyAdjustment(raw) {
     return Number.isInteger(n) && n !== 0 && Math.abs(n) <= MAX_CURRENCY_ADJUSTMENT;
 }
 
+// The same idea for Voidbreak's own currency (see /admin/voidbreak/grant).
+// Generous next to the real economy -- a full level clear pays roughly
+// 700-1500 Void Shards -- but bounded, so a typo in the admin panel can't
+// write an absurd number into an account.
+const MAX_VOID_SHARD_GRANT = 1000000;
+
 // Free-text justification the task requires on every manual
 // adjustment. Control characters and newlines are stripped (this is
 // rendered later, client-side, through escapeHtml() -- see
@@ -4224,14 +4230,25 @@ const httpServer = http.createServer(async (req, res) => {
     // this one endpoint -- a client can't smuggle progress in through
     // /save, which explicitly refuses to read `voidbreak` from its body.
     //
-    // Merging two saves (e.g. a device's offline/local progress against
-    // an account's existing cloud save) is deliberately done by the
-    // CLIENT before calling this endpoint (fetch /voidbreak/state, merge
-    // locally with voidbreak.js's same mergeSaveData logic mirrored in
-    // voidbreak.html, then POST the resolved result) -- this endpoint
-    // itself always just accepts, sanitizes and stores whatever it's
-    // given as the new authoritative save, exactly like /shop/buy trusts
-    // its own price lookup rather than re-deriving intent from history.
+    // CONFLICT RESOLUTION IS SERVER-SIDE AND AUTHORITATIVE.
+    //
+    // This endpoint used to store whatever it was handed, on the theory
+    // that the CLIENT would reconcile against /voidbreak/state first.
+    // That was the cross-device bug: it made the last device to write
+    // the winner regardless of how much progress it actually had, so
+    // playing on a Mac and then opening an iPad flattened whichever one
+    // saved first. And a device whose /voidbreak/state fetch failed fell
+    // back to an empty local save and uploaded THAT, wiping the account
+    // outright.
+    //
+    // The arbitration now happens here (Voidbreak.resolveSaveConflict),
+    // where no client can route around it: a save that carries less
+    // progress than the stored record can never replace it, a default
+    // save can never replace a real one, and a device still holding a
+    // pre-prestige save can never undo a prestige. The response carries
+    // the resolved save back, so a device that lost the comparison
+    // adopts the winner immediately instead of continuing to think its
+    // own lesser state is current.
     if (req.method === "POST" && req.url === "/voidbreak/save") {
         try {
             const body = await readJsonBody(req);
@@ -4256,10 +4273,53 @@ const httpServer = http.createServer(async (req, res) => {
             // fake a prestige -- only the transactional endpoints below
             // can touch any of that.
             const reconciled = Voidbreak.applyClientSave(clean, previousVoidbreak ? previousVoidbreak.data : null);
+
+            // Which stored version this device last read. A prestige is
+            // the one operation that legitimately LOWERS progression, so
+            // a device that has not seen it yet is holding a save that
+            // still contains everything the prestige consumed -- and
+            // because applyClientSave() above copies the stored prestige
+            // level onto every upload, the save body itself can no longer
+            // reveal that. The version does. A client that omits it (or
+            // is simply out of date) is treated as not having seen the
+            // prestige, which is the safe direction.
+            //
+            // This is a consistency guard between a player's own devices,
+            // not an anti-cheat measure: this endpoint is client-reported
+            // by design (see voidbreak.js's DEF_SAVE header), so a client
+            // willing to lie has simpler things to lie about.
+            const baseVersion = Math.max(0, Math.floor(Number(body.baseVersion) || 0));
+            const prestigeVersion = previousVoidbreak ? (previousVoidbreak.prestigeVersion || 0) : 0;
+
+            // Which save actually represents more progress -- see
+            // voidbreak.js's PROGRESS SCORING section for the exact
+            // rules. The result is never less than what was already
+            // stored, so a losing upload is a no-op rather than a loss.
+            const resolution = Voidbreak.resolveSaveConflict(
+                reconciled, previousVoidbreak ? previousVoidbreak.data : null,
+                { incomingPredatesPrestige: prestigeVersion > 0 && baseVersion < prestigeVersion });
+
+            if (!resolution.changed && previousVoidbreak) {
+                // The upload carried nothing the stored record didn't
+                // already have. Don't rewrite the record (no pointless
+                // version bump, no disk write) -- just hand back what is
+                // authoritative so the client can adopt it.
+                sendJson(res, 200, {
+                    ok: true,
+                    updatedAt: previousVoidbreak.updatedAt,
+                    version: previousVoidbreak.version,
+                    data: previousVoidbreak.data,
+                    resolvedFrom: resolution.winner,
+                    endgame: Voidbreak.endgameView(previousVoidbreak.data)
+                });
+                return;
+            }
+
             target.voidbreak = {
-                data: reconciled,
+                data: resolution.data,
                 updatedAt: Date.now(), // the SERVER's clock, never a client-supplied timestamp
-                version: previousVersion + 1
+                version: previousVersion + 1,
+                prestigeVersion: prestigeVersion // carried forward, never reset by an ordinary save
             };
             try {
                 await persistAccount(sub);
@@ -4273,6 +4333,11 @@ const httpServer = http.createServer(async (req, res) => {
                 ok: true,
                 updatedAt: target.voidbreak.updatedAt,
                 version: target.voidbreak.version,
+                // The authoritative save, so a device whose upload lost
+                // (or was merged with a higher-progress record) replaces
+                // its own lesser copy with this instead of drifting.
+                data: target.voidbreak.data,
+                resolvedFrom: resolution.winner,
                 endgame: Voidbreak.endgameView(target.voidbreak.data)
             });
         } catch (e) {
@@ -4316,12 +4381,19 @@ const httpServer = http.createServer(async (req, res) => {
     // Commits a new save produced by one of voidbreak.js's pure
     // transaction functions. In-memory rollback on a failed write is
     // what keeps "charged but didn't get the item" impossible.
-    async function commitVoidbreakSave(sub, account, nextData) {
+    async function commitVoidbreakSave(sub, account, nextData, opts) {
         const previous = account.voidbreak;
+        const version = (previous ? previous.version : 0) + 1;
         account.voidbreak = {
             data: nextData,
             updatedAt: Date.now(),
-            version: (previous ? previous.version : 0) + 1
+            version: version,
+            // The version at which this account most recently prestiged.
+            // /voidbreak/save reads it to spot a device that is still
+            // holding a save from before that reset (see the comment
+            // there); every other writer just carries it forward.
+            prestigeVersion: (opts && opts.markPrestige) ? version
+                : (previous ? previous.prestigeVersion || 0 : 0)
         };
         try {
             await persistAccount(sub);
@@ -4441,7 +4513,7 @@ const httpServer = http.createServer(async (req, res) => {
                 return;
             }
 
-            if (!(await commitVoidbreakSave(auth.sub, auth.account, result.save))) {
+            if (!(await commitVoidbreakSave(auth.sub, auth.account, result.save, { markPrestige: true }))) {
                 sendJson(res, 503, { error: "Could not complete prestige -- try again" });
                 return;
             }
@@ -5047,7 +5119,26 @@ const httpServer = http.createServer(async (req, res) => {
                 return sub === q || (a.name || "").toLowerCase().includes(q);
             })
             .slice(0, 20)
-            .map(sub => ({ id: sub, name: accounts[sub].name, coins: accounts[sub].coins, crystals: accounts[sub].crystals }));
+            .map(sub => {
+                const vb = accounts[sub].voidbreak;
+                const vbData = vb ? vb.data : null;
+                return {
+                    id: sub,
+                    name: accounts[sub].name,
+                    coins: accounts[sub].coins,
+                    crystals: accounts[sub].crystals,
+                    // Voidbreak balances, so the VOIDBREAK ADMIN panel can
+                    // show the real numbers without a second round trip.
+                    // `voidShards` is the LIFETIME earned total and
+                    // `voidShardsSpendable` is what the player can actually
+                    // spend (lifetime minus the server's spend ledger) --
+                    // both shown, because a grant moves the first and the
+                    // player feels the second.
+                    voidShards: vbData ? (vbData.shards || 0) : 0,
+                    voidShardsSpendable: vbData ? Voidbreak.spendableShards(vbData) : 0,
+                    hasVoidbreakSave: !!vb
+                };
+            });
         sendJson(res, 200, { results: results });
         return;
     }
@@ -5137,6 +5228,126 @@ const httpServer = http.createServer(async (req, res) => {
                 currency: currency,
                 previousBalance: previousBalance,
                 newBalance: target[currency]
+            });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // =====================================================================
+    // VOIDBREAK ADMIN -- grant Void Shards
+    //
+    // body: { sessionToken, playerId, amount, reason }
+    //
+    // Deliberately built on the SAME pattern as /admin/currency above --
+    // same admin check, same required audit reason, same atomic
+    // read-modify-write with in-memory rollback on a failed persist, and
+    // the same pushAdminLog trail. It is not a second admin system, just
+    // another action inside the existing one.
+    //
+    // SECURITY: the ONLY thing that decides whether this is allowed is
+    // isAdminSession(body.sessionToken), resolved server-side from the
+    // session to the account's stored email (see isAdminSession). There
+    // is no client-supplied "isAdmin" flag anywhere in this handler, and
+    // hiding the panel in the UI is presentation only -- a normal player
+    // POSTing this endpoint directly gets a 403 exactly like any other
+    // admin route.
+    //
+    // WHAT IT WRITES: the target account's OWN Voidbreak cloud save
+    // (account.voidbreak.data.shards), which is the same record every
+    // device reads through /voidbreak/state. So a grant lands on the
+    // account, never on the admin's device or anyone's localStorage, and
+    // reaches the player's Mac/iPad/phone the next time they sync.
+    //
+    // WHY `shards` AND NOT A SEPARATE BALANCE: `shards` is the LIFETIME
+    // earned counter and spendable = shards - shardsSpent (see
+    // voidbreak.js's spendableShards). Adding to `shards` therefore
+    // raises what the player can actually spend, without touching the
+    // spend ledger or any other progression field. It is also the field
+    // the save-conflict resolver MAX-merges, so a granted amount cannot
+    // be lost by another device syncing an older save afterwards, and
+    // cannot be duplicated either (MAX never sums).
+    if (req.method === "POST" && req.url === "/admin/voidbreak/grant") {
+        try {
+            const body = await readJsonBody(req);
+
+            if (!isAdminSession(body.sessionToken)) {
+                sendJson(res, 403, { error: "Forbidden -- admin access required" });
+                return;
+            }
+            const adminAccount = getAccountForSession(body.sessionToken);
+
+            const target = accounts[body.playerId];
+            if (!target) {
+                sendJson(res, 404, { error: "Player not found" });
+                return;
+            }
+
+            // Positive whole numbers only. Unlike /admin/currency this
+            // deliberately does NOT accept a negative amount: taking
+            // Void Shards away would have to fight the MAX-merge that
+            // keeps grants safe from a stale device re-uploading an
+            // older save (the higher pre-removal number would simply win
+            // back), so a "removal" here would silently un-apply itself.
+            const amount = Number(body.amount);
+            if (!Number.isInteger(amount) || amount <= 0 || amount > MAX_VOID_SHARD_GRANT) {
+                sendJson(res, 400, { error: "Amount must be a whole number between 1 and " + MAX_VOID_SHARD_GRANT });
+                return;
+            }
+
+            const reason = validateAdminReason(body.reason);
+            if (!reason) {
+                sendJson(res, 400, { error: "A reason (3-200 characters) is required" });
+                return;
+            }
+
+            const previous = target.voidbreak;
+            // An account that has never played Voidbreak has no save
+            // yet -- create a default one rather than refusing, so a
+            // grant works for any player.
+            const baseData = previous ? previous.data : Voidbreak.defaultSaveData();
+            const previousShards = Math.max(0, Math.floor(Number(baseData.shards) || 0));
+            const nextShards = previousShards + amount;
+
+            // Copy-then-commit: the stored record is only replaced once
+            // the account write succeeds (commitVoidbreakSave rolls the
+            // in-memory change back otherwise), so a failed persist can
+            // never leave a granted balance that isn't on disk.
+            const nextData = Voidbreak.sanitizeSaveData(
+                Object.assign({}, baseData, { shards: nextShards }));
+            // sanitizeSaveData only validates the client-reported half;
+            // carry the server-owned fields forward untouched so a grant
+            // can never clear a purchase, an equip, a mastery claim or a
+            // prestige.
+            const merged = Voidbreak.applyClientSave(nextData, baseData);
+
+            const ok = await commitVoidbreakSave(body.playerId, target, merged);
+            if (!ok) {
+                sendJson(res, 503, { error: "Could not save the grant -- try again" });
+                return;
+            }
+
+            pushAdminLog({
+                admin: adminAccount ? adminAccount.name : "unknown",
+                type: "voidShardGrant",
+                targetPlayer: target.name,
+                targetId: body.playerId,
+                amount: amount,
+                previousBalance: previousShards,
+                newBalance: merged.shards,
+                reason: reason
+            });
+
+            sendJson(res, 200, {
+                ok: true,
+                playerId: body.playerId,
+                name: target.name,
+                amount: amount,
+                previousBalance: previousShards,
+                newBalance: merged.shards,
+                spendable: Voidbreak.spendableShards(merged),
+                version: target.voidbreak.version
             });
         } catch (e) {
             sendJson(res, 400, { error: "Bad request" });

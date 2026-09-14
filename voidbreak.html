@@ -976,6 +976,84 @@ function writeAccountCache(accountId,s,updatedAt){
 let cloudSessionToken=null,cloudAccountId=null,cloudSyncEnabled=false,cloudBootstrapped=false;
 let cloudSyncStatus='connecting'; // 'connecting' | 'local' | 'synced' | 'saving' | 'offline' | 'error'
 let cloudSaveTimer=null,cloudSaveInFlight=false,cloudSavePending=false;
+let cloudRetryTimer=null,cloudRetryAttempts=0; // bootstrap retry backoff (see scheduleCloudBootstrapRetry)
+
+/* cloudStateKnown is the single most important flag in this file.
+   It is true ONLY once /voidbreak/state has actually been read for this
+   account on this page load -- i.e. only once we genuinely know what
+   the account's cloud progress is.
+
+   Uploading before that is what destroyed accounts: if the state fetch
+   failed (offline, flaky mobile network, server hiccup) the old code
+   fell back to whatever this device had locally -- for a device that
+   had never played, a brand-new EMPTY save -- and left cloud saving
+   switched on, so the next progression event uploaded that empty save
+   over the real one. The server now refuses such a downgrade on its own
+   (see voidbreak.js's resolveSaveConflict), but a client that knows it
+   is flying blind should not be asking in the first place, so both
+   halves are fixed rather than relying on the backstop. */
+let cloudStateKnown=false;
+
+/* The stored save VERSION this device last read, echoed back on every
+   upload as `baseVersion`. It exists for exactly one case: a prestige
+   on another device resets weapons/forge/levels/unspent shards, and a
+   device that has not seen that yet is sitting on a save that still
+   contains all of it. The server cannot tell that from the save body
+   (it stamps the authoritative prestige level onto every upload before
+   arbitrating), so it reads it from this instead and keeps only what a
+   prestige preserves. 0 means "has not read the cloud save", which the
+   server treats as the stale side -- the safe direction. */
+let cloudSaveVersion=0;
+
+/* ---- PROGRESS COMPARISON (mirrors voidbreak.js exactly) ----
+   Which of two saves holds more real progress. Deliberately the same
+   ordered, lexicographic comparison the server uses to arbitrate
+   uploads -- see voidbreak.js's PROGRESS SCORING section for the full
+   reasoning (most importantly: why this is NOT a timestamp comparison,
+   and why it is not one weighted number that a big shard balance could
+   outrank real level progress with).
+
+   This is a deliberate duplicate of server logic, exactly like
+   mergeSaveData above already is -- Voidbreak is a self-contained
+   document and cannot import the module. The SERVER is still the
+   authority; this copy only decides what this device shows and offers
+   to upload. */
+function vbHighestBeaten(s){
+  let hi=0;
+  for(const k of Object.keys((s&&s.beaten)||{})){
+    if(!s.beaten[k])continue;
+    const id=Math.floor(Number(k));
+    if(isFinite(id)&&id>hi)hi=id;
+  }
+  return hi;
+}
+function vbCountBeaten(s){
+  let n=0;for(const k of Object.keys((s&&s.beaten)||{}))if(s.beaten[k])n++;return n;
+}
+// Ordered most-significant-first; compared lexicographically.
+function progressVector(s){
+  s=s||DEF_SAVE;
+  return [
+    Math.max(0,Math.floor(Number((s.prestige||{}).level)||0)),
+    vbHighestBeaten(s),
+    vbCountBeaten(s),
+    SAVE_WEAPON_KEYS.reduce((n,k)=>n+((s.weapons||{})[k]?1:0),0),
+    FORGE_KEYS.reduce((n,k)=>n+Math.max(0,Math.floor(Number((s.forge||{})[k])||0)),0),
+    SAVE_WEAPON_KEYS.reduce((n,k)=>n+Math.max(0,Math.floor(Number((s.mastery||{})[k])||0)),0),
+    (Array.isArray(s.masteryClaimed)?s.masteryClaimed.length:0),
+    (Array.isArray(s.shopOwned)?s.shopOwned.length:0),
+    Math.max(0,Math.floor(Number(s.shards)||0)),
+    Math.max(0,Math.floor(Number(s.runs)||0)),
+    Math.max(0,Math.floor(Number(s.best)||0)),
+    Math.max(0,Math.floor(Number(s.kills)||0))
+  ];
+}
+// >0 if a has more progress, <0 if b does, 0 if tied on every signal.
+function compareSaves(a,b){
+  const va=progressVector(a),vb=progressVector(b);
+  for(let i=0;i<va.length;i++)if(va[i]!==vb[i])return va[i]>vb[i]?1:-1;
+  return 0;
+}
 
 function setSyncStatus(s){
   cloudSyncStatus=s;
@@ -1025,8 +1103,41 @@ function saveGameCloud(){
   clearTimeout(cloudSaveTimer);
   cloudSaveTimer=setTimeout(flushCloudSave,1500);
 }
+// Adopts the authoritative save the server just handed back.
+//
+// /voidbreak/save no longer stores blindly: it arbitrates the upload
+// against the stored record and returns whatever actually won (see
+// voidbreak.js's resolveSaveConflict). So an upload can legitimately
+// come back as a DIFFERENT, higher-progress save than the one this
+// device sent -- the Mac's progress arriving in response to the iPad's
+// save, which is precisely the cross-device case this whole feature is
+// about. Adopting it here is what makes the losing device converge
+// instead of sitting on its lesser copy and re-uploading it forever.
+//
+// Only ever raises this device to the server's copy; `settings` is
+// preserved because it is per-device and never part of the cloud save.
+function adoptServerSave(data,updatedAt){
+  if(!data)return false;
+  const incoming=normalizeSave(data);
+  incoming.settings=Object.assign({},DEF_SAVE.settings,save&&save.settings||{});
+  const differs=compareSaves(incoming,save)!==0;
+  save=incoming;
+  writeAccountCache(cloudAccountId,save,updatedAt||Date.now());
+  if(differs){
+    // The visible numbers just changed under the player's feet, so
+    // re-render rather than leaving a stale menu on screen.
+    refreshMenuStats();syncSettingsUI();if(actx)applyAudioSettings();
+  }
+  return differs;
+}
+
 async function flushCloudSave(){
   if(cloudSaveInFlight||!cloudSyncEnabled)return;
+  // Never upload before we know what the cloud actually holds -- see
+  // the cloudStateKnown comment above. The pending flag is deliberately
+  // left set, so whatever is queued still goes out if bootstrap later
+  // succeeds (retryCloudBootstrap below).
+  if(!cloudStateKnown)return;
   if(!cloudSavePending)return;
   cloudSavePending=false;
   cloudSaveInFlight=true;
@@ -1045,10 +1156,15 @@ async function flushCloudSave(){
     runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten,mastery:save.mastery};
   try{
     const res=await fetch('/voidbreak/save',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({sessionToken:cloudSessionToken,data:payload})});
+      body:JSON.stringify({sessionToken:cloudSessionToken,data:payload,baseVersion:cloudSaveVersion})});
     if(res.ok){
       const data=await res.json().catch(()=>({}));
-      writeAccountCache(cloudAccountId,save,data.updatedAt||Date.now());
+      // The server may have kept a HIGHER-progress stored save instead
+      // of this upload (another device got there first) -- adopt
+      // whatever it says is authoritative, then cache that.
+      if(typeof data.version==='number')cloudSaveVersion=data.version;
+      if(data.data)adoptServerSave(data.data,data.updatedAt);
+      else writeAccountCache(cloudAccountId,save,data.updatedAt||Date.now());
       // The response carries a fresh server-resolved endgame view (see
       // endgamePost, which already does this for shop/mastery/prestige
       // actions). Without this, spendableShards() -- which the main menu
@@ -1081,7 +1197,7 @@ async function flushCloudSave(){
 // reconciliation) where there's no gameplay burst to collapse and the
 // player is about to see the result on the menu right away.
 async function pushCloudSaveNow(){
-  if(!cloudSyncEnabled)return;
+  if(!cloudSyncEnabled||!cloudStateKnown)return;
   setSyncStatus('saving');
   // `mastery` is client-reported (see voidbreak.js's DEF_SAVE header
   // comment) exactly like `shards`/`kills` already were -- it belongs in
@@ -1098,10 +1214,15 @@ async function pushCloudSaveNow(){
     runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten,mastery:save.mastery};
   try{
     const res=await fetch('/voidbreak/save',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({sessionToken:cloudSessionToken,data:payload})});
+      body:JSON.stringify({sessionToken:cloudSessionToken,data:payload,baseVersion:cloudSaveVersion})});
     if(res.ok){
       const data=await res.json().catch(()=>({}));
-      writeAccountCache(cloudAccountId,save,data.updatedAt||Date.now());
+      // Same as flushCloudSave: the server arbitrates, so take back
+      // whatever it decided is authoritative rather than assuming this
+      // device's copy won.
+      if(typeof data.version==='number')cloudSaveVersion=data.version;
+      if(data.data)adoptServerSave(data.data,data.updatedAt);
+      else writeAccountCache(cloudAccountId,save,data.updatedAt||Date.now());
       if(data.endgame)adoptEndgame(data.endgame); // see the matching comment in flushCloudSave
       setSyncStatus('synced');
     }else{
@@ -1118,17 +1239,80 @@ async function pushCloudSaveNow(){
 // is null for a guest -- in which case nothing changes from the
 // original, device-only behavior at all.
 async function handleSessionHandshake(sessionToken,accountId){
-  if(cloudBootstrapped)return; // only ever bootstrap once per document load
+  const isRealSession=!!(sessionToken);
+
+  // SIGN-OUT, told to a live iframe. index.html re-sends the handshake
+  // whenever the signed-in account changes (see postVoidbreakSession),
+  // so a null session arriving after we were syncing means the player
+  // just logged out. Drop the account's session and its cache key
+  // immediately and fall back to the guest save, so nothing that
+  // happens afterwards is attributed to -- or uploaded on behalf of --
+  // the account that just left. Without this the iframe kept a live
+  // token and kept writing the previous account's cache.
+  if(cloudBootstrapped&&!isRealSession&&cloudSyncEnabled){
+    clearTimeout(cloudSaveTimer);clearTimeout(cloudRetryTimer);
+    cloudSessionToken=null;cloudAccountId=null;
+    cloudSyncEnabled=false;cloudStateKnown=false;cloudSavePending=false;cloudSaveVersion=0;
+    save=readGuestSave()||normalizeSave(null);
+    setSyncStatus('local');
+    refreshMenuStats();syncSettingsUI();if(actx)applyAudioSettings();
+    return;
+  }
+
+  // A REAL session is always allowed through, even if a guest fallback
+  // already ran. The 3s timeout in the BOOT section optimistically
+  // assumes "no reply means no account", which is usually right -- but
+  // if the parent was simply slow (its own session was still being
+  // restored, or the first fetch was queued behind a cold page load) the
+  // reply arrives after that, and the old `if(cloudBootstrapped)return`
+  // swallowed it. The player was then silently stuck on local-only play
+  // for the rest of the session, with the menu cheerfully reading
+  // "GUEST · LOCAL SAVE ONLY" while they were in fact signed in -- and
+  // any progress they made went to the guest key instead of the account.
+  if(cloudBootstrapped&&(!isRealSession||cloudSyncEnabled))return;
   cloudBootstrapped=true;
-  if(!sessionToken||!accountId){
+
+  if(!isRealSession){
     setSyncStatus('local');
     refreshMenuStats();
     return;
   }
+
   cloudSessionToken=sessionToken;
-  cloudAccountId=accountId;
+  // accountId only ever namespaces the LOCAL cache key -- the server
+  // identifies the account from the session token alone, and never
+  // trusts an id from a client (see /voidbreak/save). So a missing
+  // accountId must not disable cloud sync, which is what it used to do
+  // (`if(!sessionToken||!accountId)` fell straight through to guest
+  // mode with a perfectly valid session in hand). Fall back to a stable
+  // token-derived cache namespace instead: it is per-account in
+  // practice, never collides with another account's cache, and the
+  // cloud save itself is keyed server-side regardless.
+  cloudAccountId=accountId||('tok_'+String(sessionToken).slice(0,16));
   cloudSyncEnabled=true;
   await bootstrapCloudSave();
+}
+
+// Re-tries a bootstrap that could not reach the server (offline, flaky
+// mobile network -- the iPad case). Until one succeeds, cloudStateKnown
+// stays false and nothing is uploaded, so a device in this state can
+// never talk the account's progress downwards; it just keeps playing
+// locally and folds its progress in once it gets through. Backs off,
+// and gives up quietly rather than retrying forever.
+function scheduleCloudBootstrapRetry(){
+  if(cloudStateKnown||!cloudSyncEnabled)return;
+  if(cloudRetryAttempts>=5)return;
+  clearTimeout(cloudRetryTimer);
+  const delay=Math.min(30000,2000*Math.pow(2,cloudRetryAttempts));
+  cloudRetryAttempts++;
+  cloudRetryTimer=setTimeout(()=>{
+    if(cloudStateKnown||!cloudSyncEnabled)return;
+    bootstrapCloudSave().then(()=>{
+      // A retry that got through may have found progress queued locally
+      // while we were offline -- push it now that uploading is safe.
+      if(cloudStateKnown&&cloudSavePending)flushCloudSave();
+    }).catch(()=>{});
+  },delay);
 }
 
 // The actual "load the account's real progress before treating
@@ -1151,11 +1335,25 @@ async function bootstrapCloudSave(){
     // died between the handshake and now -- fall back to this
     // account's own last-known local cache rather than blocking play,
     // but never touch the guest key and never invent progress.
+    //
+    // cloudStateKnown stays FALSE here, which is the important part:
+    // this device has no idea what the account's real progress is, so
+    // it must not upload anything (see flushCloudSave/pushCloudSaveNow).
+    // Previously it fell through in exactly this state with uploading
+    // still enabled, so a device that had never played this account
+    // would push its empty save over the real one on the next level
+    // clear. Local play still saves locally throughout.
     save=localCache?localCache.data:normalizeSave(null);
     setSyncStatus(cloudResp?'error':'offline');
     refreshMenuStats();syncSettingsUI();if(actx)applyAudioSettings();
+    scheduleCloudBootstrapRetry();
     return;
   }
+
+  // From here on we genuinely know what the account holds, so uploading
+  // is safe.
+  cloudStateKnown=true;
+  cloudSaveVersion=Number(cloudResp.version)||0;
 
   if(!cloudResp.hasCloudSave){
     // First time THIS ACCOUNT has ever reached the cloud save system.
@@ -1183,13 +1381,31 @@ async function bootstrapCloudSave(){
     await pushCloudSaveNow(); // creates the cloud record immediately, migrated or not -- and (see pushCloudSaveNow) adopts the resulting endgame view itself
   }else{
     const cloudSave=normalizeSave(cloudResp.data);
-    if(localCache&&localCache.updatedAt>cloudResp.updatedAt){
-      // This device saved locally more recently than the cloud has ever
-      // seen (e.g. it was offline when a save attempt failed) -- merge
-      // rather than silently discard either side, then heal the cloud
-      // record so both are reconciled going forward.
+    // WHICH SAVE WINS: progress, not clocks.
+    //
+    // This used to be `localCache.updatedAt > cloudResp.updatedAt` -- a
+    // comparison between THIS DEVICE's clock and the SERVER's clock.
+    // Those are two different clocks (an iPad's can easily be minutes
+    // out either way), so the branch fired essentially at random; and
+    // even with perfect clocks it asks the wrong question, because an
+    // older save can hold far more progress than a newer one.
+    //
+    // Now the local cache only takes part at all if it actually carries
+    // MORE progress than the cloud (compareSaves, mirroring the server's
+    // own arbitration). If it does, the two are merged and the result
+    // pushed up so the account is healed; if it doesn't, the cloud save
+    // is simply the truth and this device adopts it. Either way the
+    // server re-arbitrates the upload independently, so a wrong answer
+    // here can no longer cost anybody progress.
+    const localWins=localCache&&compareSaves(localCache.data,cloudSave)>0;
+    if(localWins){
+      // This device holds progress the cloud has never seen (it was
+      // offline when a save failed, or it played while the account was
+      // signed out elsewhere) -- merge rather than discard either side,
+      // then heal the cloud record.
       save=mergeSaveData(localCache.data,cloudSave);
       writeAccountCache(cloudAccountId,save,Date.now());
+      if(cloudResp.endgame)adoptEndgame(cloudResp.endgame);
       await pushCloudSaveNow(); // also adopts the post-merge endgame view
     }else{
       // The normal case, and the whole point of this feature: whatever
@@ -1219,6 +1435,7 @@ async function refetchCloudSave(){
     if(!res.ok)return;
     const data=await res.json();
     if(!data.signedIn)return;
+    if(typeof data.version==='number')cloudSaveVersion=data.version;
     if(data.data){
       save=normalizeSave(data.data);
       writeAccountCache(cloudAccountId,save,data.updatedAt);
