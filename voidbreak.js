@@ -121,8 +121,8 @@ const EQUIP_SLOTS = Object.keys(DEF_SAVE.equipped);
 // Individual prices are what a player actually feels, and they're set
 // against that income: a common is ~1 Level-1 clear, an epic ~1 clear
 // of a mid level, a legendary ~1.5 Level-8 clears. Nothing is priced
-// out of reach of a mid-game player. The catalog TOTAL (53 items,
-// 78,250 shards) is deliberately a long tail rather than a checklist to
+// out of reach of a mid-game player. The catalog TOTAL (54 items,
+// 80,450 shards) is deliberately a long tail rather than a checklist to
 // finish in an evening -- and roughly half of it is mythic tier that
 // can't be bought with shards alone at all, being gated behind mastery
 // 10 or a prestige level, so shard income is never the only thing
@@ -155,6 +155,7 @@ const COSMETICS = [
     item("skin_abyss", "ABYSSAL DRIFT", "skin", "epic", { hull: [70, 110, 255], glow: [40, 80, 255] }),
     item("skin_gold", "GILDED VANGUARD", "skin", "legendary", { hull: [255, 215, 130], glow: [255, 201, 92] }),
     item("skin_void", "VOIDWALKER", "skin", "legendary", { hull: [230, 230, 255], glow: [190, 130, 255] }),
+    item("skin_tuff", "TUFF", "skin", "legendary", { hull: [72, 78, 92], glow: [190, 70, 255] }),
     item("skin_prestige", "ASCENDANT", "skin", "mythic", { hull: [255, 255, 255], glow: [255, 201, 92], req: { prestige: 1 } }),
 
     // ---- WEAPON SKINS (per-weapon projectile/UI color) ----
