@@ -32,6 +32,25 @@
 // Positions are also still client-owned; nothing here simulates
 // movement.
 //
+// Teams and more than two players
+// -------------------------------
+// A match is no longer assumed to be two players. createCombatMatch()
+// takes a ROSTER (which slots exist) and a TEAM LAYOUT (which team each
+// slot is on, see party.js), and every rule below reads those instead of
+// `otherSlot()`:
+//
+//   * a hit claim names the slot that fired, and is refused unless that
+//     slot is a real, DIFFERENT, ENEMY slot in this same match -- which
+//     is what makes friendly fire impossible server-side rather than by
+//     a client politely not shooting its teammate,
+//   * in-flight damage sources are matched per shooter, so four players
+//     firing at once cannot consume each other's shots,
+//   * round/elimination state covers every slot in the roster.
+//
+// Called with no roster it builds the original two-slot, two-team match
+// and behaves exactly as it did before, which is what keeps casual and
+// ranked 1v1 unchanged.
+//
 // Pure module: no sockets, no storage, no timers. server.js owns the
 // match rooms and the broadcasting; this owns "how much health is left".
 // =====================================================================
@@ -95,8 +114,27 @@ function otherSlot(slot) {
 // A single online match's combat state. Casual play has one of these;
 // each ranked room has its own.
 // ---------------------------------------------------------------------
-function createCombatMatch(abilityConfig) {
+function createCombatMatch(abilityConfig, opts) {
     const cfg = Object.assign({}, COMBAT_CONFIG);
+
+    // The roster. Defaults to the original two-slot duel so every
+    // existing call site (casual play, every ranked room) keeps the
+    // exact match it always had.
+    const roster = (opts && Array.isArray(opts.slots) && opts.slots.length)
+        ? opts.slots.slice()
+        : [1, 2];
+
+    // { slot: teamId }. Defaults to "every player is their own team",
+    // which for the two-slot default is 1v1 -- identical behaviour to
+    // the old hard-coded otherSlot() rule.
+    const teams = {};
+    for (const slot of roster) teams[slot] = slot;
+    if (opts && opts.teams) {
+        for (const slot of roster) {
+            const t = opts.teams[slot];
+            if (Number.isInteger(t) && t > 0) teams[slot] = t;
+        }
+    }
 
     // Damage numbers come from the SAME admin-tunable config the rest of
     // the server uses, so a balance change applies here automatically
@@ -144,7 +182,8 @@ function createCombatMatch(abilityConfig) {
         };
     }
 
-    const players = { 1: newPlayer(), 2: newPlayer() };
+    const players = {};
+    for (const slot of roster) players[slot] = newPlayer();
 
     // Damage sources currently "in the air", per shooter slot. A hit
     // claim has to be able to consume one of these, which is what stops
@@ -280,7 +319,15 @@ function createCombatMatch(abilityConfig) {
         // would also make hit registration less accurate than it is
         // today (the server's view of a position is always ~half an RTT
         // stale). That trade is deliberately not taken here.
-        claimHit(victimSlot, now) {
+        // `bySlot` is the slot the victim's client says fired the shot.
+        // It is a HINT, never a grant: it can only ever be used to pick
+        // WHICH enemy's in-flight shot is consumed, and the claim is
+        // refused outright if it names a teammate, the victim itself, or
+        // a slot that is not in this match -- so the worst a lying
+        // client can do with it is take damage it didn't have to.
+        // Omitted (the original two-player call) it falls back to
+        // otherSlot(), which is what casual and ranked 1v1 still do.
+        claimHit(victimSlot, now, bySlot) {
             const victim = players[victimSlot];
             if (!victim) return { accepted: false, reason: "no-such-slot" };
             if (!victim.alive) return { accepted: false, reason: "already-eliminated" };
@@ -300,10 +347,32 @@ function createCombatMatch(abilityConfig) {
 
             prune(now);
 
-            // Must correspond to something the OPPONENT actually fired
-            // and that could still be in flight. Oldest first, so a
-            // burst is consumed in the order it was fired.
-            const shooter = otherSlot(victimSlot);
+            // Must correspond to something an ENEMY actually fired and
+            // that could still be in flight. Oldest first, so a burst is
+            // consumed in the order it was fired.
+            //
+            // FRIENDLY FIRE IS DECIDED HERE, not on any client: a source
+            // is only eligible when its shooter is on a different team
+            // from the victim, so a teammate's bullet can never be
+            // consumed as damage no matter what either client reports.
+            let shooter = null;
+            if (bySlot !== undefined && bySlot !== null) {
+                const named = Math.floor(Number(bySlot));
+                if (!players[named]) return { accepted: false, reason: "no-such-shooter" };
+                if (named === victimSlot) return { accepted: false, reason: "self" };
+                if (teams[named] === teams[victimSlot]) return { accepted: false, reason: "friendly-fire" };
+                shooter = named;
+            } else {
+                // The original two-player call. Still team-checked, so a
+                // 1v1 (two teams) behaves exactly as before and a future
+                // two-slot same-team match could never damage itself.
+                const other = otherSlot(victimSlot);
+                if (!players[other] || teams[other] === teams[victimSlot]) {
+                    return { accepted: false, reason: "no-enemy" };
+                }
+                shooter = other;
+            }
+
             let idx = -1;
             for (let i = 0; i < sources.length; i++) {
                 const s = sources[i];
@@ -351,7 +420,7 @@ function createCombatMatch(abilityConfig) {
         // tracked, so a shot fired in the previous round can never land
         // in the next one.
         resetRound() {
-            for (const slot of [1, 2]) {
+            for (const slot of roster) {
                 const p = players[slot];
                 p.health = p.maxHealth;
                 p.shields = p.maxShields;
@@ -375,13 +444,41 @@ function createCombatMatch(abilityConfig) {
         // A rematch/new match additionally forgets the loadouts, since
         // the next match re-reports them.
         resetMatch() {
-            players[1] = newPlayer();
-            players[2] = newPlayer();
+            for (const slot of roster) players[slot] = newPlayer();
             sources = [];
         },
 
         isAlive(slot) {
             return !!(players[slot] && players[slot].alive);
+        },
+
+        // ---- roster / team queries -------------------------------------
+        // The team layout is fixed when the match is created (see
+        // server.js: a lobby may shuffle teams, a MATCH may not), so
+        // there is deliberately no setter here.
+        slots() {
+            return roster.slice();
+        },
+
+        teamOf(slot) {
+            return teams[slot] || null;
+        },
+
+        areAllies(a, b) {
+            return a === b || (!!teams[a] && teams[a] === teams[b]);
+        },
+
+        // Removes a slot from the round without any damage source --
+        // used when a player disconnects mid-round, where "they are out"
+        // is decided by the socket closing, not by a hit. Returns true
+        // only the first time, so a duplicate close event can never
+        // score a second elimination.
+        forceEliminate(slot) {
+            const p = players[slot];
+            if (!p || !p.alive) return false;
+            p.health = 0;
+            p.alive = false;
+            return true;
         },
 
         stateFor(slot) {

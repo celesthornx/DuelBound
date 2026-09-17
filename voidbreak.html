@@ -501,6 +501,39 @@ input[type=range]{width:180px;accent-color:var(--cy)}
   .barwrap.hp{height:12px}
   #banner{top:14%}
 }
+/* ---- ONLINE CO-OP lobby + in-run squad HUD ----
+   Uses Voidbreak's own overlay/panel/button language; nothing here
+   introduces a second visual system. Sized so a four-player roster fits
+   a phone in portrait, which is where most of this game is played. */
+.coop-join{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:6px}
+.coop-input{background:rgba(255,255,255,.05);border:1px solid rgba(180,220,255,.28);
+  color:#eafcff;font-family:inherit;font-size:15px;letter-spacing:5px;text-align:center;
+  padding:9px 10px;width:140px;text-transform:uppercase}
+.coop-input.wide{width:auto;min-width:150px;letter-spacing:1px;font-size:12px}
+.coop-code{font-size:12px;letter-spacing:3px;opacity:.75;margin:4px 0 10px}
+.coop-code b{font-size:20px;letter-spacing:7px;color:#ffc95c}
+.coop-list{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.coop-row{display:flex;justify-content:space-between;align-items:center;gap:10px;
+  border:1px solid rgba(180,220,255,.16);background:rgba(255,255,255,.03);
+  padding:8px 12px;font-size:12px;letter-spacing:1.5px}
+.coop-row.empty{opacity:.4}
+.coop-row.me{border-color:rgba(0,240,255,.5);color:#00f0ff}
+.coop-row .tag{font-size:10px;letter-spacing:2px;opacity:.7}
+.coop-row .tag.ready{color:#38ff9c;opacity:1}
+.coop-row .tag.host{color:#ffc95c;opacity:1}
+.coop-settings{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:12px}
+.coop-note{font-size:11px;letter-spacing:1.5px;opacity:.7;margin-top:10px;min-height:14px}
+.coop-note.err{color:#ff4d6d;opacity:1}
+/* Squad strip in-run: one compact health pip per teammate. */
+#coopSquad{position:absolute;left:50%;transform:translateX(-50%);top:8px;
+  display:flex;gap:8px;z-index:6;pointer-events:none}
+#coopSquad .mate{min-width:92px;border:1px solid rgba(180,220,255,.22);
+  background:rgba(6,10,22,.72);padding:4px 8px;font-size:10px;letter-spacing:1.5px}
+#coopSquad .mate .bar{height:3px;background:rgba(255,255,255,.14);margin-top:3px}
+#coopSquad .mate .bar i{display:block;height:100%;background:#38ff9c}
+#coopSquad .mate.down{opacity:.45}
+#coopSquad .mate.down .bar i{background:#ff4d6d}
+
 </style>
 </head>
 <body>
@@ -555,6 +588,8 @@ input[type=range]{width:180px;accent-color:var(--cy)}
 <div id="banner"><div id="bannerMain"></div><div id="bannerSub"></div></div>
 <div id="toast"></div>
 
+<div id="coopSquad" class="hidden"></div>
+
 <div class="overlay on" id="ov-menu"><div class="panel">
   <div class="logo"><span>VOID</span><em>BREAK</em></div>
   <div class="tagline">THE DIMENSION IS COLLAPSING. BREAK OUT.</div>
@@ -566,6 +601,7 @@ input[type=range]{width:180px;accent-color:var(--cy)}
       <button type="button" class="diff-btn" data-diff="extreme">EXTREME<span class="diff-mult">2.0×</span></button>
     </div>
     <div class="diff-hint" id="diffHint">NORMAL SELECTED</div>
+    <button class="btn primary" id="btnCoop">ONLINE CO-OP</button>
     <button class="btn" id="btnForge">VOID FORGE</button>
     <div class="endgame-row">
       <button type="button" class="btn endgame-btn" id="btnShop">SHOP</button>
@@ -583,6 +619,49 @@ input[type=range]{width:180px;accent-color:var(--cy)}
     <div><i>◆</i> <b id="menuShards">0</b> VOID SHARDS</div>
     <div>RUNS <span id="menuRuns">0</span> · BEST SECTOR <span id="menuBest">–</span> · BOSSES SLAIN <span id="menuKills">0</span></div>
   </div>
+</div></div>
+
+
+<!-- ---- ONLINE CO-OP ----
+     The lobby lives HERE, inside Voidbreak's own document, because the
+     run itself does: Voidbreak has always been a self-contained page
+     with its own save, its own loop and its own audio (see
+     launchVoidbreak() in index.html). Putting the room in the parent
+     would mean relaying every co-op message across the iframe boundary
+     for no benefit. index.html's ONLINE hub just launches this page
+     with ?coop=<size>. -->
+<div class="overlay" id="ov-coop"><div class="panel">
+  <h2 class="ovtitle">VOIDBREAK CO-OP</h2>
+  <div class="ovsub" id="coopSub">FIGHT THE VOID TOGETHER · 2–4 PLAYERS</div>
+  <div class="menu-btns" id="coopCreate">
+    <button class="btn primary" data-coop="coop2">CREATE · 2 PLAYERS</button>
+    <button class="btn primary" data-coop="coop3">CREATE · 3 PLAYERS</button>
+    <button class="btn primary" data-coop="coop4">CREATE · 4 PLAYERS</button>
+    <div class="coop-join">
+      <input id="coopJoinCode" class="coop-input" maxlength="5" placeholder="CODE"
+             autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <button class="btn" id="coopJoinBtn">JOIN</button>
+    </div>
+  </div>
+  <div id="coopRoom" class="hidden">
+    <div class="coop-code">ROOM CODE <b id="coopCode">-----</b></div>
+    <div class="coop-list" id="coopList"></div>
+    <div class="coop-settings" id="coopSettings">
+      <select class="coop-input wide" id="coopLevel"></select>
+      <select class="coop-input wide" id="coopDiff">
+        <option value="normal">NORMAL</option>
+        <option value="hard">HARD</option>
+        <option value="extreme">EXTREME</option>
+      </select>
+    </div>
+    <div class="menu-btns">
+      <button class="btn primary" id="coopReady">READY</button>
+      <button class="btn primary" id="coopStart">START RUN</button>
+      <button class="btn" id="coopLeave">LEAVE ROOM</button>
+    </div>
+  </div>
+  <div class="coop-note" id="coopNote"></div>
+  <div class="ovnav"><button class="btn" id="coopBack">BACK</button></div>
 </div></div>
 
 <!-- ---- VOID SHARD SHOP ---- -->
@@ -1240,6 +1319,15 @@ async function pushCloudSaveNow(){
 // original, device-only behavior at all.
 async function handleSessionHandshake(sessionToken,accountId){
   const isRealSession=!!(sessionToken);
+  // Online co-op authenticates over its own WebSocket with this SAME
+  // session token -- the one this page is handed by its parent, not
+  // anything it makes up. A guest (null token) simply cannot open a
+  // co-op room, which is the correct outcome: there would be no account
+  // to pay the run into.
+  COOP.sessionToken=sessionToken||null;
+  COOP.accountId=accountId||null;
+  if(!sessionToken&&COOP.socket){ try{COOP.socket.close();}catch(e){} COOP.socket=null; }
+  else if(sessionToken&&COOP.autoCreate)coopConnect();
 
   // SIGN-OUT, told to a live iframe. index.html re-sends the handshake
   // whenever the signed-in account changes (see postVoidbreakSession),
@@ -2500,6 +2588,11 @@ function fireWeapon(){
 }
 function hurtPlayer(dmg,sx,sy){
   const p=player;
+  // CO-OP: the server owns both sides of every PvE hit (it knows where
+  // its own enemies are and where every player reported being), so it
+  // applies player damage itself and reports it as a 'ph' event. A
+  // local hit here would double-count it.
+  if(COOP.active)return;
   if(p.dead||p.invuln>0)return;
   if(p.shield>0){SFX.block();ringFX(p.x,p.y,[0,240,255],54,0.25);return;}
   // The single point every damage source (enemy contact/shots, boss
@@ -2632,6 +2725,17 @@ function applyBurn(e){
 }
 function damageEnemy(e,dmg,crit,kx,ky){
   if(e.dead||e.noHit)return;
+  // CO-OP: the client detects the hit (its own view of its own shot is
+  // the only one that is not a network trip stale) but decides nothing
+  // about it. No damage number is sent -- the server computes the
+  // amount from its own weapon table and this player's own STORED forge
+  // levels, applies it to the shared enemy, and replies with what it
+  // did (see coopHitConfirmed). Enemy health here is only ever what the
+  // last snapshot said.
+  if(e.net){
+    if(COOP.active)coopSend({type:'vb_hit',e:e.netId});
+    return;
+  }
   // The Singularity: timed shield fully blocks damage while up
   if(e.type==='singularity'&&e.sst==='shield'){
     ringFX(e.x,e.y,[170,140,255],e.r+14,0.25);SFX.block();return;
@@ -2693,7 +2797,16 @@ function updateEBullets(dt){
     if(b.life<=0||(room&&(b.x<-room.w/2-20||b.x>room.w/2+20||b.y<-room.h/2-20||b.y>room.h/2+20))){
       sparks(b.x,b.y,b.c,3,120);ebullets.splice(i,1);continue;}
     const p=player;
-    if(!p.dead){
+    // CO-OP: this projectile is a local replay of one the server is
+    // also simulating, and the server's copy is the one that decides
+    // whether anybody was hit. Here it only needs to disappear on
+    // contact so it looks right.
+    if(b.net){
+      const rr2=b.r+p.r;
+      if(!p.dead&&(b.x-p.x)**2+(b.y-p.y)**2<rr2*rr2){
+        sparks(b.x,b.y,b.c,3,120);ebullets.splice(i,1);continue;
+      }
+    } else if(!p.dead){
       const rr=b.r+p.r;
       if((b.x-p.x)**2+(b.y-p.y)**2<rr*rr){
         if(p.shield>0){SFX.block();ringFX(p.x,p.y,[0,240,255],54,0.25);ebullets.splice(i,1);continue;}
@@ -2863,6 +2976,16 @@ function updateEnemies(dt){
   const p=player;
   for(const e of enemies){
     if(e.dead)continue;
+    // CO-OP: this enemy is a view of one the server owns. Its position,
+    // facing and health arrive in snapshots (see coopSnapshot) and it is
+    // eased toward them in coopUpdate -- running the local AI here as
+    // well would fight the network for control of it. Only the purely
+    // cosmetic timers it is drawn with are advanced.
+    if(e.net){
+      e.t+=dt;
+      if(e.hitFlash>0)e.hitFlash-=dt;
+      continue;
+    }
     e.t+=dt;e.hitFlash-=dt;e.windup-=dt;
     if(e.slowT>0)e.slowT-=dt;
     const slowF=e.slowT>0?1-(e.slowAmt||0.3):1;
@@ -4954,6 +5077,673 @@ function finalizeRun(victory_){
   saveGameCloud();
 }
 
+/* ---------- ONLINE CO-OP ----------
+   The client half of the shared, server-authoritative PvE simulation
+   (see voidbreakCoop.js and the ONLINE LOBBIES AND MATCH ROOMS section
+   of server.js).
+
+   WHAT THE SERVER OWNS, AND THIS FILE THEREFORE DOES NOT
+   ------------------------------------------------------
+   In a co-op run the server decides which enemies exist, where they
+   are, how much health they have, when they die, which wave is running,
+   how much damage every player has taken, which Void Upgrades are
+   offered, and what the run pays out. None of that is computed here,
+   and there is no message this client can send to assert any of it --
+   it reports where its own player is and that its own shot connected,
+   and that is the whole of its authority.
+
+   WHAT THIS FILE STILL OWNS
+   -------------------------
+   Everything a player actually looks at. Enemies are instantiated with
+   Voidbreak's OWN createEnemy() and drawn by its OWN drawEnemy(), so a
+   co-op Ravager is the same Ravager, with the same art, as a solo one.
+   Enemy shots, muzzle flashes, hit sparks, shard flyers, screen shake
+   and sound are all produced locally from the events below rather than
+   being streamed -- which is what keeps a four-player wave inside a few
+   kilobytes a second.
+
+   SOLO IS UNTOUCHED. Every hook this adds to the existing game is
+   guarded on COOP.active, which is only ever true between vb_match and
+   the end of a co-op run. */
+const COOP={
+  active:false, socket:null, sessionToken:null, accountId:null,
+  lobby:null, matchId:null, mySlot:null,
+  levels:[], types:[], note:'',
+  autoCreate:null,          // a size requested via ?coop=<typeId>
+  mates:{},                 // slot -> { slot, name, x, y, ang, hp, maxhp, alive, connected, tx, ty }
+  netEnemies:new Map(),     // server enemy id -> local enemy object
+  wave:0, totalWaves:8,
+  lastPosAt:0, lastPos:null,
+  pendingUpgrade:null,
+  reward:null,
+  ended:false
+};
+
+const COOP_POS_INTERVAL_MS=66;   // ~15/sec, the rate the server samples at
+const COOP_LERP=0.22;            // enemy/teammate position smoothing per frame
+
+function coopEl(id){return document.getElementById(id);}
+function coopNote(msg,isErr){
+  const n=coopEl('coopNote');
+  if(n){n.textContent=msg||'';n.classList.toggle('err',!!isErr);}
+}
+function coopSend(o){
+  if(COOP.socket&&COOP.socket.readyState===1){COOP.socket.send(JSON.stringify(o));return true;}
+  coopNote('NOT CONNECTED',true);return false;
+}
+
+/* The co-op socket is separate from the save/HTTP calls and asks for
+   ?mp=1, which tells the server not to hand it one of the two legacy
+   casual duel slots -- opening co-op must never lock somebody out of a
+   Duel Arena match. */
+function coopConnect(){
+  if(COOP.socket&&(COOP.socket.readyState===0||COOP.socket.readyState===1))return;
+  if(!COOP.sessionToken){coopNote('SIGN IN TO PLAY CO-OP',true);return;}
+  const proto=location.protocol==='https:'?'wss:':'ws:';
+  const ws=new WebSocket(proto+'//'+location.host+'/?mp=1');
+  COOP.socket=ws;
+  ws.onopen=()=>{
+    ws.send(JSON.stringify({type:'presence_hello',sessionToken:COOP.sessionToken}));
+    ws.send(JSON.stringify({type:'mp_types'}));
+    coopNote('');
+    if(COOP.autoCreate){
+      const want=COOP.autoCreate;COOP.autoCreate=null;
+      ws.send(JSON.stringify({type:'mp_create',typeId:want,private:false}));
+    }
+  };
+  ws.onclose=()=>{
+    COOP.socket=null;
+    if(COOP.active)coopAbort('CONNECTION LOST');
+    else coopNote('DISCONNECTED',true);
+  };
+  ws.onerror=()=>coopNote('CONNECTION FAILED',true);
+  ws.onmessage=e=>{
+    let d;try{d=JSON.parse(e.data);}catch(x){return;}
+    coopOnMessage(d);
+  };
+}
+
+function coopOpen(){
+  coopConnect();
+  go('coop');
+  coopRenderLobby();
+}
+
+function coopRenderTypes(){
+  const sel=coopEl('coopLevel');
+  if(sel&&COOP.levels.length&&!sel.options.length){
+    COOP.levels.forEach(l=>{
+      const o=document.createElement('option');
+      o.value=String(l.idx);o.textContent='SECTOR '+l.id+' · '+l.name;
+      sel.appendChild(o);
+    });
+  }
+}
+
+function coopRenderLobby(){
+  const v=COOP.lobby;
+  coopEl('coopCreate').classList.toggle('hidden',!!v);
+  coopEl('coopRoom').classList.toggle('hidden',!v);
+  if(!v)return;
+  coopEl('coopCode').textContent=v.code;
+  const host=coopEl('coopList');
+  host.innerHTML='';
+  for(let i=0;i<v.maxPlayers;i++){
+    const m=v.members[i];
+    const row=document.createElement('div');
+    row.className='coop-row'+(m?(m.you?' me':''):' empty');
+    if(m){
+      row.innerHTML='<span>'+coopEsc(m.name)+' <span class="tag">LV '+m.level+'</span></span>'+
+        '<span>'+(m.host?'<span class="tag host">HOST</span> ':'')+
+        ((m.ready||m.host)?'<span class="tag ready">READY</span>':'<span class="tag">WAITING</span>')+'</span>';
+    } else {
+      row.innerHTML='<span>OPEN SLOT</span><span class="tag">—</span>';
+    }
+    host.appendChild(row);
+  }
+  const lvl=coopEl('coopLevel'),dif=coopEl('coopDiff');
+  if(lvl){lvl.value=String(v.settings.levelIdx);lvl.disabled=!v.youAreHost;}
+  if(dif){dif.value=v.settings.difficulty;dif.disabled=!v.youAreHost;}
+
+  const me=v.members.find(m=>m.you);
+  const ready=coopEl('coopReady'),start=coopEl('coopStart');
+  ready.classList.toggle('hidden',!!v.youAreHost);
+  ready.textContent=(me&&me.ready)?'NOT READY':'READY';
+  start.classList.toggle('hidden',!v.youAreHost);
+  start.disabled=!v.canStart;
+  start.style.opacity=v.canStart?'1':'0.45';
+
+  if(v.members.length<v.maxPlayers)coopNote('WAITING FOR PLAYERS — '+v.members.length+' / '+v.maxPlayers+' · SHARE CODE '+v.code);
+  else if(!v.canStart)coopNote('WAITING FOR EVERYONE TO READY UP');
+  else coopNote(v.youAreHost?'READY TO LAUNCH':'WAITING FOR THE HOST');
+}
+
+function coopEsc(s){
+  return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ---- entering a co-op run ---------------------------------------- */
+function coopBeginRun(cfg){
+  COOP.active=true;
+  COOP.matchId=cfg.matchId;
+  COOP.mySlot=cfg.yourSlot;
+  COOP.totalWaves=cfg.totalWaves;
+  COOP.wave=0;
+  COOP.ended=false;
+  COOP.reward=null;
+  COOP.netEnemies=new Map();
+  COOP.mates={};
+  COOP.pendingUpgrade=null;
+
+  const me=cfg.players.find(p=>p.slot===cfg.yourSlot)||{weapon:'pulse'};
+  for(const p of cfg.players){
+    if(p.slot===cfg.yourSlot)continue;
+    COOP.mates[p.slot]={slot:p.slot,name:p.name,x:0,y:0,tx:0,ty:0,ang:0,
+      hp:p.maxhp,maxhp:p.maxhp,alive:true,connected:true};
+  }
+
+  // A co-op run reuses the SAME run/player/room objects solo uses, so
+  // every HUD readout, upgrade chip, particle system and renderer keeps
+  // working with no co-op-specific version of any of them.
+  selectedLevel=cfg.levelIdx;
+  newRun(cfg.levelIdx);
+  run.difficulty=cfg.difficulty;
+  run.coop=true;
+  player=newPlayer(me.weapon);
+  enemies=[];bullets=[];ebullets=[];particles=[];dmgNums=[];pickups=[];portals=[];
+  spawnQueue=[];props=[];swings=[];hurtArcs=[];hazards=[];zones=[];gravFields=[];shardFlyers=[];
+  boss=null;bossActive=false;transition=null;deathSeq=null;
+  vicT=0;vicWarped=false;runActive=true;
+  timeScale=1;tsTarget=1;hurtFlash=0;hitstopT=0;whiteT=0;
+  glitchT=0;glitchNext=rand(5,9);
+  cam.x=0;cam.y=0;cam.zoom=1;cam.baseZoom=1;cam.shake=0;cam.punchV=0;
+
+  // One arena for the whole run (see voidbreakCoop.js's LIMITATIONS) --
+  // built through the existing buildRoom() so the floor, grid, border,
+  // cracks, debris and pillars are the sector's real environment.
+  buildRoom('combat');
+  room.w=cfg.room.w;room.h=cfg.room.h;room.tw=room.w;room.th=room.h;
+  room.waves=[];room.wi=0;room.cleared=true;   // waves come from the server
+  // A co-op run is one sector and eight waves (see voidbreakCoop.js's
+  // LIMITATIONS), so the solo room-exit machinery is switched off
+  // rather than left to spawn portals into a path the server has no
+  // idea about. Void Pressure is off for the same reason: the server
+  // does not simulate it, so it must not damage anybody here either.
+  room.portalsSpawned=true;room.pendingUpgrade=false;room.pressure=false;
+  player.x=0;player.y=room.h/2-150;
+  cam.x=player.x;cam.y=player.y-60;
+
+  go('playing');
+  Music.set('game');
+  renderChips();renderNodeStrip();
+  el('roomType').textContent='CO-OP · SECTOR '+cfg.levelId;
+  el('waveLabel').textContent='STAND BY';
+  coopEl('coopSquad').classList.remove('hidden');
+  showBanner('CO-OP · '+cfg.levelName,cfg.players.length+' OPERATORS · '+cfg.totalWaves+' WAVES');
+  coopSend({type:'vb_ready'});
+}
+
+function coopAbort(reason){
+  if(!COOP.active)return;
+  COOP.active=false;
+  runActive=false;
+  coopEl('coopSquad').classList.add('hidden');
+  state='menu';
+  go('menu');
+  coopNote(reason||'RUN ENDED',true);
+}
+
+/* ---- inbound ------------------------------------------------------ */
+function coopOnMessage(d){
+  switch(d.type){
+    case 'mp_types':
+      COOP.types=d.coop||[];
+      COOP.levels=d.levels||[];
+      coopRenderTypes();
+      return;
+    case 'mp_lobby':
+      COOP.lobby=d.lobby;
+      // The server reopens the room the moment a run ends, so this
+      // arrives while the victory/defeat screen is still up. Only
+      // navigate to the room from the menu or from the room itself --
+      // never over a result the player has not read yet.
+      if(!COOP.active&&(state==='menu'||state==='coop')){
+        if(state!=='coop')go('coop');
+        coopRenderLobby();
+      }
+      return;
+    case 'mp_left':
+      COOP.lobby=null;
+      if(!COOP.active)coopRenderLobby();
+      return;
+    case 'mp_error':
+      coopNote(d.message||'SOMETHING WENT WRONG',true);
+      return;
+    case 'vb_match':
+      coopBeginRun(d);
+      return;
+    case 'vb_begin':
+      showBanner('WAVE INCOMING','HOLD THE SECTOR');
+      return;
+    case 'vb_ev':
+      for(const ev of d.e)coopEvent(ev);
+      return;
+    case 'vb_s':
+      coopSnapshot(d.s);
+      return;
+    case 'vb_hitok':
+      coopHitConfirmed(d);
+      return;
+    case 'vb_upgraded':
+      coopUpgradeApplied(d);
+      return;
+    case 'vb_reward':
+      COOP.reward=d;
+      coopApplyReward(d);
+      return;
+    case 'vb_player_left': {
+      const m=COOP.mates[d.slot];
+      if(m){m.connected=false;m.alive=false;toast(m.name+' DISCONNECTED');}
+      return;
+    }
+    case 'vb_over':
+      coopFinish(d);
+      return;
+  }
+}
+
+/* Authoritative events. Each one is a FACT; the visual that goes with
+   it is produced locally, right here, from the systems solo already
+   uses -- the server never sends a particle. */
+function coopEvent(ev){
+  switch(ev.t){
+    case 'es': {          // enemy spawned
+      // Built with the game's OWN factory, so it has every field
+      // drawEnemy() reads and renders identically to a solo enemy.
+      const e=createEnemy(ev.k,ev.x,ev.y,!!ev.e);
+      e.net=true;e.netId=ev.id;
+      e.hp=ev.hp;e.maxhp=ev.hp;
+      e.tx=ev.x;e.ty=ev.y;
+      enemies.push(e);
+      COOP.netEnemies.set(ev.id,e);
+      burstFX(e.x,e.y,ETYPES[ev.k].color,8,200);SFX.spawn();
+      return;
+    }
+    case 'ek': {          // enemy defeated
+      const e=COOP.netEnemies.get(ev.id);
+      COOP.netEnemies.delete(ev.id);
+      if(!e)return;
+      // The real death sequence, including the shard flyers -- but the
+      // shards themselves were banked by the SERVER, so this must not
+      // add any (see coopSpawnShardFX).
+      e.dead=true;
+      const c=killColor(e.elite?[255,201,92]:e.color);
+      deathFX(e.x,e.y,c,e.r*(e.elite?2:1.4),fxTier('kill'));
+      addShake(e.elite?9:4);if(e.elite)camPunch(0.05);
+      SFX.death();
+      if(e.elite)hitstopT=Math.max(hitstopT,0.07);
+      run.kills++;
+      coopSpawnShardFX(e.x,e.y,Math.min(12,ev.s||1));
+      return;
+    }
+    case 'eb': {          // an enemy fired
+      // Simulated locally from its spawn state -- it travels in a
+      // straight line and never changes course, so one message covers
+      // the whole projectile instead of a position every tick. It is
+      // PURELY VISUAL here: whether it hit anybody was decided by the
+      // server's own copy (see the 'ph' event).
+      ebullets.push({x:ev.x,y:ev.y,vx:ev.vx,vy:ev.vy,life:2.6,r:6,dmg:0,
+        c:[255,110,110],net:true});
+      SFX.bossShot();
+      return;
+    }
+    case 'ebl': {         // a Phantom blinked
+      const e=COOP.netEnemies.get(ev.id);
+      if(!e)return;
+      burstFX(e.x,e.y,e.color,6,160);
+      e.x=e.tx=ev.x;e.y=e.ty=ev.y;
+      burstFX(e.x,e.y,e.color,6,160);
+      return;
+    }
+    case 'ph': {          // a player was hurt
+      if(ev.slot===COOP.mySlot){
+        player.hp=ev.hp;
+        hurtFlash=1;addShake(9);SFX.hurt();
+        dmgNum(player.x,player.y,'-'+ev.d,'#ff4d6d',17);
+        sparks(player.x,player.y,[255,60,90],10,240);
+        player.invuln=0.7;
+        updateHUD(true);
+      } else {
+        const m=COOP.mates[ev.slot];
+        if(m){m.hp=ev.hp;sparks(m.x,m.y,[255,60,90],6,200);}
+      }
+      coopRenderSquad();
+      return;
+    }
+    case 'pd': {          // a player went down
+      if(ev.slot===COOP.mySlot){
+        player.dead=true;player.hp=0;
+        deathFX(player.x,player.y,[0,240,255],18);
+        addShake(26);SFX.explosion();
+        showBanner('YOU ARE DOWN','BACK UP NEXT WAVE');
+      } else {
+        const m=COOP.mates[ev.slot];
+        if(m){m.alive=false;m.hp=0;deathFX(m.x,m.y,[0,240,255],14);toast(m.name+' IS DOWN');}
+      }
+      coopRenderSquad();
+      return;
+    }
+    case 'pr': {          // a player came back at the wave break
+      if(ev.slot===COOP.mySlot){
+        player.dead=false;player.hp=ev.hp;player.invuln=2.1;
+        ringFX(player.x,player.y,[56,255,156],70,0.5);
+        showBanner('BACK IN','HALF HEALTH');
+      } else {
+        const m=COOP.mates[ev.slot];
+        if(m){m.alive=true;m.hp=ev.hp;ringFX(m.x,m.y,[56,255,156],60,0.4);}
+      }
+      coopRenderSquad();
+      return;
+    }
+    case 'pl': {          // a player left the run
+      const m=COOP.mates[ev.slot];
+      if(m){m.connected=false;m.alive=false;}
+      coopRenderSquad();
+      return;
+    }
+    case 'wave':          // a wave started
+      COOP.wave=ev.wave;
+      el('waveLabel').textContent='WAVE '+ev.wave+' / '+ev.total;
+      showBanner(ev.elite?'ELITE WAVE '+ev.wave:'WAVE '+ev.wave,
+                 ev.wave===ev.total?'FINAL STAND':'HOSTILES INBOUND',ev.elite);
+      return;
+    case 'wc':            // a wave was cleared
+      el('waveLabel').textContent='WAVE '+ev.wave+' / '+ev.total+' CLEAR';
+      if(ev.wave<ev.total)showBanner('WAVE '+ev.wave+' CLEAR','REGROUP');
+      return;
+    case 'uo':            // Void Upgrades offered (server-chosen)
+      coopOfferUpgrades(ev.choices);
+      return;
+    case 'end':           // the run is over
+      COOP.endSummary=ev;
+      return;
+  }
+}
+
+/* The collection animation only -- the shards were already banked
+   server-side and are paid into the account at the end of the run, so
+   this must never call addShards(). */
+function coopSpawnShardFX(x,y,n){
+  SFX.shard();
+  const hudTarget=shardCounterScreenPos();
+  for(let i=0;i<n;i++){
+    const a=rand(0,TAU),s=rand(30,70);
+    shardFlyers.push({wx:x,wy:y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,
+      sx:null,sy:null,hudX:hudTarget.x,hudY:hudTarget.y,
+      popT:rand(0.06,0.16)+i*0.025,flightT:0,flightDur:rand(0.38,0.5),
+      spin:rand(0,TAU),done:false});
+  }
+}
+
+/* A snapshot is the only thing sent every tick, and it carries the only
+   enemy facts a client cannot derive for itself: where each one is,
+   which way it faces, and how hurt it is. Positions are targets, not
+   teleports -- the render loop eases toward them (see coopUpdate). */
+function coopSnapshot(s){
+  const a=s.e||[];
+  for(let i=0;i<a.length;i+=5){
+    const e=COOP.netEnemies.get(a[i]);
+    if(!e)continue;
+    e.tx=a[i+1];e.ty=a[i+2];
+    e.faceAng=a[i+3]/100;
+    e.hp=a[i+4];
+  }
+  const ps=s.p||[];
+  for(let i=0;i<ps.length;i+=7){
+    const slot=ps[i];
+    if(slot===COOP.mySlot){
+      // The server's number is authoritative; adopt it rather than
+      // whatever local prediction thinks. Our own POSITION is not taken
+      // from here -- we are the one who reported it, and snapping to a
+      // round trip old copy of ourselves is exactly the rubber-banding
+      // this avoids.
+      player.hp=ps[i+1];
+      player.dead=!ps[i+2];
+    } else {
+      const m=COOP.mates[slot];
+      if(m){
+        m.hp=ps[i+1];m.alive=!!ps[i+2];m.connected=!!ps[i+3];
+        coopOnMatePos(slot,ps[i+4],ps[i+5],ps[i+6]/100);
+      }
+    }
+  }
+  coopRenderSquad();
+}
+
+/* Teammate positions ride the same position report the server uses for
+   the simulation -- one message per player per ~66ms, no separate
+   channel. */
+function coopOnMatePos(slot,x,y,ang){
+  const m=COOP.mates[slot];
+  if(!m)return;
+  m.tx=x;m.ty=y;m.ang=ang;
+  // First fix: place them exactly rather than easing in from the
+  // arena's centre, which would draw every teammate sliding out of the
+  // middle of the room when a run starts.
+  if(!m.seen){m.seen=true;m.x=x;m.y=y;}
+}
+
+function coopHitConfirmed(d){
+  const e=COOP.netEnemies.get(d.e);
+  if(!e)return;
+  e.hitFlash=0.12;
+  run.damage+=d.d;
+  dmgNum(e.x,e.y,d.d,d.c?'#ffc95c':'#eafcff',d.c?20:14);
+  const hitC=hitColor(e.color),hitT=fxTier('hit');
+  sparks(e.x,e.y,hitC,d.c?9:4,d.c?300:180);
+  if(hitT>=2)ringFX(e.x,e.y,hitC,e.r+6+hitT*2,0.1+hitT*0.01);
+  d.c?SFX.crit():SFX.hit();
+  addShake(d.c?2.5:1);
+}
+
+function coopOfferUpgrades(choices){
+  COOP.pendingUpgrade=choices;
+  // Reuses the existing upgrade overlay, filled with the SERVER's three
+  // choices instead of a locally rolled set.
+  const host=el('upgradeCards');
+  if(!host)return;
+  host.innerHTML='';
+  choices.forEach(c=>{
+    const card=document.createElement('div');
+    card.className='ucard r-'+(c.rar||'c');
+    card.innerHTML='<div class="uname">'+coopEsc(c.name)+'</div><div class="udesc">'+coopEsc(c.desc)+'</div>';
+    card.addEventListener('click',()=>{
+      coopSend({type:'vb_upgrade',id:c.id});
+      COOP.pendingUpgrade=null;
+      closeUpgradeUI();
+    });
+    host.appendChild(card);
+  });
+  el('ov-upgrade').classList.add('on');
+  uiOpen=true;curUI='upgrade';
+}
+
+function coopUpgradeApplied(d){
+  // The server applied it to its own copy of this player; mirror the
+  // numbers it reports so the HUD agrees.
+  player.maxhp=d.maxhp;player.hp=d.hp;
+  toast('UPGRADE ACQUIRED');
+  updateHUD(true);
+}
+
+function coopApplyReward(d){
+  // Shards were granted server-side, straight into the stored save.
+  // Re-read it rather than adding anything locally, so the client can
+  // never invent a balance.
+  if(typeof d.totalShards==='number'){
+    save.shards=d.totalShards;
+    try{writeAccountCache(cloudAccountId,save,Date.now());}catch(e){}
+  }
+  refreshMenuStats();
+}
+
+function coopFinish(d){
+  if(COOP.ended)return;
+  COOP.ended=true;
+  COOP.active=false;
+  runActive=false;
+  coopEl('coopSquad').classList.add('hidden');
+  const sum=COOP.endSummary;
+  if(sum&&sum.players){
+    run.kills=(sum.players.find(p=>p.slot===COOP.mySlot)||{}).kills||run.kills;
+    run.roomsCleared=sum.wave;
+  }
+  const victory=!!d.victory;
+  state=victory?'victory':'gameover';
+  Music.set('menu');
+  fillEndStats(victory?'vic':'go');
+  el('bossBarWrap').classList.add('hidden');
+  if(victory){
+    SFX.victory();
+    el('vicTitle').textContent='SECTOR HELD';
+    el('vicSub').textContent='THE SQUAD BROKE THE WAVE. THE VOID RETREATS — FOR NOW.';
+    el('vicUnlock').textContent=COOP.reward
+      ? ('◆ '+fmt(COOP.reward.shards)+' VOID SHARDS BANKED')
+      : 'VOID SHARDS BANKED';
+    el('ov-victory').classList.add('on');
+  } else {
+    el('ov-gameover').classList.add('on');
+  }
+  document.body.classList.remove('ingame');
+}
+
+/* ---- per-frame ----------------------------------------------------- */
+/* Called from update(). Everything here is presentation: easing the
+   network positions, keeping the local player reported, and nothing
+   that decides an outcome. */
+function coopUpdate(dt){
+  if(!COOP.active)return;
+
+  // Ease every net-driven enemy toward its last known position. A
+  // fixed fraction per frame rather than a fixed speed, so a big
+  // correction lands fast and a small one is invisible.
+  const k=Math.min(1,COOP_LERP*(dt/0.016));
+  for(const e of enemies){
+    if(!e.net||e.dead)continue;
+    e.x+=(e.tx-e.x)*k;
+    e.y+=(e.ty-e.y)*k;
+  }
+  for(const slot of Object.keys(COOP.mates)){
+    const m=COOP.mates[slot];
+    m.x+=(m.tx-m.x)*k;
+    m.y+=(m.ty-m.y)*k;
+  }
+
+  // Report our own position. Rate-limited to the server's own sampling
+  // rate, and skipped entirely when nothing has changed enough to
+  // matter -- a standing-still player costs one packet every 400ms.
+  const now=performance.now();
+  const prev=COOP.lastPos;
+  const moved=!prev||Math.abs(player.x-prev.x)>0.5||Math.abs(player.y-prev.y)>0.5||
+    Math.abs(player.faceAng-prev.a)>0.02;
+  if(now-COOP.lastPosAt>=COOP_POS_INTERVAL_MS&&(moved||now-COOP.lastPosAt>400)){
+    COOP.lastPosAt=now;
+    COOP.lastPos={x:player.x,y:player.y,a:player.faceAng};
+    coopSend({type:'vb_pos',x:Math.round(player.x*10)/10,y:Math.round(player.y*10)/10,
+      a:Math.round(player.faceAng*100)/100});
+  }
+}
+
+function coopRenderSquad(){
+  const host=coopEl('coopSquad');
+  if(!host||!COOP.active)return;
+  let html='';
+  const mine=Math.max(0,Math.min(1,player.hp/Math.max(1,player.maxhp)));
+  html+='<div class="mate'+(player.dead?' down':'')+'"><span>YOU</span>'+
+    '<div class="bar"><i style="width:'+(mine*100).toFixed(0)+'%"></i></div></div>';
+  for(const slot of Object.keys(COOP.mates)){
+    const m=COOP.mates[slot];
+    const f=Math.max(0,Math.min(1,m.hp/Math.max(1,m.maxhp)));
+    html+='<div class="mate'+(m.alive&&m.connected?'':' down')+'"><span>'+coopEsc(m.name.slice(0,9))+'</span>'+
+      '<div class="bar"><i style="width:'+(f*100).toFixed(0)+'%"></i></div></div>';
+  }
+  host.innerHTML=html;
+}
+
+/* Teammates are drawn as the same ship the local player is, in a
+   distinct hull colour per slot, so a four-player squad is readable at
+   a glance without a second renderer. */
+const COOP_MATE_COLORS=[[0,240,255],[255,140,60],[120,255,170],[255,110,200]];
+function coopDrawMates(){
+  if(!COOP.active)return;
+  for(const slot of Object.keys(COOP.mates)){
+    const m=COOP.mates[slot];
+    if(!m.connected)continue;
+    const c=COOP_MATE_COLORS[(m.slot-1)%COOP_MATE_COLORS.length];
+    ctx.save();
+    ctx.globalAlpha=m.alive?1:0.35;
+    ctx.translate(m.x,m.y);
+    drawGlow(0,0,c,34);
+    ctx.rotate(m.ang);
+    ctx.beginPath();
+    ctx.moveTo(16,0);ctx.lineTo(-11,10);ctx.lineTo(-6,0);ctx.lineTo(-11,-10);
+    ctx.closePath();
+    ctx.fillStyle=rgba(c,0.85);ctx.fill();
+    ctx.lineWidth=1.6;ctx.strokeStyle=rgb(c);ctx.stroke();
+    ctx.restore();
+    // Name tag, so you can tell who is who mid-fight.
+    ctx.save();
+    ctx.globalAlpha=0.75;
+    ctx.font='9px "Chakra Petch", sans-serif';
+    ctx.textAlign='center';
+    ctx.fillStyle=rgb(c);
+    ctx.fillText(m.name.slice(0,10).toUpperCase(),m.x,m.y-24);
+    ctx.restore();
+  }
+}
+
+function wireCoop(){
+  const open=coopEl('btnCoop');
+  if(open)open.addEventListener('click',coopOpen);
+  const back=coopEl('coopBack');
+  if(back)back.addEventListener('click',()=>{
+    if(COOP.lobby)coopSend({type:'mp_leave'});
+    COOP.lobby=null;
+    go('menu');
+  });
+  document.querySelectorAll('#coopCreate [data-coop]').forEach(b=>{
+    b.addEventListener('click',()=>coopSend({type:'mp_create',typeId:b.getAttribute('data-coop'),private:false}));
+  });
+  const join=coopEl('coopJoinBtn');
+  if(join)join.addEventListener('click',()=>{
+    const v=(coopEl('coopJoinCode').value||'').trim().toUpperCase();
+    coopSend({type:'mp_join',code:v});
+  });
+  const ready=coopEl('coopReady');
+  if(ready)ready.addEventListener('click',()=>{
+    const me=COOP.lobby&&COOP.lobby.members.find(m=>m.you);
+    coopSend({type:'mp_ready',ready:!(me&&me.ready)});
+  });
+  const start=coopEl('coopStart');
+  if(start)start.addEventListener('click',()=>coopSend({type:'mp_start'}));
+  const leave=coopEl('coopLeave');
+  if(leave)leave.addEventListener('click',()=>{
+    coopSend({type:'mp_leave'});COOP.lobby=null;coopRenderLobby();
+  });
+  const lvl=coopEl('coopLevel');
+  if(lvl)lvl.addEventListener('change',()=>coopSend({type:'mp_settings',levelIdx:Number(lvl.value)}));
+  const dif=coopEl('coopDiff');
+  if(dif)dif.addEventListener('change',()=>coopSend({type:'mp_settings',difficulty:dif.value}));
+
+  // index.html's ONLINE hub launches this page with ?coop=<typeId> --
+  // open the room straight away instead of making the player click
+  // through the menu twice.
+  try{
+    const m=/[?&]coop=(coop[234])(&|$)/.exec(location.search);
+    if(m)COOP.autoCreate=m[1];
+  }catch(e){}
+}
+
 /* ---------- 15 · MAIN UPDATE ---------- */
 let last=performance.now();
 function update(dt){
@@ -4982,6 +5772,10 @@ function update(dt){
   updateZones(dt);
   updateGrav(dt);
   updatePlayer(dt);
+  // CO-OP: eases the network-driven enemies and teammates toward their
+  // last reported positions and reports our own. Presentation and
+  // input only -- see coopUpdate.
+  coopUpdate(dt);
   updateRoom(dt);
   if(room.type==='boss'&&bossActive&&boss&&!boss.dead)updateBoss(dt);
   updateEnemies(dt);
@@ -5285,6 +6079,9 @@ function renderWorld(){
     else if(boss.kind==='origin')drawOrigin();
     else drawNullBoss();
   }
+  // CO-OP squadmates, drawn before the local player so your own ship
+  // always reads on top of theirs in a scrum.
+  coopDrawMates();
   if(player&&!player.dead&&!vicWarped&&
      (state==='playing'||state==='victory'||(state==='settings'&&runActive)))drawPlayer();
   for(const s of swings){
@@ -6527,13 +7324,14 @@ function toast(msg){
 }
 
 /* ---------- 18 · UI / MENUS ---------- */
-const OVERLAYS=['ov-menu','ov-howto','ov-settings','ov-forge','ov-weapons','ov-pause','ov-upgrade','ov-swap','ov-gameover','ov-victory','ov-levels','ov-shop','ov-mastery','ov-prestige','ov-prestige-confirm','ov-leaderboard'];
+const OVERLAYS=['ov-menu','ov-coop','ov-howto','ov-settings','ov-forge','ov-weapons','ov-pause','ov-upgrade','ov-swap','ov-gameover','ov-victory','ov-levels','ov-shop','ov-mastery','ov-prestige','ov-prestige-confirm','ov-leaderboard'];
 function hideAllOverlays(){OVERLAYS.forEach(id=>el(id).classList.remove('on'));}
 function go(s){
   state=s;paused=false;uiOpen=false;curUI=null;
   if(s==='weapons')launching=false;
   hideAllOverlays();
   if(s==='menu'){el('ov-menu').classList.add('on');Music.set('menu');refreshMenuStats();syncDifficultyUI();}
+  else if(s==='coop'){el('ov-coop').classList.add('on');Music.set('menu');coopRenderTypes();}
   else if(s==='howto')el('ov-howto').classList.add('on');
   else if(s==='settings')el('ov-settings').classList.add('on');
   else if(s==='forge'){el('ov-forge').classList.add('on');buildForge();}
@@ -7318,6 +8116,10 @@ window.addEventListener('message',(e)=>{
     handleSessionHandshake(e.data.sessionToken||null,e.data.accountId||null);
   }
 });
+// Online co-op buttons + the ?coop=<size> launch flag from the parent's
+// ONLINE hub. Wired before the readiness ping so a co-op launch is
+// already armed when the session handshake arrives.
+wireCoop();
 try{window.parent.postMessage({type:'voidbreak_ready'},location.origin);}catch(e){}
 // If no reply ever arrives (opened standalone outside the lobby's
 // iframe, or something blocked the message), don't leave the menu
