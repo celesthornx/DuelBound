@@ -1234,6 +1234,16 @@
   #menuMain.lobby{
     inset: 0;
     display: grid;
+    /* THE COLUMN MUST BE minmax(0,1fr), NOT the implicit `auto`.
+       With an implicit auto column the track sizes to the widest row's
+       max-content -- and the top bar's max-content (brand + eight nav
+       items + three currency pills + three icon buttons) is wider than a
+       1366px viewport. The whole lobby grid then grew past the viewport
+       and #menuMain's own overflow:hidden clipped the right-hand panel
+       column and the end of the bottom bar clean off the screen.
+       Capping the column at the available width is what makes every
+       child's min-width:0 below actually bite. */
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0,1fr) auto;
     gap: 0;
     padding: 0;
@@ -1720,8 +1730,171 @@
     font-size: 14px; color:#eaf6ff; letter-spacing:.6px;
   }
 
+
+  /* ==================================================================
+     HOLO PANEL REFINEMENT
+     The scene behind the panels is now bright and busy, so the panels
+     need to be readable SURFACES rather than tints. Three changes:
+     more opaque glass, a lit header rail so each panel announces what
+     it is, and corner brackets that read as a projected frame.
+     Applies on top of .lp -- no other panel in the file is touched.
+     ================================================================== */
+  .lp.holo{
+    background:
+      linear-gradient(180deg, rgba(14,28,56,.86), rgba(6,11,24,.92)),
+      repeating-linear-gradient(0deg, rgba(120,220,255,.025) 0 1px, transparent 1px 4px);
+    border-color: rgba(96,178,255,.30);
+    box-shadow:
+      0 18px 46px rgba(0,0,0,.55),
+      inset 0 1px 0 rgba(180,230,255,.12),
+      0 0 0 1px rgba(63,208,255,.06);
+  }
+  /* A lit rail down the left edge -- the single cheapest detail that
+     makes a panel read as a projected instrument. */
+  .lp.holo > .lp-head{
+    position:relative;
+    border-bottom-color: rgba(96,178,255,.20);
+    background: linear-gradient(90deg, rgba(63,208,255,.10), transparent 62%);
+  }
+  .lp.holo > .lp-head::before{
+    content:''; position:absolute; left:0; top:6px; bottom:6px; width:2px;
+    background: linear-gradient(180deg, var(--vb-cyan), rgba(160,92,255,.5));
+    box-shadow: 0 0 10px rgba(63,208,255,.7);
+  }
+  .lp.holo > .lp-head .lp-title{ padding-left: 8px; }
+  .lp.holo::before{ border-color: rgba(63,208,255,.8); width:14px; height:14px; }
+  .lp.holo::after{ border-color: rgba(160,92,255,.75); width:14px; height:14px; }
+
+  /* Small state chip in a panel header (STANDBY / ONLINE). */
+  .lp-chip{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 8px; letter-spacing: 1.8px;
+    color: rgba(150,205,245,.8);
+    border:1px solid rgba(96,178,255,.32);
+    background: rgba(63,208,255,.10);
+    border-radius:2px; padding: 2px 7px; white-space:nowrap;
+  }
+  .lp-chip.live{
+    color:#b9ffd9; border-color: rgba(93,255,160,.5); background: rgba(93,255,160,.12);
+    box-shadow: 0 0 10px rgba(93,255,160,.22);
+  }
+
+  /* ---- Command card ---- */
+  .lp-command .profile-head{ padding-top: 12px; }
+  .lp-command .avatar{
+    box-shadow: 0 0 18px rgba(63,208,255,.35), inset 0 0 18px rgba(63,208,255,.18);
+  }
+  /* The level strip is the one number the player checks most, so it gets
+     the most contrast in the card. */
+  .cmd-level{ padding: 2px 14px 12px; }
+  .cmd-level-top .cmd-v{ font-size: 18px; color:#fff; text-shadow: 0 0 12px rgba(63,208,255,.45); }
+  .cmd-xpbar{ height:7px; border-radius:4px; }
+  .cmd-xpbar i{ position:relative; }
+  .cmd-xpbar i::after{
+    /* a moving highlight, so the bar reads as charged rather than filled */
+    content:''; position:absolute; inset:0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
+    background-size: 44% 100%; background-repeat:no-repeat;
+    animation: xpSheen 2.6s linear infinite;
+  }
+  @keyframes xpSheen{ from{ background-position:-50% 0; } to{ background-position:150% 0; } }
+
+  .cmd-row{
+    padding: 9px 11px;
+    border-color: rgba(96,178,255,.22);
+    background: linear-gradient(90deg, rgba(40,96,180,.20), rgba(40,96,180,.02));
+  }
+  .cmd-row-v{ font-size: 14px; }
+  .cmd-row-icon{ width:32px; height:19px; opacity:.95; filter: drop-shadow(0 0 6px rgba(63,208,255,.4)); }
+
+  /* ---- Resource rows ---- */
+  .cur-list{ padding: 12px 14px 6px; gap:8px; }
+  .cur-row{
+    padding: 8px 10px;
+    background: linear-gradient(90deg, rgba(255,255,255,.035), rgba(255,255,255,.008));
+  }
+  .cur-row svg{ filter: drop-shadow(0 0 7px currentColor); }
+  .cur-row .v{ font-size: 16px; }
+  .stat-list.compact{ padding: 2px 14px 12px; }
+
+  /* ---- Right-hand instruments: more air, clearer hierarchy ---- */
+  .lobby-right .lp-body{ padding: 13px 14px 15px; }
+  .lobby-right .lp-head{ padding: 12px 14px 10px; }
+  .disc-body{ gap:16px; }
+  .disc-ring{ width:74px; height:74px; }
+  .disc-pct{ font-size: 17px; text-shadow: 0 0 12px rgba(63,208,255,.4); }
+  .disc-rows{ gap:10px; }
+  .disc-row b{ font-size: 15px; }
+  .dc-list{ gap:10px; }
+
+  /* ==================================================================
+     DESTINATION MODULES
+     Each tile is a place in the universe, so each reads as a holographic
+     module: a lit rail across the top, a bevelled corner, an icon in its
+     own well, and a hover that lifts it toward the player.
+     ================================================================== */
+  .dest{
+    padding: 15px 8px 13px;
+    border-color: rgba(96,178,255,.26);
+    border-radius: 3px;
+    background:
+      linear-gradient(180deg, rgba(20,46,90,.74), rgba(6,12,28,.86)),
+      repeating-linear-gradient(0deg, rgba(120,220,255,.022) 0 1px, transparent 1px 4px);
+    /* bevelled top-right corner -- the cheapest "this is a HUD module"
+       signal there is, and it costs no extra element */
+    clip-path: polygon(0 0, calc(100% - 13px) 0, 100% 13px, 100% 100%, 0 100%);
+    box-shadow: 0 10px 26px rgba(0,0,0,.45), inset 0 1px 0 rgba(180,230,255,.08);
+  }
+  /* The lit rail. ::after is already the hover sweep, so this rides
+     ::before, which .dest was not using. */
+  .dest::before{
+    content:''; position:absolute; left:0; right:13px; top:0; height:2px;
+    background: linear-gradient(90deg, var(--vb-cyan), rgba(160,92,255,.35) 70%, transparent);
+    opacity:.55; transition: opacity .16s ease;
+  }
+  .dest:hover::before{ opacity:1; box-shadow: 0 0 12px rgba(63,208,255,.75); }
+  .dest-gold::before{ background: linear-gradient(90deg, var(--vb-gold), rgba(255,206,84,.25) 70%, transparent); }
+  .dest-gold:hover::before{ box-shadow: 0 0 12px rgba(255,206,84,.75); }
+
+  /* Icon sits in its own recessed well. */
+  .dest-ico{
+    width:46px; height:46px;
+    display:flex; align-items:center; justify-content:center;
+    border-radius:50%;
+    background: radial-gradient(circle at 50% 40%, rgba(63,208,255,.16), transparent 68%);
+    filter: drop-shadow(0 0 10px currentColor);
+    transition: transform .18s ease, background .18s ease;
+  }
+  .dest-ico svg{ width:34px; height:34px; }
+  .dest:hover .dest-ico{
+    transform: translateY(-2px) scale(1.08);
+    background: radial-gradient(circle at 50% 40%, rgba(63,208,255,.3), transparent 68%);
+  }
+  .dest-gold .dest-ico{ background: radial-gradient(circle at 50% 40%, rgba(255,206,84,.16), transparent 68%); }
+  .dest:hover{
+    transform: translateY(-5px);
+    border-color: rgba(130,225,255,.8);
+    box-shadow: 0 16px 36px rgba(0,0,0,.6), 0 0 26px rgba(63,208,255,.26);
+  }
+  .dest-name{ font-size: 12px; letter-spacing: 1.7px; }
+  .dest-sub{ font-size: 8.5px; }
+  .dest-grid{ gap: 11px; }
+
+
+  /* The right column carries four instruments and must fit a 900px-tall
+     screen without any of them being cut off. These trims come out of
+     decoration (placeholder art, empty-state height), never out of
+     information. */
+  .lobby-right .news-art{ height: 62px; }
+  .lobby-right .ghost-stack{ gap: 8px; }
+  .lobby-right .disc-body{ gap: 13px; }
+  .lobby-right .disc-ring{ width:64px; height:64px; }
+  .lobby-right .disc-pct{ font-size: 15px; }
+  .lobby-right .disc-rows{ gap:7px; }
+  .lobby-right .disc-row b{ font-size: 14px; }
+  .lobby-right .lp-body{ padding: 12px 14px 13px; }
   /* ---------- Bottom journey strip ---------- */
-  .journey-strip{ display:flex; align-items:center; gap: 22px; flex: 0 1 auto; min-width:0; overflow:hidden; }
+  .journey-strip{ display:flex; align-items:center; gap: 22px; flex: 0 1 auto; min-width:0; overflow:hidden; flex-shrink:1; }
   .js-item{ display:flex; align-items:center; gap:7px; min-width:0; }
   .js-item svg{ width:18px; height:18px; flex:0 0 auto; opacity:.9; }
   .js-k{
@@ -1860,6 +2033,7 @@
   .lobby-top{
     position:relative; z-index:3;
     display:flex; align-items:center; gap:22px;
+    min-width: 0;
     padding: 12px var(--lobby-pad);
     border-bottom: 1px solid rgba(122,158,200,.13);
     background: linear-gradient(180deg, rgba(6,9,15,.94), rgba(6,9,15,.55));
@@ -1884,13 +2058,34 @@
     color: rgba(150,205,255,.62);
   }
 
-  .lobby-nav{ display:flex; align-items:center; gap:4px; flex: 1 1 auto; justify-content:center; }
+  .lobby-nav{
+    display:flex; align-items:center; gap:4px;
+    flex: 1 1 auto; justify-content:center;
+    /* Allowed to shrink (min-width:0) so it can never be the thing that
+       decides how wide the page is; if it still runs out of room it
+       scrolls sideways rather than pushing the currency pills off. */
+    min-width: 0; overflow-x: auto; scrollbar-width: none;
+  }
+  .lobby-nav::-webkit-scrollbar{ display:none; }
+  /* When the nav does have to scroll (an admin's ninth item on a small
+     laptop), fade its edges so it is visibly scrollable rather than
+     silently truncated. */
+  .lobby-nav{
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+  }
   .nav-item{
     position:relative; background:none; border:none; cursor:pointer;
     font-family:'Chakra Petch', sans-serif; font-weight:600;
     font-size: 13px; letter-spacing: 2.4px;
     color: rgba(206,220,238,.62);
-    padding: 10px 16px;
+    padding: 10px 14px;
+    /* Two-word items (GALAXY MAP, BATTLE PASS, VOID MARKET) were
+       wrapping onto a second line and making the bar ragged. The bar
+       sheds letter-spacing and padding at each breakpoint below instead,
+       which keeps every item on one line down to where the nav is hidden
+       altogether in favour of the destination tiles. */
+    white-space: nowrap;
     transition: color .16s ease;
   }
   .nav-item::after{
@@ -1982,6 +2177,7 @@
   .lobby-main{
     position:relative; z-index:2;
     display:grid;
+    min-width: 0; max-width: 100%;
     grid-template-columns: 300px minmax(0,1fr) 300px;
     gap: 16px;
     padding: 16px var(--lobby-pad);
@@ -1998,7 +2194,7 @@
 
   .lobby-col{
     display:flex; flex-direction:column; gap: 12px;
-    min-height:0; overflow-y:auto; overflow-x:hidden;
+    min-height:0; min-width:0; overflow-y:auto; overflow-x:hidden;
     padding-right: 2px;
     scrollbar-width: thin; scrollbar-color: rgba(122,158,200,.3) transparent;
   }
@@ -2076,6 +2272,13 @@
   /* ---------- CENTER ---------- */
   .lobby-center{
     position:relative; min-height:0;
+    /* min-width:0 is load-bearing. A grid item defaults to
+       min-width:auto, so this column refused to shrink below the
+       min-content width of the hero + the six destination tiles, made
+       .lobby-main wider than the viewport, and pushed the whole
+       right-hand column off the right edge at 1366 and below. The
+       fixed-width side columns hid it at larger sizes. */
+    min-width: 0;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     gap: 20px;
     padding: 4px 0;
@@ -2722,6 +2925,7 @@
   .lobby-bottom{
     position:relative; z-index:3;
     display:flex; align-items:center; gap:14px;
+    min-width: 0;
     padding: 10px var(--lobby-pad);
     border-top: 1px solid rgba(122,158,200,.13);
     background: linear-gradient(0deg, rgba(6,9,15,.94), rgba(6,9,15,.5));
@@ -2957,23 +3161,29 @@
   @media (max-width: 1680px){
     .lobby-main{ grid-template-columns: 280px minmax(0,1fr) 280px; }
     .mode-card{ width: 176px; }
+    .nav-item{ font-size: 12px; letter-spacing: 1.6px; padding: 10px 10px; }
   }
   @media (max-width: 1450px){
     :root{ --lobby-pad: 18px; }
     .lobby-main{ grid-template-columns: 262px minmax(0,1fr) 262px; gap: 12px; }
-    .nav-item{ font-size: 12px; letter-spacing: 1.8px; padding: 9px 11px; }
+    .nav-item{ font-size: 10.5px; letter-spacing: .4px; padding: 9px 6px; }
+    .lobby-top{ gap: 14px; }
     .play-label{ font-size: clamp(22px, 3.8vw, 40px); letter-spacing: 5px; }
     .play-btn{ width: min(480px, 100%); }
     .play-content{ min-height: 104px; padding: 20px 46px; }
     .mode-card{ width: 160px; }
     .mode-card .mc-art{ height: 80px; }
   }
+  @media (max-width: 1500px){
+    .dest-grid{ grid-template-columns: repeat(3, minmax(0,1fr)); }
+  }
   @media (max-width: 1240px){
     .lobby-main{ grid-template-columns: 236px minmax(0,1fr) 236px; }
     .brand-text b{ font-size: 19px; }
     .brand-tag{ font-size: 8px; letter-spacing: 2.4px; }
     .brand-mark{ width:32px; height:32px; }
-    .nav-item{ font-size: 11px; letter-spacing: 1.4px; padding: 8px 8px; }
+    .nav-item{ font-size: 10px; letter-spacing: .2px; padding: 8px 5px; }
+    .lobby-top{ gap: 10px; }
     .mode-card{ width: 146px; }
     .chat-toggle{ min-width: 0; }
     .dest-grid{ grid-template-columns: repeat(3, minmax(0,1fr)); }
@@ -3036,6 +3246,63 @@
     .journey-strip{ display:none; }
     .va-inner{ gap: 12px; }
     .va-title{ letter-spacing: 4px; }
+  }
+
+  /* ---------- Landscape phones (and any very short viewport) ----------
+     844x390 and friends. The single-column layout from the 1000px
+     breakpoint is right, but at 390px of height everything in it has to
+     shrink or the hero alone fills the screen. Information is kept;
+     only decoration and padding are spent.
+     ------------------------------------------------------------ */
+  @media (max-height: 560px){
+    :root{ --lobby-pad: 12px; }
+    .lobby-top{ padding: 6px var(--lobby-pad); gap: 10px; }
+    .brand-mark{ width:26px; height:26px; }
+    .brand-text b{ font-size: 15px; letter-spacing: 1.6px; }
+    .brand-tag{ display:none; }
+    .currency-pill{ padding: 3px 3px 3px 9px; }
+    .currency-pill .cp-val{ font-size: 13px; min-width:20px; }
+    .cp-plus{ width:21px; height:21px; font-size:13px; }
+    .icon-btn{ width:30px; height:30px; }
+
+    .lobby-main{ padding: 8px var(--lobby-pad); gap: 9px; }
+    .lobby-col{ gap: 9px; }
+    .lobby-center{ gap: 9px; }
+
+    /* The launch bay is absolutely positioned around the centre column's
+       midpoint, which stops meaning anything once the column scrolls --
+       so it goes, and the canvas sky (stars, galaxy, planet) carries the
+       atmosphere on its own. */
+    .launch-bay{ display:none; }
+
+    .play-btn{ width: min(420px, 100%); }
+    .play-label{ font-size: 22px !important; letter-spacing: 2px !important; }
+    .play-glyph{ font-size: 13px; }
+    .play-content{ min-height: 54px; padding: 10px 26px; }
+    .play-sub{ margin-top: 4px; font-size: 9.5px; letter-spacing: 2px; }
+
+    .dest-grid{ grid-template-columns: repeat(6, minmax(0,1fr)); gap: 6px; }
+    .dest{ padding: 7px 3px 6px; gap: 3px; clip-path: none; }
+    .dest-ico{ width: 22px; height: 22px; }
+    .dest-ico svg{ width:20px; height:20px; }
+    .dest-name{ font-size: 8px; letter-spacing: .4px; }
+    .dest-sub{ display:none; }
+
+    .profile-head{ padding: 8px 10px; gap:9px; }
+    .avatar{ width:42px; height:42px; }
+    .avatar svg{ width:22px; height:22px; }
+    .profile-name{ font-size: 15px; }
+    .lp-head{ padding: 7px 11px 6px; }
+    .lp-body{ padding: 9px 11px 10px; }
+    .cmd-level{ padding: 0 11px 8px; }
+    .cmd-rows{ padding: 0 11px 8px; gap:5px; }
+    .cur-list{ padding: 8px 11px 3px; gap:5px; }
+    .stat-list.compact{ padding: 2px 11px 8px; }
+    .dc-list{ max-height: 40vh; }
+    .news-art{ height: 48px; }
+
+    .lobby-bottom{ padding: 6px var(--lobby-pad); gap: 9px; }
+    .ghost-stack{ display:none; }
   }
 
   /* ============================================================
@@ -3757,7 +4024,11 @@
       <!-- ===== LEFT: commander profile (all data from the existing
            account system plus the Voidbreak cloud save) ===== -->
       <aside class="lobby-col lobby-left">
-        <div class="lp holo">
+        <div class="lp holo lp-command">
+          <div class="lp-head">
+            <span class="lp-title">COMMAND</span>
+            <span class="lp-chip" id="lobbyStatusChip">STANDBY</span>
+          </div>
           <div class="profile-head">
             <div class="avatar" id="lobbyAvatar">
               <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
@@ -3836,6 +4107,10 @@
              market) -> Crystals (premium). Every number here is the
              same one the top-bar pills show; lobbySync() writes both. -->
         <div class="lp holo">
+          <div class="lp-head">
+            <span class="lp-title">RESOURCES</span>
+            <span class="micro">ALL ACCOUNTS</span>
+          </div>
           <div class="cur-list">
             <div class="cur-row shard">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round">
@@ -4053,7 +4328,6 @@
           </div>
           <div class="lp-body" id="lobbyFriendsBody">
             <div class="ghost-stack">
-              <div class="ghost-row"><div class="ghost-av"></div><div class="ghost-lines"><span></span><span></span></div></div>
               <div class="ghost-row"><div class="ghost-av"></div><div class="ghost-lines"><span></span><span></span></div></div>
               <div class="ghost-row"><div class="ghost-av"></div><div class="ghost-lines"><span></span><span></span></div></div>
             </div>
@@ -16805,6 +17079,11 @@ if(tutorialActive) tutorialUpdate(dt);
     setTxt('lobbyKills', stats.kills);
     setTxt('lobbyWins', stats.wins);
     setTxt('lobbyName', (loggedIn && accountName) ? accountName : 'GUEST');
+    const chip = lobbyEl('lobbyStatusChip');
+    if(chip){
+      chip.textContent = loggedIn ? 'ONLINE' : 'STANDBY';
+      chip.classList.toggle('live', !!loggedIn);
+    }
     const levelTag = lobbyEl('lobbyLevelTag');
     if(levelTag){
       levelTag.classList.toggle('hidden', !loggedIn);
