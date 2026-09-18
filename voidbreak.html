@@ -428,6 +428,121 @@ input[type=range]{width:180px;accent-color:var(--cy)}
    portrait) -- shrink HUD/menu chrome so nothing overlaps the touch
    controls or runs off-screen. Breakpoint matches the device sizes
    named in the task (iPhone/iPad) rather than an arbitrary number. */
+/* ---- UNIVERSE SCREENS: galaxy map / solar system / home planet ----
+   These three are NOT panel overlays like every other screen in this
+   file. They are full-screen canvas views (drawn by render()'s own
+   branches, so they cost one extra draw call path and no new render
+   loop, no DOM churn and no WebGL context -- which is what keeps them
+   inside the same frame budget an iPad already runs the game at), with
+   a thin chrome layer on top. The chrome is pointer-events:none so a
+   drag anywhere that isn't a control reaches the canvas and rotates the
+   planet or pans the map; every actual control turns pointer events
+   back on for itself. */
+.uni-screen{position:fixed;inset:0;z-index:48;opacity:0;visibility:hidden;
+  transition:opacity .25s,visibility .25s;pointer-events:none;font-family:'Rajdhani'}
+.uni-screen.on{opacity:1;visibility:visible}
+.uni-screen > *{pointer-events:auto}
+.uni-top{position:absolute;top:calc(16px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);
+  text-align:center;pointer-events:none;width:min(680px,92vw)}
+.uni-title{font-family:'Orbitron';font-weight:900;font-size:26px;letter-spacing:7px;color:#eafcff;
+  text-shadow:0 0 18px rgba(0,240,255,.55)}
+.uni-sub{font-size:12.5px;letter-spacing:4px;color:#7ea4b5;margin-top:4px}
+.uni-back{position:absolute;top:calc(16px + env(safe-area-inset-top,0px));
+  left:calc(18px + env(safe-area-inset-left,0px));z-index:2}
+.uni-corner{position:absolute;top:calc(16px + env(safe-area-inset-top,0px));
+  right:calc(18px + env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:6px;align-items:flex-end;
+  pointer-events:none}
+.uni-stat{font-family:'Orbitron';font-size:12px;letter-spacing:2px;color:#8fb0c0;
+  background:rgba(6,9,22,.72);border:1px solid rgba(0,240,255,.22);padding:6px 11px;white-space:nowrap}
+.uni-stat b{color:var(--cy)}
+.uni-stat.coin b{color:var(--gold)}
+.uni-stat.drive b{color:var(--gn)}
+/* Bottom dock -- the one place every universe screen puts its actions,
+   so a thumb always finds them in the same spot on a phone. */
+.uni-dock{position:absolute;left:50%;transform:translateX(-50%);
+  bottom:calc(18px + env(safe-area-inset-bottom,0px));width:min(760px,94vw);
+  background:linear-gradient(160deg,rgba(13,18,40,.95),rgba(7,9,20,.97));
+  border:1px solid rgba(0,240,255,.3);padding:14px 18px;
+  clip-path:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,18px 100%,0 calc(100% - 18px))}
+.uni-dock-title{font-family:'Orbitron';font-size:15px;letter-spacing:3px;color:#eafcff}
+.uni-dock-sub{font-size:13px;color:#8fb0c0;letter-spacing:1.5px;margin-top:4px;line-height:1.45}
+.uni-dock-row{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap}
+.uni-dock-row .btn{flex:1 1 auto;min-width:120px}
+.uni-hint{position:absolute;left:50%;transform:translateX(-50%);
+  bottom:calc(6px + env(safe-area-inset-bottom,0px));font-size:11px;letter-spacing:2px;color:#4e6b7d;
+  pointer-events:none;white-space:nowrap}
+
+/* ---- discovery log (solar system screen) ---- */
+.disc-list{position:absolute;left:calc(18px + env(safe-area-inset-left,0px));top:50%;transform:translateY(-50%);
+  width:min(300px,42vw);max-height:56vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+.disc-list::-webkit-scrollbar{width:5px}
+.disc-list::-webkit-scrollbar-thumb{background:rgba(0,240,255,.3)}
+.disc{display:flex;align-items:flex-start;gap:10px;padding:8px 11px;
+  border:1px solid rgba(0,240,255,.2);background:rgba(6,9,22,.74);transition:border-color .15s}
+.disc.found{border-color:rgba(56,255,156,.4)}
+.disc.unknown{border-style:dashed;opacity:.62}
+.disc .dg{font-size:16px;line-height:1.1;flex:none;width:18px;text-align:center}
+.disc .dn{font-family:'Orbitron';font-size:11px;letter-spacing:1.5px;color:#eafcff}
+.disc.unknown .dn{color:#6e8ca0;letter-spacing:2px}
+.disc .dd{font-size:12px;color:#8fb0c0;margin-top:3px;line-height:1.35}
+.disc .dtag{font-size:9px;letter-spacing:2px;color:var(--gold);margin-top:3px;font-family:'Orbitron'}
+
+/* ---- galaxy / system cards on the maps ---- */
+.uni-pill{display:inline-block;font-family:'Orbitron';font-size:9.5px;letter-spacing:2px;
+  padding:3px 8px;border:1px solid currentColor;margin-right:6px}
+.uni-pill.ok{color:var(--gn)}
+.uni-pill.lock{color:#6e8ca0}
+.uni-pill.new{color:var(--gold)}
+
+/* ---- drive meter ---- */
+.drive-meter{display:flex;gap:4px;margin-top:10px;flex-wrap:wrap}
+.drive-pip{width:16px;height:16px;border:1px solid rgba(0,240,255,.4);
+  clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)}
+.drive-pip.on{background:var(--gn);border-color:var(--gn);box-shadow:0 0 9px rgba(56,255,156,.6)}
+
+/* ---- home planet build palette ---- */
+.build-bar{display:flex;gap:7px;margin-top:11px;overflow-x:auto;padding-bottom:4px}
+.build-bar::-webkit-scrollbar{height:5px}
+.build-bar::-webkit-scrollbar-thumb{background:rgba(0,240,255,.3)}
+.bcard{flex:0 0 auto;width:118px;border:1px solid rgba(0,240,255,.3);background:rgba(255,255,255,.02);
+  padding:9px 8px;cursor:pointer;transition:all .15s;text-align:center}
+.bcard:hover:not(.locked){background:rgba(0,240,255,.09);transform:translateY(-2px)}
+.bcard.sel{border-color:var(--cy);background:rgba(0,240,255,.14);box-shadow:0 0 16px rgba(0,240,255,.25)}
+.bcard.locked{opacity:.4;cursor:default}
+.bcard.maxed{opacity:.6;cursor:default;border-color:rgba(56,255,156,.4)}
+.bcard .bg_{font-size:19px;line-height:1}
+.bcard .bn{font-family:'Orbitron';font-size:9.5px;letter-spacing:1px;color:#eafcff;margin-top:5px;line-height:1.25}
+.bcard .bc{font-family:'Orbitron';font-size:10px;letter-spacing:1px;color:var(--gold);margin-top:5px}
+.bcard .bc.free{color:var(--gn)}
+.bcard .bl{font-size:9px;letter-spacing:1px;color:#6e8ca0;margin-top:3px}
+.plot-info{position:absolute;right:calc(18px + env(safe-area-inset-right,0px));top:50%;transform:translateY(-50%);
+  width:min(250px,40vw);background:rgba(6,9,22,.8);border:1px solid rgba(0,240,255,.26);padding:13px 14px}
+.plot-info h4{font-family:'Orbitron';font-size:12px;letter-spacing:2px;color:#eafcff;margin-bottom:6px}
+.plot-info p{font-size:12.5px;color:#8fb0c0;line-height:1.45}
+.plot-info .pe{font-size:12px;color:var(--gn);margin-top:6px;letter-spacing:1px}
+
+/* ---- ship bay ---- */
+.ship-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:10px;margin:6px 0 4px}
+.scard{border:1px solid rgba(0,240,255,.26);background:rgba(255,255,255,.02);padding:11px 13px}
+.scard .sh{display:flex;align-items:center;gap:9px}
+.scard .sglyph{font-size:17px;line-height:1}
+.scard .sn{font-family:'Orbitron';font-size:11px;letter-spacing:1.5px;color:#eafcff}
+.scard .slv{margin-left:auto;font-family:'Orbitron';font-size:11px;color:var(--cy)}
+.scard .sd{font-size:12.5px;color:#8fb0c0;margin-top:6px;letter-spacing:.5px}
+.scard .spips{display:flex;gap:3px;margin-top:8px}
+.scard .spip{width:11px;height:4px;background:rgba(0,240,255,.16)}
+.scard .spip.on{background:var(--cy);box-shadow:0 0 7px rgba(0,240,255,.55)}
+
+/* ---- reward / travel cinematic text ---- */
+.uni-reveal{position:fixed;inset:0;z-index:52;display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:10px;pointer-events:none;opacity:0;transition:opacity .4s;
+  background:radial-gradient(ellipse at center,rgba(2,4,12,.35),rgba(2,4,12,.85))}
+.uni-reveal.on{opacity:1}
+.uni-reveal .rk{font-family:'Orbitron';font-size:12px;letter-spacing:8px;color:var(--gold)}
+.uni-reveal .rt{font-family:'Orbitron';font-weight:900;font-size:min(46px,9vw);letter-spacing:6px;color:#eafcff;
+  text-shadow:0 0 30px rgba(0,240,255,.7);text-align:center;padding:0 16px}
+.uni-reveal .rs{font-size:14px;letter-spacing:4px;color:#8fb0c0;text-align:center;padding:0 16px}
+
 @media (max-width:760px), (max-height:520px){
   .logo{font-size:38px;letter-spacing:5px}
   .tagline{font-size:11px;letter-spacing:3px;margin:10px 0 18px}
@@ -493,6 +608,46 @@ input[type=range]{width:180px;accent-color:var(--cy)}
   .lb-stat{min-width:32px}
   .lb-stat b{font-size:10.5px}
   .lb-stat i{font-size:7px}
+  /* ---- universe screens on phones/small tablets ----
+     The maps and the planet are driven by touch on the canvas, so the
+     chrome gets out of the way rather than shrinking: the discovery log
+     and plot card move from the sides (where a thumb drags) to stacked
+     strips, and the dock stays full-width at the bottom where it is
+     always reachable. */
+  .uni-title{font-size:18px;letter-spacing:4px}
+  .uni-sub{font-size:10.5px;letter-spacing:2px}
+  .uni-top{width:min(520px,72vw)}
+  .uni-stat{font-size:10px;padding:5px 8px}
+  .uni-dock{width:96vw;padding:11px 13px;bottom:calc(10px + env(safe-area-inset-bottom,0px))}
+  .uni-dock-title{font-size:12.5px;letter-spacing:2px}
+  .uni-dock-sub{font-size:11.5px}
+  .uni-dock-row{margin-top:9px;gap:7px}
+  .uni-dock-row .btn{font-size:10px;padding:10px 12px;min-width:94px;letter-spacing:1.5px}
+  .uni-hint{display:none}
+  /* Both side panels are absolutely positioned against the SCREEN (they
+     are direct children of .uni-screen, not of the dock), so mobile
+     re-anchors them instead of un-positioning them -- the discovery log
+     becomes a horizontal strip under the title, clear of the dock and
+     of the area a thumb drags to rotate. */
+  /* Clear of the corner readouts, which sit at the top right. */
+  .disc-list{left:8px;right:8px;top:calc(106px + env(safe-area-inset-top,0px));transform:none;
+    width:auto;max-height:none;flex-direction:row;overflow-x:auto;overflow-y:hidden;gap:6px}
+  .disc{flex:0 0 auto;width:152px;padding:7px 9px}
+  .disc .dd{display:none}
+  .plot-info{left:8px;right:auto;top:calc(106px + env(safe-area-inset-top,0px));transform:none;
+    width:min(228px,60vw);padding:9px 10px}
+  .plot-info h4{font-size:11px}
+  .plot-info p{font-size:11.5px}
+  .bcard{width:96px;padding:7px 6px}
+  .bcard .bn{font-size:8.5px}
+  .bcard .bc{font-size:9px}
+  .build-bar{margin-top:8px}
+  .ship-grid{grid-template-columns:1fr 1fr;gap:7px}
+  .scard{padding:8px 9px}
+  .scard .sn{font-size:9.5px}
+  .scard .sd{font-size:11px}
+  .uni-reveal .rt{font-size:min(30px,8.5vw);letter-spacing:3px}
+  .uni-reveal .rs{font-size:12px;letter-spacing:2px}
 }
 /* Landscape phones specifically (short viewport) need the HUD pulled
    in tighter than a tall-but-narrow portrait tablet would. */
@@ -500,6 +655,33 @@ input[type=range]{width:180px;accent-color:var(--cy)}
   #hudTop{top:calc(3px + env(safe-area-inset-top,0px))}
   .barwrap.hp{height:12px}
   #banner{top:14%}
+}
+/* On a landscape phone the construction dock was taking half the
+   viewport, leaving the planet itself behind it. Laying the dock out as
+   a grid -- build palette on the left, navigation stacked on the right,
+   hint line dropped -- makes its height the height of one row of cards,
+   which is what gives the globe the room back. */
+@media (max-height:520px){
+  .uni-top{top:calc(8px + env(safe-area-inset-top,0px))}
+  .uni-back,.uni-corner{top:calc(8px + env(safe-area-inset-top,0px))}
+  .disc-list{top:calc(92px + env(safe-area-inset-top,0px))}
+  .plot-info{top:calc(92px + env(safe-area-inset-top,0px))}
+  .uni-dock{padding:9px 11px;bottom:calc(7px + env(safe-area-inset-bottom,0px))}
+  #planetDock{display:grid;grid-template-columns:minmax(0,1fr) auto;
+    grid-template-areas:"title title" "bar nav";column-gap:10px}
+  #buildTitle{grid-area:title;margin-bottom:5px}
+  #buildHint{display:none}
+  #buildBar{grid-area:bar;margin-top:0}
+  #planetDock .uni-dock-row{grid-area:nav;margin-top:0;flex-direction:column;
+    width:104px;gap:5px;align-self:center}
+  #planetDock .uni-dock-row .btn{min-width:0;width:100%;padding:8px 6px;font-size:9px}
+  .bcard{width:84px;padding:6px 5px}
+  .bcard .bg_{font-size:16px}
+  .bcard .bn{font-size:8px;margin-top:3px}
+  .bcard .bc{font-size:8.5px;margin-top:3px}
+  .bcard .bl{display:none}
+  .disc{width:132px;padding:5px 8px}
+  .uni-dock-sub{font-size:11px}
 }
 /* ---- ONLINE CO-OP lobby + in-run squad HUD ----
    Uses Voidbreak's own overlay/panel/button language; nothing here
@@ -594,7 +776,8 @@ input[type=range]{width:180px;accent-color:var(--cy)}
   <div class="logo"><span>VOID</span><em>BREAK</em></div>
   <div class="tagline">THE DIMENSION IS COLLAPSING. BREAK OUT.</div>
   <div class="menu-btns">
-    <button class="btn primary" id="btnStart">START RUN</button>
+    <button class="btn primary" id="btnStart">LAUNCH EXPEDITION</button>
+    <button class="btn primary" id="btnPlanet">HOME PLANET</button>
     <div class="diff-row" id="diffRow">
       <button type="button" class="diff-btn" data-diff="normal">NORMAL<span class="diff-mult">1.0×</span></button>
       <button type="button" class="diff-btn" data-diff="hard">HARD<span class="diff-mult">1.5×</span></button>
@@ -616,7 +799,8 @@ input[type=range]{width:180px;accent-color:var(--cy)}
     <div class="vb-sync-status vb-sync-connecting" id="vbSyncStatus">SYNCING…</div>
     <div class="vb-profile" id="vbProfile"></div>
     <div>PROGRESS <span id="menuLevel">LEVEL 1</span></div>
-    <div><i>◆</i> <b id="menuShards">0</b> VOID SHARDS</div>
+    <div id="menuUniverse"></div>
+    <div><i>◆</i> <b id="menuShards">0</b> VOID SHARDS &nbsp;·&nbsp; <i>◆</i> <b id="menuCoins">0</b> COINS</div>
     <div>RUNS <span id="menuRuns">0</span> · BEST SECTOR <span id="menuBest">–</span> · BOSSES SLAIN <span id="menuKills">0</span></div>
   </div>
 </div></div>
@@ -738,6 +922,95 @@ input[type=range]{width:180px;accent-color:var(--cy)}
   <div class="ovnav"><button class="btn" id="lbBack">BACK</button></div>
 </div></div>
 
+<!-- ============================================================
+     UNIVERSE SCREENS -- galaxy map, solar system, home planet, ship bay
+
+     The first three are canvas views with chrome on top (see the
+     UNIVERSE SCREENS block in the stylesheet for why). Everything below
+     is chrome only: the maps and the planet themselves are drawn by
+     render()'s drawGalaxyMap/drawSystemMap/drawHomePlanet branches.
+     ============================================================ -->
+
+<!-- ---- GALAXY MAP ---- -->
+<div class="uni-screen" id="uni-galaxy">
+  <button class="btn uni-back" id="galBack">BACK</button>
+  <div class="uni-top">
+    <div class="uni-title">THE KNOWN UNIVERSE</div>
+    <div class="uni-sub" id="galSub">SELECT A GALAXY</div>
+  </div>
+  <div class="uni-corner" id="galCorner"></div>
+  <div class="uni-dock" id="galDock">
+    <div class="uni-dock-title" id="galName">—</div>
+    <div class="uni-dock-sub" id="galDesc"></div>
+    <div class="drive-meter" id="galDrive"></div>
+    <div class="uni-dock-row">
+      <button class="btn primary" id="galEnter">ENTER GALAXY</button>
+    </div>
+  </div>
+  <div class="uni-hint">DRAG TO LOOK AROUND · CLICK A GALAXY</div>
+</div>
+
+<!-- ---- SOLAR SYSTEM MAP ---- -->
+<div class="uni-screen" id="uni-system">
+  <button class="btn uni-back" id="sysBack">BACK</button>
+  <div class="uni-top">
+    <div class="uni-title" id="sysGalaxyName">—</div>
+    <div class="uni-sub" id="sysGalaxySub"></div>
+  </div>
+  <div class="uni-corner" id="sysCorner"></div>
+  <div class="disc-list" id="sysDisc"></div>
+  <div class="uni-dock" id="sysDock">
+    <div class="uni-dock-title" id="sysName">—</div>
+    <div class="uni-dock-sub" id="sysDesc"></div>
+    <div class="uni-dock-row">
+      <button class="btn primary" id="sysLaunch">SET COURSE</button>
+      <button class="btn" id="sysPrev">◀ PREV</button>
+      <button class="btn" id="sysNext">NEXT ▶</button>
+    </div>
+  </div>
+  <div class="uni-hint">CLICK A SYSTEM · SET COURSE TO DEPLOY</div>
+</div>
+
+<!-- ---- HOME PLANET ---- -->
+<div class="uni-screen" id="uni-planet">
+  <button class="btn uni-back" id="planetBack">BACK</button>
+  <div class="uni-top">
+    <div class="uni-title" id="planetName">HOME</div>
+    <div class="uni-sub" id="planetSub">YOUR PLANET</div>
+  </div>
+  <div class="uni-corner" id="planetCorner"></div>
+  <div class="plot-info" id="plotInfo"></div>
+  <div class="uni-dock" id="planetDock">
+    <div class="uni-dock-title" id="buildTitle">CONSTRUCTION</div>
+    <div class="uni-dock-sub" id="buildHint">SELECT A STRUCTURE, THEN TAP AN EMPTY PLOT.</div>
+    <div class="build-bar" id="buildBar"></div>
+    <div class="uni-dock-row">
+      <button class="btn" id="planetShip">SHIP BAY</button>
+      <button class="btn" id="planetGalaxy">GALAXY MAP</button>
+    </div>
+  </div>
+  <div class="uni-hint">DRAG TO ROTATE · PINCH OR SCROLL TO ZOOM · TAP A PLOT</div>
+</div>
+
+<!-- ---- SHIP BAY (a normal panel -- it is a list, not a place) ---- -->
+<div class="overlay" id="ov-ship"><div class="panel" style="width:720px">
+  <h2 class="ovtitle">SHIP BAY</h2><div class="ovsub" id="shipSub">RECOVERED COMPONENTS</div>
+  <div class="ship-grid" id="shipGrid"></div>
+  <div class="uni-dock-sub" id="shipDriveInfo" style="margin-top:14px"></div>
+  <div class="drive-meter" id="shipDrive"></div>
+  <div class="ovnav"><button class="btn" id="shipBack">BACK</button></div>
+</div></div>
+
+<!-- ---- REVEAL / TRAVEL CINEMATIC ----
+     One element reused by every "something just happened" moment
+     (component recovered, site discovered, drive complete, galaxy
+     entered) rather than four bespoke screens. -->
+<div class="uni-reveal" id="uniReveal">
+  <div class="rk" id="revealKind"></div>
+  <div class="rt" id="revealTitle"></div>
+  <div class="rs" id="revealSub"></div>
+</div>
+
 <div class="overlay" id="ov-levels"><div class="panel" style="width:560px">
   <h2 class="ovtitle">SECTOR CHAINS</h2><div class="ovsub">CHOOSE YOUR DESCENT</div>
   <div class="lvlchain" id="lvlChain"></div>
@@ -753,10 +1026,25 @@ input[type=range]{width:180px;accent-color:var(--cy)}
     <div class="krow"><span class="key">ESC / P</span>Pause</div>
   </div>
   <div class="howto-sec"><h3>PROGRESSION</h3>
-    <div class="tdesc">Each level is a chain of 10 sectors ending in a guardian boss.<br>
-    Beat a level's boss to permanently unlock the next chain.<br>
+    <div class="tdesc">Each solar system is a chain of 10 sectors ending in a guardian boss.<br>
+    Beat a system's guardian to open the corridor to the next system in the galaxy.<br>
     On the LOADOUT screen: click a weapon to select it — click it <b>again</b> (or press ENTER / START) to launch.<br>
     Fall, and your Void Shards carry over to the FORGE — permanent power for future runs.</div>
+  </div>
+  <div class="howto-sec" id="howtoUniverse"><h3>THE UNIVERSE</h3>
+    <div class="tdesc">LAUNCH EXPEDITION opens the solar system map for the galaxy you are in.
+    Every system is a destination with its own star, its own sites and its own guardian —
+    and most of what is in one is <b>unknown</b> until you go there.</div>
+    <div class="trow"><span class="tname" style="color:var(--cy)">SURVEY</span><span class="tdesc">Setting course reveals part of a system. Clearing it reveals the rest. A DEEP SCANNER or an OBSERVATORY reveals more on arrival.</span></div>
+    <div class="trow"><span class="tname" style="color:var(--gn)">GALAXY DRIVE</span><span class="tdesc">Each guardian drops one drive component. Collect every one in a galaxy and the route to the next galaxy opens.</span></div>
+    <div class="trow"><span class="tname" style="color:var(--gold)">SHIP COMPONENTS</span><span class="tdesc">Guardians also drop ship parts — hull, engines, weapons, shields, scanners. Check the SHIP BAY. First clear only.</span></div>
+  </div>
+  <div class="howto-sec" id="howtoPlanet"><h3>YOUR HOME PLANET</h3>
+    <div class="tdesc">HOME PLANET is a real place you can turn, zoom and build on.
+    <b>Drag</b> to rotate, <b>scroll or pinch</b> to zoom, <b>tap a plot</b> to select it.</div>
+    <div class="trow"><span class="tname" style="color:var(--gold)">COINS</span><span class="tdesc">Salvaged from combat alongside Void Shards. Coins build the colony and nothing else — they never compete with the Forge or the Shop.</span></div>
+    <div class="trow"><span class="tname" style="color:var(--cy)">TERRITORY</span><span class="tdesc">Every solar system you clear widens your borders. The planet grows because you explored, not because you paid.</span></div>
+    <div class="trow"><span class="tname" style="color:var(--pu)">STRUCTURES</span><span class="tdesc">Start with the COMMAND CENTER — it is free, and everything else needs it standing. Pick a structure, then tap a plot.</span></div>
   </div>
   <div class="howto-sec"><h3>CHOOSING YOUR PATH</h3>
     <div class="tdesc">After clearing a room, walk into one of the marked sectors to choose your next room.<br>
@@ -876,6 +1164,14 @@ input[type=range]{width:180px;accent-color:var(--cy)}
   <div class="ovnav"><button class="btn" id="vicMenu">MAIN MENU</button><button class="btn" id="vicForge">FORGE</button><button class="btn primary" id="vicAgain">PLAY AGAIN</button></div>
 </div></div>
 
+<!-- The shared universe content layer (galaxies, solar systems,
+     discoveries, Home Planet buildings, ship systems). This is the ONE
+     external script Voidbreak loads, and it is external precisely
+     because the server needs the same definitions to validate a build
+     request -- see voidbreakUniverse.js's header for why it is shared
+     rather than mirrored the way DEF_SAVE is. It defines
+     window.VBUniverse and nothing else. -->
+<script src="/voidbreakUniverse.js"></script>
 <script>
 'use strict';
 /* ============================================================
@@ -946,7 +1242,35 @@ const DEF_SAVE={shards:0,forge:{vit:0,pow:0,swift:0,core:0,drive:0,edge:0},
   mastery:{},shardsSpent:0,shopOwned:[],
   equipped:{skin:'',trail:'',hit:'',kill:'',theme:'',title:'',badge:''},
   equippedWeaponSkins:{},masteryClaimed:[],prestige:{level:0,history:[]},
+  // Universe fields -- mirrors voidbreak.js's DEF_SAVE. `planet` and
+  // `coinsSpent` are SERVER-OWNED (held here only as a local mirror so
+  // the planet can be drawn offline); everything else is written by
+  // this file and reported on save, at the same trust tier `shards` and
+  // `beaten` have always been.
+  universe:{galaxy:1,systems:{},discovered:{},drive:{},ship:{},coins:0,coinsSpent:0,
+    planet:{buildings:{},decorations:{}}},
   settings:{vol:0.8,music:true,sfx:true,shake:true,dmgnum:true}};
+
+/* ---------- UNIVERSE MODULE ----------
+   voidbreakUniverse.js is loaded by the <script> tag above. If that
+   request ever fails (an offline tab opened from cache before the file
+   was cached, a proxy eating it), the game must still be playable
+   rather than throwing on the first menu render -- so UNI_OK gates
+   every piece of exploration UI below and the game degrades to exactly
+   the eight-level experience it always had, instead of a blank screen. */
+const UNI=window.VBUniverse||null;
+const UNI_OK=!!(UNI&&UNI.GALAXIES&&UNI.GALAXIES.length);
+function emptyUniverseSave(){
+  return {galaxy:1,systems:{},discovered:{},drive:{},ship:{},coins:0,coinsSpent:0,
+    planet:{buildings:{},decorations:{}}};
+}
+// The live universe sub-object. Always returns an object so no caller
+// needs a null check, even before the first save has loaded.
+function uni(){
+  if(!save)return emptyUniverseSave();
+  if(!save.universe)save.universe=emptyUniverseSave();
+  return save.universe;
+}
 const FORGE_KEYS=Object.keys(DEF_SAVE.forge);
 // Named SAVE_WEAPON_KEYS (not WEAPON_KEYS) -- a WEAPON_KEYS constant
 // with the identical value already exists further down (used to build
@@ -983,7 +1307,41 @@ function normalizeSave(s){
   // deliberate, confirmed reset, so re-applying it there would silently
   // hand back the Level 1 unlock prestige just took away.
   if(out.prestige.level===0&&out.kills>0&&!out.beaten[1])out.beaten[1]=true;
+  // Universe defaults, then the Galaxy 1 backfill. Both are additive
+  // and idempotent -- an existing player who has cleared levels but has
+  // never seen a galaxy map is given the matching solar systems, their
+  // surveys and their Galaxy Drive pieces, so the new direction ADDS to
+  // their save rather than appearing to have wiped it. This mirrors
+  // voidbreak.js's migrateUniverse() so the client and server reach the
+  // same answer whether or not a sync has happened yet.
+  out.universe=Object.assign(emptyUniverseSave(),out.universe||{});
+  out.universe.planet=Object.assign({buildings:{},decorations:{}},out.universe.planet||{});
+  out.universe.galaxy=Math.max(1,Math.floor(Number(out.universe.galaxy)||1));
+  out.universe.coins=Math.max(0,Math.floor(Number(out.universe.coins)||0));
+  out.universe.coinsSpent=Math.max(0,Math.floor(Number(out.universe.coinsSpent)||0));
+  migrateUniverseSave(out);
   return out;
+}
+// Derives Galaxy 1's solar-system progress from the legacy `beaten`
+// level map. Galaxy 1's systems carry the original level ids, so this
+// is an exact mapping rather than a guess, and it only ever adds.
+function migrateUniverseSave(s){
+  if(!UNI_OK||!s||!s.universe)return s;
+  const g=UNI.galaxyById(1);if(!g)return s;
+  const u=s.universe;let added=0;
+  for(const sys of g.systems){
+    if(!sys.levelId||!(s.beaten||{})[sys.levelId])continue;
+    const key=UNI.systemKey(1,sys.id);
+    if(u.systems[key])continue;
+    u.systems[key]=1;
+    u.discovered[key]=(sys.discoveries||[]).map(d=>d.id);
+    added++;
+  }
+  if(added>0){
+    const earned=UNI.clearedInGalaxy(u,1);
+    if(earned>UNI.drivePieces(u,1))u.drive['1']=earned;
+  }
+  return s;
 }
 // True only for the untouched starting state -- used to decide whether
 // a save is worth migrating/merging, or is just noise.
@@ -993,6 +1351,18 @@ function isDefaultSave(s){
   if(Object.keys(s.beaten||{}).length)return false;
   for(const k of FORGE_KEYS)if((s.forge||{})[k])return false;
   for(const k of SAVE_WEAPON_KEYS)if(k!=='pulse'&&(s.weapons||{})[k])return false;
+  // Universe progress counts too -- a player who has surveyed a system
+  // or laid a foundation without beating anything still has a save
+  // worth keeping, and calling that "default" would let a bootstrap
+  // overwrite it. Mirrors voidbreak.js's isDefaultSave.
+  const u=s.universe;
+  if(u){
+    if(Math.floor(Number(u.coins)||0)>0)return false;
+    for(const k of ['systems','discovered','drive','ship'])
+      if(Object.keys(u[k]||{}).length)return false;
+    if(Object.keys((u.planet||{}).buildings||{}).length)return false;
+    if(Object.keys((u.planet||{}).decorations||{}).length)return false;
+  }
   return true;
 }
 // Safe merge of two saves: every field is MAX'd or OR'd, NEVER summed --
@@ -1025,7 +1395,43 @@ function mergeSaveData(a,b){
     equippedWeaponSkins:Object.assign({},b.equippedWeaponSkins||{},a.equippedWeaponSkins||{}),
     prestige:{level:Math.max(aP.level||0,bP.level||0),
       history:((aP.history||[]).length>=(bP.history||[]).length?(aP.history||[]):(bP.history||[])).slice(-50)},
+    universe:mergeUniverseData(a.universe,b.universe),
     settings:Object.assign({},DEF_SAVE.settings,a.settings||{})};
+}
+// The universe half of the merge, under the same never-summed rule:
+// numbers MAX, sets UNION, and the colony merges per plot keeping the
+// higher level. Mirrors voidbreak.js's mergeUniverse exactly.
+function mergeUniverseData(a,b){
+  const ua=a||emptyUniverseSave(),ub=b||emptyUniverseSave();
+  const out=emptyUniverseSave();
+  out.galaxy=Math.max(1,Math.floor(Number(ua.galaxy)||1),Math.floor(Number(ub.galaxy)||1));
+  out.systems=Object.assign({},ub.systems||{},ua.systems||{});
+  for(const src of [ua.discovered||{},ub.discovered||{}]){
+    for(const k of Object.keys(src)){
+      if(!out.discovered[k])out.discovered[k]=[];
+      for(const id of (src[k]||[]))if(out.discovered[k].indexOf(id)===-1)out.discovered[k].push(id);
+    }
+  }
+  for(const k of Object.keys(Object.assign({},ua.drive||{},ub.drive||{}))){
+    const n=Math.max(Math.floor(Number((ua.drive||{})[k])||0),Math.floor(Number((ub.drive||{})[k])||0));
+    if(n>0)out.drive[k]=n;
+  }
+  const shipIds=UNI_OK?UNI.SHIP_SYSTEM_IDS:Object.keys(Object.assign({},ua.ship||{},ub.ship||{}));
+  for(const id of shipIds){
+    const n=Math.max(Math.floor(Number((ua.ship||{})[id])||0),Math.floor(Number((ub.ship||{})[id])||0));
+    if(n>0)out.ship[id]=n;
+  }
+  out.coins=Math.max(Math.floor(Number(ua.coins)||0),Math.floor(Number(ub.coins)||0));
+  out.coinsSpent=Math.max(Math.floor(Number(ua.coinsSpent)||0),Math.floor(Number(ub.coinsSpent)||0));
+  const pa=(ua.planet||{}),pb=(ub.planet||{});
+  out.planet={buildings:{},decorations:{}};
+  for(const k of Object.keys(Object.assign({},pa.buildings||{},pb.buildings||{}))){
+    const ea=(pa.buildings||{})[k],eb=(pb.buildings||{})[k];
+    if(ea&&eb)out.planet.buildings[k]=((ea.level||1)>=(eb.level||1))?ea:eb;
+    else out.planet.buildings[k]=ea||eb;
+  }
+  out.planet.decorations=Object.assign({},pb.decorations||{},pa.decorations||{});
+  return out;
 }
 
 function readGuestSave(){
@@ -1112,20 +1518,45 @@ function vbCountBeaten(s){
 // Ordered most-significant-first; compared lexicographically.
 function progressVector(s){
   s=s||DEF_SAVE;
+  const u=s.universe||{};
+  // ORDER IS LOAD-BEARING and must stay identical to voidbreak.js's
+  // PROGRESS_SIGNALS -- the client and the server both arbitrate save
+  // conflicts with this vector, and a different order would make them
+  // pick different winners. The universe signals sit below prestige and
+  // above the legacy level signals for the reason given there; on a
+  // pre-universe save they are all 0, so the comparison falls straight
+  // through to vbHighestBeaten exactly as it always did.
   return [
     Math.max(0,Math.floor(Number((s.prestige||{}).level)||0)),
+    UNI_OK?UNI.galaxiesCleared(u):0,
+    UNI_OK?UNI.totalCleared(u):Object.keys(u.systems||{}).length,
+    vbTotalDrivePieces(s),
     vbHighestBeaten(s),
     vbCountBeaten(s),
     SAVE_WEAPON_KEYS.reduce((n,k)=>n+((s.weapons||{})[k]?1:0),0),
     FORGE_KEYS.reduce((n,k)=>n+Math.max(0,Math.floor(Number((s.forge||{})[k])||0)),0),
+    Object.keys(u.ship||{}).reduce((n,k)=>n+Math.max(0,Math.floor(Number(u.ship[k])||0)),0),
     SAVE_WEAPON_KEYS.reduce((n,k)=>n+Math.max(0,Math.floor(Number((s.mastery||{})[k])||0)),0),
     (Array.isArray(s.masteryClaimed)?s.masteryClaimed.length:0),
     (Array.isArray(s.shopOwned)?s.shopOwned.length:0),
+    Object.keys((u.planet||{}).buildings||{}).length,
+    vbTotalDiscoveries(s),
     Math.max(0,Math.floor(Number(s.shards)||0)),
+    Math.max(0,Math.floor(Number(u.coins)||0)),
     Math.max(0,Math.floor(Number(s.runs)||0)),
     Math.max(0,Math.floor(Number(s.best)||0)),
     Math.max(0,Math.floor(Number(s.kills)||0))
   ];
+}
+function vbTotalDrivePieces(s){
+  const d=((s||{}).universe||{}).drive||{};let n=0;
+  for(const k of Object.keys(d))n+=Math.max(0,Math.floor(Number(d[k])||0));
+  return n;
+}
+function vbTotalDiscoveries(s){
+  const f=((s||{}).universe||{}).discovered||{};let n=0;
+  for(const k of Object.keys(f))n+=(Array.isArray(f[k])?f[k].length:0);
+  return n;
 }
 // >0 if a has more progress, <0 if b does, 0 if tied on every signal.
 function compareSaves(a,b){
@@ -1232,7 +1663,14 @@ async function flushCloudSave(){
   // value and refuses with "requirements not met" -- a claim button that
   // can never actually be pressed successfully.
   const payload={shards:save.shards,forge:save.forge,weapons:save.weapons,lastWeapon:save.lastWeapon,
-    runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten,mastery:save.mastery};
+    runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten,mastery:save.mastery,
+    // The client-reported half of the universe. `planet`/`coinsSpent`
+    // are deliberately NOT sent -- they are server-owned and the server
+    // discards them anyway (applyClientSave), so sending them would only
+    // be noise on the wire.
+    universe:{galaxy:save.universe.galaxy,systems:save.universe.systems,
+      discovered:save.universe.discovered,drive:save.universe.drive,
+      ship:save.universe.ship,coins:save.universe.coins}};
   try{
     const res=await fetch('/voidbreak/save',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({sessionToken:cloudSessionToken,data:payload,baseVersion:cloudSaveVersion})});
@@ -1290,7 +1728,14 @@ async function pushCloudSaveNow(){
   // value and refuses with "requirements not met" -- a claim button that
   // can never actually be pressed successfully.
   const payload={shards:save.shards,forge:save.forge,weapons:save.weapons,lastWeapon:save.lastWeapon,
-    runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten,mastery:save.mastery};
+    runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten,mastery:save.mastery,
+    // The client-reported half of the universe. `planet`/`coinsSpent`
+    // are deliberately NOT sent -- they are server-owned and the server
+    // discards them anyway (applyClientSave), so sending them would only
+    // be noise on the wire.
+    universe:{galaxy:save.universe.galaxy,systems:save.universe.systems,
+      discovered:save.universe.discovered,drive:save.universe.drive,
+      ship:save.universe.ship,coins:save.universe.coins}};
   try{
     const res=await fetch('/voidbreak/save',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({sessionToken:cloudSessionToken,data:payload,baseVersion:cloudSaveVersion})});
@@ -1875,6 +2320,112 @@ function updateTouchDashButton(){
 
 /* ---- rotate gate: a dismissible suggestion, never a hard block (see
    task requirement to keep portrait playable) ---- */
+
+/* =================================================================
+   UNIVERSE SCREEN INPUT
+
+   One pointer-event handler set, bound to the canvas and active ONLY
+   while a universe screen is open. Pointer Events are used (rather than
+   the separate mouse/touch paths the rest of this file has) because
+   these screens want identical drag-and-pinch behaviour from a mouse, a
+   finger and a pencil, and because a single pointer map makes pinch
+   zoom a few lines instead of a touch-id bookkeeping exercise.
+
+   GAMEPLAY INPUT IS UNTOUCHED. Every handler here returns immediately
+   unless isUniverseState() is true, which is never the case during a
+   run, and the on-screen sticks are hidden on these screens anyway (see
+   go()).
+   ================================================================= */
+const UNI_STATES={galaxy:1,system:1,planet:1};
+function isUniverseState(){ return !!UNI_STATES[state]; }
+
+const uniPointers=new Map();
+let uniDrag={active:false,moved:0};
+let uniPinch=0;
+
+function uniPointerPos(e){ return {x:e.clientX,y:e.clientY}; }
+
+cv.addEventListener('pointerdown',e=>{
+  if(!isUniverseState())return;
+  cv.setPointerCapture&&cv.setPointerCapture(e.pointerId);
+  uniPointers.set(e.pointerId,uniPointerPos(e));
+  if(uniPointers.size===1){
+    uniDrag={active:true,moved:0};
+    if(state==='planet'){pcam.drag=true;pcam.vyaw=0;pcam.vpitch=0;}
+  }else if(uniPointers.size===2){
+    const pts=[...uniPointers.values()];
+    uniPinch=dist(pts[0].x,pts[0].y,pts[1].x,pts[1].y);
+  }
+  initAudio();
+},{passive:true});
+
+cv.addEventListener('pointermove',e=>{
+  if(!isUniverseState())return;
+  if(!uniPointers.has(e.pointerId))return;
+  const prev=uniPointers.get(e.pointerId);
+  uniPointers.set(e.pointerId,uniPointerPos(e));
+
+  if(uniPointers.size>=2){
+    // Pinch to zoom -- planet only; the maps are laid out to fit and
+    // gain nothing from being scaled.
+    const pts=[...uniPointers.values()];
+    const d=dist(pts[0].x,pts[0].y,pts[1].x,pts[1].y);
+    if(uniPinch>0&&state==='planet'){
+      pcam.zoom=clamp(pcam.zoom*(d/uniPinch),0.72,1.9);
+    }
+    uniPinch=d;
+    uniDrag.moved=999; // a pinch is never also a tap
+    return;
+  }
+
+  const dx=e.clientX-prev.x, dy=e.clientY-prev.y;
+  uniDrag.moved+=Math.abs(dx)+Math.abs(dy);
+  if(state==='planet'){
+    // Drag scaled by zoom so the surface tracks the finger at any
+    // magnification instead of racing away when zoomed in.
+    const k=0.0052/Math.max(0.6,pcam.zoom);
+    pcam.yaw-=dx*k*1.5;
+    pcam.pitch+=dy*k*1.5;
+    pcam.vyaw=-dx*k*0.9;
+    pcam.vpitch=dy*k*0.9;
+    pcam.pitch=clamp(pcam.pitch,-1.15,1.15);
+  }else if(state==='galaxy'){
+    galPan.x=clamp(galPan.x+dx,-W*0.22,W*0.22);
+    galPan.y=clamp(galPan.y+dy,-H*0.18,H*0.18);
+  }else if(state==='system'){
+    sysPan.x=clamp(sysPan.x+dx,-W*0.6,W*0.6);
+    sysPan.y=clamp(sysPan.y+dy,-H*0.3,H*0.3);
+  }
+},{passive:true});
+
+function uniPointerEnd(e){
+  if(!isUniverseState()){uniPointers.clear();return;}
+  const wasSingle=uniPointers.size===1;
+  uniPointers.delete(e.pointerId);
+  if(uniPointers.size<2)uniPinch=0;
+  if(!wasSingle)return;
+
+  pcam.drag=false;
+  // A short drag is a tap. TOUCH_TAP_MAX_DRAG is the same threshold the
+  // in-game touch controls already use, so "tap" means the same thing
+  // everywhere in this game.
+  if(uniDrag.active&&uniDrag.moved<=TOUCH_TAP_MAX_DRAG){
+    const x=e.clientX,y=e.clientY;
+    if(state==='galaxy')pickGalaxy(x,y);
+    else if(state==='system')pickSystem(x,y);
+    else if(state==='planet')onPlanetTap(x,y);
+  }
+  uniDrag.active=false;
+}
+cv.addEventListener('pointerup',uniPointerEnd,{passive:true});
+cv.addEventListener('pointercancel',uniPointerEnd,{passive:true});
+
+addEventListener('wheel',e=>{
+  if(state!=='planet')return;
+  e.preventDefault();
+  pcam.zoom=clamp(pcam.zoom*(e.deltaY>0?0.92:1.08),0.72,1.9);
+},{passive:false});
+
 const rotateGateEl=el('rotateGate');
 let rotateGateDismissed=false;
 function updateRotateGate(){
@@ -1910,7 +2461,13 @@ function handleKey(code){
       setPause(!paused);
     }else if(paused)setPause(false);
     else if(state==='weapons'&&code==='Enter')launchRun();
-    else if(['howto','settings','forge','weapons','levels'].includes(state))go('menu');
+    // Escape walks back OUT of the universe the way the player walked
+    // in (system -> galaxy -> menu) rather than dumping them at the
+    // main menu from three screens deep.
+    else if(state==='system')go('galaxy');
+    else if(state==='galaxy'||state==='planet')go('menu');
+    else if(state==='ship')go(shipReturn);
+    else if(['howto','settings','forge','weapons','levels','shop','mastery','prestige','leaderboard'].includes(state))go('menu');
   }
   if(code==='Enter'&&state==='weapons')launchRun();
 }
@@ -2219,11 +2776,24 @@ function adoptEndgame(view){
   for(const k of Object.keys(view.mastery||{}))
     for(const lv of (view.mastery[k].claimed||[]))claimed.push(k+':'+lv);
   save.masteryClaimed=claimed;
+  // The server-owned half of the universe, adopted for the same reason
+  // shardsSpent/shopOwned are: this file holds it only as a mirror of
+  // what the server last said, so the Home Planet can be drawn while
+  // offline. A build request never mutates it locally -- it posts, and
+  // adopts whatever comes back.
+  if(view.universe){
+    const vu=view.universe;
+    save.universe.coinsSpent=Math.max(0,Math.floor(Number(vu.coinsSpent)||0));
+    if(vu.planet)save.universe.planet=
+      {buildings:Object.assign({},vu.planet.buildings||{}),
+       decorations:Object.assign({},vu.planet.decorations||{})};
+  }
   applyUiTheme();
   refreshMenuStats();
   if(state==='shop')buildShop();
   if(state==='mastery')buildMastery();
   if(state==='prestige')buildPrestige();
+  if(state==='planet')refreshPlanetUI();
 }
 
 // Spendable balance. Mirrors the server's derivation exactly
@@ -2344,6 +2914,1182 @@ const FUTURE_SLOTS=9;
 let selectedLevel=0;
 const curEnv=()=>run?run.level.env:LEVELS[0].env;
 
+/* ---------- 06b · UNIVERSE: GALAXY MAP / SOLAR SYSTEMS / HOME PLANET ----------
+   Voidbreak used to present itself as eight numbered levels in a list.
+   This section is the layer that turns the same eight (plus everything
+   voidbreakUniverse.js adds after them) into places: a galaxy you are
+   inside, solar systems you travel between, sites you have and haven't
+   found, components you recover from guardians, and a planet that is
+   physically yours and visibly grows.
+
+   NOTHING BELOW REPLACES THE GAME. LEVELS[] is still the combat
+   definition, startRun() still starts a run, and a system whose data
+   carries `levelId` resolves to the exact same hand-tuned LEVELS entry
+   it always was. What changed is how the player GETS to one and what
+   they are handed when they win.
+
+   The three spatial screens (galaxy map, solar system map, home planet)
+   are drawn on the game's own canvas from render(), for a specific
+   reason: Voidbreak is a 2D canvas game that already runs on iPads, and
+   the surest way to break that was to introduce a WebGL/Three.js
+   context and a second render loop for a menu. The planet is a real
+   rotatable, zoomable sphere -- see drawHomePlanet() -- built from
+   projected geometry rather than a library, which costs roughly one
+   sprite batch a frame. */
+
+// ---- browsing state (never touched during a run) ----
+let uniGalaxyId=1;        // which galaxy the maps are showing
+let uniSystemIdx=0;       // index into that galaxy's systems
+let galSelectedId=1;      // node picked on the galaxy map
+let galPan={x:0,y:0};     // drag offset for the galaxy map
+let sysPan={x:0,y:0};
+let uniNodes=[];          // last frame's hit-test boxes: {id,x,y,r,kind}
+let travelFx=0;           // >0 while a jump/launch flash is playing
+
+/* makeGlow() caches one offscreen canvas per (colour, radius) pair, and
+   its cache key includes the radius verbatim. Every call site that
+   existed before this section passed a CONSTANT radius, so the cache
+   stayed small. The universe screens do not: a pulsing selection ring
+   and a pinch-zoomed planet produce a different radius every single
+   frame, which would mint a brand new canvas per frame -- an unbounded
+   cache of large bitmaps, which is exactly the kind of thing that makes
+   an iPad stutter and then run out of memory.
+
+   uniGlow() rounds the radius to a fixed step before calling through,
+   so the whole universe layer can only ever populate a few dozen cache
+   entries no matter how long it is left open or how much it is zoomed. */
+const UNI_GLOW_STEP=8;
+function uniGlow(x,y,c,rad){
+  const q=Math.max(UNI_GLOW_STEP,Math.round(rad/UNI_GLOW_STEP)*UNI_GLOW_STEP);
+  if(q>420)return; // past this size a glow is a full-screen wash; see drawHomePlanet
+  drawGlow(x,y,c,q);
+}
+
+function curGalaxy(){ return UNI_OK?UNI.galaxyById(uniGalaxyId):null; }
+function curGalaxySystems(){ const g=curGalaxy(); return g?g.systems:[]; }
+function curSystem(){ const list=curGalaxySystems(); return list[clamp(uniSystemIdx,0,list.length-1)]||null; }
+
+// A system's combat definition, resolved into exactly the shape the
+// rest of the game expects from a LEVELS entry -- plus the identity it
+// needs to pay out the right rewards. `levelIdx` is kept because
+// startRun/coop/roomOptions all still speak in LEVELS indices; a
+// data-defined system has none, so it gets -1 and every consumer
+// already guards on LEVELS[...] being present.
+function resolveSystemLevel(galaxyId,system){
+  if(!UNI_OK||!system)return null;
+  const base=UNI.resolveLevel(system,LEVELS);
+  if(!base)return null;
+  let levelIdx=-1;
+  if(system.levelId){for(let i=0;i<LEVELS.length;i++)if(LEVELS[i].id===system.levelId)levelIdx=i;}
+  return Object.assign({},base,{
+    // Display name comes from the SYSTEM, so the player reads "ASTERON"
+    // where they used to read "LEVEL 1" -- the numeric id survives
+    // underneath for the save, the weapon gates and the upgrade
+    // unlocks, exactly as before.
+    name:system.name,
+    id:system.levelId||0,
+    levelIdx:levelIdx,
+    galaxyId:galaxyId,
+    systemId:system.id,
+    systemRef:system
+  });
+}
+
+// ---- progress reads, all guarded so a missing module can't throw ----
+function sysCleared(g,sid){ return UNI_OK?UNI.systemCleared(uni(),g,sid):false; }
+function sysUnlocked(g,sid){ return UNI_OK?UNI.systemUnlocked(uni(),g,sid):false; }
+function galUnlocked(g){ return UNI_OK?UNI.galaxyUnlocked(uni(),g):(g===1); }
+function galKnown(g){ return UNI_OK?UNI.galaxyKnown(uni(),g):(g===1); }
+function drivePieces(g){ return UNI_OK?UNI.drivePieces(uni(),g):0; }
+function driveTotal(g){ return UNI_OK?UNI.driveTotal(g):0; }
+function shipLv(id){ return UNI_OK?UNI.shipLevel(uni(),id):0; }
+function coinsSpendable(){ return UNI_OK?UNI.spendableCoins(uni()):0; }
+function plotsOwned(){ return UNI_OK?UNI.plotsUnlockedFor(uni()):7; }
+
+/* ---- COINS ----
+   A second currency, deliberately kept away from Void Shards. Shards
+   feed a finished, balanced economy (Forge, Shop, Mastery, Prestige);
+   hanging the entire Home Planet off them would have silently re-tuned
+   all four. Coins are earned from the same combat in parallel and spend
+   on exactly one thing: the colony. */
+function addCoins(n){
+  if(!run)return;
+  // Co-op's economy is entirely server-granted (see coopApplyReward --
+  // the client never adds a balance of its own there), and coopFinish()
+  // deliberately does not call finalizeRun(). Earning coins locally in a
+  // co-op run would therefore either be lost at the end or, worse, be a
+  // balance this client invented. Solo only.
+  if(COOP.active)return;
+  const mult=UNI_OK?UNI.coinMultiplier(uni()):1;
+  run.coins=(run.coins||0)+Math.max(0,Math.round(n*mult));
+}
+
+/* ---- REVEAL ----
+   One reusable "something just happened" title card. Used by component
+   recovery, first-time discoveries, drive completion and galaxy jumps
+   rather than four bespoke screens. Purely presentational: the reward
+   it announces was already granted before it was called. */
+let revealTimer=null;
+function showReveal(kind,title,sub,dur){
+  const box=el('uniReveal');
+  el('revealKind').textContent=kind||'';
+  el('revealTitle').textContent=title||'';
+  el('revealSub').textContent=sub||'';
+  box.classList.add('on');
+  if(revealTimer)clearTimeout(revealTimer);
+  revealTimer=setTimeout(()=>{box.classList.remove('on');revealTimer=null;},dur||2200);
+}
+
+/* ---- DISCOVERY ----
+   Arriving in a system reveals its star plus whatever the ship's
+   scanner and the Observatory can pick up from outside; clearing it
+   reveals everything. So survey gear buys information EARLY and never
+   buys something that fighting for it wouldn't eventually give. */
+function revealSites(galaxyId,systemId,count){
+  if(!UNI_OK)return [];
+  const sys=UNI.systemAt(galaxyId,systemId);
+  if(!sys)return [];
+  const u=uni();
+  const key=UNI.systemKey(galaxyId,systemId);
+  const have=(u.discovered[key]||[]).slice();
+  const added=[];
+  for(const site of (sys.discoveries||[])){
+    if(count>=0&&added.length>=count)break;
+    if(have.indexOf(site.id)!==-1)continue;
+    have.push(site.id);added.push(site);
+  }
+  if(added.length){u.discovered[key]=have;saveGameCloud();}
+  return added;
+}
+function siteFound(galaxyId,systemId,siteId){
+  const key=UNI_OK?UNI.systemKey(galaxyId,systemId):(galaxyId+':'+systemId);
+  return (uni().discovered[key]||[]).indexOf(siteId)!==-1;
+}
+
+/* ---- SYSTEM CLEAR PAYOUT ----
+   The single place a guardian's defeat turns into progression. Called
+   from victory(); every grant here is FIRST-CLEAR ONLY except coins, so
+   replaying a system for currency (which has always been allowed, and
+   is how the Forge is funded) can never farm drive pieces or ship
+   components. */
+function awardSystemClear(galaxyId,systemId){
+  if(!UNI_OK)return {first:false};
+  const sys=UNI.systemAt(galaxyId,systemId);
+  if(!sys)return {first:false};
+  const u=uni();
+  const key=UNI.systemKey(galaxyId,systemId);
+  const first=!u.systems[key];
+
+  u.systems[key]=1;
+  const newSites=revealSites(galaxyId,systemId,-1); // a cleared system is a surveyed one
+
+  let piece=null,part=null,driveDone=false;
+  if(first){
+    // Galaxy Drive piece
+    const total=UNI.driveTotal(galaxyId);
+    const held=UNI.drivePieces(u,galaxyId);
+    if(held<total){u.drive[String(galaxyId)]=held+1;piece=sys.drivePiece||'DRIVE COMPONENT';}
+    driveDone=UNI.driveComplete(u,galaxyId);
+    // Ship component
+    if(sys.part&&UNI.SHIP_SYSTEM_BY_ID[sys.part.system]){
+      const cur=UNI.shipLevel(u,sys.part.system);
+      if(cur<UNI.SHIP_PART_MAX){
+        u.ship[sys.part.system]=cur+1;
+        part=sys.part;
+      }
+    }
+  }
+  return {first:first,piece:piece,part:part,driveDone:driveDone,sites:newSites,system:sys};
+}
+
+/* =================================================================
+   GALAXY MAP
+   The universe as a spiral of galaxy nodes. Unknown galaxies are drawn
+   and labelled as unknown rather than hidden, because a blank space
+   past the edge of the map says "there is nothing there" and a masked
+   node says "there is something there you cannot see yet" -- which is
+   the whole point.
+   ================================================================= */
+// A serpentine route rather than a spiral. A spiral looks more like a
+// galaxy cluster, but ten nodes on one meant labels overlapping each
+// other and the last galaxies sitting behind the dock -- and a map you
+// cannot read is not atmospheric, it is broken. The serpentine gives
+// every node the same generous spacing, keeps the whole route inside
+// the band between the title and the dock at any viewport, and still
+// reads as a path through space because of the curved corridors drawn
+// between the nodes.
+function galaxyLayout(){
+  const out=[];
+  if(!UNI_OK)return out;
+  const s=Math.min(W,H);
+  const n=UNI.GALAXIES.length;
+  const perRow=Math.min(5,n);
+  const rows=Math.ceil(n/perRow);
+  // The safe band: below the title block, above the dock.
+  const top=Math.max(120,H*0.22),bottom=Math.min(H-210,H*0.70);
+  const rowGap=rows>1?(bottom-top)/(rows-1):0;
+  for(let i=0;i<n;i++){
+    const g=UNI.GALAXIES[i];
+    const row=Math.floor(i/perRow),col=i%perRow;
+    // Odd rows run backwards so the route snakes instead of jumping
+    // back to the left edge between rows.
+    const c=(row%2===0)?col:(perRow-1-col);
+    const t=perRow>1?c/(perRow-1):0.5;
+    out.push({g:g,id:g.id,
+      x:W*0.13+W*0.74*t+galPan.x,
+      y:top+row*rowGap+Math.sin(c*1.25+row*1.7)*s*0.045+galPan.y,
+      r:Math.max(16,s*0.032)});
+  }
+  return out;
+}
+function drawGalaxyMap(){
+  if(!UNI_OK)return;
+  const nodes=galaxyLayout();
+  uniNodes=[];
+  const t=performance.now()*0.001;
+
+  // Connecting corridor between consecutive galaxies -- solid where the
+  // route is open, dashed where it is not.
+  for(let i=1;i<nodes.length;i++){
+    const a=nodes[i-1],b=nodes[i];
+    const open=galUnlocked(b.id);
+    ctx.save();
+    ctx.strokeStyle=open?'rgba(56,255,156,0.30)':'rgba(120,150,180,0.14)';
+    ctx.lineWidth=open?2:1.2;
+    if(!open)ctx.setLineDash([5,7]);
+    ctx.beginPath();ctx.moveTo(a.x,a.y);
+    const mx=(a.x+b.x)/2,my=(a.y+b.y)/2-34;
+    ctx.quadraticCurveTo(mx,my,b.x,b.y);
+    ctx.stroke();ctx.restore();
+  }
+
+  for(const n of nodes){
+    const g=n.g;
+    const known=galKnown(n.id),open=galUnlocked(n.id);
+    const cleared=UNI.driveComplete(uni(),n.id);
+    const sel=galSelectedId===n.id;
+    const col=known?g.color:[92,104,140];
+    const pulse=sel?1+Math.sin(t*3.4)*0.07:1;
+    const r=n.r*pulse;
+
+    ctx.globalCompositeOperation='lighter';
+    uniGlow(n.x,n.y,col,r*(open?2.9:1.9));
+    ctx.globalCompositeOperation='source-over';
+
+    // The galaxy itself: a little spiral, so it reads as a galaxy and
+    // not as another level button.
+    ctx.save();ctx.translate(n.x,n.y);ctx.rotate(t*0.11+n.id);
+    ctx.globalAlpha=open?0.95:0.42;
+    for(let arm=0;arm<2;arm++){
+      ctx.beginPath();
+      for(let k=0;k<=22;k++){
+        const kt=k/22;
+        const a=arm*Math.PI+kt*2.6;
+        const rr=r*0.28+kt*r*0.86;
+        const px=Math.cos(a)*rr,py=Math.sin(a)*rr*0.5;
+        if(k===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);
+      }
+      ctx.strokeStyle=rgba(col,0.75);ctx.lineWidth=2.1;ctx.stroke();
+    }
+    ctx.beginPath();ctx.arc(0,0,r*0.26,0,TAU);
+    ctx.fillStyle=rgba(known?[255,255,255]:col,open?0.9:0.5);ctx.fill();
+    ctx.globalAlpha=1;ctx.restore();
+
+    if(sel){
+      ctx.beginPath();ctx.arc(n.x,n.y,r*1.7,0,TAU);
+      ctx.strokeStyle=rgba(col,0.85);ctx.lineWidth=1.6;ctx.stroke();
+    }
+
+    ctx.textAlign='center';
+    ctx.font='700 11px Orbitron,sans-serif';
+    ctx.fillStyle=known?(open?'#eafcff':'#9fc0d0'):'#5e7182';
+    ctx.fillText(known?g.name:'? ? ? ? ?',n.x,n.y+r*1.85+13);
+    ctx.font='600 9px Orbitron,sans-serif';
+    ctx.fillStyle=cleared?'#38ff9c':(open?'rgba(0,240,255,.62)':'rgba(120,150,180,.45)');
+    const tot=UNI.driveTotal(n.id);
+    ctx.fillText(!known?'DATA UNAVAILABLE':cleared?'CONQUERED':
+      (!open?'LOCKED':(tot>0?(drivePieces(n.id)+' / '+tot+' DRIVE'):'SURVEY IN PROGRESS')),n.x,n.y+r*1.85+26);
+    ctx.textAlign='left';
+
+    uniNodes.push({id:n.id,x:n.x,y:n.y,r:Math.max(30,r*1.7),kind:'galaxy'});
+  }
+}
+function refreshGalaxyUI(){
+  if(!UNI_OK)return;
+  const g=UNI.galaxyById(galSelectedId);
+  const known=galKnown(galSelectedId),open=galUnlocked(galSelectedId);
+  const playable=UNI.isPlayable(galSelectedId);
+  const total=UNI.driveTotal(galSelectedId);
+  const held=drivePieces(galSelectedId);
+
+  el('galName').textContent=known&&g?(g.subtitle+' — '+g.name):'UNCHARTED REGION';
+  el('galDesc').textContent=!known?'No survey data has ever returned from this region.':
+    (g?g.theme:'');
+
+  const meter=el('galDrive');meter.innerHTML='';
+  if(known&&playable){
+    for(let i=0;i<total;i++){
+      const pip=document.createElement('div');
+      pip.className='drive-pip'+(i<held?' on':'');
+      meter.appendChild(pip);
+    }
+  }
+
+  const btn=el('galEnter');
+  if(!known){btn.textContent='NO ROUTE';btn.disabled=true;}
+  else if(!open){btn.textContent='DRIVE INCOMPLETE';btn.disabled=true;}
+  else if(!playable){btn.textContent='DEEP SURVEY IN PROGRESS';btn.disabled=true;}
+  else {btn.textContent=(uni().galaxy===galSelectedId?'ENTER GALAXY':'JUMP TO GALAXY');btn.disabled=false;}
+
+  const corner=el('galCorner');
+  corner.innerHTML='<div class="uni-stat">GALAXIES <b>'+UNI.galaxiesCleared(uni())+' / '+UNI.GALAXIES.length+'</b></div>'+
+    '<div class="uni-stat">SYSTEMS <b>'+UNI.totalCleared(uni())+'</b></div>';
+  el('galSub').textContent=known&&open&&playable?'SELECT A GALAXY · ROUTE OPEN':'SELECT A GALAXY';
+}
+function pickGalaxy(sx,sy){
+  for(const n of uniNodes){
+    if(n.kind!=='galaxy')continue;
+    if(dist(sx,sy,n.x,n.y)<=n.r){
+      if(galSelectedId!==n.id){galSelectedId=n.id;SFX.ui();refreshGalaxyUI();}
+      return true;
+    }
+  }
+  return false;
+}
+function enterSelectedGalaxy(){
+  if(!UNI_OK)return;
+  if(!galUnlocked(galSelectedId)||!UNI.isPlayable(galSelectedId))return;
+  const changing=uni().galaxy!==galSelectedId;
+  uni().galaxy=galSelectedId;
+  uniGalaxyId=galSelectedId;
+  // Land on the first system that is still unfinished, so re-entering a
+  // half-explored galaxy puts the cursor where the player left off.
+  const list=curGalaxySystems();
+  uniSystemIdx=0;
+  for(let i=0;i<list.length;i++){
+    if(!sysCleared(uniGalaxyId,list[i].id)){uniSystemIdx=i;break;}
+    uniSystemIdx=i;
+  }
+  saveGameCloud();
+  if(changing){
+    const g=UNI.galaxyById(galSelectedId);
+    travelFx=1;whiteT=0.5;SFX.portal();
+    showReveal('GALAXY DRIVE ENGAGED',g?g.name:'NEW GALAXY',g?g.theme:'',2600);
+  }else SFX.ui();
+  go('system');
+}
+
+/* =================================================================
+   SOLAR SYSTEM MAP
+   The galaxy's systems as a chain of stars, each showing its own
+   contents in orbit: found sites as lit markers, unfound ones as faint
+   question marks. So a system you have never visited is visibly full of
+   things you cannot identify, which is what makes going there a
+   question rather than a chore.
+   ================================================================= */
+function systemLayout(){
+  const out=[];
+  const list=curGalaxySystems();
+  if(!list.length)return out;
+  const s=Math.min(W,H);
+  // On a wide viewport the discovery log sits against the left edge, so
+  // the chain starts to the right of it; on a phone the log is a strip
+  // under the title instead (see the stylesheet) and the chain gets the
+  // full width back.
+  const narrow=W<=760||H<=520;
+  const left=narrow?W*0.06:Math.min(W*0.34,336);
+  const right=W*0.94;
+  const span=Math.min(right-left,list.length*Math.max(104,s*0.15));
+  const x0=left+((right-left)-span)/2+sysPan.x;
+  const cy=(narrow?H*0.52:H*0.46)+sysPan.y;
+  for(let i=0;i<list.length;i++){
+    const t=list.length>1?i/(list.length-1):0.5;
+    out.push({sys:list[i],idx:i,
+      x:x0+span*t,
+      y:cy+Math.sin(t*Math.PI*1.65+0.4)*s*0.11,
+      r:Math.max(13,s*0.026)});
+  }
+  return out;
+}
+function drawSystemMap(){
+  if(!UNI_OK)return;
+  const g=curGalaxy();
+  const nodes=systemLayout();
+  uniNodes=[];
+  const t=performance.now()*0.001;
+  const gcol=g?g.color:[0,240,255];
+
+  for(let i=1;i<nodes.length;i++){
+    const a=nodes[i-1],b=nodes[i];
+    const open=sysUnlocked(uniGalaxyId,b.sys.id);
+    ctx.save();
+    ctx.strokeStyle=open?rgba(gcol,0.34):'rgba(120,150,180,0.13)';
+    ctx.lineWidth=open?1.8:1.1;
+    if(!open)ctx.setLineDash([4,6]);
+    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+    ctx.restore();
+  }
+
+  for(const n of nodes){
+    const sys=n.sys;
+    const open=sysUnlocked(uniGalaxyId,sys.id);
+    const done=sysCleared(uniGalaxyId,sys.id);
+    const sel=n.idx===uniSystemIdx;
+    const col=done?[56,255,156]:(open?gcol:[110,135,165]);
+    const r=n.r*(sel?1.13+Math.sin(t*3.2)*0.05:1);
+
+    // Orbiting sites. A system's contents are visible from here even
+    // when unidentified -- that is the hook.
+    const sites=sys.discoveries||[];
+    for(let i=0;i<sites.length;i++){
+      const found=siteFound(uniGalaxyId,sys.id,sites[i].id);
+      const meta=UNI.DISCOVERY_KINDS[sites[i].kind]||UNI.DISCOVERY_KINDS.planet;
+      const orb=r*2.05+i*(r*0.52);
+      const a=t*(0.16+i*0.045)+i*1.9+n.idx;
+      const ox=n.x+Math.cos(a)*orb,oy=n.y+Math.sin(a)*orb*0.42;
+      ctx.save();
+      ctx.globalAlpha=found?0.95:0.38;
+      if(found){
+        drawGlow(ox,oy,meta.color,7);
+        ctx.font='11px Rajdhani,sans-serif';ctx.textAlign='center';
+        ctx.fillStyle=rgb(meta.color);ctx.fillText(meta.glyph,ox,oy+4);
+      }else{
+        ctx.font='700 10px Orbitron,sans-serif';ctx.textAlign='center';
+        ctx.fillStyle='rgba(150,175,195,0.75)';ctx.fillText('?',ox,oy+4);
+      }
+      ctx.restore();
+    }
+    ctx.textAlign='left';
+
+    ctx.globalCompositeOperation='lighter';
+    uniGlow(n.x,n.y,col,r*(open?3.1:1.7));
+    ctx.globalCompositeOperation='source-over';
+    ctx.beginPath();ctx.arc(n.x,n.y,r,0,TAU);
+    ctx.fillStyle=rgba(col,open?0.95:0.5);ctx.fill();
+    if(sel){
+      ctx.beginPath();ctx.arc(n.x,n.y,r*1.75,0,TAU);
+      ctx.strokeStyle=rgba(col,0.9);ctx.lineWidth=1.5;ctx.stroke();
+    }
+    if(!open){
+      ctx.font='700 13px Orbitron,sans-serif';ctx.textAlign='center';
+      ctx.fillStyle='rgba(200,220,235,0.6)';ctx.fillText('✕',n.x,n.y+4.5);
+      ctx.textAlign='left';
+    }
+
+    ctx.textAlign='center';
+    ctx.font='700 10.5px Orbitron,sans-serif';
+    ctx.fillStyle=open?'#eafcff':'#6e8ca0';
+    ctx.fillText(open?sys.name:'UNCHARTED',n.x,n.y+r*2.0+40);
+    ctx.font='600 8.5px Orbitron,sans-serif';
+    ctx.fillStyle=done?'#38ff9c':(open?'rgba(0,240,255,.6)':'rgba(120,150,180,.45)');
+    ctx.fillText(done?'✓ CLEARED':(open?'AWAITING SURVEY':'LOCKED'),n.x,n.y+r*2.0+52);
+    ctx.textAlign='left';
+
+    uniNodes.push({id:n.idx,x:n.x,y:n.y,r:Math.max(28,r*2.0),kind:'system'});
+  }
+}
+function refreshSystemUI(){
+  if(!UNI_OK)return;
+  const g=curGalaxy(),sys=curSystem();
+  el('sysGalaxyName').textContent=g?g.name:'—';
+  el('sysGalaxySub').textContent=g?(g.subtitle+' · '+g.systems.length+' SYSTEMS'):'';
+
+  const corner=el('sysCorner');
+  const held=drivePieces(uniGalaxyId),total=driveTotal(uniGalaxyId);
+  corner.innerHTML='<div class="uni-stat drive">GALAXY DRIVE <b>'+held+' / '+total+'</b></div>'+
+    '<div class="uni-stat coin">◆ <b>'+fmt(coinsSpendable())+'</b> COINS</div>'+
+    '<div class="uni-stat">◇ <b>'+fmt(spendableShards())+'</b> SHARDS</div>';
+
+  const list=el('sysDisc');list.innerHTML='';
+  if(sys){
+    const open=sysUnlocked(uniGalaxyId,sys.id);
+    for(const site of (sys.discoveries||[])){
+      const found=open&&siteFound(uniGalaxyId,sys.id,site.id);
+      const meta=UNI.DISCOVERY_KINDS[site.kind]||UNI.DISCOVERY_KINDS.planet;
+      const row=document.createElement('div');
+      row.className='disc '+(found?'found':'unknown');
+      const collectible=UNI.DECORATIONS.some(d=>d.from===site.id);
+      row.innerHTML='<div class="dg" style="color:'+(found?rgb(meta.color):'#6e8ca0')+'">'+
+        (found?meta.glyph:'?')+'</div><div><div class="dn">'+
+        (found?site.name.toUpperCase():meta.unknown)+'</div>'+
+        (found?'<div class="dd">'+site.note+'</div>':'')+
+        (found&&collectible?'<div class="dtag">RELIC RECOVERED</div>':'')+'</div>';
+      list.appendChild(row);
+    }
+  }
+
+  const nameEl=el('sysName'),descEl=el('sysDesc'),btn=el('sysLaunch');
+  if(!sys){nameEl.textContent='NO DESTINATION';descEl.textContent='';btn.disabled=true;return;}
+  const open=sysUnlocked(uniGalaxyId,sys.id);
+  const done=sysCleared(uniGalaxyId,sys.id);
+  const lv=resolveSystemLevel(uniGalaxyId,sys);
+  nameEl.innerHTML=(done?'<span class="uni-pill ok">CLEARED</span>':
+    open?'<span class="uni-pill new">OPEN</span>':'<span class="uni-pill lock">LOCKED</span>')+
+    (open?sys.name:'UNCHARTED SYSTEM');
+  if(!open){
+    const list2=curGalaxySystems();
+    const prev=list2[uniSystemIdx-1];
+    descEl.textContent=prev?('Clear '+prev.name+' to open the corridor to this system.')
+      :'No route to this system yet.';
+  }else{
+    const found=(uni().discovered[UNI.systemKey(uniGalaxyId,sys.id)]||[]).length;
+    const totalSites=(sys.discoveries||[]).length;
+    descEl.textContent=sys.brief+'  ·  '+sys.star+'  ·  SURVEY '+found+'/'+totalSites+
+      (lv?('  ·  GUARDIAN: '+(BOSSMETA[lv.boss]?BOSSMETA[lv.boss].name:'UNKNOWN')):'')+
+      (done?'':('  ·  REWARD: '+(sys.drivePiece||'DRIVE COMPONENT')+
+        (sys.part?(' + '+sys.part.name):'')));
+  }
+  btn.disabled=!open||!lv;
+  btn.textContent=done?'RETURN TO SYSTEM':'SET COURSE';
+  el('sysPrev').disabled=uniSystemIdx<=0;
+  el('sysNext').disabled=uniSystemIdx>=curGalaxySystems().length-1;
+}
+function selectSystem(idx){
+  const list=curGalaxySystems();
+  if(!list.length)return;
+  const next=clamp(idx,0,list.length-1);
+  if(next===uniSystemIdx)return;
+  uniSystemIdx=next;SFX.ui();refreshSystemUI();
+}
+function pickSystem(sx,sy){
+  for(const n of uniNodes){
+    if(n.kind!=='system')continue;
+    if(dist(sx,sy,n.x,n.y)<=n.r){selectSystem(n.id);return true;}
+  }
+  return false;
+}
+// Arriving at a system is itself an act of exploration: the survey runs
+// the moment a course is set, before a shot is fired.
+function launchSelectedSystem(){
+  const sys=curSystem();
+  if(!sys||!sysUnlocked(uniGalaxyId,sys.id))return;
+  const lv=resolveSystemLevel(uniGalaxyId,sys);
+  if(!lv)return;
+  const found=revealSites(uniGalaxyId,sys.id,UNI_OK?UNI.surveyReveal(uni()):1);
+  if(found.length){
+    const first=found[0];
+    const meta=UNI.DISCOVERY_KINDS[first.kind]||UNI.DISCOVERY_KINDS.planet;
+    showReveal('SURVEY COMPLETE',first.name,meta.label+' · '+first.note,2400);
+  }
+  selectedLevel=lv.levelIdx>=0?lv.levelIdx:0;
+  pendingSystem={galaxyId:uniGalaxyId,systemId:sys.id,level:lv};
+  SFX.ui();
+  go('weapons');
+}
+// The system a launch is armed for. Cleared whenever the player backs
+// out to a non-launching screen so a stale destination can never leak
+// into a later run.
+let pendingSystem=null;
+
+/* =================================================================
+   HOME PLANET -- a real sphere, on the 2D canvas
+
+   The planet is not a menu with a picture of a planet on it. It is
+   actual geometry: PLOT_COUNT hexagonal territory plots distributed
+   evenly over a unit sphere, rotated by the player's drag, projected
+   with perspective, back-face culled at the true horizon, depth-sorted,
+   and drawn with structures standing out along the surface normal. That
+   is what makes it rotate and zoom like a globe instead of sliding like
+   a sprite.
+
+   WHY NOT WebGL/Three.js. Voidbreak is a 2D canvas game that already
+   runs on iPads, and performance on exactly those devices is a stated
+   problem to fix rather than add to. A second renderer and a WebGL
+   context for a menu screen would have been the single most expensive
+   thing in the build. Everything below is arithmetic plus canvas path
+   calls -- about 120 hexagons and a handful of prisms per frame, drawn
+   only while the planet screen is open, and nothing at all during a run.
+
+   WHY FIBONACCI RATHER THAN A HEX GRID. A plane can be tiled with
+   hexagons; a sphere cannot (you always need twelve pentagons). A
+   Fibonacci sphere spreads N points with near-uniform spacing and no
+   seam, no pole singularity and no special cases, and drawing each
+   point's cell as a spherical hexagon reads exactly as the intended hex
+   territory -- with the honest property that a few cells near the poles
+   are slightly irregular, which is true of any real sphere tiling.
+   ================================================================= */
+
+const PLANET_PLOT_COUNT=UNI_OK?UNI.PLOT_COUNT:122;
+// Cell radius sized so hexagons of equal area tile the sphere: each
+// cell owns 4pi/N of surface, and a hexagon of circumradius R covers
+// (3*sqrt(3)/2)*R^2.
+const PLOT_R=Math.sqrt(8*Math.PI/(3*Math.sqrt(3)*PLANET_PLOT_COUNT));
+const PLANET_CAM_DIST=3.05;      // camera distance in planet radii
+// A fixed tilt baked into the geometry so that plot 0 -- the first plot
+// a player owns, and the point territory expands outward from -- faces
+// the camera at yaw 0, pitch 0.
+//
+// Why bake it in rather than aim the camera at it: the Fibonacci
+// distribution necessarily starts at a pole, and index order IS unlock
+// order (which the SERVER relies on to decide whether a plot is inside
+// your territory -- see voidbreak.js's buildOnPlanet). Re-indexing the
+// plots to start elsewhere would mean the client and server each
+// needing the same ordering; tilting the geometry costs one rotation at
+// startup, changes no index, and means the planet screen always opens
+// looking straight at the colony instead of at the empty hemisphere.
+// Chosen so that BASE_TILT + the default camera pitch lands exactly on
+// a quarter turn: plot 0 then projects to the dead centre of the globe
+// when the planet screen opens, which is where the player's own colony
+// should be when they arrive.
+const PLANET_BASE_TILT=Math.PI/2+0.14;
+let PLANET_PLOTS=[];
+
+function buildPlanetPlots(){
+  PLANET_PLOTS=[];
+  const n=PLANET_PLOT_COUNT;
+  const golden=Math.PI*(3-Math.sqrt(5));
+  for(let i=0;i<n;i++){
+    const y=n>1?1-(i/(n-1))*2:0;
+    const rr=Math.sqrt(Math.max(0,1-y*y));
+    const th=i*golden;
+    const bt=PLANET_BASE_TILT,cb=Math.cos(bt),sb=Math.sin(bt);
+    const ry=y*cb-Math.sin(th)*rr*sb;
+    const rz=y*sb+Math.sin(th)*rr*cb;
+    const nx=Math.cos(th)*rr,ny=ry,nz=rz;
+    // A tangent basis for the cell. The cross product with world-up
+    // degenerates exactly at the poles, so fall back to world-forward
+    // there rather than producing a zero-length axis.
+    let tx,ty,tz;
+    if(Math.abs(ny)>0.999){tx=1;ty=0;tz=0;}
+    else{
+      tx=-nz;ty=0;tz=nx;
+      const l=Math.hypot(tx,tz)||1;tx/=l;tz/=l;
+    }
+    // bitangent = normal x tangent
+    const bx=ny*tz-nz*ty, by=nz*tx-nx*tz, bz=nx*ty-ny*tx;
+    // Six spherical-hexagon corners, pushed back onto the sphere so the
+    // cell hugs the curvature instead of cutting a flat chord through it.
+    const corners=[];
+    for(let k=0;k<6;k++){
+      const a=k*Math.PI/3+(i%2?0.26:0);
+      const cx=nx+(tx*Math.cos(a)+bx*Math.sin(a))*PLOT_R;
+      const cy=ny+(ty*Math.cos(a)+by*Math.sin(a))*PLOT_R;
+      const cz=nz+(tz*Math.cos(a)+bz*Math.sin(a))*PLOT_R;
+      const l=Math.hypot(cx,cy,cz)||1;
+      corners.push([cx/l,cy/l,cz/l]);
+    }
+    PLANET_PLOTS.push({i:i,n:[nx,ny,nz],t:[tx,ty,tz],b:[bx,by,bz],c:corners,
+      // A stable per-plot jitter for terrain colour, so the surface has
+      // texture without a texture.
+      tint:(Math.sin(i*12.9898)*43758.5453)%1});
+  }
+}
+buildPlanetPlots();
+
+// ---- orbital camera ----
+// Pitch starts positive so the camera opens on the NORTH POLE, which is
+// where territory begins (plots are unlocked in index order and the
+// Fibonacci distribution starts at the pole). Without it a new player
+// would open their planet looking at the one hemisphere they own none
+// of, and conclude the screen was empty.
+const pcam={yaw:0,pitch:-0.14,zoom:1,vyaw:0.045,vpitch:0,drag:false};
+let planetSelPlot=-1;      // plot the player last tapped
+let planetBuildSel=null;   // building id armed for placement
+let planetBusy=false;      // one build request in flight at a time
+
+// A landscape phone is ~390px tall and the construction dock needs a
+// fixed share of it, so the globe is drawn smaller and higher there
+// rather than being half-hidden behind the dock. Driven by height alone
+// because that is the dimension that actually runs out.
+function planetShort(){ return H<520; }
+function planetScreenRadius(){ return Math.min(W,H)*(planetShort()?0.25:0.30)*pcam.zoom; }
+// The radius the sphere's SILHOUETTE actually occupies on screen. It is
+// not planetScreenRadius(): under perspective the limb is magnified,
+// and a unit sphere seen from D projects its horizon to
+// Rs * D / sqrt(D^2 - 1). Drawing the body, the rim and the terminator
+// at the un-magnified radius is what left the outer ring of hex cells
+// hanging outside the planet they belong to.
+function planetSilhouette(){
+  const D=PLANET_CAM_DIST;
+  return planetScreenRadius()*D/Math.sqrt(D*D-1);
+}
+// The planet sits a little above centre so it clears the construction
+// dock at the bottom of the screen.
+function planetCenterY(){ return H*(planetShort()?0.36:0.455); }
+
+// planetRotate() is called roughly 900 times a frame (every plot's
+// centre and six corners, plus twelve points per structure). Computing
+// four trig functions inside it meant ~3,600 sin/cos per frame for a
+// camera orientation that only changes once per frame, so the camera's
+// sines and cosines are cached here and refreshed by syncPlanetTrig().
+let pcYawC=1,pcYawS=0,pcPitchC=1,pcPitchS=0;
+function syncPlanetTrig(){
+  pcYawC=Math.cos(pcam.yaw);pcYawS=Math.sin(pcam.yaw);
+  pcPitchC=Math.cos(pcam.pitch);pcPitchS=Math.sin(pcam.pitch);
+  ppRs=planetScreenRadius();ppCy=planetCenterY();
+}
+function planetRotate(p){
+  const x=p[0]*pcYawC+p[2]*pcYawS;
+  const z=-p[0]*pcYawS+p[2]*pcYawC;
+  return [x,p[1]*pcPitchC-z*pcPitchS,p[1]*pcPitchS+z*pcPitchC];
+}
+// Perspective projection from PLANET_CAM_DIST. Points behind the true
+// horizon (z <= 1/D for a unit sphere) are off the visible cap and are
+// reported as not visible, which is what gives the globe a correct
+// silhouette instead of a flat disc of overlapping cells.
+// Same reasoning as syncPlanetTrig: the screen radius and centre are
+// constant for a frame, so they are read once instead of per point.
+let ppRs=1,ppCy=0;
+function planetProject(v){
+  const D=PLANET_CAM_DIST;
+  const k=ppRs*D/(D-v[2]);
+  return {x:W/2+v[0]*k, y:ppCy-v[1]*k, z:v[2], vis:v[2]>1/D};
+}
+
+function planetLight(nrot){
+  // One fixed key light from the upper-left-front.
+  const L=[-0.46,0.58,0.67];
+  return clamp(nrot[0]*L[0]+nrot[1]*L[1]+nrot[2]*L[2],0,1);
+}
+
+function drawHomePlanet(){
+  syncPlanetTrig();
+  const t=performance.now()*0.001;
+  const owned=plotsOwned();
+  const u=uni();
+  const buildings=(u.planet&&u.planet.buildings)||{};
+  const decorations=(u.planet&&u.planet.decorations)||{};
+  const Rs=planetSilhouette();
+  const cyp=planetCenterY();
+
+  // Atmosphere and the body behind the plots, so the gaps between cells
+  // and the ragged edge where cells meet the horizon read as planet
+  // rather than as holes.
+  // Drawn as a gradient rather than through makeGlow: at this size the
+  // cached bitmap would be ~800px square and would be re-minted on every
+  // zoom step. A gradient fill costs nothing to keep.
+  ctx.globalCompositeOperation='lighter';
+  // Capped at the screen diagonal: past that the gradient is a
+  // full-screen wash whose extra radius is pure fill cost.
+  const atmoR=Math.min(Rs*1.5,Math.hypot(W,H)*0.6);
+  const atmo=ctx.createRadialGradient(W/2,cyp,Math.min(Rs*0.9,atmoR*0.6),W/2,cyp,atmoR);
+  atmo.addColorStop(0,'rgba(70,140,235,0.22)');
+  atmo.addColorStop(1,'rgba(70,140,235,0)');
+  ctx.fillStyle=atmo;
+  ctx.beginPath();ctx.arc(W/2,cyp,atmoR,0,TAU);ctx.fill();
+  ctx.globalCompositeOperation='source-over';
+  const bg=ctx.createRadialGradient(W/2-Rs*0.32,cyp-Rs*0.38,Rs*0.08,W/2,cyp,Rs);
+  bg.addColorStop(0,'#3d5590');bg.addColorStop(0.62,'#1d2a54');bg.addColorStop(1,'#0b1128');
+  ctx.beginPath();ctx.arc(W/2,cyp,Rs,0,TAU);ctx.fillStyle=bg;ctx.fill();
+
+  // Project once, cull, depth sort. Far cells first so nearer buildings
+  // paint over the ones behind them.
+  const draw=[];
+  for(const plot of PLANET_PLOTS){
+    const nrot=planetRotate(plot.n);
+    if(nrot[2]<=1/PLANET_CAM_DIST)continue;
+    const c=planetProject(nrot);
+    draw.push({plot:plot,nrot:nrot,cx:c.x,cy:c.y,z:nrot[2],light:planetLight(nrot)});
+  }
+  draw.sort((a,b)=>a.z-b.z);
+
+  const hexPts=new Array(6);
+  for(const d of draw){
+    const plot=d.plot;
+    const idx=plot.i;
+    const isOwned=idx<owned;
+    const b=buildings[String(idx)];
+    const dec=decorations[String(idx)];
+    const sel=planetSelPlot===idx;
+
+    // A cell whose corners straddle the horizon projects to a wildly
+    // distorted polygon (the far corners magnify toward infinity as z
+    // approaches D), which is what produced spikes off the limb. Drop
+    // the whole cell instead: the sphere body drawn underneath shows
+    // through, and the result reads as the surface curving away.
+    let clipped=false;
+    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+    for(let k=0;k<6;k++){
+      hexPts[k]=planetProject(planetRotate(plot.c[k]));
+      if(!hexPts[k].vis){clipped=true;break;}
+      if(hexPts[k].x<minX)minX=hexPts[k].x;
+      if(hexPts[k].x>maxX)maxX=hexPts[k].x;
+      if(hexPts[k].y<minY)minY=hexPts[k].y;
+      if(hexPts[k].y>maxY)maxY=hexPts[k].y;
+    }
+    if(clipped)continue;
+    // Zoomed in, most of the sphere is off-screen. Rejecting those cells
+    // before the fill/stroke is what keeps zooming in from costing more
+    // than looking at the whole planet.
+    if(maxX<0||minX>W||maxY<0||minY>H)continue;
+    ctx.beginPath();
+    ctx.moveTo(hexPts[0].x,hexPts[0].y);
+    for(let k=1;k<6;k++)ctx.lineTo(hexPts[k].x,hexPts[k].y);
+    ctx.closePath();
+
+    // Ambient floor of 0.42 rather than near-zero: an unlit hemisphere
+    // is physically honest and completely unreadable, and the player
+    // has to be able to see every plot they own in order to build on it.
+    const lit=0.46+d.light*0.60;
+    if(isOwned){
+      // Claimed ground: terraformed teal, brighter under a structure so
+      // developed territory reads at a glance.
+      const base=b?[70,146,166]:[50,116,142];
+      const tintOffset=plot.tint*16;
+      ctx.fillStyle='rgb('+Math.round(Math.min(255,(base[0]+tintOffset)*lit))+','+
+        Math.round(Math.min(255,(base[1]+tintOffset)*lit))+','+
+        Math.round(Math.min(255,(base[2]+tintOffset)*lit))+')';
+    }else{
+      // Unclaimed ground: bare violet-grey rock, obviously not yours.
+      const g=(58+plot.tint*20)*lit;
+      ctx.fillStyle='rgb('+Math.round(g)+','+Math.round(g*0.94)+','+Math.round(g*1.22)+')';
+    }
+    ctx.fill();
+    ctx.lineWidth=1;
+    ctx.strokeStyle=isOwned?'rgba(120,255,240,'+(0.18+d.light*0.30).toFixed(3)+')'
+                           :'rgba(150,160,195,'+(0.08+d.light*0.14).toFixed(3)+')';
+    ctx.stroke();
+
+    if(sel){
+      ctx.strokeStyle='rgba(255,201,92,'+(0.65+Math.sin(t*6)*0.25).toFixed(3)+')';
+      ctx.lineWidth=2.2;ctx.stroke();
+    }
+
+    if(b)drawPlanetStructure(plot,b,d.light,false);
+    else if(dec)drawPlanetStructure(plot,dec,d.light,true);
+    else if(isOwned&&planetBuildSel&&!sel){
+      // A faint marker on every buildable plot while a structure is
+      // armed, so "where can this go" is answered on the planet rather
+      // than in a paragraph.
+      ctx.beginPath();ctx.arc(d.cx,d.cy,2.2,0,TAU);
+      ctx.fillStyle='rgba(0,240,255,'+(0.22+d.light*0.3).toFixed(3)+')';ctx.fill();
+    }
+  }
+
+  // Terminator shading over the whole globe, drawn last so it unifies
+  // the cells into one body. Kept gentle -- it is here to give the
+  // sphere form, not to hide half of it.
+  ctx.save();
+  ctx.beginPath();ctx.arc(W/2,cyp,Rs,0,TAU);ctx.clip();
+  const sh=ctx.createRadialGradient(W/2-Rs*0.42,cyp-Rs*0.46,Rs*0.12,W/2,cyp,Rs*1.14);
+  sh.addColorStop(0,'rgba(255,248,225,0.16)');
+  sh.addColorStop(0.55,'rgba(0,0,0,0)');
+  sh.addColorStop(1,'rgba(4,7,20,0.42)');
+  ctx.fillStyle=sh;ctx.fillRect(W/2-Rs,cyp-Rs,Rs*2,Rs*2);
+  ctx.restore();
+
+  // Rim light
+  ctx.beginPath();ctx.arc(W/2,cyp,Rs,0,TAU);
+  ctx.strokeStyle='rgba(140,215,255,0.5)';ctx.lineWidth=1.8;ctx.stroke();
+
+  // A moon and the player's own ship in orbit, to sell the scale and to
+  // give the Ship Hangar something to point at.
+  const ma=t*0.13;
+  const mx=W/2+Math.cos(ma)*Rs*1.38,my=cyp+Math.sin(ma)*Rs*0.44;
+  ctx.globalCompositeOperation='lighter';drawGlow(mx,my,[170,190,220],11);
+  ctx.globalCompositeOperation='source-over';
+  ctx.beginPath();ctx.arc(mx,my,Math.max(4,Rs*0.045),0,TAU);
+  ctx.fillStyle='#b8c6de';ctx.fill();
+  if(UNI_OK&&UNI.hasBuilding(uni(),'hangar')){
+    const sa=-t*0.31;
+    const sx=W/2+Math.cos(sa)*Rs*1.16,sy=cyp+Math.sin(sa)*Rs*0.33;
+    ctx.save();ctx.translate(sx,sy);ctx.rotate(sa+Math.PI/2);
+    const hull=skinHull(),glow=skinGlow();
+    ctx.beginPath();ctx.moveTo(0,-8);ctx.lineTo(5.5,6);ctx.lineTo(0,3.5);ctx.lineTo(-5.5,6);ctx.closePath();
+    ctx.fillStyle=rgb(hull);ctx.fill();
+    ctx.strokeStyle=rgba(glow,0.85);ctx.lineWidth=1;ctx.stroke();
+    ctx.restore();
+    ctx.globalCompositeOperation='lighter';drawGlow(sx,sy,glow,13);
+    ctx.globalCompositeOperation='source-over';
+  }
+}
+
+// A structure standing on its plot: a hexagonal prism raised along the
+// surface normal, with its six side faces lit individually so the
+// silhouette reads as a solid object rather than a decal.
+function drawPlanetStructure(plot,entry,light,isDecoration){
+  const meta=isDecoration
+    ? (UNI_OK?UNI.DECORATION_BY_ID[entry.id]:null)
+    : (UNI_OK?UNI.BUILDING_BY_ID[entry.id]:null);
+  if(!meta)return;
+  const level=Math.max(1,Math.floor(Number(entry.level)||1));
+  // Height grows with level, so a developed colony is visibly taller.
+  const h=(meta.height||0.12)*(isDecoration?1:(0.72+level*0.22));
+  const w=0.64; // footprint as a fraction of the plot's own radius
+
+  const base=[],top=[];
+  for(let k=0;k<6;k++){
+    const a=k*Math.PI/3;
+    const ox=plot.t[0]*Math.cos(a)*PLOT_R*w+plot.b[0]*Math.sin(a)*PLOT_R*w;
+    const oy=plot.t[1]*Math.cos(a)*PLOT_R*w+plot.b[1]*Math.sin(a)*PLOT_R*w;
+    const oz=plot.t[2]*Math.cos(a)*PLOT_R*w+plot.b[2]*Math.sin(a)*PLOT_R*w;
+    base.push(planetProject(planetRotate([plot.n[0]+ox,plot.n[1]+oy,plot.n[2]+oz])));
+    const s=1+h;
+    top.push(planetProject(planetRotate([plot.n[0]*s+ox*0.78,plot.n[1]*s+oy*0.78,plot.n[2]*s+oz*0.78])));
+  }
+  const col=meta.color||[0,240,255];
+  const lit=0.5+light*0.55;
+
+  // Side faces, darkest first so the far side never paints over the near.
+  for(let k=0;k<6;k++){
+    const k2=(k+1)%6;
+    // Screen-space winding tells us which faces point away; skipping
+    // them is both correct and half the fill cost.
+    const cross=(base[k2].x-base[k].x)*(top[k].y-base[k].y)-(base[k2].y-base[k].y)*(top[k].x-base[k].x);
+    if(cross>0)continue;
+    const face=0.52+0.48*Math.abs(Math.cos(k*Math.PI/3+pcam.yaw));
+    ctx.beginPath();
+    ctx.moveTo(base[k].x,base[k].y);ctx.lineTo(base[k2].x,base[k2].y);
+    ctx.lineTo(top[k2].x,top[k2].y);ctx.lineTo(top[k].x,top[k].y);ctx.closePath();
+    ctx.fillStyle='rgba('+Math.round(col[0]*lit*face*0.62)+','+
+      Math.round(col[1]*lit*face*0.62)+','+Math.round(col[2]*lit*face*0.62)+',1)';
+    ctx.fill();
+  }
+  // Cap
+  ctx.beginPath();ctx.moveTo(top[0].x,top[0].y);
+  for(let k=1;k<6;k++)ctx.lineTo(top[k].x,top[k].y);
+  ctx.closePath();
+  ctx.fillStyle='rgba('+Math.round(Math.min(255,col[0]*lit))+','+
+    Math.round(Math.min(255,col[1]*lit))+','+Math.round(Math.min(255,col[2]*lit))+',1)';
+  ctx.fill();
+  ctx.strokeStyle=rgba(col,0.85*lit);ctx.lineWidth=1;ctx.stroke();
+
+  // A light on top, brightest on the front of the globe.
+  let tcx=0,tcy=0;for(let k=0;k<6;k++){tcx+=top[k].x;tcy+=top[k].y;}
+  tcx/=6;tcy/=6;
+  ctx.globalCompositeOperation='lighter';
+  ctx.globalAlpha=0.55*lit;
+  uniGlow(tcx,tcy,col,isDecoration?8:8+level*4);
+  ctx.globalAlpha=1;
+  ctx.globalCompositeOperation='source-over';
+}
+
+// Nearest visible, owned plot to a screen point. Only the front cap is
+// considered (planetProject reports visibility), so a tap can never
+// select something on the far side of the planet.
+function pickPlot(sx,sy){
+  syncPlanetTrig();
+  const owned=plotsOwned();
+  let best=-1,bestD=Infinity;
+  const threshold=planetScreenRadius()*PLOT_R*1.25;
+  for(const plot of PLANET_PLOTS){
+    if(plot.i>=owned)continue;
+    const nrot=planetRotate(plot.n);
+    if(nrot[2]<=1/PLANET_CAM_DIST)continue;
+    const p=planetProject(nrot);
+    const d=dist(sx,sy,p.x,p.y);
+    if(d<bestD){bestD=d;best=plot.i;}
+  }
+  return bestD<=threshold?best:-1;
+}
+
+function updatePlanetCam(dt){
+  if(!pcam.drag){
+    // Inertia, then a slow idle spin once the player stops touching it
+    // -- enough to read as alive, slow enough not to fight a reader.
+    pcam.yaw+=pcam.vyaw*dt*60*0.016;
+    pcam.pitch+=pcam.vpitch*dt*60*0.016;
+    pcam.vyaw+=(0.045-pcam.vyaw)*Math.min(1,dt*1.1);
+    pcam.vpitch*=Math.pow(0.02,dt);
+  }
+  // Clamped so the globe can never be flipped past its own poles, which
+  // is disorienting and has no upside.
+  pcam.pitch=clamp(pcam.pitch,-1.15,1.15);
+  if(pcam.yaw>TAU)pcam.yaw-=TAU;
+  if(pcam.yaw<0)pcam.yaw+=TAU;
+}
+
+/* ---- planet chrome ---- */
+function refreshPlanetUI(){
+  if(!UNI_OK)return;
+  const u=uni();
+  const owned=plotsOwned();
+  const built=UNI.countBuildings(u);
+  const tier=UNI.buildingLevel(u,'command');
+
+  el('planetName').textContent=tier>0?('HOME · TIER '+tier):'HOME';
+  el('planetSub').textContent=tier>0
+    ?(built+' STRUCTURE'+(built===1?'':'S')+' · '+owned+' / '+UNI.PLOT_COUNT+' PLOTS HELD')
+    :'UNDEVELOPED · BUILD A COMMAND CENTER TO BEGIN';
+
+  el('planetCorner').innerHTML=
+    '<div class="uni-stat coin">◆ <b>'+fmt(coinsSpendable())+'</b> COINS</div>'+
+    '<div class="uni-stat">TERRITORY <b>'+owned+' / '+UNI.PLOT_COUNT+'</b></div>'+
+    '<div class="uni-stat">SALVAGE <b>×'+UNI.coinMultiplier(u).toFixed(2)+'</b></div>';
+
+  // Build palette
+  const bar=el('buildBar');bar.innerHTML='';
+  for(const b of UNI.BUILDINGS){
+    const lv=UNI.buildingLevel(u,b.id);
+    const cost=UNI.buildingCost(u,b.id);
+    const reqMet=UNI.buildingRequirementMet(u,b.id);
+    const maxed=lv>=b.maxLevel;
+    const afford=cost!==null&&coinsSpendable()>=cost;
+    const card=document.createElement('div');
+    card.className='bcard'+(planetBuildSel===b.id?' sel':'')+
+      (maxed?' maxed':(!reqMet?' locked':''));
+    card.innerHTML='<div class="bg_" style="color:'+rgb(b.color)+'">'+b.glyph+'</div>'+
+      '<div class="bn">'+b.name+'</div>'+
+      (maxed?'<div class="bc free">MAX</div>'
+        :!reqMet?'<div class="bl">'+UNI.requirementText(b.id)+'</div>'
+        :'<div class="bc'+(cost===0?' free':'')+'" style="'+(afford?'':'color:#ff6b86')+'">'+
+          (cost===0?'FREE':fmt(cost)+' ◆')+'</div>')+
+      '<div class="bl">'+(lv>0?('LEVEL '+lv+' / '+b.maxLevel):'NOT BUILT')+'</div>';
+    if(!maxed&&reqMet){
+      card.addEventListener('click',()=>{
+        SFX.ui();
+        planetBuildSel=(planetBuildSel===b.id)?null:b.id;
+        refreshPlanetUI();
+      });
+    }else{
+      card.addEventListener('click',()=>{
+        SFX.error();
+        toast(maxed?(b.name+' IS AT MAXIMUM LEVEL'):UNI.requirementText(b.id));
+      });
+    }
+    bar.appendChild(card);
+  }
+
+  // Hint line reflects what the next tap will actually do.
+  const hint=el('buildHint');
+  if(planetBuildSel){
+    const b=UNI.BUILDING_BY_ID[planetBuildSel];
+    const lv=UNI.buildingLevel(u,planetBuildSel);
+    hint.textContent=lv>0
+      ?('TAP THE EXISTING '+b.name+' TO UPGRADE IT TO LEVEL '+(lv+1)+'.')
+      :('TAP ANY EMPTY PLOT TO SITE THE '+b.name+'.');
+  }else if(!UNI.hasBuilding(u,'command')){
+    hint.textContent='NOTHING STANDS HERE YET. THE COMMAND CENTER IS FREE — PICK IT AND TAP A PLOT.';
+  }else{
+    hint.textContent='SELECT A STRUCTURE, THEN TAP A PLOT. CLEARED SYSTEMS EXPAND YOUR TERRITORY.';
+  }
+
+  refreshPlotInfo();
+}
+
+function refreshPlotInfo(){
+  const box=el('plotInfo');
+  if(!UNI_OK||planetSelPlot<0){box.style.display='none';return;}
+  box.style.display='block';
+  const u=uni();
+  const b=(u.planet.buildings||{})[String(planetSelPlot)];
+  const dec=(u.planet.decorations||{})[String(planetSelPlot)];
+  if(b){
+    const meta=UNI.BUILDING_BY_ID[b.id];
+    box.innerHTML='<h4>'+(meta?meta.name:b.id)+'</h4><p>'+(meta?meta.desc:'')+'</p>'+
+      '<div class="pe">LEVEL '+b.level+' / '+(meta?meta.maxLevel:'?')+
+      (meta&&meta.effect?(' · '+meta.effect(b.level)):'')+'</div>';
+  }else if(dec){
+    const meta=UNI.DECORATION_BY_ID[dec.id];
+    box.innerHTML='<h4>'+(meta?meta.name:dec.id)+'</h4><p>Recovered in the field and brought home.</p>';
+  }else{
+    box.innerHTML='<h4>PLOT '+String(planetSelPlot+1).padStart(3,'0')+'</h4>'+
+      '<p>Empty ground, surveyed and yours.</p>'+
+      (planetBuildSel?'<div class="pe">TAP AGAIN TO BUILD HERE</div>':'');
+  }
+}
+
+/* ---- construction, server-authoritative ----
+   The client never mutates the colony. It posts a plot and a building
+   id, the server decides against its own stored record whether that is
+   affordable and allowed (voidbreak.js's buildOnPlanet), and whatever
+   comes back is adopted. A guest with no account builds locally instead,
+   which is the same tier of trust the rest of a guest's save already
+   sits at -- there is nothing to defend when there is no account. */
+async function requestBuild(plot,buildingId){
+  if(planetBusy)return;
+  const u=uni();
+  const cost=UNI.buildingCost(u,buildingId);
+  if(cost===null){SFX.error();toast('NOTHING LEFT TO BUILD THERE');return;}
+  if(coinsSpendable()<cost){SFX.error();toast('NOT ENOUGH COINS');return;}
+  if(!UNI.buildingRequirementMet(u,buildingId)){SFX.error();toast(UNI.requirementText(buildingId));return;}
+
+  const meta=UNI.BUILDING_BY_ID[buildingId];
+  planetBusy=true;
+  try{
+    if(cloudSyncEnabled&&cloudSessionToken){
+      const res=await fetch('/voidbreak/planet/build',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({sessionToken:cloudSessionToken,plot:plot,buildingId:buildingId})});
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok||!data.ok){SFX.error();toast((data&&data.error)||'CONSTRUCTION REFUSED');return;}
+      if(data.endgame)adoptEndgame(data.endgame);
+      if(data.version)cloudSaveVersion=data.version;
+    }else{
+      // Offline/guest: apply the identical rules locally.
+      u.coinsSpent=(Math.floor(Number(u.coinsSpent)||0))+cost;
+      u.planet.buildings[String(plot)]={id:buildingId,level:UNI.buildingLevel(u,buildingId)+1};
+      saveGame();
+    }
+    SFX.portal();
+    const lv=UNI.buildingLevel(uni(),buildingId);
+    showReveal(lv>1?'STRUCTURE UPGRADED':'STRUCTURE COMPLETE',meta.name,
+      meta.effect?meta.effect(lv):'',1700);
+    planetSelPlot=plot;
+    // A structure is a commitment, not a brush -- disarm after placing
+    // so a second tap cannot accidentally spend again.
+    planetBuildSel=null;
+    refreshPlanetUI();
+    refreshMenuStats();
+  }catch(e){
+    SFX.error();toast('CONNECTION LOST — TRY AGAIN');
+  }finally{
+    planetBusy=false;
+  }
+}
+
+function onPlanetTap(sx,sy){
+  const hit=pickPlot(sx,sy);
+  if(hit<0)return;
+  const u=uni();
+  const existing=(u.planet.buildings||{})[String(hit)];
+  if(planetBuildSel){
+    const armedLevel=UNI.buildingLevel(u,planetBuildSel);
+    if(armedLevel>0){
+      // Upgrading: only the plot that already holds it is a valid target.
+      if(existing&&existing.id===planetBuildSel){requestBuild(hit,planetBuildSel);return;}
+      SFX.error();
+      toast('TAP THE EXISTING '+(UNI.BUILDING_BY_ID[planetBuildSel]||{}).name+' TO UPGRADE IT');
+      planetSelPlot=hit;refreshPlotInfo();return;
+    }
+    if(existing){SFX.error();toast('THAT PLOT IS OCCUPIED');planetSelPlot=hit;refreshPlotInfo();return;}
+    requestBuild(hit,planetBuildSel);return;
+  }
+  SFX.ui();
+  planetSelPlot=hit;
+  refreshPlotInfo();
+}
+
+/* =================================================================
+   SHIP BAY
+   ================================================================= */
+function buildShipBay(){
+  if(!UNI_OK)return;
+  const u=uni();
+  const grid=el('shipGrid');grid.innerHTML='';
+  let total=0;
+  for(const sys of UNI.SHIP_SYSTEMS){
+    const lv=UNI.shipLevel(u,sys.id);
+    total+=lv;
+    const card=document.createElement('div');
+    card.className='scard';
+    let pips='';
+    for(let i=0;i<UNI.SHIP_PART_MAX;i++)pips+='<div class="spip'+(i<lv?' on':'')+'"></div>';
+    card.innerHTML='<div class="sh"><div class="sglyph" style="color:'+rgb(sys.color)+'">'+sys.glyph+'</div>'+
+      '<div class="sn">'+sys.name+'</div><div class="slv">'+lv+'</div></div>'+
+      '<div class="sd">'+(lv>0?sys.fmt(lv):'No components recovered yet.')+'</div>'+
+      '<div class="spips">'+pips+'</div>';
+    grid.appendChild(card);
+  }
+  el('shipSub').textContent=total>0
+    ? (total+' COMPONENT'+(total===1?'':'S')+' RECOVERED · GUARDIANS DROP ONE PER SYSTEM')
+    : 'NO COMPONENTS YET · DEFEAT A SYSTEM GUARDIAN TO RECOVER ONE';
+
+  const gid=uni().galaxy||1;
+  const held=drivePieces(gid),tot=driveTotal(gid);
+  const g=UNI.galaxyById(gid);
+  el('shipDriveInfo').textContent=tot>0
+    ? ('GALAXY DRIVE · '+(g?g.name:'GALAXY '+gid)+' · '+held+' / '+tot+' COMPONENTS'+
+       (held>=tot?' · COMPLETE — THE GATE WILL OPEN':''))
+    : 'GALAXY DRIVE · NO ROUTE DATA';
+  const meter=el('shipDrive');meter.innerHTML='';
+  for(let i=0;i<tot;i++){
+    const pip=document.createElement('div');
+    pip.className='drive-pip'+(i<held?' on':'');
+    meter.appendChild(pip);
+  }
+}
+
 /* ---------- 07 · WORLD STATE ---------- */
 let state='menu',paused=false,uiOpen=false,curUI=null,runActive=false;
 let transition=null,hitstopT=0,timeScale=1,tsTarget=1,hurtFlash=0,deathSeq=null,whiteT=0;
@@ -2403,15 +4149,26 @@ function updateParticles(dt){
 }
 
 /* ---------- 09 · PLAYER ---------- */
+// Recovered ship components, as flat additions on top of the Forge.
+// Deliberately smaller per level than the equivalent Forge upgrade (see
+// the balance note in voidbreakUniverse.js) -- a full galaxy of parts is
+// worth a couple of Forge levels spread across several stats, not a
+// re-tune of the existing eight systems.
+function shipHullHp(){ return shipLv('hull')*10; }
+function shipEnergyMax(){ return shipLv('energy')*6; }
+function shipSpeedMult(){ return 1+shipLv('engine')*0.015; }
+function shipDmgMult(){ return 1+shipLv('weapon')*0.025; }
+function shipDashInvuln(){ return 1+shipLv('shield')*0.03; }
+
 function newPlayer(weapon){
   const f=save.forge;
   return {
     x:0,y:0,r:15,vx:0,vy:0,kx:0,ky:0,faceAng:0,
     weapon,fireTimer:0,muzzle:0,
-    hp:100+20*f.vit,maxhp:100+20*f.vit,
-    energy:100+15*f.core,maxenergy:100+15*f.core,energyRegen:22,
-    speed:280*(1+0.06*f.swift),
-    dmgMult:1+0.10*f.pow,fireRateMult:1,projAdd:0,pierceAdd:0,crit:0.05+0.04*f.edge,
+    hp:100+20*f.vit+shipHullHp(),maxhp:100+20*f.vit+shipHullHp(),
+    energy:100+15*f.core+shipEnergyMax(),maxenergy:100+15*f.core+shipEnergyMax(),energyRegen:22,
+    speed:280*(1+0.06*f.swift)*shipSpeedMult(),
+    dmgMult:(1+0.10*f.pow)*shipDmgMult(),fireRateMult:1,projAdd:0,pierceAdd:0,crit:0.05+0.04*f.edge,
     bSpd:1,dashCD:1.1*(1-0.08*f.drive),dashPow:1,
     burnS:0,explodeS:0,lifestealS:0,dashshieldS:0,homingS:0,resonanceS:0,stasisS:0,anchorS:0,
     dashT:0,dashCd:0,dashDur:0.17,dashDir:0,invuln:0,shield:0,dashHits:null,
@@ -2420,14 +4177,16 @@ function newPlayer(weapon){
 }
 function recomputeStats(){
   const p=player,f=save.forge;
-  p.dmgMult=(1+0.25*u('dmg'))*(1+0.10*f.pow);
-  p.speed=280*(1+0.12*u('speed'))*(1+0.06*f.swift)*(1+0.08*u('anchor'));
+  p.dmgMult=(1+0.25*u('dmg'))*(1+0.10*f.pow)*shipDmgMult();
+  p.speed=280*(1+0.12*u('speed'))*(1+0.06*f.swift)*(1+0.08*u('anchor'))*shipSpeedMult();
   p.fireRateMult=1+0.18*u('firerate');
   p.projAdd=u('multishot');p.pierceAdd=u('pierce');
   p.crit=0.05+0.10*u('crit')+0.04*f.edge;
   p.bSpd=1+0.25*u('bulletspeed');
   p.energyRegen=22*(1+0.6*u('energy'));
-  const newMax=100+20*f.vit+25*u('maxhp');
+  p.maxenergy=100+15*f.core+shipEnergyMax();
+  if(p.energy>p.maxenergy)p.energy=p.maxenergy;
+  const newMax=100+20*f.vit+25*u('maxhp')+shipHullHp();
   if(newMax>p.maxhp){p.hp+=newMax-p.maxhp;}
   p.maxhp=newMax;
   p.dashCD=1.1*(1-0.08*f.drive)*(1-0.04*u('dash'));
@@ -2457,7 +4216,10 @@ function updatePlayer(dt){
       p.energy-=32;p.dashDur=0.17;p.dashCd=p.dashCD;
       let ax=(keys['KeyD']?1:0)-(keys['KeyA']?1:0)+touchMoveX,ay=(keys['KeyS']?1:0)-(keys['KeyW']?1:0)+touchMoveY;
       p.dashDir=(ax||ay)?Math.atan2(ay,ax):p.faceAng;
-      p.invuln=Math.max(p.invuln,0.28);
+      // The Shield Emitter extends the dash's own i-frames rather than
+    // adding a new defensive layer, so it improves a skill the player
+    // already has instead of replacing it.
+    p.invuln=Math.max(p.invuln,0.28*shipDashInvuln());
       p.dashHits=new Set();
       if(p.dashshieldS>0)p.shield=0.8+0.35*p.dashshieldS;
       SFX.dash();addShake(2);el('dashUI').classList.remove('ready');
@@ -2783,6 +4545,9 @@ function killEnemy(e){
   if(e.elite){hitstopT=Math.max(hitstopT,0.07);}
   const n=e.elite?e.shards*4:e.shards;
   spawnShards(e.x,e.y,n);
+  // Coin salvage, on the same per-kill schedule shards already use so
+  // the planet is funded by playing rather than by a separate grind.
+  addCoins(n*0.5);
   // Weapon mastery XP, weighted by the enemy's own shard value so
   // tougher kills are worth more and the weakest trash mob is never the
   // efficient grind. Elites pay the same multiple their shards do.
@@ -4627,21 +6392,32 @@ function updateBossBar(){
 }
 
 /* ---------- 13 · ROOMS, CHOICES & RUN FLOW ---------- */
-function newRun(levelIdx){
-  const lv=LEVELS[levelIdx];
+// `dest` is the universe destination this run was launched at, when
+// there is one: { galaxyId, systemId, level }. Passing none keeps the
+// original behaviour exactly (LEVELS[levelIdx], no universe payout),
+// which is what the co-op lobby and the fallback level list still do.
+function newRun(levelIdx,dest){
+  const lv=(dest&&dest.level)||LEVELS[levelIdx];
   // Captured once, here, from whatever was chosen on the main menu --
   // run.difficulty then never changes for the rest of this run (level
   // transitions, boss fights, room choices, room restarts all reuse
   // this same run object), which is what makes curDiff() correct
   // everywhere without threading a difficulty parameter through every
   // enemy/boss/room function.
-  run={level:lv,levelIdx,depth:1,totalDepth:lv.depth,shards:0,kills:0,roomsCleared:0,damage:0,time:0,
+  run={level:lv,levelIdx,depth:1,totalDepth:lv.depth,shards:0,coins:0,kills:0,roomsCleared:0,damage:0,time:0,
     difficulty:pendingDifficulty,
+    // Where in the universe this run is happening. Both are 0 for a run
+    // started through the legacy level list or by a co-op lobby, and
+    // every consumer checks for that -- so the universe payout simply
+    // does not happen for a run that has no destination, rather than
+    // guessing one.
+    galaxyId:(dest&&dest.galaxyId)||0,
+    systemId:(dest&&dest.systemId)||0,
     upgrades:{},typeCounts:{combat:0,elite:0,coin:0,treasure:0,upgrade:0,heal:0},hadElite:false,victoryBonus:0};
 }
-function startRun(weapon,levelIdx){
+function startRun(weapon,levelIdx,dest){
   selectedLevel=levelIdx;
-  newRun(levelIdx);
+  newRun(levelIdx,dest);
   player=newPlayer(weapon);
   save.lastWeapon=weapon;saveGameCloud();
   enemies=[];bullets=[];ebullets=[];particles=[];dmgNums=[];pickups=[];portals=[];spawnQueue=[];props=[];swings=[];hurtArcs=[];hazards=[];zones=[];gravFields=[];shardFlyers=[];
@@ -4654,7 +6430,8 @@ function startRun(weapon,levelIdx){
   go('playing');
   Music.set('game');
   renderChips();renderNodeStrip();
-  showBanner('LEVEL '+run.level.id+' — '+run.level.name,'THE DESCENT BEGINS');
+  showBanner(run.galaxyId?run.level.name:('LEVEL '+run.level.id+' — '+run.level.name),
+    run.galaxyId?'ENTERING THE SYSTEM':'THE DESCENT BEGINS');
 }
 function roomOptions(){
   if(run.depth>=run.level.depth-1)return[{type:'boss'}];
@@ -4801,6 +6578,7 @@ function buildRoom(type){
 function roomCleared(){
   if(room.cleared||room.type==='boss')return;
   room.cleared=true;run.roomsCleared++;
+  addCoins(12+run.depth*3);
   SFX.portal();
   showBanner('ROOM CLEAR','CHOOSE YOUR PATH');
   if(room.type==='combat'&&Math.random()<0.7)room.pendingUpgrade=true;
@@ -5013,7 +6791,9 @@ function victory(){
   if(state!=='playing')return;
   tsTarget=1;timeScale=1;
   const lv=run.level;
-  const next=LEVELS[lv.levelIdx+1];
+  // run.levelIdx, not lv.levelIdx: the index lives on the run, and
+  // reading it off the level object made this undefined for every clear.
+  const next=LEVELS[(run.levelIdx!=null?run.levelIdx:-1)+1];
   const firstClear=!save.beaten[lv.id];
   // Display value mirrors addShards()'s own multipliers exactly (both
   // the difficulty multiplier and the prestige shard bonus), so the
@@ -5021,6 +6801,7 @@ function victory(){
   // actually banked.
   run.victoryBonus=Math.round(lv.completionBonus*curDiff().shardMult*(1+prestigeShardBonus()));
   addShards(lv.completionBonus);
+  addCoins((lv.systemRef&&lv.systemRef.coins)||Math.round(lv.completionBonus*0.4));
   awardMastery(MASTERY_XP_LEVEL_CLEAR);
   // Tells the Duel Arena lobby (this always runs inside its iframe --
   // see launchVoidbreak() in index.html) that a level was beaten for
@@ -5030,10 +6811,19 @@ function victory(){
   // new "meaningful achievement" and shouldn't be XP-farmable. Fully
   // fire-and-forget and additive: nothing in Voidbreak reads a reply,
   // so this can never affect anything else in this file.
-  if(!save.beaten[lv.id] && window.parent){
+  if(lv.id && !save.beaten[lv.id] && window.parent){
     try{ window.parent.postMessage({ type:'voidbreak_complete', levelId: lv.id }, '*'); }catch(e){}
   }
-  save.beaten[lv.id]=true;
+  // `beaten` is still written for every system that carries a legacy
+  // level id, because the weapon gates (WEAPONS[].gate) and the
+  // level-gated Void Upgrades read it and must keep working exactly as
+  // they did. A data-defined system has no legacy id and is recorded
+  // only in the universe layer.
+  if(lv.id)save.beaten[lv.id]=true;
+
+  // The universe payout: drive piece, ship component, full survey.
+  // First clear only for everything except coins -- see awardSystemClear.
+  const clearInfo=run.galaxyId?awardSystemClear(run.galaxyId,run.systemId):{first:false};
   runActive=false;state='victory';vicT=0;vicWarped=false;deathSeq=null;
   finalizeRun(true);
   run.roomsCleared=run.totalDepth;
@@ -5051,11 +6841,46 @@ function victory(){
     'THE ECLIPSE BREAKS. LIGHT FLOODS BACK INTO THE HOLLOW.',
     'THE ORIGIN SEALS ITSELF SHUT. THE VOID REMEMBERS WHERE IT BEGAN.'][lv.id-1]||'THE GUARDIAN FALLS.';
   let ut='';
-  if(next)ut=firstClear?'◆ LEVEL '+next.id+' UNLOCKED — '+next.name:'LEVEL '+next.id+' AVAILABLE — '+next.name;
+  if(run.galaxyId&&UNI_OK){
+    // Universe wording: what was recovered and where the corridor now
+    // leads, rather than a level number.
+    const parts=[];
+    if(clearInfo.piece)parts.push('◆ '+clearInfo.piece+' RECOVERED');
+    if(clearInfo.part)parts.push('◇ '+clearInfo.part.name);
+    const g=UNI.galaxyById(run.galaxyId);
+    const list=g?g.systems:[];
+    let idx=-1;for(let i=0;i<list.length;i++)if(list[i].id===run.systemId)idx=i;
+    const nextSys=idx>=0?list[idx+1]:null;
+    if(clearInfo.driveDone)parts.push('GALAXY DRIVE COMPLETE');
+    else if(nextSys)parts.push(clearInfo.first?('CORRIDOR OPEN — '+nextSys.name):('NEXT: '+nextSys.name));
+    else if(!clearInfo.driveDone)parts.push('SYSTEM SECURED');
+    ut=parts.join(' · ');
+  }
+  else if(next)ut=firstClear?'◆ LEVEL '+next.id+' UNLOCKED — '+next.name:'LEVEL '+next.id+' AVAILABLE — '+next.name;
   else ut=firstClear?'◆ LEVEL '+(lv.id+1)+' UNLOCKED — IN DEVELOPMENT':'ALL CURRENT SECTORS CLEARED';
   if(lv.id===3&&firstClear)ut+=' · VOID CANNON AVAILABLE IN THE FORGE';
   if(lv.id===5&&firstClear)ut+=' · GRAVITY ANCHOR UPGRADE UNLOCKED';
   el('vicUnlock').textContent=ut;
+
+  // The recovery moment itself, staged so each card is readable: the
+  // component first, then the drive if this clear finished it.
+  if(clearInfo.piece){
+    setTimeout(()=>{
+      showReveal('COMPONENT RECOVERED',clearInfo.piece,
+        clearInfo.part?(clearInfo.part.name+' · '+
+          (UNI.SHIP_SYSTEM_BY_ID[clearInfo.part.system]||{}).name):'',2400);
+    },1700);
+  }
+  if(clearInfo.driveDone){
+    setTimeout(()=>{
+      const g=UNI.galaxyById(run.galaxyId);
+      const nextG=UNI.galaxyById(run.galaxyId+1);
+      SFX.victory();
+      showReveal('GALAXY DRIVE COMPLETE',(g?g.name:'THIS GALAXY')+' CONQUERED',
+        nextG?('THE GATE OPENS ON '+(UNI.galaxyKnown(uni(),nextG.id)?nextG.name:'SOMETHING UNRECORDED')):
+        'NOTHING LIES BEYOND. YET.',3400);
+    },4300);
+  }
   el('bossBarWrap').classList.add('hidden');
   cam.baseZoom=0.8;
   setTimeout(()=>{el('ov-victory').classList.add('on');document.body.classList.remove('ingame');Music.set('menu');},1400);
@@ -5072,6 +6897,10 @@ function gameOver(){
 }
 function finalizeRun(victory_){
   save.shards+=run.shards;save.runs++;
+  // Coins bank exactly like shards do -- earned during the run, added
+  // to the lifetime total here. Spending is a separate, server-owned
+  // ledger (see voidbreak.js), so this can only ever raise the balance.
+  uni().coins=Math.max(0,Math.floor(Number(uni().coins)||0))+Math.max(0,Math.floor(run.coins||0));
   save.best=Math.max(save.best,run.roomsCleared+(victory_?1:0));
   if(victory_)save.kills++;
   saveGameCloud();
@@ -5804,6 +7633,14 @@ function frame(now){
     if(state==='victory')updateVictoryFX(rdt);
   }
   if(state==='playing'||state==='victory'||state==='gameover'||(state==='settings'&&runActive))updateCamera(rdt);
+  else if(isUniverseState()){
+    // The universe screens own their own cameras; the world camera only
+    // keeps drifting so the shared parallax star field stays alive
+    // behind them.
+    cam.x+=rdt*8;cam.zoom=1;
+    if(state==='planet')updatePlanetCam(rdt);
+    if(travelFx>0)travelFx=Math.max(0,travelFx-rdt*1.6);
+  }
   else{
     cam.x+=rdt*30;cam.y=Math.sin(now*0.00008)*80;
     cam.zoom=lerp(cam.zoom,1,rdt*2);
@@ -5847,6 +7684,24 @@ function render(){
   ctx.drawImage(makeGlow(env.neb[0][0],env.neb[0][1],env.neb[0][2],400),(W*0.25-cam.x*0.1)%W-400,(H*0.3-cam.y*0.1)%H-400,800,800);
   ctx.drawImage(makeGlow(env.neb[1][0],env.neb[1][1],env.neb[1][2],400),(W*0.8-cam.x*0.08)%W-400,(H*0.75-cam.y*0.08)%H-400,800,800);
   ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+  // Universe screens draw in place of the world. They share the star
+  // field and nebula wash already drawn above, which is why they cost
+  // one branch rather than a second renderer.
+  if(isUniverseState()){
+    if(state==='galaxy')drawGalaxyMap();
+    else if(state==='system')drawSystemMap();
+    else if(state==='planet')drawHomePlanet();
+    if(travelFx>0){
+      ctx.globalCompositeOperation='lighter';
+      const r=Math.max(W,H)*0.6;
+      const fx=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,r);
+      fx.addColorStop(0,'rgba(0,240,255,'+(travelFx*0.45).toFixed(3)+')');
+      fx.addColorStop(1,'rgba(0,240,255,0)');
+      ctx.fillStyle=fx;ctx.fillRect(0,0,W,H);
+      ctx.globalCompositeOperation='source-over';
+    }
+    return;
+  }
   const showWorld=state==='playing'||state==='gameover'||state==='victory'||(state==='settings'&&runActive);
   if(showWorld){
     ctx.save();
@@ -7324,13 +9179,58 @@ function toast(msg){
 }
 
 /* ---------- 18 · UI / MENUS ---------- */
-const OVERLAYS=['ov-menu','ov-coop','ov-howto','ov-settings','ov-forge','ov-weapons','ov-pause','ov-upgrade','ov-swap','ov-gameover','ov-victory','ov-levels','ov-shop','ov-mastery','ov-prestige','ov-prestige-confirm','ov-leaderboard'];
-function hideAllOverlays(){OVERLAYS.forEach(id=>el(id).classList.remove('on'));}
+const OVERLAYS=['ov-menu','ov-coop','ov-howto','ov-settings','ov-forge','ov-weapons','ov-pause','ov-upgrade','ov-swap','ov-gameover','ov-victory','ov-levels','ov-shop','ov-mastery','ov-prestige','ov-prestige-confirm','ov-leaderboard','ov-ship'];
+// The three canvas-backed universe screens. Kept in their own list
+// because they are chrome over a live view, not panels over a frozen
+// one -- but they hide exactly like overlays do.
+const UNI_SCREENS=['uni-galaxy','uni-system','uni-planet'];
+function hideAllOverlays(){
+  OVERLAYS.forEach(id=>el(id).classList.remove('on'));
+  UNI_SCREENS.forEach(id=>el(id).classList.remove('on'));
+}
 function go(s){
+  // The old level list is the fallback for a build where
+  // voidbreakUniverse.js failed to load. With it present, "choose where
+  // to go" always means the solar system map, so every existing call
+  // site (victory's PLAY AGAIN, game over, the weapon screen's BACK)
+  // lands on the new screen without needing to know it exists.
+  if(s==='levels'&&UNI_OK)s='system';
+  // Without the content module there is no universe to show. Send these
+  // back to the menu rather than opening a screen with nothing in it --
+  // the game degrades to exactly the eight-level experience it had
+  // before, which is a working game, not a broken one.
+  if(!UNI_OK&&(s==='galaxy'||s==='system'||s==='planet'||s==='ship'))s='menu';
   state=s;paused=false;uiOpen=false;curUI=null;
   if(s==='weapons')launching=false;
+  // Backing out of a launch screen disarms the destination, so a stale
+  // system can never be carried into a later run.
+  if(s!=='weapons'&&s!=='playing')pendingSystem=null;
   hideAllOverlays();
   if(s==='menu'){el('ov-menu').classList.add('on');Music.set('menu');refreshMenuStats();syncDifficultyUI();}
+  else if(s==='galaxy'){
+    el('uni-galaxy').classList.add('on');Music.set('menu');
+    galSelectedId=uni().galaxy||1;galPan.x=0;galPan.y=0;
+    refreshGalaxyUI();
+  }
+  else if(s==='system'){
+    el('uni-system').classList.add('on');Music.set('menu');
+    uniGalaxyId=uni().galaxy||1;
+    const list=curGalaxySystems();
+    if(!list.length){go('galaxy');return;}
+    uniSystemIdx=clamp(uniSystemIdx,0,list.length-1);
+    sysPan.x=0;sysPan.y=0;
+    refreshSystemUI();
+  }
+  else if(s==='planet'){
+    el('uni-planet').classList.add('on');Music.set('menu');
+    planetBuildSel=null;planetSelPlot=-1;
+    // Always open facing the colony. The idle spin will carry it away
+    // again, which is what a globe should do -- but arriving to a view
+    // of your own buildings is not something to leave to chance.
+    pcam.yaw=0;pcam.pitch=-0.14;pcam.vyaw=0.045;pcam.vpitch=0;
+    refreshPlanetUI();
+  }
+  else if(s==='ship'){el('ov-ship').classList.add('on');buildShipBay();}
   else if(s==='coop'){el('ov-coop').classList.add('on');Music.set('menu');coopRenderTypes();}
   else if(s==='howto')el('ov-howto').classList.add('on');
   else if(s==='settings')el('ov-settings').classList.add('on');
@@ -7342,8 +9242,11 @@ function go(s){
   else if(s==='levels'){el('ov-levels').classList.add('on');buildLevelChain();}
   else if(s==='weapons'){
     el('ov-weapons').classList.add('on');buildWeaponSelect();
-    const lv=LEVELS[selectedLevel];
-    el('wsSub').textContent='LEVEL '+lv.id+' — '+lv.name+' · CLICK A WEAPON, THEN CLICK IT AGAIN TO LAUNCH'+
+    const lv=(pendingSystem&&pendingSystem.level)||LEVELS[selectedLevel];
+    const where=pendingSystem
+      ? (UNI.galaxyById(pendingSystem.galaxyId).name+' — '+lv.name)
+      : ('LEVEL '+lv.id+' — '+lv.name);
+    el('wsSub').textContent=where+' · CLICK A WEAPON, THEN CLICK IT AGAIN TO LAUNCH'+
       ' · '+DIFFICULTY_MODES[pendingDifficulty].label+' MODE';
   }
   else if(s==='playing'){el('hud').classList.remove('hidden');}
@@ -7387,7 +9290,8 @@ function refreshMenuStats(){
   // exists to prevent.
   if(cloudSyncStatus==='connecting'){
     setTxt('menuShards','—');setTxt('menuRuns','—');setTxt('menuBest','—');
-    setTxt('menuKills','—');setTxt('menuLevel','SYNCING…');
+    setTxt('menuKills','—');setTxt('menuLevel','SYNCING…');setTxt('menuCoins','—');
+    el('menuUniverse').textContent='';
     el('vbProfile').innerHTML='';
     return;
   }
@@ -7406,6 +9310,19 @@ function refreshMenuStats(){
   // ledger) so it always matches what the Forge and Shop will let you
   // actually spend.
   setTxt('menuShards',spendableShards());
+  setTxt('menuCoins',fmt(coinsSpendable()));
+  // Where the player is in the universe, and how far the current
+  // galaxy's drive has come -- the two things that decide what they can
+  // do next, on the screen they see first.
+  if(UNI_OK){
+    const gid=uni().galaxy||1;
+    const g=UNI.galaxyById(gid);
+    const held=drivePieces(gid),tot=driveTotal(gid);
+    const cleared=UNI.clearedInGalaxy(uni(),gid);
+    el('menuUniverse').innerHTML=(g?g.name:'UNCHARTED')+
+      ' · SYSTEMS <b>'+cleared+' / '+(g?g.systems.length:0)+'</b>'+
+      (tot>0?(' · DRIVE <b>'+held+' / '+tot+'</b>'):'');
+  }else el('menuUniverse').textContent='';
   setTxt('menuRuns',save.runs);
   setTxt('menuBest',save.best>0?save.best+' / 10':'–');
   setTxt('menuKills',save.kills);
@@ -7532,7 +9449,9 @@ function openSwapSelect(){
 }
 function fillEndStats(prefix){
   const rows=[
-    ['LEVEL','L'+run.level.id+' · '+run.level.name],
+    // Named by where you were, not by which number it was.
+    [run.galaxyId?'SYSTEM':'LEVEL',
+      run.galaxyId?run.level.name:('L'+run.level.id+' · '+run.level.name)],
     ['ENEMIES DEFEATED',fmt(run.kills)],
     ['ROOMS CLEARED',run.roomsCleared+' / '+run.totalDepth],
     ['DAMAGE DEALT',fmt(run.damage)],
@@ -7545,7 +9464,8 @@ function fillEndStats(prefix){
   });
   const sh=el(prefix+'Shards');
   sh.innerHTML='◆ VOID SHARDS EARNED: '+run.shards+(prefix==='vic'?' (GUARDIAN BONUS +'+run.victoryBonus+')':'')+
-    ' &nbsp;·&nbsp; TOTAL: '+save.shards;
+    ' &nbsp;·&nbsp; TOTAL: '+save.shards+
+    (run.coins?('<br>◆ COIN SALVAGE: '+fmt(run.coins)+' &nbsp;·&nbsp; AVAILABLE: '+fmt(coinsSpendable())):'');
 }
 function buildForge(){
   // The Forge spends the SAME balance the Void Shard Shop does, so it
@@ -7992,8 +9912,9 @@ function launchRun(){
   SFX.portal();
   el('wsStart').textContent='LAUNCHING…';
   el('wsStart').disabled=true;
+  const dest=pendingSystem;
   setTimeout(()=>{
-    startRun(selWeapon,selectedLevel);
+    startRun(selWeapon,selectedLevel,dest);
     launching=false;
     el('wsStart').textContent='START RUN';
     el('wsStart').disabled=false;
@@ -8020,7 +9941,27 @@ function applyAudioSettings(){
   if(save.settings.music)Music.nextT=actx.currentTime+0.1;
 }
 /* --- wire buttons --- */
-el('btnStart').addEventListener('click',()=>{SFX.ui();go('levels');});
+el('btnStart').addEventListener('click',()=>{SFX.ui();go(UNI_OK?'system':'levels');});
+el('btnPlanet').addEventListener('click',()=>{SFX.ui();go('planet');});
+if(!UNI_OK){
+  el('btnPlanet').style.display='none';
+  // Don't document screens this build cannot reach.
+  el('howtoUniverse').style.display='none';
+  el('howtoPlanet').style.display='none';
+}
+
+/* ---- universe screen navigation ---- */
+el('galBack').addEventListener('click',()=>{SFX.ui();go('menu');});
+el('galEnter').addEventListener('click',()=>{enterSelectedGalaxy();});
+el('sysBack').addEventListener('click',()=>{SFX.ui();go('galaxy');});
+el('sysLaunch').addEventListener('click',()=>{launchSelectedSystem();});
+el('sysPrev').addEventListener('click',()=>{selectSystem(uniSystemIdx-1);});
+el('sysNext').addEventListener('click',()=>{selectSystem(uniSystemIdx+1);});
+el('planetBack').addEventListener('click',()=>{SFX.ui();go('menu');});
+let shipReturn='menu';
+el('planetShip').addEventListener('click',()=>{SFX.ui();shipReturn='planet';go('ship');});
+el('planetGalaxy').addEventListener('click',()=>{SFX.ui();go('galaxy');});
+el('shipBack').addEventListener('click',()=>{SFX.ui();go(shipReturn);});
 /* ---- difficulty select ---- */
 function syncDifficultyUI(){
   document.querySelectorAll('#diffRow .diff-btn').forEach(b=>{
@@ -8065,9 +10006,11 @@ el('pauseResume').addEventListener('click',()=>{SFX.ui();setPause(false);});
 el('pauseSettings').addEventListener('click',()=>{SFX.ui();settingsReturn='pause';setPause(false);go('settings');syncSettingsUI();});
 el('pauseQuit').addEventListener('click',()=>{
   SFX.ui();
-  save.shards+=run.shards;save.runs++;save.best=Math.max(save.best,run.roomsCleared);saveGameCloud();
+  save.shards+=run.shards;save.runs++;save.best=Math.max(save.best,run.roomsCleared);
+  uni().coins=Math.max(0,Math.floor(Number(uni().coins)||0))+Math.max(0,Math.floor(run.coins||0));
+  saveGameCloud();
   runActive=false;deathSeq=null;
-  toast('RUN ABANDONED · +'+run.shards+' SHARDS BANKED');
+  toast('RUN ABANDONED · +'+run.shards+' SHARDS'+(run.coins?(' · +'+run.coins+' COINS'):'')+' BANKED');
   Music.set('menu');
   go('menu');refreshMenuStats();
 });
