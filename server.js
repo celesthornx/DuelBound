@@ -2801,16 +2801,32 @@ const staticServer = Static.createStaticServer(__dirname, {
 // e-mail addresses) and the whole server source, including the new
 // match-room and co-op modules.
 //
-// This is the allowlist. Exactly three files are ever requested by the
-// game (index.html, voidbreak.html and bgm.mp3 -- everything else the
-// clients ask for is an API route handled above), so the safe set is
-// small and explicit rather than a pattern that has to be kept ahead of
-// whatever gets added to this directory next.
+// This is the allowlist. Only a handful of files are ever requested by
+// the game (index.html, voidbreak.html, bgm.mp3 and the one shared
+// content module below -- everything else the clients ask for is an API
+// route handled above), so the safe set is small and explicit rather
+// than a pattern that has to be kept ahead of whatever gets added to
+// this directory next.
+//
+// /voidbreakUniverse.js is the ONE server-side .js file on this list,
+// and it is here deliberately: it is the shared definition of what the
+// universe contains (galaxies, solar systems, discoveries, planet
+// buildings, ship systems), which voidbreak.html needs in order to draw
+// any of it. It holds content data and pure lookup helpers only -- no
+// credentials, no account data, no server logic, and nothing that
+// decides a currency amount on its own (the server re-derives every
+// price and gate from its own copy when it validates a request; see
+// voidbreak.js's buildOnPlanet). Serving it is exactly as safe as
+// serving the level tables already embedded in voidbreak.html.
+//
+// Adding any OTHER .js from this directory would be a mistake -- the
+// rest of them are the server.
 // =====================================================================
 const PUBLIC_FILES = new Set([
     "/",
     "/index.html",
     "/voidbreak.html",
+    "/voidbreakUniverse.js",
     "/bgm.mp3",
     "/favicon.ico"
 ]);
@@ -4513,6 +4529,83 @@ const httpServer = http.createServer(async (req, res) => {
             sendJson(res, 200, {
                 ok: true, itemId: result.item.id,
                 endgame: Voidbreak.endgameView(result.save),
+                version: auth.account.voidbreak.version
+            });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // ---- POST /voidbreak/planet/build ----
+    // body: { sessionToken, plot, buildingId }
+    //
+    // Home Planet construction SPENDS a currency, so it gets the same
+    // treatment the shop does rather than riding along on /voidbreak/save
+    // (which carries the colony forward from the stored record and
+    // discards whatever the client claims about it -- see
+    // voidbreak.js's applyClientSave). The body contributes a plot index
+    // and a building id; the cost, the territory check, the requirement
+    // gate and the level are all decided in voidbreak.js against the
+    // STORED save.
+    if (req.method === "POST" && req.url === "/voidbreak/planet/build") {
+        try {
+            const body = await readJsonBody(req);
+            const auth = voidbreakEndgameAuth(body);
+            if (auth.error) { sendJson(res, auth.error, { error: auth.message }); return; }
+
+            const current = auth.account.voidbreak ? auth.account.voidbreak.data : Voidbreak.defaultSaveData();
+            const result = Voidbreak.buildOnPlanet(current, body.plot, body.buildingId);
+            if (!result.ok) { sendJson(res, result.code || 400, { error: result.error }); return; }
+
+            if (!(await commitVoidbreakSave(auth.sub, auth.account, result.save))) {
+                sendJson(res, 503, { error: "Could not save construction -- try again" });
+                return;
+            }
+            sendJson(res, 200, {
+                ok: true,
+                plot: result.plot,
+                buildingId: result.building.id,
+                level: result.level,
+                spent: result.spent,
+                endgame: Voidbreak.endgameView(result.save),
+                data: result.save,
+                version: auth.account.voidbreak.version
+            });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // ---- POST /voidbreak/planet/decorate ----
+    // body: { sessionToken, plot, decorationId }   (decorationId null clears)
+    //
+    // Costs nothing, so the only thing being enforced here is that the
+    // player actually FOUND the thing they are placing -- which is a read
+    // of the stored discovery log, not of the request.
+    if (req.method === "POST" && req.url === "/voidbreak/planet/decorate") {
+        try {
+            const body = await readJsonBody(req);
+            const auth = voidbreakEndgameAuth(body);
+            if (auth.error) { sendJson(res, auth.error, { error: auth.message }); return; }
+
+            const current = auth.account.voidbreak ? auth.account.voidbreak.data : Voidbreak.defaultSaveData();
+            const wanted = (body.decorationId === null || body.decorationId === undefined) ? null : String(body.decorationId);
+            const result = Voidbreak.placeDecoration(current, body.plot, wanted);
+            if (!result.ok) { sendJson(res, result.code || 400, { error: result.error }); return; }
+
+            if (!(await commitVoidbreakSave(auth.sub, auth.account, result.save))) {
+                sendJson(res, 503, { error: "Could not save placement -- try again" });
+                return;
+            }
+            sendJson(res, 200, {
+                ok: true,
+                plot: result.plot,
+                decorationId: result.decoration ? result.decoration.id : null,
+                cleared: !!result.cleared,
+                endgame: Voidbreak.endgameView(result.save),
+                data: result.save,
                 version: auth.account.voidbreak.version
             });
         } catch (e) {
