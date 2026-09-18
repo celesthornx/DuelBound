@@ -1458,12 +1458,93 @@
   .lp-title.magenta{ color:#ff6fb0; }
   .lp-body{ padding: 12px 14px 14px; }
 
+  /* ---------- Commander profile + Legacy (Profile modal) ---------- */
+  .cmd-card{
+    margin: 14px 0 12px; padding: 12px 14px;
+    border:1px solid rgba(90,180,255,.30); border-radius:4px;
+    background:
+      linear-gradient(140deg, rgba(30,70,140,.38), rgba(60,26,120,.30)),
+      repeating-linear-gradient(0deg, rgba(120,220,255,.03) 0 1px, transparent 1px 4px);
+  }
+  .cmd-card-tag{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 8.5px; letter-spacing: 3.6px; color: rgba(130,205,255,.8);
+  }
+  .cmd-card-name{
+    font-family:'Chakra Petch', sans-serif; font-weight:700;
+    font-size: 24px; letter-spacing: 1.6px; color:#fff; line-height:1.1;
+    word-break: break-word;
+  }
+  .cmd-card-title{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 10px; letter-spacing: 2.6px; color: var(--vb-gold);
+    text-shadow: 0 0 10px rgba(255,206,84,.4);
+    margin-top: 3px;
+  }
+  .cmd-card-rows{ display:flex; gap:22px; flex-wrap:wrap; margin-top:9px; }
+  .cmd-card-rows > div{ display:flex; flex-direction:column; gap:1px; min-width:0; }
+  .cmd-card-rows span{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 8px; letter-spacing: 2.2px; color: rgba(150,195,235,.7);
+  }
+  .cmd-card-rows b{
+    font-family:'Chakra Petch', sans-serif; font-weight:600;
+    font-size: 13px; letter-spacing:1px; color:#e8f4ff;
+  }
+
+  .lg-banner{
+    display:flex; align-items:center; gap:12px;
+    padding: 11px 13px; margin-bottom: 12px;
+    border:1px solid rgba(122,158,200,.25); border-radius:4px;
+    background: rgba(255,255,255,.02);
+    color: rgba(190,210,235,.8);
+  }
+  .lg-banner.og{
+    border-color: rgba(255,206,84,.45);
+    background: linear-gradient(120deg, rgba(255,206,84,.14), rgba(255,206,84,.03));
+    color: var(--gold);
+    box-shadow: 0 0 20px rgba(255,206,84,.12);
+  }
+  .lg-banner svg{ width:26px; height:26px; flex:0 0 auto; }
+  .lg-b-text{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .lg-b-text b{
+    font-family:'Chakra Petch', sans-serif; font-weight:700;
+    font-size: 13px; letter-spacing: 1.8px;
+  }
+  .lg-b-text span{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 8px; letter-spacing: 1.4px; color: rgba(190,205,225,.62);
+    line-height:1.4;
+  }
+  .lg-sec{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 9px; letter-spacing: 2.4px; color: rgba(140,190,235,.72);
+    margin: 12px 0 6px;
+  }
+  .lg-chips{ display:flex; flex-wrap:wrap; gap:5px; }
+  .lg-chip{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 8.5px; letter-spacing: 1.4px; color: rgba(215,232,250,.85);
+    border:1px solid rgba(122,158,200,.28); border-radius:2px;
+    background: rgba(122,158,200,.09);
+    padding: 3px 7px;
+  }
+  .lg-note{
+    font-family:'Share Tech Mono', monospace;
+    font-size: 8px; letter-spacing: 1.3px; line-height:1.55;
+    color: rgba(150,180,215,.55);
+    margin-top: 14px; padding-top: 10px;
+    border-top: 1px solid rgba(122,158,200,.14);
+  }
+
   /* In-match location nameplate (see ARENA_LOCATIONS). Sits top-centre
      above the arena, fades itself out a few seconds into the round so
      it never competes with the HUD. */
   #arenaLocLabel{
     position:fixed; z-index: 40;
-    top: calc(env(safe-area-inset-top, 0px) + 10px);
+    /* Clear of anything the tutorial or a mode HUD puts at the very
+       top-centre of the stage. */
+    top: calc(env(safe-area-inset-top, 0px) + 46px);
     left:50%; transform: translateX(-50%);
     display:flex; flex-direction:column; align-items:center; gap:2px;
     padding: 5px 16px;
@@ -16241,6 +16322,8 @@ if(tutorialActive) tutorialUpdate(dt);
     discovered: 0, discoverable: 0,
     cleared: 0, clearable: 0,
     galaxiesCleared: 0, galaxyTotal: 0,
+    title: '',          // equipped Voidbreak title, if any
+    prestige: 0,
     loaded: false
   };
 
@@ -16258,10 +16341,22 @@ if(tutorialActive) tutorialUpdate(dt);
     return 'VOID RUNNER MK-' + mark;
   }
 
-  // Reads a Voidbreak save blob into VBP. Pure; no network, no writes.
-  function vbAbsorbSave(data){
+  // Reads a /voidbreak/state response into VBP. Pure; no network, no
+  // writes. `endgame` is the server's own resolved view of the Voidbreak
+  // cosmetic catalog -- the only place the DISPLAY NAME of an equipped
+  // title lives, since that catalog is defined server-side in
+  // voidbreak.js. Reading it here rather than mirroring the catalog is
+  // what keeps a title the shell shows and a title Voidbreak shows the
+  // same string forever.
+  function vbAbsorbSave(data, endgame){
     const U = vbUni();
     VBP.loaded = true;
+    VBP.title = '';
+    VBP.prestige = (endgame && endgame.prestige && endgame.prestige.level) || 0;
+    if(endgame && Array.isArray(endgame.items)){
+      const t = endgame.items.find(it => it.cat === 'title' && it.equipped);
+      if(t && t.name) VBP.title = t.name;
+    }
     if(!data){
       VBP.shards = 0; VBP.galaxyId = 1; VBP.shipLevel = 0;
       VBP.discovered = 0; VBP.cleared = 0; VBP.galaxiesCleared = 0;
@@ -16342,8 +16437,8 @@ if(tutorialActive) tutorialUpdate(dt);
       + (loggedIn && sessionToken ? '?sessionToken=' + encodeURIComponent(sessionToken) : '');
     fetch(url)
       .then(r => r.ok ? r.json() : null)
-      .then(j => { vbAbsorbSave(j && j.data ? j.data : null); })
-      .catch(() => { vbAbsorbSave(null); });
+      .then(j => { vbAbsorbSave(j && j.data ? j.data : null, j && j.endgame ? j.endgame : null); })
+      .catch(() => { vbAbsorbSave(null, null); });
   }
 
   // The arena-location picker on the VOIDBREAK ARENA screen. It sets a
@@ -17886,39 +17981,163 @@ if(tutorialActive) tutorialUpdate(dt);
   // ---- PROFILE MODAL ---------------------------------------------
   // Reuses the existing lobby modal rather than adding another screen.
   // Shows the account's normal progression AND its ranked section.
+  // ================================================================
+  // COMMANDER PROFILE
+  // ----------------------------------------------------------------
+  // One screen for who the player is across the whole game: the
+  // commander (level, galaxy, ship, discovery), the arena (ranked
+  // standing, records), and LEGACY -- everything they earned back when
+  // this was Duel Arena.
+  //
+  // NOTHING here migrates, rewrites or deletes any stored data. Every
+  // number is read from state the account already had: `coins`,
+  // `crystals`, `stats`, the owned-cosmetic Sets loaded by
+  // applyAccount(), /ranked/me, and the Voidbreak save mirror (VBP).
+  // That is the whole migration story for old players -- their record
+  // was never in a format that needed converting, so the safest
+  // "migration" is the one that reads it where it already lives.
+  // ================================================================
+
+  // An OG is any account that played the game before it became
+  // Voidbreak. There is no flag for that on the record and inventing
+  // one retroactively would be a lie, so it is inferred from evidence
+  // that can only have come from arena play: a match record, or a
+  // cosmetic that is no longer obtainable the same way.
+  function legacyIsOG(){
+    return (stats.kills > 0) || (stats.wins > 0)
+        || ownedPowers.size > 0 || ownedAbilities.size > 0
+        || ownedSkins.size > 2;   // 'cyan' and 'red' are granted to everyone
+  }
+
+  function legacyOwnedNames(set, table){
+    const names = [];
+    set.forEach(id => {
+      const def = table ? table.find(x => x.id === id) : null;
+      names.push(def && def.name ? def.name : String(id).toUpperCase());
+    });
+    return names.sort();
+  }
+
+  function legacyChips(names){
+    if(!names.length) return '<div class="rl-empty" style="padding:8px">NONE</div>';
+    return '<div class="lg-chips">'
+      + names.map(n => '<span class="lg-chip">' + escapeHtmlRk(n) + '</span>').join('')
+      + '</div>';
+  }
+
+  // The Legacy block. Shown to everyone -- an account with nothing in it
+  // reads as "nothing yet" rather than being hidden, because a player
+  // who DID have progress needs to be able to find this without
+  // guessing whether it exists.
+  function renderLegacyBlock(){
+    const og = legacyIsOG();
+    let html = '<div class="rk-season" style="margin:16px 0 8px">LEGACY</div>';
+
+    html += '<div class="lg-banner' + (og ? ' og' : '') + '">'
+      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'
+      + '<path d="M7 3h10v5a5 5 0 0 1-10 0z"/><path d="M7 4H4v1a3.5 3.5 0 0 0 3 3.4"/>'
+      + '<path d="M17 4h3v1a3.5 3.5 0 0 1-3 3.4"/><path d="M9.5 14h5M8 21h8M12 14v7"/></svg>'
+      + '<div class="lg-b-text">'
+      + '<b>' + (og ? 'OG DUEL ARENA PILOT' : 'NO LEGACY RECORD YET') + '</b>'
+      + '<span>' + (og
+          ? 'YOU FLEW BEFORE THE VOID OPENED. EVERYTHING YOU EARNED IS STILL YOURS.'
+          : 'ARENA PROGRESS EARNED FROM HERE ON IS RECORDED IN THIS SECTION.')
+      + '</span></div></div>';
+
+    html += '<div class="rr-grid">'
+      + '<div class="rr-row"><span>ARENA ELIMINATIONS</span><b>' + stats.kills.toLocaleString() + '</b></div>'
+      + '<div class="rr-row"><span>ARENA WINS</span><b>' + stats.wins.toLocaleString() + '</b></div>'
+      + '<div class="rr-row"><span>COINS</span><b>' + coins.toLocaleString() + '</b></div>'
+      + '<div class="rr-row"><span>CRYSTALS</span><b>' + crystals.toLocaleString() + '</b></div>'
+      + '</div>';
+
+    html += '<div class="lg-sec">SHIP SKINS &middot; ' + ownedSkins.size + '</div>'
+      + legacyChips(legacyOwnedNames(ownedSkins, SKINS));
+    html += '<div class="lg-sec">ABILITIES &middot; ' + ownedAbilities.size + '</div>'
+      + legacyChips(legacyOwnedNames(ownedAbilities, ABILITIES));
+    html += '<div class="lg-sec">SYSTEMS &middot; ' + ownedPowers.size + '</div>'
+      + legacyChips(legacyOwnedNames(ownedPowers, POWERS));
+
+    const collectibles = ownedBadges.size + ownedBanners.size
+      + ownedPlayerIcons.size + ownedEmotes.size + ownedKillEffects.size
+      + ownedAbilityCosmetics.size;
+    if(collectibles > 0){
+      html += '<div class="lg-sec">BATTLE PASS COLLECTIBLES &middot; ' + collectibles + '</div>'
+        + '<div class="rr-grid">'
+        + '<div class="rr-row"><span>BADGES</span><b>' + ownedBadges.size + '</b></div>'
+        + '<div class="rr-row"><span>BANNERS</span><b>' + ownedBanners.size + '</b></div>'
+        + '<div class="rr-row"><span>PLAYER ICONS</span><b>' + ownedPlayerIcons.size + '</b></div>'
+        + '<div class="rr-row"><span>EMOTES</span><b>' + ownedEmotes.size + '</b></div>'
+        + '<div class="rr-row"><span>KILL EFFECTS</span><b>' + ownedKillEffects.size + '</b></div>'
+        + '<div class="rr-row"><span>ABILITY SKINS</span><b>' + ownedAbilityCosmetics.size + '</b></div>'
+        + '</div>';
+    }
+
+    html += '<div class="lg-note">NOTHING IN THIS SECTION WAS RESET, CONVERTED OR SPENT BY THE MOVE '
+      + 'TO VOIDBREAK. IT IS THE SAME RECORD, READ FROM THE SAME PLACE.</div>';
+    return html;
+  }
+
+  // Commander header: who you are, where you are, what you fly. Reads
+  // the Voidbreak mirror (VBP), which may legitimately be empty for an
+  // account that has never launched an expedition.
+  function renderCommanderBlock(){
+    const disc = VBP.discoverable > 0
+      ? Math.round((VBP.discovered / VBP.discoverable) * 100) : 0;
+    return '<div class="cmd-card">'
+      + '<div class="cmd-card-tag">COMMANDER'
+        + (VBP.prestige > 0 ? ' \u00b7 PRESTIGE ' + VBP.prestige : '') + '</div>'
+      + '<div class="cmd-card-name">' + escapeHtmlRk(accountName || 'GUEST') + '</div>'
+      + (VBP.title ? '<div class="cmd-card-title">' + escapeHtmlRk(VBP.title) + '</div>' : '')
+      + '<div class="cmd-card-rows">'
+      + '<div><span>GALAXY</span><b>' + escapeHtmlRk(VBP.galaxyName || '—') + '</b></div>'
+      + '<div><span>SHIP</span><b>' + (VBP.loaded ? vbShipName(VBP.shipLevel) : '—') + '</b></div>'
+      + '</div></div>'
+      + '<div class="rr-grid">'
+      + '<div class="rr-row"><span>VOID SHARDS</span><b>' + VBP.shards.toLocaleString() + '</b></div>'
+      + '<div class="rr-row"><span>GALAXIES CLEARED</span><b>'
+        + VBP.galaxiesCleared + ' / ' + (VBP.galaxyTotal || '—') + '</b></div>'
+      + '<div class="rr-row"><span>SYSTEMS CLEARED</span><b>'
+        + VBP.cleared + ' / ' + (VBP.clearable || '—') + '</b></div>'
+      + '<div class="rr-row"><span>SITES DISCOVERED</span><b>'
+        + VBP.discovered + ' / ' + (VBP.discoverable || '—') + ' (' + disc + '%)</b></div>'
+      + '</div>';
+  }
+
   async function openRankedProfileModal(){
     if(!loggedIn){
-      lobbyOpenModal('PROFILE',
-        '<div class="rl-empty">SIGN IN WITH GOOGLE TO VIEW YOUR PROFILE.<br>'
+      lobbyOpenModal('COMMANDER',
+        '<div class="rl-empty">SIGN IN TO VIEW YOUR COMMANDER PROFILE.<br>'
         + 'GUEST PROGRESS IS NOT SAVED.</div>');
       return;
     }
-    lobbyOpenModal('PROFILE', '<div class="rl-empty">LOADING...</div>');
+    lobbyOpenModal('COMMANDER', '<div class="rl-empty">LOADING...</div>');
+
+    // Both reads in parallel -- the ranked record and a fresh pull of the
+    // Voidbreak save, so the galaxy/ship/discovery lines are current
+    // rather than whatever the lobby last cached.
     let data = null;
-    try{
-      const res = await fetch(ACCOUNT_SERVER_URL + '/ranked/me?sessionToken=' + encodeURIComponent(sessionToken));
-      if(res.ok) data = await res.json();
-    } catch(e){ /* fall through to the offline view below */ }
+    const ranked = fetch(ACCOUNT_SERVER_URL + '/ranked/me?sessionToken=' + encodeURIComponent(sessionToken))
+      .then(res => res.ok ? res.json() : null)
+      .catch(() => null);
+    try{ syncVoidbreakProfile(); }catch(e){}
+    data = await ranked;
 
     let html = renderXPBlock()
-      + '<div class="rr-grid">'
-      + renderUsernameRow()
-      + '<div class="rr-row"><span>COINS</span><b>' + coins.toLocaleString() + '</b></div>'
-      + '<div class="rr-row"><span>CRYSTALS</span><b>' + crystals.toLocaleString() + '</b></div>'
-      + '<div class="rr-row"><span>KILLS</span><b>' + stats.kills + '</b></div>'
-      + '<div class="rr-row"><span>WINS</span><b>' + stats.wins + '</b></div>'
-      + '</div>';
+      + '<div class="rr-grid">' + renderUsernameRow() + '</div>'
+      + renderCommanderBlock();
 
     if(!data){
-      html += '<div class="rl-empty">RANKED STATS UNAVAILABLE — SERVER OFFLINE</div>';
-      lobbyOpenModal('PROFILE', html);
+      html += '<div class="rl-empty">ARENA STATS UNAVAILABLE — SERVER OFFLINE</div>'
+        + renderLegacyBlock();
+      lobbyOpenModal('COMMANDER', html);
       wireUsernameEditor();
       return;
     }
 
     const r = data.ranked;
-    html += '<div class="rk-season" style="margin:14px 0 8px">'
-      + ((data.config && data.config.seasonName) || 'SEASON').toUpperCase() + ' · RANKED</div>';
+    html += '<div class="rk-season" style="margin:16px 0 8px">'
+      + ((data.config && data.config.seasonName) || 'SEASON').toUpperCase() + ' · VOIDBREAK ARENA</div>';
 
     html += '<div style="text-align:center;margin-bottom:10px">'
       + '<div style="font-size:22px;font-weight:900;letter-spacing:2px;color:'
@@ -17945,7 +18164,9 @@ if(tutorialActive) tutorialUpdate(dt);
         + '</div>';
     }
 
-    lobbyOpenModal('PROFILE', html);
+    html += renderLegacyBlock();
+
+    lobbyOpenModal('COMMANDER', html);
     wireUsernameEditor();
   }
 
