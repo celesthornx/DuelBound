@@ -1247,185 +1247,162 @@
 
   /* ---------- Background: arena environment (pure CSS, no assets) ---------- */
   /* ==================================================================
-     VOIDBREAK LOBBY BACKDROP -- deep space, drawn entirely in CSS.
-     No image assets, no extra HTTP requests, no canvas: the whole scene
-     is six absolutely-positioned layers inside .lobby-bg, so it costs
-     one paint and composites on the GPU. Layer order back-to-front:
+     VOIDBREAK LOBBY BACKDROP -- a deep-space scene, not a background.
 
-       .lb-deep      base void wash + the galactic core glow
-       .lb-stars     three parallax starfields (radial-gradient dots)
-       .lb-nebula    two drifting nebula clouds (cyan / violet)
-       .lb-galaxy    the spiral galaxy in the upper right of the art
-       .lb-planet-*  the two foreground worlds
-       .lb-ship      the player's ship with its engine trail
-       .lb-vignette  scanlines + edge falloff, on top of everything
+     Split by cost, deliberately:
 
-     Every animation is transform/opacity only (never layout), and the
-     whole block is disabled under prefers-reduced-motion further down.
+       CANVAS (#lobbyStars)  everything with COUNT -- ~420 parallax
+                             stars across 4 depth planes, drifting dust,
+                             tumbling asteroids and occasional shooting
+                             stars. A thousand of these cost one cheap
+                             draw each; as DOM nodes they would cost a
+                             thousand composited layers. It is driven by
+                             the game's EXISTING rAF loop (see
+                             drawLobbySky) and draws nothing once a match
+                             starts, so it adds no second animation loop
+                             and no in-match cost.
+
+       CSS                   the big soft shapes -- nebula clouds, the
+                             spiral galaxy, the planet and its
+                             atmosphere rim, the distant station. These
+                             are a handful of GPU-composited layers that
+                             animate on transform/opacity only.
+
+     Layer order, back to front:
+       ::before        the void itself + galactic core wash
+       .lb-neb-*       three nebula clouds (cyan / violet / magenta)
+       .lb-galaxy      the spiral galaxy core, .lb-galaxy-arms its arms
+       .lb-canvas      stars, dust, asteroids, shooting stars
+       .lb-planet-main the world below, .lb-planet-rim its atmosphere
+       .lb-station     a distant orbital
+       .lb-vignette    scanlines + edge falloff, over everything
+
+     The whole block stops moving under prefers-reduced-motion, and the
+     scene stays fully legible stopped.
      ================================================================== */
   .lobby-bg{ position:absolute; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
   .lobby-bg::before{
-    /* deep base wash -- the void itself */
     content:''; position:absolute; inset:0;
     background:
-      radial-gradient(80% 62% at 74% 30%, rgba(110,58,200,0.26) 0%, transparent 58%),
-      radial-gradient(62% 54% at 20% 54%, rgba(20,70,150,0.24) 0%, transparent 62%),
-      radial-gradient(120% 90% at 50% 4%, rgba(34,72,150,0.16) 0%, transparent 60%),
-      linear-gradient(180deg, #070c1c 0%, #060a16 46%, #03050c 100%);
+      /* the galactic core's light, spilling across the upper right */
+      radial-gradient(58% 48% at 76% 26%, rgba(150,90,255,0.34) 0%, transparent 62%),
+      radial-gradient(90% 70% at 70% 30%, rgba(70,40,160,0.22) 0%, transparent 66%),
+      /* the world's light from below left */
+      radial-gradient(70% 58% at 16% 74%, rgba(24,92,180,0.30) 0%, transparent 64%),
+      radial-gradient(120% 90% at 50% 0%, rgba(30,64,140,0.16) 0%, transparent 58%),
+      linear-gradient(170deg, #080f26 0%, #060a1a 42%, #04060f 72%, #020309 100%);
   }
 
-  /* ---- starfields: three sizes, three speeds, pure gradients ---- */
-  .lb-stars{
-    position:absolute; inset:-10% -10% -10% -10%;
-    background-repeat: repeat;
-    will-change: transform;
-  }
-  .lb-stars-far{
-    background-image:
-      radial-gradient(1px 1px at 14% 22%, rgba(210,230,255,.85), transparent),
-      radial-gradient(1px 1px at 63% 11%, rgba(190,215,255,.70), transparent),
-      radial-gradient(1px 1px at 31% 74%, rgba(225,240,255,.75), transparent),
-      radial-gradient(1px 1px at 82% 58%, rgba(180,210,255,.65), transparent),
-      radial-gradient(1px 1px at 47% 41%, rgba(235,245,255,.60), transparent),
-      radial-gradient(1px 1px at 92% 29%, rgba(200,225,255,.70), transparent),
-      radial-gradient(1px 1px at 7% 63%, rgba(200,225,255,.55), transparent);
-    background-size: 340px 300px;
-    opacity:.62;
-    animation: lbDrift 190s linear infinite;
-  }
-  .lb-stars-mid{
-    background-image:
-      radial-gradient(1.6px 1.6px at 24% 33%, rgba(160,210,255,.95), transparent),
-      radial-gradient(1.6px 1.6px at 71% 67%, rgba(215,190,255,.85), transparent),
-      radial-gradient(1.4px 1.4px at 52% 18%, rgba(255,240,235,.80), transparent),
-      radial-gradient(1.4px 1.4px at 88% 82%, rgba(170,220,255,.75), transparent);
-    background-size: 520px 470px;
-    opacity:.75;
-    animation: lbDrift 120s linear infinite reverse;
-  }
-  .lb-stars-near{
-    background-image:
-      radial-gradient(2.4px 2.4px at 18% 61%, rgba(120,235,255,.95), transparent),
-      radial-gradient(2.2px 2.2px at 77% 26%, rgba(210,150,255,.90), transparent),
-      radial-gradient(2px 2px at 41% 88%, rgba(255,220,180,.80), transparent);
-    background-size: 760px 680px;
-    opacity:.9;
-    animation: lbTwinkle 7s ease-in-out infinite;
-  }
-  @keyframes lbDrift{
-    from{ transform: translate3d(0,0,0); }
-    to{   transform: translate3d(-340px,-150px,0); }
-  }
-  @keyframes lbTwinkle{
-    0%,100%{ opacity:.9; }
-    50%{ opacity:.45; }
+  /* ---- canvas: stars, dust, asteroids, shooting stars ---- */
+  /* The global `canvas{ background: var(--void) }` rule above exists for
+     the ARENA canvas, which must be opaque. This one must not be: it is
+     a transparent overlay drawn on top of the nebula and galaxy behind
+     it, and inheriting that opaque fill painted the whole scene out. */
+  .lb-canvas{
+    position:absolute; inset:0; width:100%; height:100%; display:block;
+    background: transparent;
   }
 
   /* ---- nebula clouds ---- */
-  .lb-neb{ position:absolute; filter: blur(64px); will-change: transform, opacity; }
+  .lb-neb{ position:absolute; filter: blur(70px); will-change: transform, opacity; }
   .lb-neb-cyan{
-    left:-12%; top:6%; width:62%; height:82%;
+    left:-6%; top:34%; width:66%; height:74%;
     background:
-      radial-gradient(circle at 42% 38%, rgba(0,170,255,0.30), transparent 58%),
-      radial-gradient(circle at 62% 70%, rgba(30,90,220,0.20), transparent 62%);
-    animation: lbNeb 26s ease-in-out infinite alternate;
+      radial-gradient(circle at 46% 42%, rgba(0,185,255,0.42), transparent 44%),
+      radial-gradient(circle at 68% 76%, rgba(40,105,235,0.30), transparent 40%);
+    animation: lbNeb 30s ease-in-out infinite alternate;
   }
   .lb-neb-violet{
-    right:-14%; top:-10%; width:70%; height:92%;
+    right:4%; top:-18%; width:72%; height:100%;
     background:
-      radial-gradient(circle at 58% 40%, rgba(150,60,255,0.32), transparent 56%),
-      radial-gradient(circle at 34% 72%, rgba(230,60,170,0.18), transparent 60%);
-    animation: lbNeb 33s ease-in-out infinite alternate-reverse;
+      radial-gradient(circle at 58% 38%, rgba(160,68,255,0.52), transparent 42%),
+      radial-gradient(circle at 36% 72%, rgba(225,66,200,0.30), transparent 38%),
+      radial-gradient(circle at 74% 66%, rgba(90,40,200,0.26), transparent 36%);
+    animation: lbNeb 37s ease-in-out infinite alternate-reverse;
+  }
+  .lb-neb-magenta{
+    right:26%; top:26%; width:44%; height:54%;
+    background: radial-gradient(circle at 50% 50%, rgba(255,86,195,0.26), transparent 42%);
+    animation: lbNeb 44s ease-in-out infinite alternate;
   }
   @keyframes lbNeb{
-    from{ transform: translate3d(0,0,0) scale(1);      opacity:.48; }
-    to{   transform: translate3d(2.5%,-2%,0) scale(1.09); opacity:.72; }
+    from{ transform: translate3d(0,0,0) scale(1);          opacity:.62; }
+    to{   transform: translate3d(2.5%,-2.5%,0) scale(1.08); opacity:.9; }
   }
 
-  /* ---- the spiral galaxy (upper right of the reference art) ---- */
-  .lb-galaxy{
-    position:absolute; right:14%; top:12%;
-    width: min(38vw, 520px); aspect-ratio: 1 / 1;
-    border-radius:50%;
-    background:
-      radial-gradient(circle at 50% 50%, rgba(255,255,255,.95) 0%, rgba(210,175,255,.65) 5%, rgba(150,110,255,.30) 13%, transparent 34%),
-      conic-gradient(from 0deg,
-        rgba(120,200,255,.32) 0deg, transparent 52deg,
-        rgba(190,120,255,.34) 104deg, transparent 158deg,
-        rgba(120,200,255,.30) 208deg, transparent 262deg,
-        rgba(210,120,255,.30) 314deg, transparent 360deg);
-    filter: blur(7px);
-    opacity:.85;
-    transform: rotate(-16deg) scaleY(.46);
-    animation: lbSpin 240s linear infinite;
-  }
-  .lb-galaxy::after{
-    /* the bright core, kept unblurred so it reads as a light source */
-    content:''; position:absolute; left:50%; top:50%;
-    width:16%; height:32%; transform: translate(-50%,-50%);
-    border-radius:50%;
-    background: radial-gradient(circle, rgba(255,255,255,.95), rgba(220,190,255,.45) 45%, transparent 72%);
-    filter: blur(3px);
-  }
-  @keyframes lbSpin{
-    from{ transform: rotate(-16deg) scaleY(.46); }
-    to{   transform: rotate(344deg) scaleY(.46); }
-  }
-
-  /* ---- foreground worlds ---- */
+  /* ---- the world below. The rim is a separate element so the
+     atmosphere can glow OUTSIDE the sphere, which is what sells the
+     scale in the reference art. ---- */
   .lb-planet{ position:absolute; border-radius:50%; will-change: transform; }
   .lb-planet-main{
-    left:-6%; top:6%;
-    width: min(34vw, 460px); aspect-ratio: 1 / 1;
+    left:-26%; top:58%;
+    width: min(84vw, 1240px); aspect-ratio: 1 / 1;
     background:
-      radial-gradient(circle at 34% 30%, rgba(120,210,255,.55), rgba(30,90,160,.55) 38%, rgba(8,20,44,.95) 72%),
-      radial-gradient(circle at 70% 76%, rgba(90,255,200,.20), transparent 48%);
+      /* continents and city light, catching the star from upper right */
+      radial-gradient(circle at 62% 26%, rgba(150,230,255,.30), transparent 34%),
+      radial-gradient(circle at 44% 40%, rgba(60,190,160,.20), transparent 26%),
+      radial-gradient(circle at 70% 54%, rgba(70,150,220,.18), transparent 30%),
+      radial-gradient(circle at 60% 30%, rgba(40,110,190,.55) 0%, rgba(12,44,92,.85) 42%, rgba(4,10,26,.97) 68%);
     box-shadow:
-      inset -26px -18px 60px rgba(0,0,0,.85),
-      inset 16px 12px 46px rgba(120,210,255,.22),
-      0 0 90px rgba(40,140,220,.28);
-    animation: lbFloat 34s ease-in-out infinite alternate;
+      inset -60px -40px 150px rgba(0,0,0,.92),
+      inset 40px 26px 110px rgba(110,200,255,.16);
+    animation: lbFloat 60s ease-in-out infinite alternate;
+  }
+  /* The lit atmospheric limb: a ring the same size as the planet, with
+     only its upper-right arc visible, glowing outward. */
+  .lb-planet-rim{
+    position:absolute;
+    left:-26%; top:58%;
+    width: min(84vw, 1240px); aspect-ratio: 1 / 1;
+    border-radius:50%;
+    border: 2px solid rgba(150,230,255,.72);
+    box-shadow:
+      0 0 26px rgba(120,215,255,.55),
+      0 0 70px rgba(80,180,255,.34),
+      inset 0 0 40px rgba(140,225,255,.28);
+    -webkit-mask-image: linear-gradient(18deg, transparent 30%, #000 52%, #000 88%, transparent 99%);
+    mask-image: linear-gradient(18deg, transparent 30%, #000 52%, #000 88%, transparent 99%);
+    animation: lbFloat 60s ease-in-out infinite alternate;
   }
   .lb-planet-moon{
-    left:22%; top:-4%;
-    width: min(9vw, 118px); aspect-ratio: 1 / 1;
+    left:23%; top:9%;
+    width: min(8vw, 108px); aspect-ratio: 1 / 1;
     background:
-      radial-gradient(circle at 36% 32%, rgba(190,205,230,.75), rgba(70,85,115,.75) 44%, rgba(10,14,26,.95) 76%);
-    box-shadow: inset -8px -6px 20px rgba(0,0,0,.8), 0 0 34px rgba(120,160,220,.18);
-    animation: lbFloat 46s ease-in-out infinite alternate-reverse;
+      radial-gradient(circle at 64% 30%, rgba(214,226,246,.82), rgba(84,98,130,.7) 44%, rgba(8,12,24,.96) 78%);
+    box-shadow: inset -10px -7px 24px rgba(0,0,0,.85), 0 0 40px rgba(130,170,225,.2);
+    animation: lbFloat 78s ease-in-out infinite alternate-reverse;
   }
   @keyframes lbFloat{
     from{ transform: translate3d(0,0,0); }
-    to{   transform: translate3d(1.2%,2.2%,0); }
+    to{   transform: translate3d(.8%,1.4%,0); }
   }
 
-  /* ---- the ship: a CSS-drawn hull with an engine trail. It is the one
-     element that reads instantly as "you fly this", which is why it sits
-     closest to the camera and gets the only fast animation. ---- */
-  .lb-ship{
-    position:absolute; left:23%; top:78%;
-    width: min(30vw, 400px); height: 0;
-    opacity:.9;
-    animation: lbCruise 9s ease-in-out infinite alternate;
+  /* ---- a distant orbital, far right, for scale ---- */
+  .lb-station{
+    /* Upper-left of the centre band, balancing the galaxy on the right.
+       right:6% put it behind the right-hand panel stack. */
+    position:absolute; left:22%; top:14%;
+    width: min(10vw, 150px);
+    opacity:.5;
+    filter: drop-shadow(0 0 14px rgba(120,215,255,.35));
+    animation: lbFloat 90s ease-in-out infinite alternate;
   }
-  .lb-ship svg{ position:absolute; left:0; top:-52px; width:100%; height:auto;
-    filter: drop-shadow(0 0 22px rgba(63,208,255,.45)); }
-  @keyframes lbCruise{
-    from{ transform: translate3d(0,0,0) rotate(-1.2deg); }
-    to{   transform: translate3d(2.4%,-2.6%,0) rotate(1.2deg); }
-  }
+  .lb-station svg{ width:100%; height:auto; }
 
   .lb-vignette{
     position:absolute; inset:0;
     background:
-      radial-gradient(120% 86% at 50% 44%, transparent 26%, rgba(2,4,9,.88) 100%),
-      repeating-linear-gradient(0deg, rgba(120,200,255,.018) 0 1px, transparent 1px 3px);
+      radial-gradient(132% 96% at 50% 46%, transparent 40%, rgba(2,4,9,.74) 100%),
+      linear-gradient(180deg, rgba(2,4,9,.55) 0%, transparent 13%, transparent 84%, rgba(2,4,9,.6) 100%),
+      repeating-linear-gradient(0deg, rgba(120,200,255,.016) 0 1px, transparent 1px 3px);
   }
 
   /* Anything that moves on its own is a preference, not a requirement:
-     the scene stays fully legible with every animation stopped. */
+     the scene stays fully legible with every animation stopped. The
+     canvas checks the same query itself and renders one static frame. */
   @media (prefers-reduced-motion: reduce){
-    .lb-stars, .lb-neb, .lb-galaxy, .lb-planet, .lb-ship{ animation: none !important; }
+    .lb-neb, .lb-planet, .lb-planet-rim,
+    .lb-station, .lb-ship{ animation: none !important; }
   }
 
   /* ---------- Shared panel look ---------- */
@@ -2100,9 +2077,104 @@
   .lobby-center{
     position:relative; min-height:0;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap: 18px;
+    gap: 20px;
     padding: 4px 0;
   }
+  /* The launch bay behind them is position:absolute, which would
+     otherwise paint over these static siblings. Lifting the real
+     content into its own layer keeps the scenery behind it. */
+  .lobby-center > .arena-banner,
+  .lobby-center > .play-btn,
+  .lobby-center > .dest-grid{ position:relative; z-index:1; }
+
+  /* ==================================================================
+     LAUNCH BAY -- the ship, its energy rings and its glow, sitting
+     behind the hero button.
+
+     Absolutely positioned inside .lobby-center and pointer-events:none,
+     so it is pure scenery: it takes no space in the column's flow, the
+     hero and the destination tiles lay out exactly as if it did not
+     exist, and it can never intercept a click meant for either.
+     ================================================================== */
+  .launch-bay{
+    position:absolute; left:50%; top:50%;
+    transform: translate(-50%, -50%);
+    width: min(860px, 116%); aspect-ratio: 16 / 9;
+    pointer-events:none; z-index:0;
+    display:flex; align-items:center; justify-content:center;
+  }
+  /* Two counter-rotating containment rings. Dashed borders rather than
+     images, so they cost nothing and scale to any size. */
+  .bay-ring{
+    position:absolute; left:46%; top:33%;
+    width: min(500px, 74%); aspect-ratio: 1 / 1;
+    margin:-0 0 0 0; transform: translate(-50%,-50%);
+    border-radius:50%;
+    border: 1px dashed rgba(120,200,255,.20);
+    animation: bayRing 68s linear infinite;
+  }
+  .bay-ring-2{
+    width: min(660px, 96%);
+    border-style: solid;
+    border-color: rgba(160,92,255,.14);
+    animation: bayRing 104s linear infinite reverse;
+  }
+  .bay-ring::after{
+    /* one bright arc riding the ring, so the rotation is legible */
+    content:''; position:absolute; inset:-1px; border-radius:50%;
+    border:1px solid transparent;
+    border-top-color: rgba(120,220,255,.55);
+    border-right-color: rgba(120,220,255,.18);
+    filter: drop-shadow(0 0 8px rgba(63,208,255,.5));
+  }
+  @keyframes bayRing{
+    from{ transform: translate(-50%,-50%) rotate(0deg); }
+    to{   transform: translate(-50%,-50%) rotate(360deg); }
+  }
+  /* The light the ship's own engines throw into the bay. */
+  .bay-glow{
+    position:absolute; left:38%; top:33%;
+    width: min(620px, 88%); aspect-ratio: 2 / 1;
+    transform: translate(-50%,-50%);
+    background:
+      radial-gradient(closest-side, rgba(63,208,255,.22), rgba(40,120,255,.08) 52%, transparent 74%);
+    filter: blur(22px);
+    animation: bayPulse 5.5s ease-in-out infinite;
+  }
+  @keyframes bayPulse{
+    0%,100%{ opacity:.7;  transform: translate(-50%,-50%) scale(1); }
+    50%    { opacity:1;   transform: translate(-50%,-50%) scale(1.07); }
+  }
+  .bay-ship{
+    position:absolute; left:46%; top:33%;
+    width: min(700px, 100%);
+    transform: translate(-50%,-50%);
+    filter: drop-shadow(0 0 30px rgba(63,208,255,.55)) drop-shadow(0 16px 46px rgba(0,0,0,.8));
+    animation: bayIdle 11s ease-in-out infinite alternate;
+  }
+  .bay-ship svg{ width:100%; height:auto; display:block; }
+  /* Idle drift: the ship is holding station, not parked. */
+  @keyframes bayIdle{
+    from{ transform: translate(-50%,-50%) translate3d(-1.2%, 1.4%, 0) rotate(-1.1deg); }
+    to{   transform: translate(-50%,-50%) translate3d( 1.2%,-1.4%, 0) rotate( 1.1deg); }
+  }
+  /* Pressing the hero kicks the engines. */
+  .lobby-center.launching .bay-ship{ animation: bayLaunch .5s cubic-bezier(.3,0,.2,1) both; }
+  @keyframes bayLaunch{
+    0%  { transform: translate(-50%,-50%) translate3d(0,0,0) scale(1); }
+    35% { transform: translate(-50%,-50%) translate3d(-3%,0,0) scale(.98); }
+    100%{ transform: translate(-50%,-50%) translate3d(14%,0,0) scale(1.06); }
+  }
+  .lobby-center.launching .bay-glow{ animation: bayFlare .5s ease-out both; }
+  @keyframes bayFlare{
+    from{ opacity:1; transform: translate(-50%,-50%) scale(1); }
+    to  { opacity:0; transform: translate(-50%,-50%) scale(1.5); }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .bay-ring, .bay-glow, .bay-ship{ animation: none !important; }
+  }
+
   .arena-banner{
     display:flex; flex-direction:column; align-items:center; gap:5px;
     opacity:.9;
@@ -2126,9 +2198,17 @@
      hexagon geometry, no matter how the shape is tuned. */
   .play-btn{
     position:relative; isolation:isolate; cursor:pointer; border:none; background:none;
-    padding: 0; width: min(560px, 100%);
+    padding: 0; width: min(620px, 100%);
     display:block;
     transition: transform .16s cubic-bezier(.22,.8,.32,1);
+  }
+  /* A soft dark pad under the hero so the label stays readable where it
+     crosses the ship's bright hull. Sits below the shape, above the bay. */
+  .play-btn::before{
+    content:''; position:absolute; inset:-18% -6%;
+    background: radial-gradient(closest-side, rgba(3,6,14,.72), rgba(3,6,14,.28) 58%, transparent 78%);
+    filter: blur(10px);
+    z-index:-1; pointer-events:none;
   }
   .play-btn:hover{ transform: translateY(-3px) scale(1.03); }
   .play-btn:active,
@@ -3580,48 +3660,26 @@
     <!-- Deep-space backdrop. Purely decorative (pointer-events:none on
          .lobby-bg), so nothing here can ever intercept a menu click. -->
     <div class="lobby-bg" aria-hidden="true">
-      <div class="lb-stars lb-stars-far"></div>
-      <div class="lb-stars lb-stars-mid"></div>
+      <!-- Nebula and galaxy stay in CSS (they are big, soft and cheap to
+           composite). Everything with COUNT -- stars, dust, asteroids,
+           shooting stars -- is on the canvas, where a thousand of them
+           cost one draw call apiece instead of a thousand DOM nodes. -->
       <div class="lb-neb lb-neb-cyan"></div>
       <div class="lb-neb lb-neb-violet"></div>
-      <div class="lb-galaxy"></div>
+      <div class="lb-neb lb-neb-magenta"></div>
+      <canvas class="lb-canvas" id="lobbyStars"></canvas>
       <div class="lb-planet lb-planet-main"></div>
+      <div class="lb-planet-rim"></div>
       <div class="lb-planet lb-planet-moon"></div>
-      <div class="lb-stars lb-stars-near"></div>
-      <div class="lb-ship">
-        <svg viewBox="0 0 400 150" fill="none" preserveAspectRatio="xMidYMid meet">
-          <defs>
-            <linearGradient id="vbTrail" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%"   stop-color="#00f0ff" stop-opacity="0"/>
-              <stop offset="60%"  stop-color="#3fd0ff" stop-opacity=".45"/>
-              <stop offset="100%" stop-color="#eaffff" stop-opacity=".9"/>
-            </linearGradient>
-            <linearGradient id="vbHull" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"   stop-color="#6d86c4"/>
-              <stop offset="48%"  stop-color="#2b3c68"/>
-              <stop offset="100%" stop-color="#0f1730"/>
-            </linearGradient>
-            <linearGradient id="vbWing" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"   stop-color="#3c4f80"/>
-              <stop offset="100%" stop-color="#101a34"/>
-            </linearGradient>
-          </defs>
-          <!-- engine wash -->
-          <path d="M4 68 H150" stroke="url(#vbTrail)" stroke-width="10" stroke-linecap="round" opacity=".7"/>
-          <path d="M22 84 H156" stroke="url(#vbTrail)" stroke-width="6"  stroke-linecap="round" opacity=".45"/>
-          <!-- swept wings, drawn under the fuselage -->
-          <path d="M214 62 L268 18 L318 30 L286 66 Z" fill="url(#vbWing)" stroke="#4fb9ff" stroke-width="1.2" opacity=".95"/>
-          <path d="M214 90 L268 134 L318 122 L286 86 Z" fill="url(#vbWing)" stroke="#4fb9ff" stroke-width="1.2" opacity=".95"/>
-          <!-- fuselage -->
-          <path d="M150 62 L236 44 L392 76 L236 108 L150 90 L178 76 Z" fill="url(#vbHull)" stroke="#6fe0ff" stroke-width="1.7"/>
-          <!-- spine + canopy -->
-          <path d="M214 62 L330 76 L214 90 L238 76 Z" fill="#0c1730" stroke="#a05cff" stroke-width="1.2" opacity=".95"/>
-          <circle cx="262" cy="76" r="8" fill="#00f0ff" opacity=".95"/>
-          <circle cx="262" cy="76" r="15" fill="none" stroke="#00f0ff" stroke-width="1.1" opacity=".4"/>
-          <!-- thruster mouths -->
-          <path d="M150 66 L176 76 L150 86" fill="#00f0ff" opacity=".9"/>
-          <path d="M214 50 L232 54 L214 58" fill="#7fe3ff" opacity=".6"/>
-          <path d="M214 94 L232 98 L214 102" fill="#7fe3ff" opacity=".6"/>
+      <div class="lb-station">
+        <svg viewBox="0 0 220 150" fill="none" preserveAspectRatio="xMidYMid meet">
+          <ellipse cx="110" cy="96" rx="96" ry="15" stroke="#7fd8ff" stroke-width="1.1" opacity=".5"/>
+          <ellipse cx="110" cy="96" rx="58" ry="9"  stroke="#a05cff" stroke-width="1" opacity=".45"/>
+          <path d="M104 96 L104 20 L110 6 L116 20 L116 96 Z" fill="#0a1226" stroke="#7fd8ff" stroke-width="1.1" opacity=".75"/>
+          <path d="M96 78 L96 40 L100 32 L100 78 Z"   fill="#0a1226" stroke="#7fd8ff" stroke-width=".9" opacity=".6"/>
+          <path d="M124 78 L124 40 L120 32 L120 78 Z" fill="#0a1226" stroke="#7fd8ff" stroke-width=".9" opacity=".6"/>
+          <circle cx="110" cy="14" r="2.6" fill="#8ef2ff" opacity=".95"/>
+          <circle cx="110" cy="96" r="3.4" fill="#c77dff" opacity=".8"/>
         </svg>
       </div>
       <div class="lb-vignette"></div>
@@ -3817,6 +3875,87 @@
 
       <!-- ===== CENTER: the journey, and every destination in it ===== -->
       <section class="lobby-center">
+
+        <!-- LAUNCH BAY -- the ship the player is about to fly, the energy
+             ring it sits in, and the horizon arc under both. Absolutely
+             positioned and pointer-events:none, so it is scenery: it
+             cannot move, cover or intercept anything in the column, and
+             the hero button and destination tiles lay out exactly as if
+             it were not there. -->
+        <div class="launch-bay" aria-hidden="true">
+          <div class="bay-ring"></div>
+          <div class="bay-ring bay-ring-2"></div>
+          <div class="bay-glow"></div>
+          <div class="bay-ship">
+            <svg viewBox="0 0 520 210" fill="none" preserveAspectRatio="xMidYMid meet">
+              <defs>
+                <linearGradient id="vbTrail" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%"   stop-color="#00f0ff" stop-opacity="0"/>
+                  <stop offset="55%"  stop-color="#4fd8ff" stop-opacity=".5"/>
+                  <stop offset="100%" stop-color="#f2ffff" stop-opacity=".95"/>
+                </linearGradient>
+                <linearGradient id="vbHull" x1="0" y1="0" x2=".25" y2="1">
+                  <stop offset="0%"   stop-color="#d3e4ff"/>
+                  <stop offset="26%"  stop-color="#7f97cf"/>
+                  <stop offset="62%"  stop-color="#33456f"/>
+                  <stop offset="100%" stop-color="#111c36"/>
+                </linearGradient>
+                <linearGradient id="vbWing" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%"   stop-color="#9db0dc"/>
+                  <stop offset="58%"  stop-color="#3a4d7f"/>
+                  <stop offset="100%" stop-color="#131d3c"/>
+                </linearGradient>
+                <linearGradient id="vbCanopy" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%"   stop-color="#7ce8ff"/>
+                  <stop offset="55%"  stop-color="#2a6fd0"/>
+                  <stop offset="100%" stop-color="#101c3c"/>
+                </linearGradient>
+                <radialGradient id="vbThrust" cx="0" cy=".5" r="1">
+                  <stop offset="0%"   stop-color="#ffffff" stop-opacity=".95"/>
+                  <stop offset="35%"  stop-color="#7ceaff" stop-opacity=".8"/>
+                  <stop offset="100%" stop-color="#2b8cff" stop-opacity="0"/>
+                </radialGradient>
+              </defs>
+
+              <!-- engine wash, longest layer first -->
+              <path d="M2 100 H196"  stroke="url(#vbTrail)" stroke-width="13" stroke-linecap="round" opacity=".55"/>
+              <path d="M18 120 H202" stroke="url(#vbTrail)" stroke-width="8"  stroke-linecap="round" opacity=".38"/>
+              <path d="M34 82 H200"  stroke="url(#vbTrail)" stroke-width="6"  stroke-linecap="round" opacity=".3"/>
+              <ellipse cx="200" cy="100" rx="66" ry="17" fill="url(#vbThrust)" opacity=".55"/>
+              <ellipse cx="200" cy="120" rx="44" ry="11" fill="url(#vbThrust)" opacity=".35"/>
+
+              <!-- swept wings, under the fuselage -->
+              <path d="M274 82 L344 14 L414 32 L372 88 Z"   fill="url(#vbWing)" stroke="#5fc9ff" stroke-width="1.4"/>
+              <path d="M274 122 L344 190 L414 172 L372 116 Z" fill="url(#vbWing)" stroke="#5fc9ff" stroke-width="1.4"/>
+              <path d="M344 20 L400 34 L378 62 Z"   fill="#0c1832" stroke="#a05cff" stroke-width="1" opacity=".8"/>
+              <path d="M344 184 L400 170 L378 142 Z" fill="#0c1832" stroke="#a05cff" stroke-width="1" opacity=".8"/>
+
+              <!-- nacelles -->
+              <path d="M196 86 L268 74 L292 88 L268 102 L196 100 Z" fill="url(#vbHull)" stroke="#6fe0ff" stroke-width="1.3"/>
+              <path d="M202 120 L268 110 L288 120 L268 132 L202 130 Z" fill="url(#vbHull)" stroke="#6fe0ff" stroke-width="1.2" opacity=".9"/>
+              <circle cx="200" cy="93" r="7" fill="#bff4ff" opacity=".95"/>
+              <circle cx="204" cy="124" r="5" fill="#9fe8ff" opacity=".85"/>
+
+              <!-- fuselage -->
+              <path d="M240 84 L340 58 L512 104 L340 148 L240 124 L276 104 Z"
+                    fill="url(#vbHull)" stroke="#7fe8ff" stroke-width="2"/>
+              <!-- hull panel lines -->
+              <path d="M300 74 L470 104 L300 134" stroke="#8fd4ff" stroke-width=".9" opacity=".35"/>
+              <path d="M262 96 L300 104 L262 112" stroke="#8fd4ff" stroke-width=".9" opacity=".3"/>
+              <!-- spine -->
+              <path d="M300 84 L436 104 L300 124 L332 104 Z" fill="#0b1630" stroke="#a05cff" stroke-width="1.3" opacity=".95"/>
+              <!-- canopy -->
+              <path d="M344 92 L404 104 L344 116 L362 104 Z" fill="url(#vbCanopy)" opacity=".95"/>
+              <circle cx="358" cy="104" r="9" fill="#00f0ff" opacity=".9"/>
+              <circle cx="358" cy="104" r="17" fill="none" stroke="#00f0ff" stroke-width="1.2" opacity=".38"/>
+              <!-- running lights -->
+              <circle cx="414" cy="32" r="3"  fill="#ff5fc8" opacity=".9"/>
+              <circle cx="414" cy="172" r="3" fill="#5dffa0" opacity=".9"/>
+              <circle cx="500" cy="104" r="2.6" fill="#eaffff" opacity=".9"/>
+            </svg>
+          </div>
+        </div>
+
         <div class="arena-banner">
           <div class="ab-plate">VOIDBREAK</div>
           <div class="ab-mast"></div>
@@ -13703,9 +13842,15 @@ if(mode === "online" && socket && socket.readyState === WebSocket.OPEN){
   function loop(ts){
     requestAnimationFrame(loop);
     netDbgFrame(ts); // no-op unless NET_DEBUG -- render-rate sampling only
-    if(!started) return;
     const dt = Math.min(0.032, (loop._last? (ts-loop._last)/1000 : 0.016));
     loop._last = ts;
+    if(!started){
+      // The lobby backdrop rides this loop rather than starting a second
+      // one. drawLobbySky() returns immediately when the lobby is not on
+      // screen, so an open shop/arena/profile costs nothing either.
+      if(typeof drawLobbySky === 'function') drawLobbySky(dt);
+      return;
+    }
 
     if(state==='countdown'){
       roundTimer -= dt;
@@ -15734,6 +15879,8 @@ if(tutorialActive) tutorialUpdate(dt);
   }
   function exitVoidbreak(){
     voidbreakOverlay.classList.add('hidden');
+    const centre = document.querySelector('.lobby-center');
+    if(centre) centre.classList.remove('launching');
     // Tearing the iframe's document down (rather than just hiding it)
     // immediately stops its game loop/audio instead of leaving it
     // running invisibly in the background.
@@ -16243,6 +16390,383 @@ if(tutorialActive) tutorialUpdate(dt);
     if(btn) btn.click();
   }
 
+  /* ================================================================
+     LOBBY SKY -- the canvas half of the backdrop.
+
+     Everything with COUNT lives here rather than in the DOM: ~420
+     stars across four depth planes, drifting dust, tumbling asteroids
+     and the occasional shooting star. As DOM nodes that would be a
+     thousand composited layers; as canvas it is one element and a few
+     hundred cheap fills.
+
+     COSTS NOTHING IN A MATCH. It is driven by the game's EXISTING rAF
+     loop (see loop()), which already runs every frame, and the very
+     first thing drawLobbySky() does is return if a match is running or
+     the lobby is not on screen. There is no second animation loop.
+
+     PARALLAX is driven by the pointer, softly and with a hard cap, so
+     the scene has depth when the mouse moves and is perfectly still
+     when it doesn't. Touch devices never get a pointermove, so they
+     simply get the drift, which is the correct behaviour rather than a
+     missing feature.
+     ================================================================ */
+  const skyCanvas = document.getElementById('lobbyStars');
+  const skyCtx = skyCanvas ? skyCanvas.getContext('2d') : null;
+  const SKY = {
+    w: 0, h: 0, dpr: 1,
+    stars: [], dust: [], rocks: [], shooting: null,
+    nextShoot: 4,
+    px: 0, py: 0,      // current parallax offset
+    tx: 0, ty: 0,      // target parallax offset (from the pointer)
+    t: 0,
+    built: false,
+    reduced: false
+  };
+  try{
+    SKY.reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }catch(e){}
+
+  // Deterministic-ish scatter: plain Math.random is fine here (nothing
+  // networked depends on it) and re-seeds on resize, which is invisible
+  // because the field is rebuilt to the new size anyway.
+  function buildSky(){
+    if(!skyCanvas) return;
+    const rect = skyCanvas.getBoundingClientRect();
+    const w = Math.max(1, Math.round(rect.width));
+    const h = Math.max(1, Math.round(rect.height));
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if(SKY.built && w === SKY.w && h === SKY.h && dpr === SKY.dpr) return;
+
+    SKY.w = w; SKY.h = h; SKY.dpr = dpr;
+    skyCanvas.width = Math.round(w * dpr);
+    skyCanvas.height = Math.round(h * dpr);
+
+    // Star count scales with area so a phone doesn't pay for a desktop's
+    // field, capped so an ultrawide doesn't pay for four of them.
+    const density = Math.min(1.35, Math.max(0.45, (w * h) / (1600 * 900)));
+    const n = Math.round(300 * density);
+    SKY.stars = [];
+    for(let i = 0; i < n; i++){
+      // depth 0 = furthest (tiny, dim, barely parallaxes)
+      // depth 3 = nearest (bright, big, moves most)
+      const depth = i < n * 0.52 ? 0 : i < n * 0.80 ? 1 : i < n * 0.94 ? 2 : 3;
+      SKY.stars.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        d: depth,
+        r: [0.55, 0.85, 1.25, 1.8][depth] * (0.7 + Math.random() * 0.7),
+        a: [0.30, 0.48, 0.70, 0.92][depth] * (0.6 + Math.random() * 0.4),
+        // twinkle phase/speed -- the near planes shimmer, the far ones
+        // stay steady, which is what makes the field read as depth
+        tw: Math.random() * Math.PI * 2,
+        ts: depth >= 2 ? 0.6 + Math.random() * 1.4 : 0.15 + Math.random() * 0.3,
+        // a few stars are warm or violet rather than white
+        c: Math.random() < 0.10 ? [255, 214, 170]
+         : Math.random() < 0.18 ? [198, 168, 255]
+         : Math.random() < 0.28 ? [176, 226, 255]
+         : [232, 244, 255]
+      });
+    }
+
+    // Slow drifting dust motes -- the thing that makes the scene read as
+    // "moving through space" rather than "a photo of space".
+    SKY.dust = [];
+    const dn = Math.round(46 * density);
+    for(let i = 0; i < dn; i++){
+      SKY.dust.push({
+        x: Math.random() * w, y: Math.random() * h,
+        vx: -(6 + Math.random() * 20), vy: (Math.random() - 0.5) * 5,
+        r: 0.6 + Math.random() * 1.5,
+        a: 0.10 + Math.random() * 0.26
+      });
+    }
+
+    // Foreground asteroids, bottom band only, so they frame the scene
+    // without ever sitting behind readable text.
+    SKY.rocks = [];
+    const rn = Math.round(9 * Math.min(1.2, density));
+    for(let i = 0; i < rn; i++){
+      const rad = 7 + Math.random() * 26;
+      const pts = [];
+      const sides = 7 + Math.floor(Math.random() * 4);
+      for(let k = 0; k < sides; k++){
+        const ang = (k / sides) * Math.PI * 2;
+        const rr = rad * (0.66 + Math.random() * 0.5);
+        pts.push([Math.cos(ang) * rr, Math.sin(ang) * rr]);
+      }
+      SKY.rocks.push({
+        x: Math.random() * w,
+        y: h * (0.62 + Math.random() * 0.42),
+        vx: -(3 + Math.random() * 9),
+        rot: Math.random() * Math.PI * 2,
+        vr: (Math.random() - 0.5) * 0.22,
+        pts: pts, rad: rad,
+        a: 0.30 + Math.random() * 0.4
+      });
+    }
+    SKY.built = true;
+  }
+
+  // Pointer parallax. Capped hard and eased, so it is depth rather than
+  // a camera the player is fighting.
+  if(skyCanvas){
+    window.addEventListener('pointermove', (e)=>{
+      if(started || SKY.reduced) return;
+      const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+      SKY.tx = Math.max(-1, Math.min(1, (e.clientX - cx) / cx));
+      SKY.ty = Math.max(-1, Math.min(1, (e.clientY - cy) / cy));
+    }, { passive: true });
+  }
+
+  function lobbySkyVisible(){
+    if(!skyCanvas || started) return false;
+    const lobby = document.getElementById('menuMain');
+    return !!(lobby && !lobby.classList.contains('hidden'));
+  }
+
+  // ---- the spiral galaxy -------------------------------------------
+  // Drawn procedurally into an OFFSCREEN canvas exactly once, then
+  // blitted each frame with a slow rotation. A CSS conic-gradient was
+  // tried first and makes radial spokes, not arms -- a spiral needs
+  // actual curvature, which means actual geometry.
+  //
+  // Cost: one drawImage per frame. The 4,000-odd star plots happen on
+  // the single build, never in the loop.
+  let galaxyTex = null, galaxyAng = 0;
+  function buildGalaxyTex(size){
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const g = c.getContext('2d');
+    const cx = size / 2, cy = size / 2;
+    const R = size * 0.46;
+
+    // the core: a small hot centre inside a wide warm bulge
+    let grd = g.createRadialGradient(cx, cy, 0, cx, cy, R * 0.42);
+    grd.addColorStop(0,    'rgba(255,253,246,1)');
+    grd.addColorStop(0.06, 'rgba(255,240,208,.95)');
+    grd.addColorStop(0.16, 'rgba(255,198,236,.55)');
+    grd.addColorStop(0.36, 'rgba(198,132,255,.28)');
+    grd.addColorStop(1,    'rgba(120,80,230,0)');
+    g.fillStyle = grd;
+    g.beginPath(); g.arc(cx, cy, R * 0.42, 0, Math.PI * 2); g.fill();
+
+    // two logarithmic arms, plus a fainter pair offset between them
+    const ARMS = [
+      { off: 0,          a: 1,   hue: 'cy' },
+      { off: Math.PI,    a: 1,   hue: 'vi' },
+      { off: Math.PI*0.5,a: 0.5, hue: 'vi' },
+      { off: Math.PI*1.5,a: 0.5, hue: 'cy' }
+    ];
+    const tight = 0.30;          // how tightly the arms wind
+    for(const arm of ARMS){
+      const dots = Math.round(1200 * arm.a);
+      for(let i = 0; i < dots; i++){
+        // t biased outward so the arms thin out rather than clumping
+        const t = Math.pow(Math.random(), 0.55);
+        const theta = t * Math.PI * 3.1 + arm.off;
+        const rad = R * 0.10 * Math.exp(tight * theta - tight * arm.off);
+        if(rad > R) continue;
+        // scatter across the arm's width, wider further out
+        const spread = R * (0.022 + 0.085 * t);
+        const jx = (Math.random() + Math.random() - 1) * spread;
+        const jy = (Math.random() + Math.random() - 1) * spread;
+        const x = cx + Math.cos(theta) * rad + jx;
+        const y = cy + Math.sin(theta) * rad + jy;
+        // fades out at the rim, brighter near the core
+        const fall = 1 - t;
+        const a = (0.14 + Math.random() * 0.62) * (0.3 + fall * 0.9) * arm.a;
+        const warm = t < 0.28;   // the inner arms are older/warmer
+        const col = warm ? '255,226,190'
+                  : arm.hue === 'cy' ? '150,216,255' : '214,150,255';
+        g.fillStyle = 'rgba(' + col + ',' + a.toFixed(3) + ')';
+        const r = 0.6 + Math.random() * 1.5;
+        g.fillRect(x - r, y - r, r * 2, r * 2);
+      }
+    }
+
+    // a few bright knots -- star-forming regions along the arms
+    for(let i = 0; i < 26; i++){
+      const theta = Math.random() * Math.PI * 6;
+      const t = 0.25 + Math.random() * 0.6;
+      const rad = R * 0.10 * Math.exp(tight * theta);
+      if(rad > R * 0.92) continue;
+      const x = cx + Math.cos(theta) * rad, y = cy + Math.sin(theta) * rad;
+      const kr = 6 + Math.random() * 14;
+      const kg = g.createRadialGradient(x, y, 0, x, y, kr);
+      kg.addColorStop(0, 'rgba(210,240,255,.5)');
+      kg.addColorStop(1, 'rgba(150,200,255,0)');
+      g.fillStyle = kg;
+      g.beginPath(); g.arc(x, y, kr, 0, Math.PI * 2); g.fill();
+    }
+
+    // dust lanes: subtract a couple of dark curved bands
+    g.globalCompositeOperation = 'destination-out';
+    for(let d = 0; d < 2; d++){
+      g.beginPath();
+      for(let i = 0; i <= 60; i++){
+        const theta = (i / 60) * Math.PI * 2.6 + d * Math.PI + 0.5;
+        const rad = R * 0.12 * Math.exp(tight * theta);
+        const x = cx + Math.cos(theta) * rad, y = cy + Math.sin(theta) * rad;
+        if(i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.strokeStyle = 'rgba(0,0,0,.5)';
+      g.lineWidth = size * 0.022;
+      g.stroke();
+    }
+    g.globalCompositeOperation = 'source-over';
+    return c;
+  }
+
+  // Blit the galaxy: rotated slowly, squashed to a disc seen near-edge-on,
+  // and parallaxed with the far star plane so it sits behind everything.
+  function drawGalaxy(g, w, h, dt){
+    const size = Math.round(Math.min(Math.max(w * 0.52, 420), 860));
+    if(!galaxyTex || galaxyTex.width !== size) galaxyTex = buildGalaxyTex(size);
+    if(!SKY.reduced) galaxyAng += dt * 0.0055;   // ~19 minutes per turn
+    const gx = w * 0.665 + SKY.px * 0.22;
+    const gy = h * 0.21 + SKY.py * 0.22;
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    g.translate(gx, gy);
+    g.rotate(-0.32 + galaxyAng);
+    g.scale(1, 0.52);
+    g.globalAlpha = 1;
+    g.drawImage(galaxyTex, -size / 2, -size / 2, size, size);
+    g.restore();
+  }
+
+  // One frame of sky. Called from loop() -- see the call site there.
+  function drawLobbySky(dt){
+    if(!skyCtx || !lobbySkyVisible()) return;
+    buildSky();
+    const { w, h } = SKY;
+    if(!w || !h) return;
+
+    // Under reduced motion, draw exactly one static frame and stop.
+    if(SKY.reduced){
+      if(SKY.staticDrawn) return;
+      SKY.staticDrawn = true;
+      dt = 0;
+    }
+    SKY.t += dt;
+
+    // Ease toward the pointer target. 2.2/s reaches ~90% in half a
+    // second: responsive, never twitchy.
+    const k = 1 - Math.pow(0.0001, dt);
+    SKY.px += (SKY.tx * 26 - SKY.px) * Math.min(1, k * 2.2);
+    SKY.py += (SKY.ty * 16 - SKY.py) * Math.min(1, k * 2.2);
+
+    const g = skyCtx;
+    g.setTransform(SKY.dpr, 0, 0, SKY.dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+
+    // ---- the galaxy, behind every star ----
+    drawGalaxy(g, w, h, dt);
+
+    // ---- stars ----
+    const depthShift = [0.18, 0.42, 0.78, 1.25];
+    for(const s of SKY.stars){
+      const sh = depthShift[s.d];
+      const x = s.x + SKY.px * sh;
+      const y = s.y + SKY.py * sh;
+      // wrap rather than clamp, so a star pushed off one edge returns
+      // from the other instead of piling up against it
+      const wx = ((x % w) + w) % w;
+      const wy = ((y % h) + h) % h;
+      s.tw += dt * s.ts;
+      const tw = 0.72 + Math.sin(s.tw) * 0.28;
+      const a = s.a * tw;
+      g.fillStyle = 'rgba(' + s.c[0] + ',' + s.c[1] + ',' + s.c[2] + ',' + a.toFixed(3) + ')';
+      g.beginPath();
+      g.arc(wx, wy, s.r, 0, Math.PI * 2);
+      g.fill();
+      // the nearest plane gets a soft bloom, which is what makes it
+      // read as "in front of" the rest
+      if(s.d === 3){
+        g.fillStyle = 'rgba(' + s.c[0] + ',' + s.c[1] + ',' + s.c[2] + ',' + (a * 0.16).toFixed(3) + ')';
+        g.beginPath();
+        g.arc(wx, wy, s.r * 4.2, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+
+    // ---- dust ----
+    for(const d of SKY.dust){
+      d.x += d.vx * dt; d.y += d.vy * dt;
+      if(d.x < -8){ d.x = w + 8; d.y = Math.random() * h; }
+      if(d.y < -8) d.y = h + 8;
+      if(d.y > h + 8) d.y = -8;
+      g.fillStyle = 'rgba(170,215,255,' + d.a.toFixed(3) + ')';
+      g.beginPath();
+      g.arc(d.x + SKY.px * 1.1, d.y + SKY.py * 1.1, d.r, 0, Math.PI * 2);
+      g.fill();
+    }
+
+    // ---- foreground asteroids ----
+    for(const r of SKY.rocks){
+      r.x += r.vx * dt;
+      r.rot += r.vr * dt;
+      if(r.x < -r.rad * 2){ r.x = w + r.rad * 2; r.y = h * (0.62 + Math.random() * 0.42); }
+      g.save();
+      g.translate(r.x + SKY.px * 1.6, r.y + SKY.py * 1.6);
+      g.rotate(r.rot);
+      g.beginPath();
+      g.moveTo(r.pts[0][0], r.pts[0][1]);
+      for(let i = 1; i < r.pts.length; i++) g.lineTo(r.pts[i][0], r.pts[i][1]);
+      g.closePath();
+      g.fillStyle = 'rgba(11,15,28,' + (r.a + 0.3).toFixed(3) + ')';
+      g.fill();
+      g.strokeStyle = 'rgba(128,178,238,' + (r.a * 0.5).toFixed(3) + ')';
+      g.lineWidth = 1;
+      g.stroke();
+      // rim light from the galaxy, upper right
+      g.strokeStyle = 'rgba(190,150,255,' + (r.a * 0.42).toFixed(3) + ')';
+      g.beginPath();
+      g.moveTo(r.pts[0][0], r.pts[0][1]);
+      for(let i = 1; i < Math.ceil(r.pts.length / 2); i++) g.lineTo(r.pts[i][0], r.pts[i][1]);
+      g.stroke();
+      g.restore();
+    }
+
+    // ---- shooting star: rare, brief, never twice at once ----
+    SKY.nextShoot -= dt;
+    if(!SKY.shooting && SKY.nextShoot <= 0){
+      SKY.nextShoot = 7 + Math.random() * 13;
+      const fromLeft = Math.random() < 0.5;
+      SKY.shooting = {
+        x: fromLeft ? -40 : w + 40,
+        y: Math.random() * h * 0.55,
+        vx: (fromLeft ? 1 : -1) * (520 + Math.random() * 380),
+        vy: 130 + Math.random() * 120,
+        life: 1.15, max: 1.15
+      };
+    }
+    const sh = SKY.shooting;
+    if(sh){
+      sh.x += sh.vx * dt; sh.y += sh.vy * dt; sh.life -= dt;
+      if(sh.life <= 0 || sh.x < -160 || sh.x > w + 160 || sh.y > h + 60){
+        SKY.shooting = null;
+      } else {
+        const fade = Math.min(1, sh.life / sh.max);
+        const tailX = sh.x - sh.vx * 0.075, tailY = sh.y - sh.vy * 0.075;
+        const grad = g.createLinearGradient(tailX, tailY, sh.x, sh.y);
+        grad.addColorStop(0, 'rgba(120,220,255,0)');
+        grad.addColorStop(1, 'rgba(226,246,255,' + (0.85 * fade).toFixed(3) + ')');
+        g.strokeStyle = grad;
+        g.lineWidth = 2;
+        g.lineCap = 'round';
+        g.beginPath();
+        g.moveTo(tailX, tailY);
+        g.lineTo(sh.x, sh.y);
+        g.stroke();
+      }
+    }
+  }
+
+  // A resize invalidates the whole field (it is generated to fit the
+  // viewport), so drop it and let the next frame rebuild.
+  window.addEventListener('resize', ()=>{ SKY.built = false; SKY.staticDrawn = false; });
+
   // ================================================================
   // VOIDBREAK ARENA screen
   // ----------------------------------------------------------------
@@ -16564,7 +17088,14 @@ if(tutorialActive) tutorialUpdate(dt);
         btn.addEventListener(evt, release);
       });
     };
-    wireHero('lobbyJourney', ()=> launchVoidbreak());
+    wireHero('lobbyJourney', ()=>{
+      // Kick the engines before the campaign loads. The class drives a
+      // half-second CSS animation and is cleared on the way back, so a
+      // second launch always plays it again.
+      const centre = document.querySelector('.lobby-center');
+      if(centre) centre.classList.add('launching');
+      launchVoidbreak();
+    });
     wireHero('arenaPlay', lobbyStartSelectedMode);
 
     const backArena = lobbyEl('btnBackVbArena');
