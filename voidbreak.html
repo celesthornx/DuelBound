@@ -3414,8 +3414,11 @@ function updateEnemies(dt){
     const hw=room.w/2-e.r,hh=room.h/2-e.r;
     e.x=clamp(e.x,-hw,hw);e.y=clamp(e.y,-hh,hh);
   }
-  for(let i=0;i<enemies.length;i++){const a=enemies[i];if(a.dead||a.noHit||a.type==='core')continue;
-    for(let j=i+1;j<enemies.length;j++){const b=enemies[j];if(b.dead||b.noHit||b.type==='core')continue;
+  // CO-OP: the server already separates its own roster and pushes them
+  // clear of the Guardian, and its positions are what the snapshots
+  // carry -- nudging them again here would fight that every frame.
+  for(let i=0;i<enemies.length;i++){const a=enemies[i];if(a.dead||a.noHit||a.type==='core'||a.net)continue;
+    for(let j=i+1;j<enemies.length;j++){const b=enemies[j];if(b.dead||b.noHit||b.type==='core'||b.net)continue;
       const dx=b.x-a.x,dy=b.y-a.y,rr=a.r+b.r+4,d2=dx*dx+dy*dy;
       if(d2<rr*rr&&d2>0.01){const d=Math.sqrt(d2),push=(rr-d)/d*0.4;
         a.x-=dx*push;a.y-=dy*push;b.x+=dx*push;b.y+=dy*push;}}
@@ -4576,6 +4579,14 @@ function drawGravFields(){
 function damageBoss(dmg,crit){
   const b=boss,meta=BOSSMETA[b.kind];
   if(!b||b.dying>0)return;
+  // CO-OP: the Guardian belongs to the server. This client detects that
+  // its own shot connected and says so -- it sends no damage number,
+  // and it never decides a phase change or the kill. The reserved id 0
+  // is the Guardian's; ordinary enemy ids start at 1.
+  if(b.net){
+    if(COOP.active)coopSend({type:'vb_hit',e:0});
+    return;
+  }
   if(b.invuln>0){ringFX(b.x,b.y,[190,130,255],b.r+30,0.3);return;}
   if(b.vulnT>0)dmg*=1.5;
   b.hp-=dmg;run.damage+=dmg;b.hitFlash=0.1;
@@ -5112,7 +5123,9 @@ const COOP={
   autoCreate:null,          // a size requested via ?coop=<typeId>
   mates:{},                 // slot -> { slot, name, x, y, ang, hp, maxhp, alive, connected, tx, ty }
   netEnemies:new Map(),     // server enemy id -> local enemy object
-  wave:0, totalWaves:8,
+  wave:0, totalWaves:8, bossWave:8,
+  boss:null,                // the drawn Guardian's spawn event, once it arrives
+  bossIntroRunning:false,
   lastPosAt:0, lastPos:null,
   pendingUpgrade:null,
   reward:null,
@@ -5234,6 +5247,12 @@ function coopBeginRun(cfg){
   COOP.netEnemies=new Map();
   COOP.mates={};
   COOP.pendingUpgrade=null;
+  COOP.boss=null;
+  COOP.bossIntroRunning=false;
+  COOP.bossFell=false;
+  COOP.finishDeferred=false;
+  COOP.bossWave=cfg.bossWave||8;
+  boss=null;bossActive=false;
 
   const me=cfg.players.find(p=>p.slot===cfg.yourSlot)||{weapon:'pulse'};
   for(const p of cfg.players){
@@ -5392,8 +5411,9 @@ function coopEvent(ev){
       // the whole projectile instead of a position every tick. It is
       // PURELY VISUAL here: whether it hit anybody was decided by the
       // server's own copy (see the 'ph' event).
-      ebullets.push({x:ev.x,y:ev.y,vx:ev.vx,vy:ev.vy,life:2.6,r:6,dmg:0,
-        c:[255,110,110],net:true});
+      ebullets.push({x:ev.x,y:ev.y,vx:ev.vx,vy:ev.vy,
+        life:ev.b?4.2:2.6, r:ev.b?8:6, dmg:0,
+        c:ev.b?[255,70,150]:[255,110,110], net:true});
       SFX.bossShot();
       return;
     }
@@ -5451,8 +5471,77 @@ function coopEvent(ev){
       coopRenderSquad();
       return;
     }
+    case 'bs': {          // THE GUARDIAN ARRIVES
+      // Which Guardian this is was drawn by the SERVER (see BOSSES in
+      // voidbreakCoop.js) -- the client finds out here, at the same
+      // moment everyone else in the party does.
+      COOP.boss=ev;
+      // Built with the game's OWN factory, so it carries every field
+      // its renderer reads and is drawn by the real art, not a
+      // co-op-specific copy of it.
+      createBoss(ev.kind);
+      boss.x=ev.x;boss.y=ev.y;boss.r=ev.r;
+      boss.hp=ev.hp;boss.maxhp=ev.hp;
+      boss.net=true;boss.dead=false;boss.dying=0;
+      // The real intro sequence: warning, reveal, name card, phase
+      // marks on the bar. Driven from coopUpdate because a co-op run
+      // has no 'boss' room for updateRoom to run it from.
+      bossActive=false;bossIntroT=0;bossIntroStage=0;
+      COOP.bossIntroRunning=true;
+      return;
+    }
+    case 'bph':           // phase change
+      coopBossPhase(ev.phase);
+      return;
+    case 'bcore':         // the sealed/exposed core cycle
+      if(boss){
+        boss.coreMode=ev.mode;
+        ringFX(boss.x,boss.y,ev.mode==='open'?[120,255,220]:[190,130,255],boss.r+40,0.4);
+        SFX.phase();
+        if(ev.mode==='open')showBanner('CORE EXPOSED','HIT IT NOW');
+      }
+      return;
+    case 'btel': {        // a big attack is winding up
+      if(!boss)return;
+      const c=BOSSMETA[boss.kind].color;
+      ringFX(ev.x,ev.y,c,boss.r+90,(ev.ms||700)/1000);
+      SFX.warn();addShake(4);
+      boss.eye=(ev.ms||700)/1000;
+      if(ev.k==='charge'){
+        // Show the lane it is about to cross.
+        const a=ev.ang/100;
+        for(let i=1;i<=7;i++){
+          part({x:ev.x+Math.cos(a)*i*70,y:ev.y+Math.sin(a)*i*70,vx:0,vy:0,
+            life:(ev.ms||700)/1000,ml:(ev.ms||700)/1000,size:7,c:c,type:'glow'});
+        }
+      }
+      return;
+    }
+    case 'bbl':           // the Eclipse blinks
+      if(boss){
+        burstFX(boss.x,boss.y,BOSSMETA[boss.kind].color,22,380);
+        boss.x=ev.x;boss.y=ev.y;
+        burstFX(boss.x,boss.y,BOSSMETA[boss.kind].color,22,380);
+        SFX.phase();
+      }
+      return;
+    case 'bvuln':         // it overcommitted -- the window to punish
+      if(boss){
+        boss.vulnT=Math.max(boss.vulnT||0,2.6);
+        ringFX(boss.x,boss.y,[255,201,92],boss.r+26,0.35);
+      }
+      return;
+    case 'bd':            // THE GUARDIAN FALLS
+      coopBossDeath();
+      return;
     case 'wave':          // a wave started
       COOP.wave=ev.wave;
+      if(ev.boss){
+        el('waveLabel').textContent='GUARDIAN';
+        // Deliberately unnamed here: the reveal belongs to the intro.
+        showBanner('WARNING','DIMENSIONAL ANOMALY DETECTED',true);
+        return;
+      }
       el('waveLabel').textContent='WAVE '+ev.wave+' / '+ev.total;
       showBanner(ev.elite?'ELITE WAVE '+ev.wave:'WAVE '+ev.wave,
                  ev.wave===ev.total?'FINAL STAND':'HOSTILES INBOUND',ev.elite);
@@ -5468,6 +5557,53 @@ function coopEvent(ev){
       COOP.endSummary=ev;
       return;
   }
+}
+
+/* A phase change, as the player experiences it: the real banner, the
+   real flash, the real screen shake, the real bar label. The half that
+   is NOT done here is the summoning -- the server already spawned those
+   adds and they arrive as ordinary 'es' events, so running BOSSMETA's
+   on2/on3 locally would conjure a second, phantom set that only this
+   client can see. */
+function coopBossPhase(n){
+  if(!boss)return;
+  const meta=BOSSMETA[boss.kind];
+  boss.phase=n;
+  boss.invuln=1.5;
+  for(const eb of ebullets)sparks(eb.x,eb.y,eb.c,3,140);
+  ebullets.length=0;
+  ringFX(boss.x,boss.y,meta.color,420,0.7);burstFX(boss.x,boss.y,meta.color,30,450);
+  addShake(22);camPunch(0.12);SFX.phase();
+  if(run.level.env.glitch)glitchT=Math.max(glitchT,0.3);
+  tsTarget=0.4;setTimeout(()=>{tsTarget=1;},420);
+  showBanner('PHASE '+(['I','II','III'][n-1]),n===2?meta.ph2:n===3?meta.ph3:'');
+  el('bossPhaseLabel').textContent='PHASE '+['I','II','III'][n-1];
+}
+
+/* The death sequence, minus the two things the server owns: it does not
+   end the run (the server's own 'end'/vb_over does) and it does not
+   hand out shards (already banked). Weapon mastery is granted the same
+   way a solo Guardian kill grants it -- the kill itself was confirmed
+   by the server. */
+function coopBossDeath(){
+  if(!boss||boss.dying>0)return;
+  COOP.bossFell=true;
+  boss.dying=1.15;
+  tsTarget=0.3;
+  Music.set(null);
+  ebullets.length=0;hazards.length=0;zones.length=0;gravFields.length=0;
+  awardMastery(MASTERY_XP_BOSS);
+  setTimeout(()=>{
+    if(!boss)return;
+    boss.dead=true;bossActive=false;
+    whiteT=1;addShake(30);camPunch(0.15);
+    burstFX(boss.x,boss.y,[255,255,255],60,700);
+    ringFX(boss.x,boss.y,[0,240,255],700,1);ringFX(boss.x,boss.y,[255,45,85],500,0.8);
+    SFX.explosion();SFX.phase();
+    bullets.length=0;
+    el('bossBarWrap').classList.add('hidden');
+    showBanner(COOP.boss?COOP.boss.name+' BROKEN':'GUARDIAN BROKEN','THE SECTOR IS HELD');
+  },900);
 }
 
 /* The collection animation only -- the shards were already banked
@@ -5498,6 +5634,22 @@ function coopSnapshot(s){
     e.faceAng=a[i+3]/100;
     e.hp=a[i+4];
   }
+  // The Guardian's eight scalars -- exactly the set its renderer reads.
+  // Position is eased in coopUpdate like everything else; health, phase
+  // and the invulnerable/exposed flags are adopted as sent, because
+  // they decide what the player is allowed to do to it.
+  if(s.b&&boss&&!boss.dead){
+    boss.tx=s.b[0];boss.ty=s.b[1];
+    if(boss.bseen!==true){boss.x=s.b[0];boss.y=s.b[1];boss.bseen=true;}
+    boss.hp=s.b[2];
+    boss.phase=s.b[3];
+    boss.invuln=s.b[4]?0.2:0;
+    boss.vulnT=s.b[5]?0.2:0;
+    boss.hitFlash=s.b[6]?0.1:0;
+    if(boss.coreMode)boss.coreMode=s.b[7]?'open':'closed';
+    updateBossBar();
+  }
+
   const ps=s.p||[];
   for(let i=0;i<ps.length;i+=7){
     const slot=ps[i];
@@ -5534,6 +5686,17 @@ function coopOnMatePos(slot,x,y,ang){
 }
 
 function coopHitConfirmed(d){
+  if(d.e===0){
+    // A confirmed hit on the Guardian. Health and phase come from the
+    // snapshot; this is only the feedback for the shot that landed.
+    if(!boss||boss.dead)return;
+    boss.hitFlash=0.1;
+    run.damage+=d.d;
+    dmgNum(boss.x+rand(-30,30),boss.y-boss.r,d.d,d.c?'#ffc95c':'#eafcff',d.c?21:15);
+    d.c?SFX.crit():SFX.hit();
+    addShake(d.c?2.5:1);
+    return;
+  }
   const e=COOP.netEnemies.get(d.e);
   if(!e)return;
   e.hitFlash=0.12;
@@ -5589,10 +5752,33 @@ function coopApplyReward(d){
 
 function coopFinish(d){
   if(COOP.ended)return;
+  // A Guardian that just fell gets its death sequence -- the slow-down,
+  // the white flash, the shockwave -- before the result screen lands on
+  // top of it. The server ends the run the instant the Guardian dies,
+  // which is correct; this is only how long the player watches it.
+  //
+  // Deferred exactly ONCE, on a flag that is never cleared. Keying this
+  // off boss.dying instead would never resolve: coopUpdate stops
+  // advancing that timer the moment the Guardian is marked dead, so it
+  // stays above zero forever and every retry would defer again.
+  if(d.victory&&COOP.bossFell&&!COOP.finishDeferred){
+    COOP.finishDeferred=true;
+    setTimeout(()=>coopFinish(d),2200);
+    return;
+  }
   COOP.ended=true;
   COOP.active=false;
   runActive=false;
   coopEl('coopSquad').classList.add('hidden');
+  // The server has stopped simulating this run, so nothing network
+  // -driven should still be on screen behind the result. A Guardian
+  // kill already clears the field (every add dies with it); a party
+  // wipe does not, and without this the gameover screen would sit on
+  // top of enemies that no longer exist anywhere but here.
+  enemies=[];ebullets=[];spawnQueue=[];
+  COOP.netEnemies=new Map();
+  if(boss&&boss.net){boss.dead=true;bossActive=false;}
+  el('bossBarWrap').classList.add('hidden');
   const sum=COOP.endSummary;
   if(sum&&sum.players){
     run.kills=(sum.players.find(p=>p.slot===COOP.mySlot)||{}).kills||run.kills;
@@ -5605,8 +5791,10 @@ function coopFinish(d){
   el('bossBarWrap').classList.add('hidden');
   if(victory){
     SFX.victory();
-    el('vicTitle').textContent='SECTOR HELD';
-    el('vicSub').textContent='THE SQUAD BROKE THE WAVE. THE VOID RETREATS — FOR NOW.';
+    el('vicTitle').textContent=COOP.boss?(COOP.boss.name+' BROKEN'):'SECTOR HELD';
+    el('vicSub').textContent=COOP.boss
+      ? 'THE SQUAD BROKE THE GUARDIAN. THE VOID RETREATS — FOR NOW.'
+      : 'THE SQUAD HELD THE SECTOR. THE VOID RETREATS — FOR NOW.';
     el('vicUnlock').textContent=COOP.reward
       ? ('◆ '+fmt(COOP.reward.shards)+' VOID SHARDS BANKED')
       : 'VOID SHARDS BANKED';
@@ -5637,6 +5825,22 @@ function coopUpdate(dt){
     const m=COOP.mates[slot];
     m.x+=(m.tx-m.x)*k;
     m.y+=(m.ty-m.y)*k;
+  }
+  if(boss&&boss.net&&!boss.dead){
+    boss.t+=dt;
+    if(boss.eye>0)boss.eye-=dt;
+    if(boss.dying>0)boss.dying-=dt;
+    if(typeof boss.tx==='number'){
+      boss.x+=(boss.tx-boss.x)*k;
+      boss.y+=(boss.ty-boss.y)*k;
+    }
+    // The real intro: warning, reveal, name card, the two phase marks
+    // on the bar. A co-op run has no 'boss' room, so it is driven from
+    // here instead of from updateRoom.
+    if(COOP.bossIntroRunning){
+      bossIntro(dt);
+      if(bossActive)COOP.bossIntroRunning=false;
+    }
   }
 
   // Report our own position. Rate-limited to the server's own sampling

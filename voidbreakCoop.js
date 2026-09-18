@@ -165,6 +165,68 @@ const DIFFICULTY_MODES = {
     extreme: { id: "extreme", shardMult: 2.0, hpMult: 1.45, dmgMult: 1.55, speedMult: 1.15, spawnMult: 1.30 }
 };
 
+// =====================================================================
+// THE FINALE GUARDIAN
+//
+// A co-op run ends on a RANDOMLY DRAWN Guardian, not the sector's own.
+// Which one you get is decided here, by the run's own RNG, and is not
+// something a client asks for.
+//
+// How this can be server-authoritative without porting 1,200 lines of
+// boss AI: voidbreak.html's eight boss RENDERERS read nothing but
+// scalars -- x, y, r, t, phase, hitFlash, eye, invuln, vulnT, and
+// coreMode for the two core bosses. So the server owns the FIGHT (where
+// it is, what it is doing, how much health it has, which phase it is
+// in, when it is vulnerable, what it summons, when it dies) and the
+// client draws the real Guardian with the real art, the real phase
+// banners, the real HP bar and the real intro. Nothing is re-drawn or
+// re-skinned here.
+//
+// What is NOT a port: each Guardian's exact attack script. Instead each
+// is mapped to the STYLE its own fight is built around, and the style
+// is simulated with that Guardian's own radius, phase thresholds and
+// summon composition (all mirrored from BOSSMETA). See LIMITATIONS.
+const BOSS_STYLES = ["orbiter", "charger", "sweeper", "blinker", "core"];
+
+const BOSSES = [
+    { kind: "null",     name: "THE NULL",             r: 56, thresholds: [0.70, 0.35], style: "orbiter",
+      adds: { 2: [["chaser", 2]],                 3: [["chaser", 2]] } },
+    { kind: "king",     name: "THE FRACTURED KING",   r: 64, thresholds: [0.65, 0.30], style: "charger",
+      adds: { 2: [["phantom", 2]],                3: [["phantom", 1], ["fdrone", 2]] } },
+    { kind: "archon",   name: "THE COLLAPSED ARCHON", r: 68, thresholds: [0.65, 0.30], style: "sweeper",
+      adds: { 2: [["phantom", 2]],                3: [["leaper", 2], ["phantom", 1]] } },
+    { kind: "warden",   name: "THE ABYSSAL WARDEN",   r: 66, thresholds: [0.65, 0.30], style: "sweeper",
+      adds: { 2: [["stalker", 2]],                3: [["stalker", 1], ["orb", 2]] } },
+    { kind: "depths",   name: "THE DEPTHS",           r: 76, thresholds: [0.65, 0.30], style: "core",
+      adds: { 2: [["leech", 2]],                  3: [["hunter", 2]] } },
+    { kind: "sentinel", name: "THE SENTINEL",         r: 70, thresholds: [0.65, 0.30], style: "charger",
+      adds: { 2: [["stalker", 2]],                3: [["shattered", 1], ["chaser", 2]] } },
+    { kind: "eclipse",  name: "THE ECLIPSE",          r: 72, thresholds: [0.65, 0.30], style: "blinker",
+      adds: { 2: [["leech", 2]],                  3: [["singularity", 1], ["hunter", 2]] } },
+    { kind: "origin",   name: "THE ORIGIN",           r: 88, thresholds: [0.62, 0.28], style: "core",
+      adds: { 2: [["guardian", 1], ["stalker", 2]], 3: [["singularity", 1], ["shattered", 1]] } }
+];
+
+// The Guardian answers hit claims on this reserved id. Enemy ids start
+// at 1, so it can never collide with one.
+const BOSS_ID = 0;
+
+// Solo Guardians range from 5,200 health (The Null) to 16,500 (The
+// Origin) -- a 3x spread that is part of each one's identity when you
+// fight it at the end of ITS OWN sector. Drawn at random it would just
+// be a coin flip between a short fight and a long one, so a co-op
+// Guardian's health comes from a CO-OP budget instead: the sector's
+// difficulty, the party's size, and the run's difficulty mode. Which
+// Guardian you draw decides how the fight LOOKS and PLAYS, never how
+// long it takes.
+const BOSS_BASE_HP = 5200;
+const BOSS_HP_PER_EXTRA_PLAYER = 0.85;
+const BOSS_CONTACT_DMG = 22;
+const BOSS_SHOT_DMG = 13;
+const BOSS_PHASE_INVULN_MS = 1500;
+const BOSS_VULN_WINDOW_MS = 2600;   // after a big attack: the opening to punish
+const BOSS_SHARDS = 220;            // paid to every player, on top of the clear bonus
+
 // The Void Upgrades a co-op run can offer. A subset of voidbreak.html's
 // UPGRADES: exactly the ones whose effect this simulation can actually
 // honour (a damage multiplier it applies, a max-health change it owns).
@@ -198,11 +260,12 @@ const PLAYER_SCALING = {
     4: { spawn: 3.00, hp: 1.28, elites: 1 }
 };
 
-// Run shape. Eight waves in one sector, with the 4th and the 8th fought
-// against elites -- the existing "elite chamber" mechanic, not a new
-// one. The 8th is the run's finale.
+// Run shape. Eight waves in one sector: the 4th is an elite wave (the
+// existing "elite chamber" mechanic) and the 8th is the GUARDIAN -- a
+// randomly drawn one of the game's eight, see BOSSES above.
 const TOTAL_WAVES = 8;
-const ELITE_WAVES = [4, 8];
+const ELITE_WAVES = [4];
+const BOSS_WAVE = 8;
 const UPGRADE_AFTER_WAVES = [2, 4, 6];
 
 // One arena for the whole run (the client never has to load a second
@@ -306,6 +369,7 @@ function createRun(opts) {
         enemies: [],
         ebullets: [],
         spawnQueue: [],
+        boss: null,
         tickCount: 0,
         nextEnemyId: 1,
         nextBulletId: 1,
@@ -416,6 +480,18 @@ function createRun(opts) {
     }
 
     function queueWave(waveNo, now) {
+        if (waveNo === BOSS_WAVE) {
+            spawnBoss(now);
+            // A little company, so the arena is never just the two of you.
+            const support = level.eliteSupport || "drone";
+            const n = Math.max(2, Math.round(1.5 * scaling.spawn));
+            for (let i = 0; i < n; i++) {
+                const pos = findSpawnPos(now);
+                run.spawnQueue.push({ x: pos.x, y: pos.y, type: support, elite: false, at: now + 2800 + i * 140 });
+            }
+            emit({ t: "wave", wave: waveNo, total: TOTAL_WAVES, elite: false, boss: 1 });
+            return;
+        }
         const groups = buildWave(waveNo);
         let queued = 0;
         for (const g of groups) {
@@ -467,6 +543,275 @@ function createRun(opts) {
             blinkT: rand(1.8, 3.2),
             dead: false
         };
+    }
+
+    // ---- the Guardian ------------------------------------------------
+    function spawnBoss(now) {
+        // Randomly drawn, from the RUN's own RNG. Nothing a client sends
+        // influences which one it is.
+        const def = pick(BOSSES);
+        const hp = Math.round(
+            BOSS_BASE_HP * level.diff * diff.hpMult *
+            (1 + BOSS_HP_PER_EXTRA_PLAYER * (playerCount - 1)));
+
+        run.boss = {
+            id: BOSS_ID,
+            kind: def.kind,
+            name: def.name,
+            def: def,
+            x: 0, y: -Math.min(300, ROOM.h / 2 - 140),
+            vx: 0, vy: 0,
+            r: def.r,
+            hp: hp, maxhp: hp,
+            phase: 1,
+            t: 0,
+            invulnUntil: now + 2600,   // the intro: untouchable while it arrives
+            vulnUntil: 0,
+            hitFlashUntil: 0,
+            eyeUntil: 0,
+            // The two core Guardians alternate between a sealed shell
+            // (untouchable) and an exposed core (vulnerable, and the
+            // only time real damage goes in) -- their actual mechanic,
+            // not a new one.
+            coreMode: def.style === "core" ? "closed" : null,
+            coreUntil: def.style === "core" ? now + 6500 : 0,
+            // Attack timers, in seconds of simulation.
+            tRadial: 3.0, tVolley: 2.2, tBig: 5.5, tSummon: 11,
+            act: null,                 // the attack currently being telegraphed
+            dead: false
+        };
+        emit({ t: "bs", kind: def.kind, name: def.name,
+               x: Math.round(run.boss.x), y: Math.round(run.boss.y),
+               r: def.r, hp: hp, th: def.thresholds.slice() });
+    }
+
+    function bossShot(b, ang, speed, dmg, now) {
+        if (run.ebullets.length >= MAX_EBULLETS) return;
+        const bullet = {
+            id: run.nextBulletId++,
+            x: b.x + Math.cos(ang) * (b.r + 6),
+            y: b.y + Math.sin(ang) * (b.r + 6),
+            vx: Math.cos(ang) * speed,
+            vy: Math.sin(ang) * speed,
+            dmg: dmg, r: 8,
+            dieAt: now + 4200
+        };
+        run.ebullets.push(bullet);
+        // One message per shot; the client flies it locally, exactly
+        // like an ordinary enemy shot (see the 'eb' event).
+        emit({ t: "eb", x: Math.round(bullet.x), y: Math.round(bullet.y),
+               vx: Math.round(bullet.vx), vy: Math.round(bullet.vy), b: 1 });
+    }
+
+    function bossSummon(b, now) {
+        const groups = b.def.adds[b.phase] || [];
+        for (const [type, n] of groups) {
+            const live = run.enemies.filter(e => e.type === type && !e.dead).length;
+            if (live >= 4) continue;
+            for (let i = 0; i < n; i++) {
+                if (run.enemies.length + run.spawnQueue.length >= MAX_ENEMIES) break;
+                const pos = findSpawnPos(now);
+                run.spawnQueue.push({ x: pos.x, y: pos.y, type: type, elite: false, at: now + 850 + i * 120 });
+            }
+        }
+    }
+
+    function bossPhaseTo(b, n, now) {
+        b.phase = n;
+        b.invulnUntil = now + BOSS_PHASE_INVULN_MS;
+        b.act = null;
+        // The phase change clears the field, exactly as it does solo.
+        run.ebullets.length = 0;
+        bossSummon(b, now);
+        emit({ t: "bph", phase: n });
+
+        // A downed player comes back at each phase break.
+        //
+        // Every other wave gives a downed player a way back in when it
+        // is cleared; the Guardian is ONE wave, so without this a death
+        // in the first ten seconds of a two-minute finale would mean
+        // watching the rest of it. The Guardian's own phase thresholds
+        // are the natural beat for it, and they are earned -- the party
+        // only gets the revive by pushing it into the next phase.
+        for (const p of activePlayers()) {
+            if (p.alive) continue;
+            p.alive = true;
+            p.hp = Math.max(1, Math.round(p.maxhp * RESPAWN_HP_FRACTION));
+            p.invulnUntil = now + PLAYER_INVULN_MS * 4;
+            emit({ t: "pr", slot: p.slot, hp: Math.round(p.hp) });
+        }
+    }
+
+    function bossDie(b, now) {
+        if (b.dead) return;
+        b.dead = true;
+        b.hp = 0;
+        run.ebullets.length = 0;
+        run.spawnQueue.length = 0;
+        // Its remaining summons die with it, exactly as they do solo.
+        // They go through killEnemy so every client gets the kill EVENT
+        // and removes them -- marking them dead here without telling
+        // anybody would leave a ghost on screen that nothing can shoot.
+        // `0` as the killer means nobody gets credit for the kill, but
+        // the shards are paid, same as any other death.
+        for (const e of run.enemies.slice()) {
+            if (!e.dead) killEnemy(e, 0, now);
+        }
+        for (const p of activePlayers()) p.shards += Math.round(BOSS_SHARDS * diff.shardMult);
+        emit({ t: "bd", kind: b.kind, name: b.name });
+    }
+
+    // One step of the Guardian fight. Styles differ in how it MOVES and
+    // which big attack it commits to; every one of them also does the
+    // radial/volley pressure that all eight Guardians share.
+    function stepBoss(b, dt, now) {
+        b.t += dt;
+        const near = nearestPlayer(b.x, b.y, now);
+
+        // The sealed/exposed cycle for the two core Guardians.
+        if (b.coreMode && now >= b.coreUntil) {
+            if (b.coreMode === "closed") {
+                b.coreMode = "open";
+                b.coreUntil = now + 5200;
+                b.vulnUntil = now + 5200;     // exposed: hits land for 1.5x
+            } else {
+                b.coreMode = "closed";
+                b.coreUntil = now + 6000;
+            }
+            emit({ t: "bcore", mode: b.coreMode });
+        }
+
+        if (!near) return;
+        const p = near.player;
+        const d = Math.max(1, near.d);
+        const ax = (p.x - b.x) / d, ay = (p.y - b.y) / d;
+
+        // ---- movement --------------------------------------------------
+        const style = b.def.style;
+        let speed = 70 + b.phase * 25;
+        if (style === "charger" && b.act && b.act.k === "charge") {
+            // Committed: it is already moving, handled below.
+        } else if (style === "blinker") {
+            speed = 45;                       // it mostly teleports
+        }
+
+        if (!b.act || b.act.k !== "charge") {
+            // Holds a ring rather than sitting on top of the party.
+            const want = style === "charger" ? 220 : 340;
+            const drift = clamp((d - want) * 1.6, -speed, speed);
+            b.x += ax * drift * dt;
+            b.y += ay * drift * dt;
+            // A slow orbit, so it is never a stationary target.
+            b.x += -ay * speed * 0.45 * dt;
+            b.y += ax * speed * 0.45 * dt;
+        }
+
+        const hw = ROOM.w / 2 - b.r, hh = ROOM.h / 2 - b.r;
+        b.x = clamp(b.x, -hw, hw);
+        b.y = clamp(b.y, -hh, hh);
+
+        // ---- the attack it is committed to -----------------------------
+        if (b.act) {
+            b.act.t -= dt;
+            if (b.act.k === "charge") {
+                if (b.act.t > 0) {
+                    // Telegraph: it winds up, aimed at where you were.
+                } else if (b.act.t > -0.9) {
+                    const cs = 620;
+                    b.x += Math.cos(b.act.ang) * cs * dt;
+                    b.y += Math.sin(b.act.ang) * cs * dt;
+                    // Anything it runs through takes the hit.
+                    for (const q of alivePlayers()) {
+                        if (dist(b.x, b.y, q.x, q.y) < b.r + PLAYER_R + 6) hurtPlayer(q, BOSS_CONTACT_DMG, now);
+                    }
+                } else {
+                    // Overshoots and is open for a moment.
+                    b.act = null;
+                    b.vulnUntil = now + BOSS_VULN_WINDOW_MS;
+                    emit({ t: "bvuln" });
+                }
+            } else if (b.act.t <= 0) {
+                // The telegraph finished: the attack goes off.
+                if (b.act.k === "nova") {
+                    const n = 16 + b.phase * 6;
+                    for (let i = 0; i < n; i++) bossShot(b, (i / n) * Math.PI * 2, 300, BOSS_SHOT_DMG, now);
+                } else if (b.act.k === "sweep") {
+                    // A rotating fan, fired as one burst per step.
+                    const arms = 3 + b.phase;
+                    for (let i = 0; i < arms; i++) {
+                        bossShot(b, b.act.ang + (i / arms) * Math.PI * 2, 340, BOSS_SHOT_DMG, now);
+                    }
+                    b.act.ang += 0.42;
+                    b.act.t = 0.12;
+                    b.act.left--;
+                    if (b.act.left > 0) return;   // keep sweeping
+                } else if (b.act.k === "blink") {
+                    const ang = random() * Math.PI * 2;
+                    const dd = 200 + random() * 120;
+                    b.x = clamp(p.x + Math.cos(ang) * dd, -hw, hw);
+                    b.y = clamp(p.y + Math.sin(ang) * dd, -hh, hh);
+                    emit({ t: "bbl", x: Math.round(b.x), y: Math.round(b.y) });
+                    const n = 10 + b.phase * 4;
+                    for (let i = 0; i < n; i++) bossShot(b, (i / n) * Math.PI * 2, 330, BOSS_SHOT_DMG, now);
+                } else if (b.act.k === "spire") {
+                    // The core Guardians' aimed lance volley.
+                    for (let i = -2; i <= 2; i++) {
+                        bossShot(b, Math.atan2(p.y - b.y, p.x - b.x) + i * 0.13, 520, BOSS_SHOT_DMG + 3, now);
+                    }
+                }
+                b.act = null;
+                b.vulnUntil = now + BOSS_VULN_WINDOW_MS;
+                emit({ t: "bvuln" });
+            }
+            return;   // one committed attack at a time
+        }
+
+        // ---- shared pressure -------------------------------------------
+        // A sealed core Guardian does not attack; that IS the trade for
+        // being untouchable.
+        if (b.coreMode === "closed") return;
+
+        b.tRadial -= dt;
+        if (b.tRadial <= 0) {
+            b.tRadial = Math.max(1.7, 3.4 - b.phase * 0.5);
+            const n = 8 + b.phase * 3;
+            const off = random() * Math.PI * 2;
+            for (let i = 0; i < n; i++) bossShot(b, off + (i / n) * Math.PI * 2, 280, BOSS_SHOT_DMG, now);
+        }
+
+        b.tVolley -= dt;
+        if (b.tVolley <= 0) {
+            b.tVolley = Math.max(1.2, 2.6 - b.phase * 0.35);
+            const aim = Math.atan2(p.y - b.y, p.x - b.x);
+            for (let i = -1; i <= 1; i++) bossShot(b, aim + i * 0.16, 430, BOSS_SHOT_DMG, now);
+        }
+
+        b.tSummon -= dt;
+        if (b.tSummon <= 0) {
+            b.tSummon = 13 - b.phase;
+            bossSummon(b, now);
+        }
+
+        // ---- the big, telegraphed attack -------------------------------
+        b.tBig -= dt;
+        if (b.tBig <= 0) {
+            b.tBig = Math.max(3.2, 6.5 - b.phase * 0.8);
+            const k = style === "charger" ? "charge"
+                : style === "sweeper" ? "sweep"
+                : style === "blinker" ? "blink"
+                : style === "core" ? "spire"
+                : "nova";
+            b.act = {
+                k: k,
+                t: k === "charge" ? 0.85 : 0.7,
+                ang: Math.atan2(p.y - b.y, p.x - b.x),
+                left: 7 + b.phase * 2
+            };
+            // The telegraph is what makes the attack readable, so it is
+            // an EVENT rather than something the client has to infer.
+            emit({ t: "btel", k: k, x: Math.round(b.x), y: Math.round(b.y),
+                   ang: Math.round(b.act.ang * 100), ms: Math.round(b.act.t * 1000) });
+        }
     }
 
     function spawnEnemy(s, now) {
@@ -802,6 +1147,10 @@ function createRun(opts) {
                 room: { w: ROOM.w, h: ROOM.h },
                 totalWaves: TOTAL_WAVES,
                 eliteWaves: ELITE_WAVES.slice(),
+                // Which Guardian is drawn is deliberately NOT in the
+                // config: the client finds out when it arrives, same as
+                // everyone else in the party.
+                bossWave: BOSS_WAVE,
                 playerCount: playerCount,
                 players: Object.keys(players).map(s => ({
                     slot: players[s].slot,
@@ -847,10 +1196,21 @@ function createRun(opts) {
             if (!p || !p.connected || !p.alive) return { ok: false, reason: "not-alive" };
             if (run.phase !== "fighting") return { ok: false, reason: "not-fighting" };
 
-            const e = run.enemies.find(x => x.id === enemyId && !x.dead);
-            if (!e) return { ok: false, reason: "no-such-enemy" };
+            const b = run.boss;
+            const isBoss = enemyId === BOSS_ID;
+            const target = isBoss ? (b && !b.dead ? b : null)
+                                  : run.enemies.find(x => x.id === enemyId && !x.dead);
+            if (!target) return { ok: false, reason: "no-such-enemy" };
+            const e = target;
 
             if (dist(p.x, p.y, e.x, e.y) > CLAIM_MAX_RANGE) return { ok: false, reason: "out-of-range" };
+
+            // A Guardian mid-phase-change, or one whose core is sealed,
+            // takes nothing at all -- its own mechanic, enforced here
+            // rather than by a client agreeing not to shoot.
+            if (isBoss && (now < b.invulnUntil || b.coreMode === "closed")) {
+                return { ok: false, reason: "invulnerable" };
+            }
 
             const w = WEAPONS[p.weapon] || WEAPONS.pulse;
             // What this weapon could HONESTLY connect with in a second:
@@ -877,9 +1237,27 @@ function createRun(opts) {
             p.claimTimes.push(now);
 
             const crit = random() < p.crit;
-            const dmg = Math.max(1, w.dmg * p.dmgMult * (crit ? 2.2 : 1));
+            // An exposed Guardian takes 1.5x, exactly as it does solo.
+            const vulnMult = (isBoss && now < b.vulnUntil) ? 1.5 : 1;
+            const dmg = Math.max(1, w.dmg * p.dmgMult * (crit ? 2.2 : 1) * vulnMult);
             e.hp -= dmg;
             p.damage += dmg;
+
+            if (isBoss) {
+                b.hitFlashUntil = now + 100;
+                if (b.hp <= 0) {
+                    bossDie(b, now);
+                    return { ok: true, dead: true, dmg: Math.round(dmg), crit: crit, enemyId: BOSS_ID };
+                }
+                // Phase thresholds are the Guardian's OWN, mirrored from
+                // BOSSMETA, so the bar's two marks still mean what they
+                // mean in a solo fight.
+                const f = b.hp / b.maxhp;
+                const th = b.def.thresholds;
+                if (b.phase === 1 && f < th[0]) bossPhaseTo(b, 2, now);
+                else if (b.phase === 2 && f < th[1]) bossPhaseTo(b, 3, now);
+                return { ok: true, dead: false, dmg: Math.round(dmg), crit: crit, enemyId: BOSS_ID };
+            }
 
             if (e.hp <= 0) {
                 killEnemy(e, slot, now);
@@ -949,6 +1327,7 @@ function createRun(opts) {
             }
 
             for (const e of run.enemies) { if (!e.dead) stepEnemy(e, dt, now); }
+            if (run.boss && !run.boss.dead) stepBoss(run.boss, dt, now);
             separate(dt);
             stepBullets(dt, now);
 
@@ -958,7 +1337,9 @@ function createRun(opts) {
                 run.enemies = run.enemies.filter(e => !e.dead);
             }
 
-            if (run.phase === "fighting" && !run.enemies.length && !run.spawnQueue.length) {
+            // The Guardian wave is not over until the Guardian is.
+            if (run.phase === "fighting" && !run.enemies.length && !run.spawnQueue.length &&
+                (!run.boss || run.boss.dead)) {
                 waveCleared(now);
             }
 
@@ -974,6 +1355,7 @@ function createRun(opts) {
         // carries the only enemy facts a client cannot derive for itself
         // -- where it is, which way it faces, and how hurt it is.
         snapshot() {
+            const now = Date.now();
             const a = [];
             for (const e of run.enemies) {
                 if (e.dead) continue;
@@ -994,7 +1376,19 @@ function createRun(opts) {
                 ps.push(p.slot, Math.round(p.hp), p.alive ? 1 : 0, p.connected ? 1 : 0,
                         Math.round(p.x), Math.round(p.y), Math.round(p.ang * 100));
             }
-            return { e: a, p: ps, w: run.waveActive, ph: run.phase };
+            // The Guardian's own scalars -- the exact set its renderer
+            // reads (see the BOSSES comment). Eight numbers, only while
+            // a Guardian is alive.
+            let bo = null;
+            const b = run.boss;
+            if (b && !b.dead) {
+                bo = [Math.round(b.x), Math.round(b.y), Math.round(b.hp), b.phase,
+                      now < b.invulnUntil ? 1 : 0,
+                      now < b.vulnUntil ? 1 : 0,
+                      now < b.hitFlashUntil ? 1 : 0,
+                      b.coreMode === "closed" ? 0 : 1];
+            }
+            return { e: a, p: ps, w: run.waveActive, ph: run.phase, b: bo };
         },
 
         drainEvents() {
@@ -1036,6 +1430,8 @@ function createRun(opts) {
                 wave: run.waveActive + "/" + TOTAL_WAVES,
                 enemies: run.enemies.length,
                 ebullets: run.ebullets.length,
+                boss: run.boss ? (run.boss.kind + " p" + run.boss.phase + " " +
+                    Math.round(100 * run.boss.hp / run.boss.maxhp) + "%") : null,
                 players: activePlayers().length
             };
         }
@@ -1045,15 +1441,18 @@ function createRun(opts) {
 // =====================================================================
 // LIMITATIONS (deliberate, documented rather than worked around)
 //
-// 1. NO GUARDIAN/BOSS FIGHT. voidbreak.html's eight bosses are ~1,500
-//    lines of multi-phase, client-only behaviour with their own
-//    telegraphs, arenas and death sequences. Re-implementing them here
-//    would be a second, drifting copy of the hardest code in the game,
-//    and driving them from the client instead would hand a client
-//    authority over the run's outcome. A co-op run therefore ends on an
-//    ELITE FINALE built from the sector's own elitePool -- an existing
-//    Voidbreak mechanic, not an invented one -- and does not mark the
-//    sector "beaten" for the solo campaign.
+// 1. THE GUARDIAN'S ATTACK SCRIPT IS BY STYLE, not a per-boss port.
+//    The eight Guardians are ~1,200 lines of bespoke, client-only
+//    attack scripting. What IS the real thing here: which Guardian you
+//    face, its art, its radius, its phase thresholds and banners, its
+//    summon composition, its HP bar, its intro, its sealed/exposed core
+//    where it has one, and the whole fight being decided by the server.
+//    What is not: the exact order and timing of ITS OWN attacks, which
+//    is drawn from the style its fight is built around (see BOSSES).
+//
+//    A co-op clear still does not mark the sector "beaten" for the solo
+//    campaign -- the Guardian is randomly drawn and is usually not that
+//    sector's own, so it is not the same achievement.
 //
 // 2. ENEMY BEHAVIOUR IS BY ARCHETYPE, not a per-type port (see AI_ROLE).
 //    Stats, health, damage, shard value and appearance are the real
@@ -1066,6 +1465,8 @@ function createRun(opts) {
 
 module.exports = {
     ETYPES,
+    BOSSES,
+    BOSS_ID,
     WEAPONS,
     WEAPON_KEYS,
     LEVELS,
