@@ -8080,7 +8080,7 @@ async function startServer() {
         .catch(e => console.log("[static] warm failed:", e.message));
 
     httpServer.listen(PORT, "0.0.0.0", () => {
-        console.log("DUEL ARENA SERVER STARTED on port " + PORT);
+        console.log("VOIDBREAK SERVER STARTED on port " + PORT);
         console.log("Open http://localhost:" + PORT + " on this computer,");
         console.log("or http://<this computer's LAN IP>:" + PORT + " on the other player's computer.");
     });

@@ -4002,7 +4002,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.5-5A8 8 0 1 1 21 12z"/>
         </svg>
-        <span>LOBBY CHAT</span>
+        <span>FLEET COMMS</span>
         <span class="chat-unread hidden" id="chatUnread">0</span>
       </button>
       <!-- Journey status strip. Same three numbers the Discovery panel
@@ -4046,7 +4046,7 @@
          there is no second connection and no polling. -->
     <div class="chat-panel hidden" id="lobbyChat">
       <div class="chat-head">
-        <span class="chat-title">LOBBY CHAT</span>
+        <span class="chat-title">FLEET COMMS</span>
         <span class="chat-count" id="chatCount"></span>
         <button class="chat-close" id="chatCollapse" type="button" title="Collapse">&ndash;</button>
       </div>
@@ -4140,7 +4140,7 @@
       <div class="va-actions">
         <button class="menu-btn" data-act="ranked">RANKED LADDER</button>
         <button class="menu-btn" data-act="leaderboards">LEADERBOARDS</button>
-        <button class="menu-btn" data-act="loadout">ARENA LOADOUT</button>
+        <button class="menu-btn" data-act="pilotgear">PILOT GEAR</button>
       </div>
     </div>
     <button class="menu-back" id="btnBackVbArena">&larr; back to the void</button>
@@ -4148,7 +4148,7 @@
 
   <!-- GAME TYPE MENU (Classic vs Football) -->
   <div class="menu-overlay hidden" id="menuGameType">
-    <div class="menu-title">SELECT GAME TYPE</div>
+    <div class="menu-title">SELECT ENGAGEMENT</div>
     <div class="menu-group">
       <button class="menu-btn" id="btnModeClassic">CLASSIC<br><span style="font-size:9px;color:var(--ink-dim);letter-spacing:1.5px;">FIRST TO 3 ROUNDS</span></button>
       <button class="menu-btn accent-2" id="btnModeFootball">&#9917; FOOTBALL<br><span style="font-size:9px;color:var(--ink-dim);letter-spacing:1.5px;">FIRST TO 3 GOALS</span></button>
@@ -4161,7 +4161,7 @@
   <!-- SETTINGS -->
   <div class="menu-overlay hidden" id="menuSettings">
     <div class="shop-panel settings-panel">
-      <div class="menu-title">PLAYER SETTINGS</div>
+      <div class="menu-title">COMMANDER SETTINGS</div>
 
       <div class="settings-section-label">PLAYER SETTINGS</div>
       <div class="settings-note">
@@ -4412,7 +4412,7 @@
   <!-- LEADERBOARDS -->
   <div class="menu-overlay hidden" id="menuLeaderboard">
     <div class="shop-panel">
-      <div class="menu-title">LEADERBOARDS</div>
+      <div class="menu-title">COMMANDER LEADERBOARDS</div>
       <div class="shop-tabs">
         <button class="shop-tab selected" id="lbTabCoins" data-sort="coins">COINS</button>
         <button class="shop-tab" id="lbTabKills" data-sort="kills">KILLS</button>
@@ -4483,7 +4483,7 @@
 
   <div class="menu-overlay hidden" id="menuRanked">
     <div class="shop-panel ranked-panel">
-      <div class="menu-title">RANKED</div>
+      <div class="menu-title">COMMANDER RANK</div>
       <div class="rk-season" id="rkSeason">SEASON 1</div>
 
       <div class="rk-card" id="rkCard">
@@ -4516,9 +4516,9 @@
   <!-- RANKED QUEUE -->
   <div class="menu-overlay hidden" id="menuRankedQueue">
     <div class="rq-wrap">
-      <div class="menu-title">RANKED</div>
+      <div class="menu-title">COMMANDER RANK</div>
       <div class="rq-spinner"><i></i><i></i><i></i></div>
-      <div class="rq-status" id="rqStatus">SEARCHING FOR OPPONENT...</div>
+      <div class="rq-status" id="rqStatus">SCANNING FOR A RIVAL PILOT...</div>
       <div class="rq-timer">QUEUE TIME: <b id="rqTimer">00:00</b></div>
       <div class="rq-detail" id="rqDetail"></div>
 
@@ -4568,7 +4568,7 @@
   <!-- RANKED LEADERBOARD -->
   <div class="menu-overlay hidden" id="menuRankedLadder">
     <div class="shop-panel">
-      <div class="menu-title">RANKED LEADERBOARD</div>
+      <div class="menu-title">ARENA LADDER</div>
       <div class="rk-season" id="rlSeason">SEASON 1</div>
       <div class="rl-you hidden" id="rlYou"></div>
       <div class="shop-body" id="rankedLadderBody"></div>
@@ -4578,7 +4578,7 @@
 
   <!-- ONLINE LOBBY -->
   <div class="menu-overlay hidden" id="menuOnline">
-    <div class="menu-title">ONLINE MATCH</div>
+    <div class="menu-title">PILOT DUEL</div>
     <div id="onlineStatusWrap">
       <div class="currency-box" id="onlineStatusMsg" style="color:var(--p1); border-color:rgba(63,208,255,0.35); background:rgba(63,208,255,0.06);">CONNECTING...</div>
     </div>
@@ -4598,18 +4598,18 @@
        lobby.js) rather than the legacy two-slot relay.
        ============================================================ -->
   <div class="menu-overlay hidden" id="menuOnlineHub">
-    <div class="menu-title">ONLINE</div>
+    <div class="menu-title">VOIDBREAK ARENA</div>
     <div class="mp-panel">
       <div class="mp-section">
-        <div class="mp-heading">PVP</div>
+        <div class="mp-heading">PILOT VERSUS PILOT</div>
         <div class="mp-grid" id="mpPvpGrid"></div>
       </div>
       <div class="mp-section">
-        <div class="mp-heading alt">VOIDBREAK CO-OP</div>
+        <div class="mp-heading alt">DEEP-SPACE CO-OP</div>
         <div class="mp-grid" id="mpCoopGrid"></div>
       </div>
       <div class="mp-section">
-        <div class="mp-heading">JOIN A ROOM</div>
+        <div class="mp-heading">JOIN A SQUADRON</div>
         <div class="menu-row" style="align-items:center; flex-wrap:wrap; justify-content:center;">
           <input class="mp-input" id="mpJoinCode" maxlength="5" placeholder="CODE"
                  autocomplete="off" autocapitalize="characters" spellcheck="false">
@@ -4618,7 +4618,7 @@
         </div>
         <div class="mp-rows" id="mpBrowseRows"></div>
       </div>
-      <div class="mp-note" id="mpHubNote">SIGN IN TO PLAY ONLINE MATCHES.</div>
+      <div class="mp-note" id="mpHubNote">SIGN IN TO FLY ONLINE.</div>
     </div>
     <button class="menu-back" id="btnBackOnlineHub">&larr; back</button>
   </div>
@@ -4646,14 +4646,14 @@
   <div class="menu-overlay hidden" id="menuShop">
     <div class="shop-panel">
       <div class="shop-header">
-        <div class="menu-title">SHOP</div>
+        <div class="menu-title">VOID MARKET</div>
         <div class="currency-box" id="coinsDisplayShop">◈ <span id="coinsAmountShop">0</span> COINS</div>
         <div class="currency-box crystal" id="crystalsDisplayShop">&#9670; <span id="crystalsAmountShop">0</span> CRYSTALS</div>
       </div>
       <div class="shop-tabs">
-        <button class="shop-tab selected" id="tabSkins" data-tab="skins">SKINS SHOP</button>
-        <button class="shop-tab" id="tabPowers" data-tab="powers">POWERS SHOP</button>
-        <button class="shop-tab" id="tabAbilities" data-tab="abilities">ABILITIES SHOP</button>
+        <button class="shop-tab selected" id="tabSkins" data-tab="skins">SHIP SKINS</button>
+        <button class="shop-tab" id="tabPowers" data-tab="powers">SHIP SYSTEMS</button>
+        <button class="shop-tab" id="tabAbilities" data-tab="abilities">PILOT ABILITIES</button>
         <button class="shop-tab crystal-tab" id="tabCrystals" data-tab="crystals">CRYSTALS</button>
       </div>
       <div class="shop-body" id="shopBody"></div>
@@ -6369,7 +6369,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     if(!loggedIn || !sessionToken){
       mpCloseMenus();
       menuMain.classList.remove('hidden');
-      lobbyToast('SIGN IN TO PLAY ONLINE MATCHES');
+      lobbyToast('SIGN IN TO FLY ONLINE');
       return;
     }
     menuMain.classList.add('hidden');
@@ -14781,6 +14781,15 @@ if(tutorialActive) tutorialUpdate(dt);
     updateCurrencyDisplay();
     menuShop.classList.remove('hidden');
   });
+
+  // Straight to the arena equip tab. Same overlay, same code path as
+  // the Void Market button above -- it only starts on a different tab.
+  function openPilotGear(){
+    menuMain.classList.add('hidden');
+    selectShopTab('abilities');
+    updateCurrencyDisplay();
+    menuShop.classList.remove('hidden');
+  }
   // The Crystal pill's own "+" button (data-act="crystalshop") opens
   // the SAME shop overlay straight to the CRYSTALS tab, rather than a
   // separate screen -- one shop, four tabs, per the "don't build a
@@ -15033,7 +15042,7 @@ if(tutorialActive) tutorialUpdate(dt);
     tutCardShow(
       '<div class="tut-wm">VOIDBREAK ARENA</div>'
       + '<div class="tut-plate">TRAINING PROTOCOL</div>'
-      + '<div class="tut-wline">TOP-DOWN ARENA DUELS</div>'
+      + '<div class="tut-wline">PILOT COMBAT, ONE ON ONE</div>'
       + '<div class="tut-wline dim">LEARN THE BASICS IN ABOUT A MINUTE</div>'
       + '<div class="tut-card-btns">'
       + '<button class="tut-cta" id="tutStartBtn"><span>' + (isTouchDevice?'TAP TO BEGIN':'PRESS ANY KEY TO BEGIN') + '</span></button>'
@@ -15720,7 +15729,7 @@ if(tutorialActive) tutorialUpdate(dt);
     menuMain.classList.add('hidden');
     closeVbArena({ silent: true });
     voidbreakFrame.focus();
-    // Friends presence: friends see "IN VOIDBREAK".
+    // Friends presence: friends see "ON AN EXPEDITION".
     if(typeof syncActivity === 'function') syncActivity();
   }
   function exitVoidbreak(){
@@ -16483,6 +16492,11 @@ if(tutorialActive) tutorialUpdate(dt);
     else if(act === 'galaxy')        { launchVoidbreak('galaxy'); }
     else if(act === 'planet')        { launchVoidbreak('planet'); }
     else if(act === 'loadout')       { launchVoidbreak('loadout'); }
+    // The arena's own equip screen: the ability and ship systems a
+    // pilot takes into a duel, which live in the Void Market's own
+    // tabs. Distinct from the campaign's Void Loadout above -- these
+    // two arm different parts of the game and always have.
+    else if(act === 'pilotgear')     { closeVbArena({ silent: true }); openPilotGear(); }
     else if(act === 'arena')         { openVbArena(); }
     else if(act === 'play')          { lobbyStartSelectedMode(); }
     else if(act === 'ranked')        { closeVbArena({ silent: true }); openRankedHub(); }
@@ -17124,7 +17138,7 @@ if(tutorialActive) tutorialUpdate(dt);
   const menuFriendProfile = frEl('menuFriendProfile');
 
   const PRESENCE_LABEL = {
-    online: 'ONLINE', inMatch: 'IN MATCH', voidbreak: 'IN VOIDBREAK', offline: 'OFFLINE'
+    online: 'ONLINE', inMatch: 'IN THE ARENA', voidbreak: 'ON AN EXPEDITION', offline: 'OFFLINE'
   };
 
   function frEscape(s){
@@ -17297,7 +17311,7 @@ if(tutorialActive) tutorialUpdate(dt);
     empty.className = 'chat-empty';
     empty.textContent = loggedIn
       ? 'NO MESSAGES YET \u2014 SAY HELLO'
-      : 'SIGN IN TO JOIN THE LOBBY CHAT';
+      : 'SIGN IN TO JOIN FLEET COMMS';
     log.appendChild(empty);
   }
 
