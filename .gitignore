@@ -16,5 +16,7 @@ stripePurchases.json
 # so the game can be driven headlessly. They are rebuilt from source on
 # every test run and must never be committed -- shipping one would expose
 # an unauthenticated session endpoint.
+# (The real, committed tests live in test/ and inject nothing -- see
+# test/voidbreakSave.test.js, which `npm test` runs.)
 *.testonly.html
 *.testonly.js

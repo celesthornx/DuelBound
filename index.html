@@ -16327,7 +16327,7 @@ if(tutorialActive) tutorialUpdate(dt);
     shards: 0,          // spendable Void Shards (earned - spent)
     galaxyId: 1,
     galaxyName: '',
-    shipLevel: 0,
+    shipParts: 0,       // total recovered ship components
     discovered: 0, discoverable: 0,
     cleared: 0, clearable: 0,
     galaxiesCleared: 0, galaxyTotal: 0,
@@ -16341,13 +16341,30 @@ if(tutorialActive) tutorialUpdate(dt);
   // labels and nothing else.
   function vbUni(){ return (typeof window !== 'undefined' && window.VBUniverse) ? window.VBUniverse : null; }
 
-  // Ship designation from the ship's actual part level. MK-I at the
-  // start, one mark per two levels of accumulated ship systems -- so it
-  // is a real readout of progression rather than a decorative string.
+  // Ship designation from the ship's REAL part count -- every hull
+  // plate, engine, weapon mount, emitter, cell, scanner and cargo bay
+  // recovered from a first clear, added up. One mark per four
+  // components, so the name is a readout of how much of the ship has
+  // actually been rebuilt rather than a decorative string.
   const VB_SHIP_MARKS = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'];
-  function vbShipName(level){
-    const mark = VB_SHIP_MARKS[Math.min(VB_SHIP_MARKS.length - 1, Math.floor((level || 0) / 2))];
+  const VB_PARTS_PER_MARK = 4;
+  function vbShipName(parts){
+    const mark = VB_SHIP_MARKS[Math.min(VB_SHIP_MARKS.length - 1,
+      Math.floor((parts || 0) / VB_PARTS_PER_MARK))];
     return 'VOID RUNNER MK-' + mark;
+  }
+  // Total recovered ship components. shipPower() returns the per-system
+  // levels; shipLevel() takes a system id, which is why this sums the
+  // former rather than calling the latter with none.
+  function vbShipParts(uni){
+    const U = vbUni();
+    if(!U || !U.shipPower) return 0;
+    const power = U.shipPower(uni || {});
+    let total = 0;
+    for(const k in power){
+      if(typeof power[k] === 'number') total += power[k];
+    }
+    return total;
   }
 
   // Reads a /voidbreak/state response into VBP. Pure; no network, no
@@ -16367,13 +16384,13 @@ if(tutorialActive) tutorialUpdate(dt);
       if(t && t.name) VBP.title = t.name;
     }
     if(!data){
-      VBP.shards = 0; VBP.galaxyId = 1; VBP.shipLevel = 0;
+      VBP.shards = 0; VBP.galaxyId = 1; VBP.shipParts = 0;
       VBP.discovered = 0; VBP.cleared = 0; VBP.galaxiesCleared = 0;
     } else {
       VBP.shards = Math.max(0, (data.shards || 0) - (data.shardsSpent || 0));
       const uni = data.universe || {};
       VBP.galaxyId = uni.galaxy || 1;
-      VBP.shipLevel = (U && U.shipLevel) ? U.shipLevel(uni) : 0;
+      VBP.shipParts = vbShipParts(uni);
       VBP.discovered = 0;
       const disc = uni.discovered || {};
       for(const k in disc){
@@ -16409,7 +16426,7 @@ if(tutorialActive) tutorialUpdate(dt);
     setTxt('lobbyShards', VBP.shards.toLocaleString());
     setTxt('lobbyShardsStat', VBP.shards.toLocaleString());
     setTxt('lobbyGalaxy', known && VBP.galaxyName ? VBP.galaxyName : '\u2014');
-    setTxt('lobbyShip', VBP.loaded ? vbShipName(VBP.shipLevel) : '\u2014');
+    setTxt('lobbyShip', VBP.loaded ? vbShipName(VBP.shipParts) : '\u2014');
 
     const pct = VBP.discoverable > 0
       ? Math.round((VBP.discovered / VBP.discoverable) * 100) : 0;
@@ -18105,7 +18122,7 @@ if(tutorialActive) tutorialUpdate(dt);
       + (VBP.title ? '<div class="cmd-card-title">' + escapeHtmlRk(VBP.title) + '</div>' : '')
       + '<div class="cmd-card-rows">'
       + '<div><span>GALAXY</span><b>' + escapeHtmlRk(VBP.galaxyName || '—') + '</b></div>'
-      + '<div><span>SHIP</span><b>' + (VBP.loaded ? vbShipName(VBP.shipLevel) : '—') + '</b></div>'
+      + '<div><span>SHIP</span><b>' + (VBP.loaded ? vbShipName(VBP.shipParts) : '—') + '</b></div>'
       + '</div></div>'
       + '<div class="rr-grid">'
       + '<div class="rr-row"><span>VOID SHARDS</span><b>' + VBP.shards.toLocaleString() + '</b></div>'
