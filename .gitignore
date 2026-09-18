@@ -12,3 +12,4 @@ node_modules/
 # an unauthenticated session endpoint.
 *.testonly.html
 *.testonly.js
+*.perftest.html
