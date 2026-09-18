@@ -6497,7 +6497,15 @@ function coopBroadcast(match, payload) {
 function coopLoadoutFor(sub) {
     const account = accounts[sub];
     const save = (account && account.voidbreak && account.voidbreak.data) || Voidbreak.defaultSaveData();
-    let weapon = typeof save.lastWeapon === "string" ? save.lastWeapon : "pulse";
+    // The Void Loadout's primary is what the player actually flies now;
+    // `lastWeapon` is the pre-loadout field and stays the fallback so a
+    // save written before the loadout existed still starts a co-op run
+    // with the weapon its owner last used. Either way the answer is
+    // re-checked against the STORED weapons map, so a client still
+    // cannot bring a weapon it has not unlocked.
+    const loadout = (save.loadout && typeof save.loadout === "object") ? save.loadout : {};
+    let weapon = typeof loadout.primary === "string" ? loadout.primary
+               : (typeof save.lastWeapon === "string" ? save.lastWeapon : "pulse");
     if (!save.weapons || !save.weapons[weapon]) weapon = "pulse";
     return { weapon: weapon, forge: save.forge || {} };
 }
