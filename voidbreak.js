@@ -59,6 +59,18 @@ const DEF_SAVE = {
     forge: { vit: 0, pow: 0, swift: 0, core: 0, drive: 0, edge: 0 },
     weapons: { pulse: true, scatter: false, rail: false, plasma: false, voidb: false, voidc: false },
     lastWeapon: "pulse",
+
+    // ---- VOID LOADOUT ----
+    // What the player flies with, chosen once and kept. Purely a
+    // PREFERENCE, exactly like lastWeapon above: it decides which of the
+    // player's already-earned options is equipped, never what they are
+    // allowed to have. Which secondaries and abilities exist at all is
+    // gated by universe progress (systems cleared / guardians beaten),
+    // which is separate, already-validated save state -- so there is no
+    // new ownership list here for a client to lie about, and an
+    // unavailable id simply falls back to the default at use time.
+    loadout: { primary: "pulse", secondary: "missile", ability: "overdrive" },
+
     runs: 0,
     best: 0,
     kills: 0,
@@ -154,6 +166,16 @@ const DEF_SAVE = {
 const FORGE_KEYS = Object.keys(DEF_SAVE.forge);
 const WEAPON_KEYS = Object.keys(DEF_SAVE.weapons);
 const EQUIP_SLOTS = Object.keys(DEF_SAVE.equipped);
+
+// The closed sets the Void Loadout's two non-weapon slots are validated
+// against. Kept in sync with voidbreak.html's SECONDARIES/VB_ABILITIES
+// by hand, exactly as DEF_SAVE itself is kept in sync with that file's
+// own DEF_SAVE -- this module re-describes the shape the client owns, it
+// does not invent a second one. Only the IDS live here: what each does,
+// what it costs in energy and when it unlocks are gameplay, and gameplay
+// is the client's, same as the WEAPONS table has always been.
+const SECONDARY_IDS = ["none", "missile", "drone", "barrier"];
+const ABILITY_IDS = ["none", "overdrive", "mark", "blink"];
 
 // =====================================================================
 // VOID SHARD SHOP -- catalog
@@ -620,6 +642,22 @@ function sanitizeSaveData(raw) {
     let lastWeapon = typeof raw.lastWeapon === "string" ? raw.lastWeapon : "pulse";
     if (WEAPON_KEYS.indexOf(lastWeapon) === -1 || !weapons[lastWeapon]) lastWeapon = "pulse";
 
+    // The loadout is three ids out of three closed sets. Anything else
+    // -- a missing object, a wrong type, an unknown id, a primary the
+    // account does not own -- collapses to the default rather than being
+    // rejected, because a bad preference should never cost a player a
+    // save. SECONDARY_IDS/ABILITY_IDS are the whole validation: what a
+    // given account may actually EQUIP is decided by universe progress
+    // at use time, not stored here.
+    const rawLoadout = (raw.loadout && typeof raw.loadout === "object") ? raw.loadout : {};
+    let lPrimary = typeof rawLoadout.primary === "string" ? rawLoadout.primary : lastWeapon;
+    if (WEAPON_KEYS.indexOf(lPrimary) === -1 || !weapons[lPrimary]) lPrimary = lastWeapon;
+    let lSecondary = typeof rawLoadout.secondary === "string" ? rawLoadout.secondary : "missile";
+    if (SECONDARY_IDS.indexOf(lSecondary) === -1) lSecondary = "missile";
+    let lAbility = typeof rawLoadout.ability === "string" ? rawLoadout.ability : "overdrive";
+    if (ABILITY_IDS.indexOf(lAbility) === -1) lAbility = "overdrive";
+    const loadout = { primary: lPrimary, secondary: lSecondary, ability: lAbility };
+
     const beaten = {};
     const rawBeaten = (raw.beaten && typeof raw.beaten === "object") ? raw.beaten : {};
     let beatenCount = 0;
@@ -647,6 +685,7 @@ function sanitizeSaveData(raw) {
         forge: forge,
         weapons: weapons,
         lastWeapon: lastWeapon,
+        loadout: loadout,
         runs: clampInt(raw.runs, 0, MAX_COUNTER, 0),
         best: clampInt(raw.best, 0, MAX_COUNTER, 0),
         kills: clampInt(raw.kills, 0, MAX_COUNTER, 0),
@@ -919,6 +958,12 @@ function applyPrestige(save) {
     next.weapons = {};
     for (const k of WEAPON_KEYS) next.weapons[k] = (k === "pulse");
     next.lastWeapon = "pulse";
+    // Prestige takes the weapons back, so the loadout has to let go of
+    // them too -- leaving `primary` pointed at a railgun the account no
+    // longer owns would sanitize back to pulse on the next save anyway,
+    // just less visibly. The secondary and ability slots reset with it:
+    // both are gated on universe progress, which this same reset clears.
+    next.loadout = { primary: "pulse", secondary: "missile", ability: "overdrive" };
     next.forge = {};
     for (const k of FORGE_KEYS) next.forge[k] = 0;
     next.beaten = {};
@@ -1196,6 +1241,22 @@ function mergeSaveData(a, b) {
     // side first at every call site).
     let lastWeapon = weapons[a.lastWeapon] ? a.lastWeapon : (weapons[b.lastWeapon] ? b.lastWeapon : "pulse");
 
+    // The loadout merges the same way, and for the same reason: three
+    // preferences with no stakes. `a` (the more-recent side at every
+    // call site) wins each slot as long as it names something the merged
+    // account can actually equip, which for the primary means a weapon
+    // the MERGED weapons map owns -- so a merge can never leave a player
+    // pointed at a weapon they do not have.
+    const aL = a.loadout || {}, bL = b.loadout || {};
+    const pickPrimary = weapons[aL.primary] ? aL.primary : (weapons[bL.primary] ? bL.primary : lastWeapon);
+    const pickId = (x, y, set, dflt) =>
+        (set.indexOf(x) !== -1 ? x : (set.indexOf(y) !== -1 ? y : dflt));
+    const loadout = {
+        primary: pickPrimary,
+        secondary: pickId(aL.secondary, bL.secondary, SECONDARY_IDS, "missile"),
+        ability: pickId(aL.ability, bL.ability, ABILITY_IDS, "overdrive")
+    };
+
     // Endgame fields follow the same never-summed rule. shardsSpent is
     // MAX'd for the same reason `shards` is: it only ever grows (the
     // server is the only writer), so MAX keeps the true spend total and
@@ -1223,6 +1284,7 @@ function mergeSaveData(a, b) {
         forge: forge,
         weapons: weapons,
         lastWeapon: lastWeapon,
+        loadout: loadout,
         runs: Math.max(a.runs || 0, b.runs || 0),
         best: Math.max(a.best || 0, b.best || 0),
         kills: Math.max(a.kills || 0, b.kills || 0),
