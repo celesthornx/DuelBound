@@ -2126,8 +2126,17 @@
   .nav-item:hover::after{ transform: scaleX(.55); }
   .nav-item.active{ color:#fff; }
   .nav-item.active::after{ transform: scaleX(1); }
-  .nav-item.nav-admin{ color:#ff8a94; }
-  .nav-item.nav-admin::after{ background: var(--p2); box-shadow:0 0 10px var(--p2); }
+  .icon-btn.icon-admin{
+    color:#ff8a94;
+    border-color: rgba(255,95,109,.42);
+    background: rgba(255,95,109,.10);
+  }
+  .icon-btn.icon-admin:hover{
+    color:#fff; border-color: var(--p2);
+    background: rgba(255,95,109,.24);
+    box-shadow: 0 0 14px rgba(255,95,109,.45);
+  }
+  .icon-btn.icon-admin.hidden{ display:none; }
   .nav-item.nav-battlepass{ color:#ffce54; }
   .nav-item.nav-battlepass::after{ background: var(--gold); box-shadow:0 0 10px var(--gold); }
 
@@ -3186,16 +3195,47 @@
 
   #legacyControls{ display:none !important; }
 
+  /* ---------- Nav sizing ladder ----------
+     Kept separate from the layout breakpoints below because the two have
+     different pressure points: the nav runs out of room at 1560 and
+     1300, which are not where the columns need to change. Each step
+     spends letter-spacing first (it buys the most width per unit of
+     legibility lost), then padding, then size. Measured, not guessed --
+     1536 is a 1920 laptop at 125% scaling and is the common case that
+     was clipping. */
+  @media (max-width: 1680px){
+    .nav-item{ font-size: 12px; letter-spacing: 1.5px; padding: 10px 10px; }
+  }
+  @media (max-width: 1560px){
+    .nav-item{ font-size: 11px; letter-spacing: .8px; padding: 9px 7px; }
+  }
+  @media (max-width: 1460px){
+    .nav-item{ font-size: 10.5px; letter-spacing: .3px; padding: 9px 5px; }
+  }
+  @media (max-width: 1370px){
+    .nav-item{ font-size: 10px; letter-spacing: .1px; padding: 8px 4px; }
+  }
+  @media (max-width: 1300px){
+    /* Last step before the nav is hidden altogether at 1000px. The
+       currency pills and icon buttons give up width here too -- below
+       this the nav is not the only thing under pressure. */
+    .nav-item{ font-size: 9.5px; letter-spacing: 0; padding: 8px 3px; }
+    .lobby-top{ gap: 8px; }
+    .currency-pill{ padding: 4px 4px 4px 9px; gap:6px; }
+    .currency-pill .cp-val{ font-size: 14px; min-width: 20px; }
+    .cp-plus{ width: 22px; height: 22px; font-size: 13px; }
+    .icon-btn{ width: 32px; height: 32px; }
+    .lobby-top-right{ gap: 6px; }
+  }
+
   /* ---------- Responsive: 1600x900 / 1366x768 and below ---------- */
   @media (max-width: 1680px){
     .lobby-main{ grid-template-columns: 280px minmax(0,1fr) 280px; }
     .mode-card{ width: 176px; }
-    .nav-item{ font-size: 12px; letter-spacing: 1.6px; padding: 10px 10px; }
   }
   @media (max-width: 1450px){
     :root{ --lobby-pad: 18px; }
     .lobby-main{ grid-template-columns: 262px minmax(0,1fr) 262px; gap: 12px; }
-    .nav-item{ font-size: 10.5px; letter-spacing: .4px; padding: 9px 6px; }
     .lobby-top{ gap: 14px; }
     .play-label{ font-size: clamp(22px, 3.8vw, 40px); letter-spacing: 5px; }
     .play-btn{ width: min(480px, 100%); }
@@ -3211,7 +3251,6 @@
     .brand-text b{ font-size: 19px; }
     .brand-tag{ font-size: 8px; letter-spacing: 2.4px; }
     .brand-mark{ width:32px; height:32px; }
-    .nav-item{ font-size: 10px; letter-spacing: .2px; padding: 8px 5px; }
     .lobby-top{ gap: 10px; }
     .mode-card{ width: 146px; }
     .chat-toggle{ min-width: 0; }
@@ -4004,7 +4043,6 @@
         <button class="nav-item" data-act="shop">VOID MARKET</button>
         <button class="nav-item" data-act="leaderboards">LEADERBOARDS</button>
         <button class="nav-item" data-act="profile">PROFILE</button>
-        <button class="nav-item nav-admin hidden" id="lobbyNavAdmin" data-act="admin">ADMIN</button>
       </nav>
 
       <div class="lobby-top-right">
@@ -4036,6 +4074,20 @@
         <button class="icon-btn muted" data-act="mail" title="Mail">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
             <rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>
+          </svg>
+        </button>
+        <!-- ADMIN lives here rather than in the nav. It is a utility, not
+             a destination, and as a ninth nav item it was the one that
+             got scrolled out of reach behind the nav's fade on a 1536px
+             or 1280px laptop -- precisely the people who need it. In the
+             icon row it is always visible at every width. It still grants
+             nothing: visibility is mirrored from #btnAdmin, which the
+             server decides at sign-in, and every admin request is
+             re-checked server-side regardless. -->
+        <button class="icon-btn icon-admin hidden" id="lobbyNavAdmin" data-act="admin" title="Admin">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2.6 L20 6.2 V12 c0 4.7-3.4 8.1-8 9.4C7.4 20.1 4 16.7 4 12 V6.2 Z"/>
+            <path d="M9.4 12.1 L11.3 14 L14.9 10.2"/>
           </svg>
         </button>
         <button class="icon-btn" data-act="settings" title="Settings">
@@ -17478,7 +17530,7 @@ if(tutorialActive) tutorialUpdate(dt);
       });
     });
 
-    // The ADMIN nav item simply mirrors the real admin button's
+    // The ADMIN icon button simply mirrors the real admin button's
     // visibility, which the server decides at sign-in. It grants nothing
     // by itself -- every admin request is still re-checked server-side.
     const realAdmin = lobbyEl('btnAdmin');
