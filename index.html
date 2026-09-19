@@ -1893,6 +1893,35 @@
   .lobby-right .disc-rows{ gap:7px; }
   .lobby-right .disc-row b{ font-size: 14px; }
   .lobby-right .lp-body{ padding: 12px 14px 13px; }
+
+  /* ==================================================================
+     LITE MODE
+     Set by the frame budget in drawLobbySky() when real frame times stay
+     bad for a sustained stretch -- a machine rasterising in software, or
+     an old phone. It spends DECORATION to buy frames, in cost order:
+     the continuous animations stop first (they are what forces a repaint
+     every frame), then the blur radii shrink, then the biggest shadows
+     go. The scene keeps every layer, so it still reads as the same
+     place -- it just stops moving.
+     ================================================================== */
+  body.vb-lite .lb-neb,
+  body.vb-lite .lb-planet,
+  body.vb-lite .lb-planet-rim,
+  body.vb-lite .lb-station,
+  body.vb-lite .bay-ring,
+  body.vb-lite .bay-glow,
+  body.vb-lite .bay-ship,
+  body.vb-lite .play-edge,
+  body.vb-lite .cmd-xpbar i::after{ animation: none !important; }
+  body.vb-lite .lb-neb{ filter: blur(38px); }
+  body.vb-lite .bay-glow{ filter: blur(14px); }
+  body.vb-lite .bay-ship{ filter: drop-shadow(0 0 18px rgba(63,208,255,.4)); }
+  body.vb-lite .lb-planet-main{ box-shadow: inset -40px -28px 90px rgba(0,0,0,.9); }
+  body.vb-lite .lb-planet-rim{ box-shadow: 0 0 20px rgba(120,215,255,.45); }
+  body.vb-lite .lb-vignette{ background:
+      radial-gradient(132% 96% at 50% 46%, transparent 40%, rgba(2,4,9,.74) 100%); }
+  body.vb-lite .lp.holo{ backdrop-filter: none; -webkit-backdrop-filter: none; }
+
   /* ---------- Bottom journey strip ---------- */
   .journey-strip{ display:flex; align-items:center; gap: 22px; flex: 0 1 auto; min-width:0; overflow:hidden; flex-shrink:1; }
   .js-item{ display:flex; align-items:center; gap:7px; min-width:0; }
@@ -16909,12 +16938,64 @@ if(tutorialActive) tutorialUpdate(dt);
     g.restore();
   }
 
+  // ================================================================
+  // FRAME BUDGET
+  // ----------------------------------------------------------------
+  // The lobby is a full-screen canvas composited over several large
+  // blurred layers. On a GPU that is ordinary; on a machine falling back
+  // to software rasterisation it is not, and the two together can drag
+  // the page to single-digit frames -- which is exactly what this
+  // scene's own measurements showed under software rendering.
+  //
+  // So the scene measures itself rather than assuming. If real frame
+  // times stay bad for a sustained stretch while the lobby is up, it
+  // drops to LITE once: the canvas redraws at a quarter rate, the
+  // decorative CSS animations stop, and the blur radii shrink (see the
+  // .vb-lite rules). It is a one-way switch for the visit -- flapping
+  // between two looks would be worse than either.
+  //
+  // 34ms ~= 29fps. Judged on ACCUMULATED wall-clock time spent over
+  // budget, not a frame count: at 2fps a frame count takes a minute to
+  // trip, which is a minute of the player watching it stutter. Good
+  // frames pay the debt back down, so one GC pause or a tab regaining
+  // focus can't trip it, but a sustained 2.5s of bad frames will.
+  const SKY_BUDGET_MS = 34, SKY_SLOW_BUDGET_MS = 2500;
+  let skyLastTs = 0, skySlowMs = 0, skyLite = false, skyFrame = 0;
+  function skyGoLite(){
+    if(skyLite) return;
+    skyLite = true;
+    document.body.classList.add('vb-lite');
+  }
+
   // One frame of sky. Called from loop() -- see the call site there.
   function drawLobbySky(dt){
-    if(!skyCtx || !lobbySkyVisible()) return;
+    if(!skyCtx || !lobbySkyVisible()){ skyLastTs = 0; return; }
     buildSky();
     const { w, h } = SKY;
     if(!w || !h) return;
+
+    // Real elapsed time, not loop()'s clamped dt -- the clamp hides
+    // exactly the frames this needs to see.
+    const now = performance.now();
+    if(skyLastTs){
+      // Ignore absurd gaps (tab was backgrounded, machine slept) -- those
+      // are not this scene being slow.
+      const real = Math.min(now - skyLastTs, 500);
+      if(real > SKY_BUDGET_MS){
+        skySlowMs += real - SKY_BUDGET_MS;
+        if(skySlowMs >= SKY_SLOW_BUDGET_MS) skyGoLite();
+      } else {
+        skySlowMs = Math.max(0, skySlowMs - (SKY_BUDGET_MS - real) * 2);
+      }
+    }
+    skyLastTs = now;
+
+    // In LITE the canvas is the cheapest thing to stop dirtying every
+    // frame, so it redraws at a quarter rate. Everything still moves,
+    // just in bigger steps.
+    skyFrame++;
+    if(skyLite && (skyFrame & 3) !== 0) return;
+    if(skyLite) dt *= 4;
 
     // Under reduced motion, draw exactly one static frame and stop.
     if(SKY.reduced){
@@ -16956,7 +17037,7 @@ if(tutorialActive) tutorialUpdate(dt);
       g.fill();
       // the nearest plane gets a soft bloom, which is what makes it
       // read as "in front of" the rest
-      if(s.d === 3){
+      if(s.d === 3 && !skyLite){
         g.fillStyle = 'rgba(' + s.c[0] + ',' + s.c[1] + ',' + s.c[2] + ',' + (a * 0.16).toFixed(3) + ')';
         g.beginPath();
         g.arc(wx, wy, s.r * 4.2, 0, Math.PI * 2);
@@ -16964,8 +17045,8 @@ if(tutorialActive) tutorialUpdate(dt);
       }
     }
 
-    // ---- dust ----
-    for(const d of SKY.dust){
+    // ---- dust (decoration: first thing dropped in LITE) ----
+    if(!skyLite) for(const d of SKY.dust){
       d.x += d.vx * dt; d.y += d.vy * dt;
       if(d.x < -8){ d.x = w + 8; d.y = Math.random() * h; }
       if(d.y < -8) d.y = h + 8;
