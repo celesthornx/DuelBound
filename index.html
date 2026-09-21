@@ -13,15 +13,15 @@
      devices; user-scalable=no prevents an accidental pinch-zoom from
      breaking the fixed-position HUD/joysticks mid-match. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>VOIDBREAK</title>
+<title>DUEL ARENA</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Share+Tech+Mono&display=swap');
 
   :root{
-    --void: #05070f;
-    --void-2: #0a0f1e;
-    --grid: #131c30;
+    --void: #0a0d14;
+    --void-2: #10151f;
+    --grid: #1a2130;
     --p1: #3fd0ff;
     --p1-dim: #1c4a5c;
     --p2: #ff5f6d;
@@ -30,28 +30,6 @@
     --cover-edge: #4a5568;
     --ink: #e8edf5;
     --ink-dim: #6b7688;
-
-    /* ---- VOIDBREAK palette ------------------------------------------
-       The game's identity colours, named by ROLE rather than by hue so
-       a later retheme is one block instead of a find-and-replace over
-       750 KB. --vb-cyan is the primary energy colour (buttons, holo
-       edges, ship trails), --vb-violet the deep-space counterpart
-       (nebulas, premium currency, galaxy chrome) and --vb-magenta the
-       accent that keeps the two from reading as one gradient.
-       The legacy --p1/--p2 duel colours above are deliberately left
-       untouched: they are gameplay-critical (player one / player two
-       identity in the arena) and retinting them would make teams
-       harder to tell apart mid-match. ------------------------------- */
-    --vb-cyan:    #3fd0ff;
-    --vb-cyan-2:  #00f0ff;
-    --vb-violet:  #a05cff;
-    --vb-violet-2:#7b3fff;
-    --vb-magenta: #ff5fc8;
-    --vb-shard:   #c77dff;
-    --vb-gold:    #ffce54;
-    --vb-holo:    rgba(63,208,255,.34);
-    --vb-panel:   rgba(10,18,36,.72);
-    --vb-panel-2: rgba(8,14,30,.86);
   }
 
   *{ box-sizing: border-box; }
@@ -1246,186 +1224,44 @@
   @keyframes lobbyIn{ from{ opacity:0; } to{ opacity:1; } }
 
   /* ---------- Background: arena environment (pure CSS, no assets) ---------- */
-  /* ==================================================================
-     VOIDBREAK LOBBY BACKDROP -- deep space, drawn entirely in CSS.
-     No image assets, no extra HTTP requests, no canvas: the whole scene
-     is six absolutely-positioned layers inside .lobby-bg, so it costs
-     one paint and composites on the GPU. Layer order back-to-front:
-
-       .lb-deep      base void wash + the galactic core glow
-       .lb-stars     three parallax starfields (radial-gradient dots)
-       .lb-nebula    two drifting nebula clouds (cyan / violet)
-       .lb-galaxy    the spiral galaxy in the upper right of the art
-       .lb-planet-*  the two foreground worlds
-       .lb-ship      the player's ship with its engine trail
-       .lb-vignette  scanlines + edge falloff, on top of everything
-
-     Every animation is transform/opacity only (never layout), and the
-     whole block is disabled under prefers-reduced-motion further down.
-     ================================================================== */
   .lobby-bg{ position:absolute; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
   .lobby-bg::before{
-    /* deep base wash -- the void itself */
+    /* deep base wash */
     content:''; position:absolute; inset:0;
     background:
-      radial-gradient(80% 62% at 74% 30%, rgba(110,58,200,0.26) 0%, transparent 58%),
-      radial-gradient(62% 54% at 20% 54%, rgba(20,70,150,0.24) 0%, transparent 62%),
-      radial-gradient(120% 90% at 50% 4%, rgba(34,72,150,0.16) 0%, transparent 60%),
-      linear-gradient(180deg, #070c1c 0%, #060a16 46%, #03050c 100%);
+      radial-gradient(120% 90% at 50% 8%, rgba(70,110,190,0.22) 0%, transparent 60%),
+      linear-gradient(180deg, #0a1020 0%, #080b14 45%, #05070c 100%);
   }
+  .lb-glow{ position:absolute; width:52%; height:78%; top:-6%; filter: blur(70px); opacity:.55; }
+  .lb-glow-l{ left:-8%;  background: radial-gradient(circle at 40% 40%, rgba(63,208,255,0.55), transparent 62%); }
+  .lb-glow-r{ right:-8%; background: radial-gradient(circle at 60% 40%, rgba(255,64,150,0.50), transparent 62%); }
 
-  /* ---- starfields: three sizes, three speeds, pure gradients ---- */
-  .lb-stars{
-    position:absolute; inset:-10% -10% -10% -10%;
-    background-repeat: repeat;
-    will-change: transform;
-  }
-  .lb-stars-far{
+  /* perspective floor */
+  .lb-floor{
+    position:absolute; left:-40%; right:-40%; bottom:-14%; height:56%;
     background-image:
-      radial-gradient(1px 1px at 14% 22%, rgba(210,230,255,.85), transparent),
-      radial-gradient(1px 1px at 63% 11%, rgba(190,215,255,.70), transparent),
-      radial-gradient(1px 1px at 31% 74%, rgba(225,240,255,.75), transparent),
-      radial-gradient(1px 1px at 82% 58%, rgba(180,210,255,.65), transparent),
-      radial-gradient(1px 1px at 47% 41%, rgba(235,245,255,.60), transparent),
-      radial-gradient(1px 1px at 92% 29%, rgba(200,225,255,.70), transparent),
-      radial-gradient(1px 1px at 7% 63%, rgba(200,225,255,.55), transparent);
-    background-size: 340px 300px;
-    opacity:.62;
-    animation: lbDrift 190s linear infinite;
+      repeating-linear-gradient(90deg, rgba(120,180,255,0.16) 0 1px, transparent 1px 84px),
+      repeating-linear-gradient(0deg,  rgba(120,180,255,0.13) 0 1px, transparent 1px 56px);
+    transform: perspective(560px) rotateX(72deg);
+    transform-origin: 50% 0%;
+    mask-image: linear-gradient(180deg, rgba(0,0,0,.85), transparent 78%);
+    -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,.85), transparent 78%);
+    opacity:.8;
   }
-  .lb-stars-mid{
-    background-image:
-      radial-gradient(1.6px 1.6px at 24% 33%, rgba(160,210,255,.95), transparent),
-      radial-gradient(1.6px 1.6px at 71% 67%, rgba(215,190,255,.85), transparent),
-      radial-gradient(1.4px 1.4px at 52% 18%, rgba(255,240,235,.80), transparent),
-      radial-gradient(1.4px 1.4px at 88% 82%, rgba(170,220,255,.75), transparent);
-    background-size: 520px 470px;
-    opacity:.75;
-    animation: lbDrift 120s linear infinite reverse;
+  .lb-horizon{
+    position:absolute; left:0; right:0; top:46%; height:2px;
+    background: linear-gradient(90deg, transparent, rgba(63,208,255,.55) 22%, rgba(255,255,255,.5) 50%, rgba(255,95,160,.55) 78%, transparent);
+    filter: blur(1px); opacity:.7;
   }
-  .lb-stars-near{
-    background-image:
-      radial-gradient(2.4px 2.4px at 18% 61%, rgba(120,235,255,.95), transparent),
-      radial-gradient(2.2px 2.2px at 77% 26%, rgba(210,150,255,.90), transparent),
-      radial-gradient(2px 2px at 41% 88%, rgba(255,220,180,.80), transparent);
-    background-size: 760px 680px;
-    opacity:.9;
-    animation: lbTwinkle 7s ease-in-out infinite;
+  .lb-horizon::after{
+    content:''; position:absolute; left:12%; right:12%; top:-70px; height:70px;
+    background: radial-gradient(60% 100% at 50% 100%, rgba(150,200,255,.20), transparent 70%);
   }
-  @keyframes lbDrift{
-    from{ transform: translate3d(0,0,0); }
-    to{   transform: translate3d(-340px,-150px,0); }
-  }
-  @keyframes lbTwinkle{
-    0%,100%{ opacity:.9; }
-    50%{ opacity:.45; }
-  }
-
-  /* ---- nebula clouds ---- */
-  .lb-neb{ position:absolute; filter: blur(64px); will-change: transform, opacity; }
-  .lb-neb-cyan{
-    left:-12%; top:6%; width:62%; height:82%;
-    background:
-      radial-gradient(circle at 42% 38%, rgba(0,170,255,0.30), transparent 58%),
-      radial-gradient(circle at 62% 70%, rgba(30,90,220,0.20), transparent 62%);
-    animation: lbNeb 26s ease-in-out infinite alternate;
-  }
-  .lb-neb-violet{
-    right:-14%; top:-10%; width:70%; height:92%;
-    background:
-      radial-gradient(circle at 58% 40%, rgba(150,60,255,0.32), transparent 56%),
-      radial-gradient(circle at 34% 72%, rgba(230,60,170,0.18), transparent 60%);
-    animation: lbNeb 33s ease-in-out infinite alternate-reverse;
-  }
-  @keyframes lbNeb{
-    from{ transform: translate3d(0,0,0) scale(1);      opacity:.48; }
-    to{   transform: translate3d(2.5%,-2%,0) scale(1.09); opacity:.72; }
-  }
-
-  /* ---- the spiral galaxy (upper right of the reference art) ---- */
-  .lb-galaxy{
-    position:absolute; right:14%; top:12%;
-    width: min(38vw, 520px); aspect-ratio: 1 / 1;
-    border-radius:50%;
-    background:
-      radial-gradient(circle at 50% 50%, rgba(255,255,255,.95) 0%, rgba(210,175,255,.65) 5%, rgba(150,110,255,.30) 13%, transparent 34%),
-      conic-gradient(from 0deg,
-        rgba(120,200,255,.32) 0deg, transparent 52deg,
-        rgba(190,120,255,.34) 104deg, transparent 158deg,
-        rgba(120,200,255,.30) 208deg, transparent 262deg,
-        rgba(210,120,255,.30) 314deg, transparent 360deg);
-    filter: blur(7px);
-    opacity:.85;
-    transform: rotate(-16deg) scaleY(.46);
-    animation: lbSpin 240s linear infinite;
-  }
-  .lb-galaxy::after{
-    /* the bright core, kept unblurred so it reads as a light source */
-    content:''; position:absolute; left:50%; top:50%;
-    width:16%; height:32%; transform: translate(-50%,-50%);
-    border-radius:50%;
-    background: radial-gradient(circle, rgba(255,255,255,.95), rgba(220,190,255,.45) 45%, transparent 72%);
-    filter: blur(3px);
-  }
-  @keyframes lbSpin{
-    from{ transform: rotate(-16deg) scaleY(.46); }
-    to{   transform: rotate(344deg) scaleY(.46); }
-  }
-
-  /* ---- foreground worlds ---- */
-  .lb-planet{ position:absolute; border-radius:50%; will-change: transform; }
-  .lb-planet-main{
-    left:-6%; top:6%;
-    width: min(34vw, 460px); aspect-ratio: 1 / 1;
-    background:
-      radial-gradient(circle at 34% 30%, rgba(120,210,255,.55), rgba(30,90,160,.55) 38%, rgba(8,20,44,.95) 72%),
-      radial-gradient(circle at 70% 76%, rgba(90,255,200,.20), transparent 48%);
-    box-shadow:
-      inset -26px -18px 60px rgba(0,0,0,.85),
-      inset 16px 12px 46px rgba(120,210,255,.22),
-      0 0 90px rgba(40,140,220,.28);
-    animation: lbFloat 34s ease-in-out infinite alternate;
-  }
-  .lb-planet-moon{
-    left:22%; top:-4%;
-    width: min(9vw, 118px); aspect-ratio: 1 / 1;
-    background:
-      radial-gradient(circle at 36% 32%, rgba(190,205,230,.75), rgba(70,85,115,.75) 44%, rgba(10,14,26,.95) 76%);
-    box-shadow: inset -8px -6px 20px rgba(0,0,0,.8), 0 0 34px rgba(120,160,220,.18);
-    animation: lbFloat 46s ease-in-out infinite alternate-reverse;
-  }
-  @keyframes lbFloat{
-    from{ transform: translate3d(0,0,0); }
-    to{   transform: translate3d(1.2%,2.2%,0); }
-  }
-
-  /* ---- the ship: a CSS-drawn hull with an engine trail. It is the one
-     element that reads instantly as "you fly this", which is why it sits
-     closest to the camera and gets the only fast animation. ---- */
-  .lb-ship{
-    position:absolute; left:23%; top:78%;
-    width: min(30vw, 400px); height: 0;
-    opacity:.9;
-    animation: lbCruise 9s ease-in-out infinite alternate;
-  }
-  .lb-ship svg{ position:absolute; left:0; top:-52px; width:100%; height:auto;
-    filter: drop-shadow(0 0 22px rgba(63,208,255,.45)); }
-  @keyframes lbCruise{
-    from{ transform: translate3d(0,0,0) rotate(-1.2deg); }
-    to{   transform: translate3d(2.4%,-2.6%,0) rotate(1.2deg); }
-  }
-
   .lb-vignette{
     position:absolute; inset:0;
     background:
-      radial-gradient(120% 86% at 50% 44%, transparent 26%, rgba(2,4,9,.88) 100%),
-      repeating-linear-gradient(0deg, rgba(120,200,255,.018) 0 1px, transparent 1px 3px);
-  }
-
-  /* Anything that moves on its own is a preference, not a requirement:
-     the scene stays fully legible with every animation stopped. */
-  @media (prefers-reduced-motion: reduce){
-    .lb-stars, .lb-neb, .lb-galaxy, .lb-planet, .lb-ship{ animation: none !important; }
+      radial-gradient(110% 80% at 50% 45%, transparent 42%, rgba(3,5,9,.78) 100%),
+      repeating-linear-gradient(0deg, rgba(255,255,255,.014) 0 1px, transparent 1px 3px);
   }
 
   /* ---------- Shared panel look ---------- */
@@ -1457,376 +1293,6 @@
   }
   .lp-title.magenta{ color:#ff6fb0; }
   .lp-body{ padding: 12px 14px 14px; }
-
-  /* ---------- Commander profile + Legacy (Profile modal) ---------- */
-  .cmd-card{
-    margin: 14px 0 12px; padding: 12px 14px;
-    border:1px solid rgba(90,180,255,.30); border-radius:4px;
-    background:
-      linear-gradient(140deg, rgba(30,70,140,.38), rgba(60,26,120,.30)),
-      repeating-linear-gradient(0deg, rgba(120,220,255,.03) 0 1px, transparent 1px 4px);
-  }
-  .cmd-card-tag{
-    font-family:'Share Tech Mono', monospace;
-    font-size: 8.5px; letter-spacing: 3.6px; color: rgba(130,205,255,.8);
-  }
-  .cmd-card-name{
-    font-family:'Chakra Petch', sans-serif; font-weight:700;
-    font-size: 24px; letter-spacing: 1.6px; color:#fff; line-height:1.1;
-    word-break: break-word;
-  }
-  .cmd-card-title{
-    font-family:'Share Tech Mono', monospace;
-    font-size: 10px; letter-spacing: 2.6px; color: var(--vb-gold);
-    text-shadow: 0 0 10px rgba(255,206,84,.4);
-    margin-top: 3px;
-  }
-  .cmd-card-rows{ display:flex; gap:22px; flex-wrap:wrap; margin-top:9px; }
-  .cmd-card-rows > div{ display:flex; flex-direction:column; gap:1px; min-width:0; }
-  .cmd-card-rows span{
-    font-family:'Share Tech Mono', monospace;
-    font-size: 8px; letter-spacing: 2.2px; color: rgba(150,195,235,.7);
-  }
-  .cmd-card-rows b{
-    font-family:'Chakra Petch', sans-serif; font-weight:600;
-    font-size: 13px; letter-spacing:1px; color:#e8f4ff;
-  }
-
-  .lg-banner{
-    display:flex; align-items:center; gap:12px;
-    padding: 11px 13px; margin-bottom: 12px;
-    border:1px solid rgba(122,158,200,.25); border-radius:4px;
-    background: rgba(255,255,255,.02);
-    color: rgba(190,210,235,.8);
-  }
-  .lg-banner.og{
-    border-color: rgba(255,206,84,.45);
-    background: linear-gradient(120deg, rgba(255,206,84,.14), rgba(255,206,84,.03));
-    color: var(--gold);
-    box-shadow: 0 0 20px rgba(255,206,84,.12);
-  }
-  .lg-banner svg{ width:26px; height:26px; flex:0 0 auto; }
-  .lg-b-text{ display:flex; flex-direction:column; gap:2px; min-width:0; }
-  .lg-b-text b{
-    font-family:'Chakra Petch', sans-serif; font-weight:700;
-    font-size: 13px; letter-spacing: 1.8px;
-  }
-  .lg-b-text span{
-    font-family:'Share Tech Mono', monospace;
-    font-size: 8px; letter-spacing: 1.4px; color: rgba(190,205,225,.62);
-    line-height:1.4;
-  }
-  .lg-sec{
-    font-family:'Share Tech Mono', monospace;
-    font-size: 9px; letter-spacing: 2.4px; color: rgba(140,190,235,.72);
-    margin: 12px 0 6px;
-  }
-  .lg-chips{ display:flex; flex-wrap:wrap; gap:5px; }
-  .lg-chip{
-    font-family:'Share Tech Mono', monospace;
-    font-size: 8.5px; letter-spacing: 1.4px; color: rgba(215,232,250,.85);
-    border:1px solid rgba(122,158,200,.28); border-radius:2px;
-    background: rgba(122,158,200,.09);
-    padding: 3px 7px;
-  }
-  .lg-note{
-    font-family:'Share Tech Mono', monospace;
-    font-size: 8px; letter-spacing: 1.3px; line-height:1.55;
-    color: rgba(150,180,215,.55);
-    margin-top: 14px; padding-top: 10px;
-    border-top: 1px solid rgba(122,158,200,.14);
-  }
-
-  /* In-match location nameplate (see ARENA_LOCATIONS). Sits top-centre
-     above the arena, fades itself out a few seconds into the round so
-     it never competes with the HUD. */
-  #arenaLocLabel{
-    position:fixed; z-index: 40;
-    /* Clear of anything the tutorial or a mode HUD puts at the very
-       top-centre of the stage. */
-    top: calc(env(safe-area-inset-top, 0px) + 46px);
-    left:50%; transform: translateX(-50%);
-    display:flex; flex-direction:column; align-items:center; gap:2px;
-    padding: 5px 16px;
-    border:1px solid rgba(122,158,200,.28);
-    border-radius:3px;
-    background: linear-gradient(180deg, rgba(8,14,30,.82), rgba(8,14,30,.55));
-    pointer-events:none;
-    transition: opacity .8s ease;
-  }
-  #arenaLocLabel.hidden{ display:none; }
-  #arenaLocLabel.faded{ opacity:0; }
-  #arenaLocLabel .al-n{
-    font-family:'Chakra Petch', sans-serif; font-weight:700;
-    font-size: 11px; letter-spacing: 3px;
-  }
-  #arenaLocLabel .al-s{
-    font-family:'Share Tech Mono', monospace;
-    font-size: 8px; letter-spacing: 2.2px; color: rgba(160,200,240,.6);
-  }
-
-  /* ==================================================================
-     VOIDBREAK HOLO PANELS
-     .holo layers a projected-hologram treatment ON TOP of .lp rather
-     than replacing it, so every existing .lp/.lp-head/.lp-body rule
-     (and every panel elsewhere in the file that uses them) is untouched.
-     ================================================================== */
-  .lp.holo{
-    background:
-      linear-gradient(180deg, rgba(16,32,62,.60), rgba(8,14,30,.72)),
-      repeating-linear-gradient(0deg, rgba(120,220,255,.030) 0 1px, transparent 1px 4px);
-    border-color: rgba(90,180,255,.26);
-    box-shadow:
-      0 14px 40px rgba(0,0,0,.5),
-      inset 0 1px 0 rgba(180,230,255,.10),
-      0 0 0 1px rgba(63,208,255,.05);
-  }
-  .lp.holo::before{ border-color: rgba(63,208,255,.75); }
-  .lp.holo::after{ border-color: rgba(160,92,255,.7); }
-  .lp.holo .lp-head{ border-bottom-color: rgba(90,180,255,.18); }
-
-  /* ---------- Commander card ---------- */
-  .profile-rankline{
-    font-family:'Share Tech Mono', monospace;
-    font-size: 8.5px; letter-spacing: 3.4px;
-    color: rgba(120,200,255,.75);
-    margin-bottom: 2px;
-  }
-  .cmd-level{ padding: 0 14px 10px; }
-  .cmd-level-top{ display:flex; align-items:baseline; justify-content:space-between; }
-  .cmd-k{
-    font-family:'Share Tech Mono', monospace;
-    font-size: 9px; letter-spacing: 2.6px; color: rgba(150,200,240,.7);
-  }
-  .cmd-v{
-    font-family:'Chakra Petch', sans-serif; font-weight:700;
-    font-size: 15px; color:#eaf6ff;
-  }
-  .cmd-xpbar{
-    position:relative; height:5px; margin-top:5px; border-radius:3px;
-    background: rgba(10,22,44,.9);
-    border: 1px solid rgba(90,180,255,.22);
-    overflow:hidden;
-  }
-  .cmd-xpbar i{
-    display:block; height:100%;
-    background: linear-gradient(90deg, var(--vb-cyan), #9fe8ff);
-    box-shadow: 0 0 12px rgba(63,208,255,.7);
-    transition: width .35s ease;
-  }
-  .cmd-xptext{
-    font-family:'Share Tech Mono', monospace;
-    font-size: 8.5px; letter-spacing: 1.4px; color: rgba(150,190,230,.62);
-    text-align:right; margin-top: 3px;
-  }
-
-  .cmd-rows{ padding: 0 14px 10px; display:flex; flex-direction:column; gap:7px; }
-  .cmd-row{
-    display:grid; grid-template-columns: 1fr auto;
-    grid-template-areas: "k icon" "v icon";
-    align-items:center; gap: 0 10px;
-    padding: 7px 9px;
-    border: 1px solid rgba(90,180,255,.16);
-    border-radius: 3px;
-    background: linear-gradient(90deg, rgba(40,90,170,.14), transparent);
-  }
-  .cmd-row-k{
-    grid-area:k;
-    font-family:'Share Tech Mono', monospace;
-    font-size: 8.5px; letter-spacing: 2.4px; color: rgba(120,200,255,.72);
-  }
-  .cmd-row-v{
-    grid-area:v;
-    font-family:'Chakra Petch', sans-serif; font-weight:600;
-    font-size: 13px; letter-spacing: 1.2px; color:#e8f4ff;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  }
-  .cmd-row-icon{ grid-area:icon; width:30px; height:18px; opacity:.85; }
-
-  /* ---------- Currency list ---------- */
-  .cur-list{ padding: 12px 14px 4px; display:flex; flex-direction:column; gap:7px; }
-  .cur-row{
-    display:flex; align-items:center; gap:9px;
-    padding: 6px 8px; border-radius:3px;
-    border:1px solid rgba(122,158,200,.14);
-    background: rgba(255,255,255,.015);
-  }
-  .cur-row svg{ width:16px; height:16px; flex:0 0 auto; }
-  .cur-row .k{
-    flex:1 1 auto;
-    font-family:'Share Tech Mono', monospace;
-    font-size: 9px; letter-spacing: 2px; color: rgba(190,210,235,.78);
-  }
-  .cur-row .v{
-    font-family:'Chakra Petch', sans-serif; font-weight:700;
-    font-size: 15px; letter-spacing:.5px;
-  }
-  .cur-row.shard{ color: var(--vb-shard); border-color: rgba(199,125,255,.28); }
-  .cur-row.shard .v{ color:#f0dcff; }
-  .cur-row.coin{ color: var(--vb-gold); border-color: rgba(255,206,84,.26); }
-  .cur-row.coin .v{ color:#ffe7a8; }
-  .cur-row.crystal{ color:#7fd8ff; border-color: rgba(90,200,255,.28); }
-  .cur-row.crystal .v{ color:#d8f2ff; }
-  .stat-list.compact{ padding-top: 4px; }
-
-  /* ---------- Destination grid (the six places you can go) ---------- */
-  .dest-grid{
-    display:grid; grid-template-columns: repeat(6, minmax(0,1fr));
-    gap: 10px; width:100%;
-  }
-  .dest{
-    position:relative; cursor:pointer;
-    display:flex; flex-direction:column; align-items:center; gap:6px;
-    padding: 14px 8px 12px;
-    border: 1px solid rgba(90,180,255,.28);
-    border-radius: 4px;
-    background:
-      linear-gradient(180deg, rgba(20,44,84,.55), rgba(8,16,34,.72)),
-      repeating-linear-gradient(0deg, rgba(120,220,255,.025) 0 1px, transparent 1px 4px);
-    color: var(--vb-cyan);
-    transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease, background .16s ease;
-    overflow:hidden;
-  }
-  .dest::after{
-    /* sweep highlight on hover -- transform only, never layout */
-    content:''; position:absolute; inset:0;
-    background: linear-gradient(115deg, transparent 38%, rgba(160,220,255,.16) 50%, transparent 62%);
-    transform: translateX(-120%);
-    transition: transform .55s ease;
-    pointer-events:none;
-  }
-  .dest:hover{
-    transform: translateY(-4px);
-    border-color: rgba(120,220,255,.72);
-    box-shadow: 0 12px 34px rgba(0,0,0,.55), 0 0 22px rgba(63,208,255,.22);
-    background:
-      linear-gradient(180deg, rgba(34,72,132,.62), rgba(10,20,42,.78)),
-      repeating-linear-gradient(0deg, rgba(120,220,255,.04) 0 1px, transparent 1px 4px);
-  }
-  .dest:hover::after{ transform: translateX(120%); }
-  .dest:active{ transform: translateY(-1px) scale(.985); }
-  .dest-ico{ display:block; width:38px; height:38px; filter: drop-shadow(0 0 9px currentColor); }
-  .dest-ico svg{ width:100%; height:100%; }
-  .dest-name{
-    font-family:'Chakra Petch', sans-serif; font-weight:700;
-    font-size: 11.5px; letter-spacing: 1.6px; color:#eaf6ff; text-align:center;
-    line-height: 1.15;
-  }
-  .dest-sub{
-    font-family:'Share Tech Mono', monospace;
-    font-size: 8px; letter-spacing: 1.6px; color: rgba(150,195,235,.62);
-    text-align:center; line-height:1.2;
-  }
-  .dest-gold{ color: var(--vb-gold); border-color: rgba(255,206,84,.34); }
-  .dest-gold:hover{ border-color: rgba(255,214,110,.8); box-shadow: 0 12px 34px rgba(0,0,0,.55), 0 0 22px rgba(255,206,84,.24); }
-
-  .play-glyph{ font-size: 18px; vertical-align:-1px; margin-right:4px; opacity:.9; }
-
-  /* ---------- Discovery ring ---------- */
-  .disc-body{ display:flex; align-items:center; gap:14px; }
-  .disc-ring{ position:relative; width:64px; height:64px; flex:0 0 auto; }
-  .disc-ring svg{ width:100%; height:100%; }
-  #discArc{ transition: stroke-dasharray .6s ease; }
-  .disc-pct{
-    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-    font-family:'Chakra Petch', sans-serif; font-weight:700;
-    font-size: 15px; color:#eaf6ff;
-  }
-  .disc-rows{ flex:1 1 auto; display:flex; flex-direction:column; gap:8px; min-width:0; }
-  .disc-row{ display:flex; flex-direction:column; gap:1px; }
-  .disc-row .k{
-    font-family:'Share Tech Mono', monospace;
-    font-size: 8.5px; letter-spacing: 1.9px; color: rgba(150,195,235,.68);
-  }
-  .disc-row b{
-    font-family:'Chakra Petch', sans-serif; font-weight:700;
-    font-size: 14px; color:#eaf6ff; letter-spacing:.6px;
-  }
-
-  /* ---------- Bottom journey strip ---------- */
-  .journey-strip{ display:flex; align-items:center; gap: 22px; flex: 0 1 auto; min-width:0; overflow:hidden; }
-  .js-item{ display:flex; align-items:center; gap:7px; min-width:0; }
-  .js-item svg{ width:18px; height:18px; flex:0 0 auto; opacity:.9; }
-  .js-k{
-    font-family:'Share Tech Mono', monospace;
-    font-size: 8.5px; letter-spacing: 1.8px; color: rgba(150,195,235,.62);
-    white-space:nowrap;
-  }
-  .js-v{
-    font-family:'Chakra Petch', sans-serif; font-weight:700;
-    font-size: 13px; color:#dff0ff; letter-spacing:.6px; white-space:nowrap;
-  }
-  .js-bar{
-    display:block; width:70px; height:4px; border-radius:2px;
-    background: rgba(10,22,44,.9); border:1px solid rgba(90,180,255,.22); overflow:hidden;
-  }
-  .js-bar i{
-    display:block; height:100%;
-    background: linear-gradient(90deg, var(--vb-violet), var(--vb-cyan));
-    box-shadow: 0 0 10px rgba(63,208,255,.6);
-    transition: width .4s ease;
-  }
-
-  /* ==================================================================
-     VOIDBREAK ARENA screen
-     ================================================================== */
-  .va-screen{ padding:0; }
-  /* .va-bg is absolutely positioned, so it paints above any STATIC
-     sibling -- which the back button is. Lifting it into the same
-     stacking layer as .va-inner is what keeps it clickable and visible. */
-  .va-screen > .menu-back{ position:relative; z-index:2; }
-  .va-bg{ position:absolute; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
-  .va-bg::before{
-    content:''; position:absolute; inset:0;
-    background:
-      radial-gradient(90% 70% at 50% 20%, rgba(150,60,220,0.26) 0%, transparent 62%),
-      linear-gradient(180deg, #0a0718 0%, #06060f 55%, #030409 100%);
-  }
-  .va-inner{
-    position:relative; z-index:2;
-    width: min(1180px, 94vw);
-    display:flex; flex-direction:column; align-items:center; gap: 16px;
-    max-height: 88vh; overflow-y:auto; padding: 8px 4px;
-  }
-  .va-head{ text-align:center; }
-  .va-title{
-    font-family:'Chakra Petch', sans-serif; font-weight:700;
-    font-size: clamp(26px, 4.2vw, 44px); letter-spacing: 8px;
-    background: linear-gradient(90deg, var(--vb-cyan), #ffffff 45%, var(--vb-magenta));
-    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color: transparent;
-  }
-  .va-sub{
-    font-family:'Share Tech Mono', monospace;
-    font-size: 10px; letter-spacing: 3.4px; color: rgba(160,200,240,.62); margin-top: 4px;
-  }
-  .va-play{ width: min(460px, 92%); }
-  .va-actions{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
-  .va-actions .menu-btn{ min-width: 190px; }
-
-  /* Arena locations -- the places a duel is fought in the Voidbreak
-     universe. Purely presentational: picking one changes the arena's
-     palette and backdrop, never its geometry, spawns or collision. */
-  .va-locations{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
-  .va-loc{
-    display:flex; flex-direction:column; align-items:center; gap:3px;
-    padding: 8px 12px; cursor:pointer;
-    border:1px solid rgba(122,158,200,.22); border-radius:3px;
-    background: rgba(12,22,44,.55);
-    transition: all .16s ease;
-    min-width: 120px;
-  }
-  .va-loc .vl-n{
-    font-family:'Chakra Petch', sans-serif; font-weight:600;
-    font-size: 10.5px; letter-spacing: 1.4px; color: rgba(215,232,250,.85); text-align:center;
-  }
-  .va-loc .vl-s{
-    font-family:'Share Tech Mono', monospace;
-    font-size: 7.5px; letter-spacing: 1.5px; color: rgba(150,190,230,.55);
-  }
-  .va-loc .vl-dot{ width:9px; height:9px; border-radius:50%; box-shadow:0 0 10px currentColor; background: currentColor; }
-  .va-loc:hover{ border-color: rgba(120,220,255,.6); background: rgba(24,46,86,.6); transform: translateY(-2px); }
-  .va-loc.sel{ border-color: var(--vb-cyan); box-shadow: 0 0 18px rgba(63,208,255,.28) inset, 0 0 14px rgba(63,208,255,.18); }
-  .va-loc.sel .vl-n{ color:#fff; }
 
   .micro{
     font-family:'Share Tech Mono', monospace;
@@ -1888,24 +1354,15 @@
     background: linear-gradient(180deg, rgba(6,9,15,.94), rgba(6,9,15,.55));
   }
   .lobby-brand{ display:flex; align-items:center; gap:11px; flex:0 0 auto; }
-  .brand-mark{ width:40px; height:40px; flex:0 0 auto; filter: drop-shadow(0 0 10px rgba(63,208,255,.6)); }
-  .brand-text{ display:flex; flex-direction:column; line-height:1; gap:3px; }
-  .brand-word{ display:flex; align-items:baseline; }
+  .brand-mark{ width:38px; height:38px; flex:0 0 auto; filter: drop-shadow(0 0 8px rgba(63,208,255,.5)); }
+  .brand-text{ display:flex; flex-direction:column; line-height:.95; }
   .brand-text b{
     font-family:'Chakra Petch', sans-serif; font-weight:700;
-    font-size: 26px; letter-spacing: 3px;
-    background: linear-gradient(90deg, #eaffff, #8fe4ff 55%, var(--vb-cyan));
+    font-size: 21px; letter-spacing: 2.5px;
+    background: linear-gradient(90deg, var(--p1), #b9d9ff 45%, #ff5f9e);
     -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color: transparent;
   }
-  .brand-text b.brand-break{
-    background: linear-gradient(90deg, var(--vb-violet), var(--vb-magenta) 70%, #ffa8e6);
-    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color: transparent;
-  }
-  .brand-tag{
-    font-family:'Share Tech Mono', monospace;
-    font-size: 9.5px; letter-spacing: 3.6px;
-    color: rgba(150,205,255,.62);
-  }
+  .brand-text b + b{ font-size: 21px; }
 
   .lobby-nav{ display:flex; align-items:center; gap:4px; flex: 1 1 auto; justify-content:center; }
   .nav-item{
@@ -1962,30 +1419,16 @@
   .cp-plus:hover{ background: var(--gold); color:#12130c; box-shadow:0 0 14px rgba(255,206,84,.55); }
 
   .currency-pill.crystal{
-    border-color: rgba(90,200,255,.5);
-    background: linear-gradient(180deg, rgba(90,200,255,.14), rgba(90,200,255,.04));
-    box-shadow: 0 0 16px rgba(90,200,255,.16), inset 0 1px 0 rgba(255,255,255,.06);
+    border-color: rgba(176,107,255,.5);
+    background: linear-gradient(180deg, rgba(176,107,255,.14), rgba(176,107,255,.04));
+    box-shadow: 0 0 16px rgba(176,107,255,.16), inset 0 1px 0 rgba(255,255,255,.06);
   }
-  .currency-pill.crystal .cp-gem{ color:#7fd8ff; text-shadow: 0 0 6px rgba(90,200,255,.7); }
-  .currency-pill.crystal .cp-val{ color:#d8f2ff; }
+  .currency-pill.crystal .cp-gem{ color:#b06bff; text-shadow: 0 0 6px rgba(176,107,255,.65); }
+  .currency-pill.crystal .cp-val{ color:#e6d4ff; }
   .currency-pill.crystal .cp-plus{
-    border-color: rgba(90,200,255,.5); background: rgba(90,200,255,.14); color:#7fd8ff;
+    border-color: rgba(176,107,255,.5); background: rgba(176,107,255,.14); color:#b06bff;
   }
-  .currency-pill.crystal .cp-plus:hover{ background:#7fd8ff; color:#08131c; box-shadow:0 0 14px rgba(90,200,255,.6); }
-
-  /* Void Shards -- Voidbreak's own progression currency. Same pill
-     shape as Coins/Crystals so the three read as one economy row. */
-  .currency-pill.shard{
-    border-color: rgba(199,125,255,.5);
-    background: linear-gradient(180deg, rgba(160,92,255,.16), rgba(120,60,220,.05));
-    box-shadow: 0 0 16px rgba(160,92,255,.18), inset 0 1px 0 rgba(255,255,255,.06);
-  }
-  .currency-pill.shard .cp-gem{ color: var(--vb-shard); text-shadow: 0 0 8px rgba(199,125,255,.8); }
-  .currency-pill.shard .cp-val{ color:#f0dcff; }
-  .currency-pill.shard .cp-plus{
-    border-color: rgba(199,125,255,.5); background: rgba(199,125,255,.14); color: var(--vb-shard);
-  }
-  .currency-pill.shard .cp-plus:hover{ background: var(--vb-shard); color:#16091f; box-shadow:0 0 14px rgba(199,125,255,.6); }
+  .currency-pill.crystal .cp-plus:hover{ background:#b06bff; color:#12130c; box-shadow:0 0 14px rgba(176,107,255,.55); }
 
   .icon-btn{
     width:38px; height:38px; border-radius:3px; cursor:pointer;
@@ -2194,12 +1637,7 @@
   .play-label{
     display:block;
     font-family:'Chakra Petch', sans-serif; font-weight:700;
-    /* "START JOURNEY" is three times the width "PLAY" was, so the size
-       is fluid rather than fixed -- it fills the button on a desktop and
-       stops overflowing it on a narrow one, with no extra breakpoints. */
-    font-size: clamp(22px, 4.2vw, 46px); line-height:1;
-    letter-spacing: clamp(2px, .6vw, 6px); color:#fff;
-    white-space: nowrap;
+    font-size: 54px; line-height:1; letter-spacing: 8px; color:#fff;
     text-shadow:
       0 0 4px rgba(255,255,255,.65),
       0 0 22px rgba(150,205,255,.7),
@@ -2369,24 +1807,44 @@
     font-size: 12.5px; letter-spacing: 2px; color: var(--gold);
   }
 
+  /* ---------- Voidbreak minigame card (bottom-right of the lobby) ----------
+     Duel Arena's own panel chrome (.lp/.lp-head/.lp-title/.lp-body), just
+     accented in Voidbreak's own cyan/violet so it reads as a distinct
+     featured minigame rather than a native Duel Arena mode. The actual
+     game keeps its own full identity -- this card is only a teaser. */
+  .lp-title.voidbreak{ color:#00f0ff; text-shadow:0 0 8px rgba(0,240,255,.45); }
+  .vb-preview{
+    position:relative; height:60px; border-radius:3px; overflow:hidden;
+    background: radial-gradient(120% 140% at 50% 35%, rgba(160,92,255,.22), rgba(4,5,12,.92) 72%);
+    border:1px solid rgba(0,240,255,.25);
+    display:flex; align-items:flex-end; justify-content:center; padding-bottom:6px;
+  }
+  .vb-preview svg{ position:absolute; inset:0; width:100%; height:100%; }
+  .vb-tag{
+    position:relative; font-family:'Share Tech Mono', monospace; font-size:9px; letter-spacing:2.5px;
+    color:#bfeaff; text-shadow:0 0 6px rgba(0,240,255,.5);
+  }
+  .vb-play-btn{
+    display:block; width:100%; margin-top:10px;
+    font-family:'Chakra Petch', sans-serif; font-weight:700; letter-spacing:2px; font-size:12px;
+    padding:9px; border-radius:3px; cursor:pointer;
+    background: linear-gradient(90deg, rgba(0,240,255,.16), rgba(160,92,255,.12));
+    border:1px solid rgba(0,240,255,.5);
+    color:#eafcff;
+    transition: all .15s ease;
+  }
+  .vb-play-btn:hover{
+    border-color:#00f0ff; box-shadow:0 0 18px rgba(0,240,255,.35);
+    background: linear-gradient(90deg, rgba(0,240,255,.26), rgba(160,92,255,.2));
+  }
+
   /* ---------- Daily Challenges card ----------
      Same .lp/.lp-head/.lp-title/.lp-body chrome as every other lobby
      panel -- deliberately not its own visual system. See
      fetchDailyChallenges()/renderDailyChallenges()/claimDailyChallenge()
      in the script, and server.js's DAILY CHALLENGES block for where the
      3-a-day set and the reset are actually decided. */
-  /* The right column now carries four panels (Friends, News, Daily
-     Missions, Discovery Progress). Daily Missions is the only one whose
-     height grows with content, so it -- not the column -- is what
-     scrolls, which keeps Discovery Progress on screen without shrinking
-     anything else. */
-  .dc-list{
-    display:flex; flex-direction:column; gap:9px;
-    max-height: 24vh; overflow-y:auto;
-    -webkit-overflow-scrolling: touch;
-  }
-  .dc-list::-webkit-scrollbar{ width:4px; }
-  .dc-list::-webkit-scrollbar-thumb{ background: rgba(122,158,200,.28); border-radius:2px; }
+  .dc-list{ display:flex; flex-direction:column; gap:9px; }
   .dc-status{
     font-family:'Share Tech Mono', monospace; font-size:9px; letter-spacing:1.4px;
     color:var(--ink-dim); text-align:center; padding:8px 2px;
@@ -2882,7 +2340,7 @@
     :root{ --lobby-pad: 18px; }
     .lobby-main{ grid-template-columns: 262px minmax(0,1fr) 262px; gap: 12px; }
     .nav-item{ font-size: 12px; letter-spacing: 1.8px; padding: 9px 11px; }
-    .play-label{ font-size: clamp(22px, 3.8vw, 40px); letter-spacing: 5px; }
+    .play-label{ font-size: 44px; letter-spacing: 7px; }
     .play-btn{ width: min(480px, 100%); }
     .play-content{ min-height: 104px; padding: 20px 46px; }
     .mode-card{ width: 160px; }
@@ -2890,15 +2348,11 @@
   }
   @media (max-width: 1240px){
     .lobby-main{ grid-template-columns: 236px minmax(0,1fr) 236px; }
-    .brand-text b{ font-size: 19px; }
-    .brand-tag{ font-size: 8px; letter-spacing: 2.4px; }
+    .brand-text b{ font-size: 17px; }
     .brand-mark{ width:32px; height:32px; }
     .nav-item{ font-size: 11px; letter-spacing: 1.4px; padding: 8px 8px; }
     .mode-card{ width: 146px; }
     .chat-toggle{ min-width: 0; }
-    .dest-grid{ grid-template-columns: repeat(3, minmax(0,1fr)); }
-    .dest-ico{ width:32px; height:32px; }
-    .journey-strip{ gap: 14px; }
   }
   /* short laptop screens (768px tall) -- compress vertical rhythm */
   @media (max-height: 850px){
@@ -2912,21 +2366,17 @@
     .profile-head{ padding: 11px 12px 10px; }
     .stat-row{ padding: 7px 11px; }
     .stat-row .v{ font-size: 15px; }
-    .play-label{ font-size: clamp(20px, 3.6vw, 38px); }
+    .play-label{ font-size: 42px; }
     .play-content{ padding: 17px 34px; min-height: 92px; }
     .mode-card .mc-art{ height: 72px; }
     .news-art{ height: 88px; }
     .arena-banner{ display:none; }
-    .dest{ padding: 10px 6px 9px; }
-    .dest-ico{ width:30px; height:30px; }
   }
   @media (max-height: 700px){
-    .play-label{ font-size: clamp(18px, 3.2vw, 32px); letter-spacing: 3px; }
+    .play-label{ font-size: 34px; letter-spacing: 5px; }
     .play-content{ padding: 13px 26px; min-height: 76px; }
     .mode-card .mc-art{ height: 60px; }
     .news-art{ height: 72px; }
-    .dest-sub{ display:none; }
-    .dest-ico{ width:26px; height:26px; }
   }
 
   /* ---------- Narrow / touch: single scrolling column ---------- */
@@ -2942,20 +2392,10 @@
     .mode-cards{ gap: 8px; }
     .mode-card{ width: 132px; }
     .mode-card.selected{ transform: scale(1.06); }
-    .play-label{ font-size: clamp(18px, 3.2vw, 32px); letter-spacing: 3px; }
+    .play-label{ font-size: 34px; letter-spacing: 5px; }
     .chat-toggle{ min-width:0; padding:7px 10px; }
     .chat-toggle span:not(.chat-unread){ display:none; }
     .arena-banner{ display:none; }
-    /* The six destinations become two rows of three rather than a
-       six-across strip nobody can read on a phone. */
-    .dest-grid{ grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
-    .dest-name{ font-size: 10px; letter-spacing: 1.1px; }
-    .dest-sub{ display:none; }
-    /* The bottom bar is already tight on a phone; the journey numbers
-       are all repeated in the Discovery panel above, so they go. */
-    .journey-strip{ display:none; }
-    .va-inner{ gap: 12px; }
-    .va-title{ letter-spacing: 4px; }
   }
 
   /* ============================================================
@@ -3486,7 +2926,7 @@
 </head>
 <body>
 
-<h1>VOIDBREAK</h1>
+<h1>DUEL ARENA</h1>
 <div class="sub">FIRST TO 3 ROUNDS WINS</div>
 
 <div class="stage">
@@ -3539,11 +2979,6 @@
        is already drawn by the normal HUD). -->
   <div id="mpScoreBar" class="hidden"></div>
 
-  <!-- Where in the universe this duel is being fought. Presentation
-       only -- see ARENA_LOCATIONS: a location changes the arena's
-       palette and backdrop, never its geometry, spawns or collision. -->
-  <div id="arenaLocLabel" class="hidden"></div>
-
   <!-- ONLINE MULTIPLAYER PING BADGE (hidden outside mode==='online') -->
   <div class="ping-badge hidden" id="pingBadge">PING: -- ms</div>
   <div class="net-debug hidden" id="netDebugPanel"></div>
@@ -3577,53 +3012,11 @@
        ============================================================ -->
   <div class="menu-overlay lobby" id="menuMain">
 
-    <!-- Deep-space backdrop. Purely decorative (pointer-events:none on
-         .lobby-bg), so nothing here can ever intercept a menu click. -->
-    <div class="lobby-bg" aria-hidden="true">
-      <div class="lb-stars lb-stars-far"></div>
-      <div class="lb-stars lb-stars-mid"></div>
-      <div class="lb-neb lb-neb-cyan"></div>
-      <div class="lb-neb lb-neb-violet"></div>
-      <div class="lb-galaxy"></div>
-      <div class="lb-planet lb-planet-main"></div>
-      <div class="lb-planet lb-planet-moon"></div>
-      <div class="lb-stars lb-stars-near"></div>
-      <div class="lb-ship">
-        <svg viewBox="0 0 400 150" fill="none" preserveAspectRatio="xMidYMid meet">
-          <defs>
-            <linearGradient id="vbTrail" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%"   stop-color="#00f0ff" stop-opacity="0"/>
-              <stop offset="60%"  stop-color="#3fd0ff" stop-opacity=".45"/>
-              <stop offset="100%" stop-color="#eaffff" stop-opacity=".9"/>
-            </linearGradient>
-            <linearGradient id="vbHull" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"   stop-color="#6d86c4"/>
-              <stop offset="48%"  stop-color="#2b3c68"/>
-              <stop offset="100%" stop-color="#0f1730"/>
-            </linearGradient>
-            <linearGradient id="vbWing" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"   stop-color="#3c4f80"/>
-              <stop offset="100%" stop-color="#101a34"/>
-            </linearGradient>
-          </defs>
-          <!-- engine wash -->
-          <path d="M4 68 H150" stroke="url(#vbTrail)" stroke-width="10" stroke-linecap="round" opacity=".7"/>
-          <path d="M22 84 H156" stroke="url(#vbTrail)" stroke-width="6"  stroke-linecap="round" opacity=".45"/>
-          <!-- swept wings, drawn under the fuselage -->
-          <path d="M214 62 L268 18 L318 30 L286 66 Z" fill="url(#vbWing)" stroke="#4fb9ff" stroke-width="1.2" opacity=".95"/>
-          <path d="M214 90 L268 134 L318 122 L286 86 Z" fill="url(#vbWing)" stroke="#4fb9ff" stroke-width="1.2" opacity=".95"/>
-          <!-- fuselage -->
-          <path d="M150 62 L236 44 L392 76 L236 108 L150 90 L178 76 Z" fill="url(#vbHull)" stroke="#6fe0ff" stroke-width="1.7"/>
-          <!-- spine + canopy -->
-          <path d="M214 62 L330 76 L214 90 L238 76 Z" fill="#0c1730" stroke="#a05cff" stroke-width="1.2" opacity=".95"/>
-          <circle cx="262" cy="76" r="8" fill="#00f0ff" opacity=".95"/>
-          <circle cx="262" cy="76" r="15" fill="none" stroke="#00f0ff" stroke-width="1.1" opacity=".4"/>
-          <!-- thruster mouths -->
-          <path d="M150 66 L176 76 L150 86" fill="#00f0ff" opacity=".9"/>
-          <path d="M214 50 L232 54 L214 58" fill="#7fe3ff" opacity=".6"/>
-          <path d="M214 94 L232 98 L214 102" fill="#7fe3ff" opacity=".6"/>
-        </svg>
-      </div>
+    <div class="lobby-bg">
+      <div class="lb-glow lb-glow-l"></div>
+      <div class="lb-glow lb-glow-r"></div>
+      <div class="lb-horizon"></div>
+      <div class="lb-floor"></div>
       <div class="lb-vignette"></div>
     </div>
 
@@ -3631,45 +3024,31 @@
     <header class="lobby-top">
       <div class="lobby-brand">
         <svg class="brand-mark" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-          <path d="M20 1 L37 11 L37 29 L20 39 L3 29 L3 11 Z" stroke="#3fd0ff" stroke-width="1.3" opacity=".45"/>
-          <path d="M20 5 L32 20 L20 35 L24 20 Z" fill="#a05cff"/>
-          <path d="M20 5 L8 20 L20 35 L16 20 Z" fill="#3fd0ff"/>
-          <path d="M20 12 L25 20 L20 28 L15 20 Z" fill="#eaffff" opacity=".85"/>
+          <path d="M20 2 L34 11 L28 20 L34 29 L20 38 L6 29 L12 20 L6 11 Z" stroke="#3fd0ff" stroke-width="1.4" opacity=".55"/>
+          <path d="M20 7 L30 20 L20 33 L23 20 Z" fill="#ff5f9e"/>
+          <path d="M20 7 L10 20 L20 33 L17 20 Z" fill="#3fd0ff"/>
         </svg>
-        <div class="brand-text">
-          <div class="brand-word"><b>VOID</b><b class="brand-break">BREAK</b></div>
-          <span class="brand-tag">EXPLORE &middot; DISCOVER &middot; GROW</span>
-        </div>
+        <div class="brand-text"><b>DUEL</b><b>ARENA</b></div>
       </div>
 
       <nav class="lobby-nav">
-        <button class="nav-item active" data-act="journey">JOURNEY</button>
-        <button class="nav-item" data-act="galaxy">GALAXY MAP</button>
-        <button class="nav-item" data-act="arena">ARENA</button>
+        <button class="nav-item active" data-act="play">PLAY</button>
+        <button class="nav-item" data-act="ranked">RANKED</button>
         <button class="nav-item nav-battlepass" data-act="battlepass">BATTLE PASS</button>
-        <button class="nav-item" data-act="shop">VOID MARKET</button>
+        <button class="nav-item" data-act="modes">MODES</button>
+        <button class="nav-item" data-act="shop">SHOP</button>
         <button class="nav-item" data-act="leaderboards">LEADERBOARDS</button>
         <button class="nav-item" data-act="profile">PROFILE</button>
         <button class="nav-item nav-admin hidden" id="lobbyNavAdmin" data-act="admin">ADMIN</button>
       </nav>
 
       <div class="lobby-top-right">
-        <!-- Three currencies, three ledgers, three jobs -- see the
-             CURRENCIES block in the lobby script for which system owns
-             which. Void Shards are read-only here: they are earned and
-             spent inside Voidbreak itself, so the pill's "+" opens the
-             journey rather than a purchase screen. -->
-        <div class="currency-pill shard" title="Void Shards &mdash; weapons, ship upgrades, mastery">
-          <span class="cp-gem">&#9670;</span>
-          <span class="cp-val" id="lobbyShards">0</span>
-          <button class="cp-plus" data-act="journey" title="Earn Void Shards on an expedition">+</button>
-        </div>
-        <div class="currency-pill" title="Coins &mdash; home planet, buildings, decorations">
+        <div class="currency-pill" title="Coins">
           <span class="cp-gem">&#9670;</span>
           <span class="cp-val" id="lobbyCoins">0</span>
-          <button class="cp-plus" data-act="shop" title="Spend Coins in the Void Market">+</button>
+          <button class="cp-plus" data-act="shop" title="Spend Coins in the shop">+</button>
         </div>
-        <div class="currency-pill crystal" title="Crystals &mdash; battle pass, cosmetics, special items">
+        <div class="currency-pill crystal" title="Crystals">
           <span class="cp-gem">&#9670;</span>
           <span class="cp-val" id="lobbyCrystals">0</span>
           <button class="cp-plus" data-act="crystalshop" title="Buy Crystals">+</button>
@@ -3696,10 +3075,9 @@
     <!-- ---------- MAIN GRID ---------- -->
     <main class="lobby-main">
 
-      <!-- ===== LEFT: commander profile (all data from the existing
-           account system plus the Voidbreak cloud save) ===== -->
+      <!-- ===== LEFT: player profile (all data from the existing account system) ===== -->
       <aside class="lobby-col lobby-left">
-        <div class="lp holo">
+        <div class="lp">
           <div class="profile-head">
             <div class="avatar" id="lobbyAvatar">
               <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
@@ -3708,7 +3086,6 @@
               </svg>
             </div>
             <div class="profile-id">
-              <div class="profile-rankline">COMMANDER</div>
               <div class="profile-name"><span class="level-tag hidden" id="lobbyLevelTag">LV 1</span> <span id="lobbyName">GUEST</span></div>
               <div class="profile-tag" id="accountStatus">NOT SIGNED IN &mdash; PROGRESS WON'T BE SAVED</div>
               <div class="profile-auth">
@@ -3720,194 +3097,104 @@
             </div>
           </div>
 
-          <!-- Commander level. The XP numbers are the account's real ones
-               (see renderXPBlock / applyXPTotal) -- this strip is just a
-               second view of them that is visible without opening the
-               Profile. -->
-          <div class="cmd-level">
-            <div class="cmd-level-top">
-              <span class="cmd-k">LEVEL</span>
-              <span class="cmd-v" id="lobbyLevelNum">1</span>
-            </div>
-            <div class="cmd-xpbar"><i id="lobbyXpFill" style="width:0%"></i></div>
-            <div class="cmd-xptext" id="lobbyXpText">0 / 0 XP</div>
-          </div>
-
-          <!-- Where you are and what you fly. Both come from the Voidbreak
-               cloud save (GET /voidbreak/state) resolved against
-               voidbreakUniverse.js -- see syncVoidbreakProfile(). -->
-          <div class="cmd-rows">
-            <div class="cmd-row">
-              <div class="cmd-row-k">GALAXY</div>
-              <div class="cmd-row-v" id="lobbyGalaxy">&mdash;</div>
-              <svg class="cmd-row-icon" viewBox="0 0 30 18" fill="none" aria-hidden="true">
-                <path d="M2 9 C8 2, 22 2, 28 9" stroke="#3fd0ff" stroke-width="1.2" opacity=".7"/>
-                <path d="M6 5 L16 9 L6 13 L9 9 Z" fill="#3fd0ff"/>
-                <path d="M16 4 L26 8 L16 12 L19 8 Z" fill="#a05cff" opacity=".85"/>
-              </svg>
-            </div>
-            <div class="cmd-row">
-              <div class="cmd-row-k">SHIP</div>
-              <div class="cmd-row-v" id="lobbyShip">&mdash;</div>
-              <svg class="cmd-row-icon" viewBox="0 0 30 18" fill="none" aria-hidden="true">
-                <path d="M3 9 L18 3 L27 9 L18 15 Z" fill="#111c36" stroke="#5fd8ff" stroke-width="1.1"/>
-                <circle cx="19" cy="9" r="2.4" fill="#00f0ff" opacity=".9"/>
-              </svg>
-            </div>
-          </div>
-
-          <!-- Mirrors the player's real Ranked standing (see the VOIDBREAK
-               ARENA hub / ranked.js) -- refreshLobbyRank() below keeps this
-               in sync at boot and sign-in so it's visible without having to
-               open the Arena first. -->
+          <!-- Mirrors the player's real Ranked standing (see the RANKED
+               hub / ranked.js) -- refreshLobbyRank() below keeps this in
+               sync at boot and sign-in so it's visible without having to
+               open the Ranked hub first. -->
           <div class="rank-strip" id="lobbyRankStrip">
             <svg viewBox="0 0 30 30" fill="none" aria-hidden="true">
               <path d="M15 2 L27 8 L27 17 C27 23 21 27 15 28 C9 27 3 23 3 17 L3 8 Z" stroke="rgba(160,190,225,.7)" stroke-width="1.3" fill="rgba(122,158,200,.10)"/>
               <path d="M15 9 L20 15 L15 21 L10 15 Z" fill="rgba(190,215,245,.55)"/>
             </svg>
             <div class="rk">
-              <div class="micro">ARENA RANK</div>
+              <div class="micro">RANK</div>
               <div class="rank-name" id="lobbyRankName">&mdash;</div>
             </div>
             <span class="soon-tag" id="lobbyRankTag">SIGN IN</span>
           </div>
-        </div>
 
-        <!-- The three currencies, in the order the economy reads:
-             Void Shards (progression) -> Coins (the planet and the
-             market) -> Crystals (premium). Every number here is the
-             same one the top-bar pills show; lobbySync() writes both. -->
-        <div class="lp holo">
-          <div class="cur-list">
-            <div class="cur-row shard">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round">
-                <path d="M8 1.2 L12.6 8 L8 14.8 L3.4 8 Z"/><path d="M8 1.2 L8 14.8" opacity=".5"/>
-              </svg>
-              <span class="k">VOID SHARDS</span><span class="v" id="lobbyShardsStat">0</span>
-            </div>
-            <div class="cur-row coin">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round">
-                <path d="M8 1.6 L13.6 8 L8 14.4 L2.4 8 Z"/><circle cx="8" cy="8" r="2.2"/>
-              </svg>
-              <span class="k">COINS</span><span class="v" id="lobbyCoinsStat">0</span>
-            </div>
-            <div class="cur-row crystal">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round">
-                <path d="M8 1.4 L12.8 6 L8 14.6 L3.2 6 Z"/><path d="M3.2 6 H12.8"/>
-              </svg>
-              <span class="k">CRYSTALS</span><span class="v" id="lobbyCrystalsStat">0</span>
-            </div>
-          </div>
-          <div class="stat-list compact">
+          <div class="stat-list">
             <div class="stat-row">
               <svg viewBox="0 0 16 16" fill="none" stroke="#ffce54" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M4.5 2h7v4a3.5 3.5 0 0 1-7 0z"/><path d="M4.5 3H2.5v1a2.5 2.5 0 0 0 2 2.4"/><path d="M11.5 3h2v1a2.5 2.5 0 0 1-2 2.4"/><path d="M6.5 9.5h3M5.5 14h5M8 9.5V14"/>
               </svg>
-              <span class="k">ARENA WINS</span><span class="v" id="lobbyWins">0</span>
+              <span class="k">WINS</span><span class="v" id="lobbyWins">0</span>
             </div>
             <div class="stat-row">
               <svg viewBox="0 0 16 16" fill="none" stroke="#ff5f6d" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M2 2.5l9 9M11.5 2.5l-9 9"/><circle cx="12.6" cy="12.6" r="1.6"/><circle cx="3.4" cy="12.6" r="1.6"/>
               </svg>
-              <span class="k">ELIMINATIONS</span><span class="v" id="lobbyKills">0</span>
+              <span class="k">KILLS</span><span class="v" id="lobbyKills">0</span>
+            </div>
+            <div class="stat-row gold">
+              <svg viewBox="0 0 16 16" fill="none" stroke="#ffce54" stroke-width="1.4" stroke-linejoin="round">
+                <path d="M8 1.6 L13.6 8 L8 14.4 L2.4 8 Z"/>
+              </svg>
+              <span class="k">COINS</span><span class="v" id="lobbyCoinsStat">0</span>
+            </div>
+            <div class="stat-row" style="color:#e6d4ff;">
+              <svg viewBox="0 0 16 16" fill="none" stroke="#b06bff" stroke-width="1.4" stroke-linejoin="round">
+                <path d="M8 1.6 L13.6 8 L8 14.4 L2.4 8 Z"/>
+              </svg>
+              <span class="k">CRYSTALS</span><span class="v" id="lobbyCrystalsStat">0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Daily Challenges: 3/day, the same for every player, picked and
+             reset server-side on the actual UTC calendar date (see
+             server.js's DAILY CHALLENGES block). Progress is tracked from
+             real gameplay events and rides the same account save as
+             everything else; rewards are granted by the server, not the
+             client -- see fetchDailyChallenges()/renderDailyChallenges()/
+             claimDailyChallenge() below. -->
+        <div class="lp">
+          <div class="lp-head">
+            <span class="lp-title">DAILY CHALLENGES</span>
+            <span class="micro">RESETS DAILY</span>
+          </div>
+          <div class="lp-body">
+            <div id="dcList" class="dc-list">
+              <div class="dc-status">SYNCING&hellip;</div>
             </div>
           </div>
         </div>
       </aside>
 
-      <!-- ===== CENTER: the journey, and every destination in it ===== -->
+      <!-- ===== CENTER: play + existing game modes ===== -->
       <section class="lobby-center">
         <div class="arena-banner">
-          <div class="ab-plate">VOIDBREAK</div>
+          <div class="ab-plate">DUEL ARENA</div>
           <div class="ab-mast"></div>
         </div>
 
-        <button class="play-btn" id="lobbyJourney">
+        <button class="play-btn" id="lobbyPlay">
           <span class="play-shape" aria-hidden="true">
             <span class="play-edge"></span>
             <span class="play-fill"></span>
             <span class="play-sheen"></span>
           </span>
           <span class="play-content">
-            <span class="play-label"><span class="play-glyph" aria-hidden="true">&#9673;</span> START JOURNEY</span>
-            <span class="play-sub"><span id="lobbyJourneySub">EXPLORE &middot; DISCOVER &middot; GROW</span><span class="chev">&raquo;</span></span>
+            <span class="play-label">PLAY</span>
+            <span class="play-sub"><span id="lobbyPlaySub">ONLINE MULTIPLAYER</span><span class="chev">&raquo;</span></span>
           </span>
         </button>
 
-        <!-- Every destination in the game, one tile each. Each one routes
-             to a system that already exists -- nothing here is a stub. -->
-        <div class="dest-grid" id="lobbyDestGrid">
-          <button class="dest" data-act="galaxy">
-            <span class="dest-ico">
-              <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
-                <ellipse cx="17" cy="17" rx="15" ry="6.5" stroke="currentColor" stroke-width="1.4" opacity=".55" transform="rotate(-20 17 17)"/>
-                <ellipse cx="17" cy="17" rx="9" ry="3.6" stroke="currentColor" stroke-width="1.4" transform="rotate(-20 17 17)"/>
-                <circle cx="17" cy="17" r="2.8" fill="currentColor"/>
-              </svg>
-            </span>
-            <span class="dest-name">GALAXY MAP</span>
-            <span class="dest-sub">EXPLORE SYSTEMS</span>
-          </button>
-          <button class="dest" data-act="planet">
-            <span class="dest-ico">
-              <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
-                <circle cx="17" cy="17" r="9" stroke="currentColor" stroke-width="1.5"/>
-                <ellipse cx="17" cy="17" rx="15" ry="4.6" stroke="currentColor" stroke-width="1.3" opacity=".65" transform="rotate(-22 17 17)"/>
-                <path d="M12 19 q5 -4 10 0" stroke="currentColor" stroke-width="1.2" opacity=".7"/>
-              </svg>
-            </span>
-            <span class="dest-name">HOME PLANET</span>
-            <span class="dest-sub">BUILD &amp; UPGRADE</span>
-          </button>
-          <button class="dest" data-act="arena">
-            <span class="dest-ico">
-              <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
-                <path d="M6 6 L22 22 M10 6 L6 10 M22 22 L28 28" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                <path d="M28 6 L12 22 M24 6 L28 10 M12 22 L6 28" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-              </svg>
-            </span>
-            <span class="dest-name">VOIDBREAK ARENA</span>
-            <span class="dest-sub">PVP BATTLES</span>
-          </button>
-          <button class="dest" data-act="shop">
-            <span class="dest-ico">
-              <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
-                <path d="M11 4 L17 14 L11 24 L5 14 Z" fill="currentColor" opacity=".55"/>
-                <path d="M23 10 L29 19 L23 28 L17 19 Z" fill="currentColor" opacity=".8"/>
-              </svg>
-            </span>
-            <span class="dest-name">VOID MARKET</span>
-            <span class="dest-sub">GEAR &amp; RESOURCES</span>
-          </button>
-          <button class="dest dest-gold" data-act="battlepass">
-            <span class="dest-ico">
-              <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
-                <path d="M17 3 L29 9 L29 19 C29 25 23 29 17 31 C11 29 5 25 5 19 L5 9 Z" stroke="currentColor" stroke-width="1.6" fill="none"/>
-                <path d="M17 10 L19.2 15 L24.5 15.4 L20.4 18.7 L21.8 24 L17 21 L12.2 24 L13.6 18.7 L9.5 15.4 L14.8 15 Z" fill="currentColor"/>
-              </svg>
-            </span>
-            <span class="dest-name">BATTLE PASS</span>
-            <span class="dest-sub">SEASON REWARDS</span>
-          </button>
-          <button class="dest" data-act="profile">
-            <span class="dest-ico">
-              <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
-                <circle cx="17" cy="12" r="5.4" stroke="currentColor" stroke-width="1.6"/>
-                <path d="M6.5 29 a10.5 10.5 0 0 1 21 0" stroke="currentColor" stroke-width="1.6" fill="none"/>
-              </svg>
-            </span>
-            <span class="dest-name">PROFILE</span>
-            <span class="dest-sub">YOUR PROGRESS</span>
-          </button>
+        <div class="mode-carousel">
+          <button class="carousel-arrow" id="lobbyModePrev" title="Previous mode">&lsaquo;</button>
+          <div class="mode-cards" id="lobbyModeCards"></div>
+          <button class="carousel-arrow" id="lobbyModeNext" title="Next mode">&rsaquo;</button>
         </div>
+        <div class="mode-dots" id="lobbyModeDots"></div>
       </section>
 
-      <!-- ===== RIGHT: the living side of the lobby ===== -->
+      <!-- ===== RIGHT: reserved space for future systems ===== -->
       <aside class="lobby-col lobby-right">
         <!-- Mirrors the real Friends system (see the FRIENDS menu / FRIENDS
              object below) -- renderLobbyFriends() keeps this in sync at
-             boot, sign-in/out, and every real friends-list update. -->
-        <div class="lp holo">
+             boot, sign-in/out, and every real friends-list update, same
+             pattern as the rank strip above it. -->
+        <div class="lp">
           <div class="lp-head">
             <span class="lp-title">FRIENDS</span>
             <span class="soon-tag" id="lobbyFriendsTag">&mdash;</span>
@@ -3924,8 +3211,11 @@
 
         <!-- Real, admin-posted announcements (see GET /news / POST
              /admin/news in server.js) -- renderNewsWidget() keeps this
-             in sync at boot and after every fetch. -->
-        <div class="lp holo" id="lobbyNewsPanel">
+             in sync at boot and after every fetch, same pattern as the
+             Friends panel above it. The art/tag chrome below is only
+             shown as a fallback when no posts exist yet, so an unposted
+             server still reads as deliberate rather than broken. -->
+        <div class="lp" id="lobbyNewsPanel">
           <div class="lp-head">
             <span class="lp-title magenta">NEWS &amp; EVENTS</span>
             <span class="soon-tag" id="lobbyNewsTag">&mdash;</span>
@@ -3933,66 +3223,33 @@
           <div class="lp-body" id="lobbyNewsBody">
             <div class="news-art">
               <svg viewBox="0 0 240 110" preserveAspectRatio="none" fill="none" aria-hidden="true">
-                <circle cx="180" cy="40" r="26" stroke="#a05cff" stroke-width="1.3" opacity=".7"/>
-                <circle cx="180" cy="40" r="9" fill="#a05cff" opacity=".7"/>
                 <path d="M30 70 L96 46 L84 62 L110 56 L44 84 L58 68 Z" fill="#3fd0ff" opacity=".75"/>
+                <path d="M210 70 L144 46 L156 62 L130 56 L196 84 L182 68 Z" fill="#ff5f9e" opacity=".75"/>
                 <path d="M0 96 H240" stroke="rgba(160,200,255,.35)" stroke-width="1"/>
               </svg>
-              <span class="na-cap">VOIDBREAK UPDATES</span>
+              <span class="na-cap">ARENA UPDATES</span>
             </div>
             <div class="micro" style="text-align:center; margin-top:9px;">SYNCING&hellip;</div>
           </div>
         </div>
 
-        <!-- Discovery Progress -- the one number that says "this is an
-             exploration game". Both fractions are computed from the
-             Voidbreak save against voidbreakUniverse.js's real content
-             totals, so a new galaxy added to that file changes this
-             panel with no edit here. -->
-        <div class="lp holo">
+        <div class="lp">
           <div class="lp-head">
-            <span class="lp-title">DISCOVERY PROGRESS</span>
-          </div>
-          <div class="lp-body disc-body">
-            <div class="disc-ring">
-              <svg viewBox="0 0 64 64" aria-hidden="true">
-                <circle cx="32" cy="32" r="27" fill="none" stroke="rgba(122,158,200,.20)" stroke-width="6"/>
-                <circle cx="32" cy="32" r="27" fill="none" stroke="url(#discGrad)" stroke-width="6"
-                        stroke-linecap="round" id="discArc"
-                        stroke-dasharray="0 999" transform="rotate(-90 32 32)"/>
-                <defs>
-                  <linearGradient id="discGrad" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stop-color="#3fd0ff"/><stop offset="100%" stop-color="#a05cff"/>
-                  </linearGradient>
-                </defs>
-              </svg>
-              <span class="disc-pct" id="discPct">0%</span>
-            </div>
-            <div class="disc-rows">
-              <div class="disc-row"><span class="k">PLANETS DISCOVERED</span><b id="discPlanets">0 / 0</b></div>
-              <div class="disc-row"><span class="k">SYSTEMS CLEARED</span><b id="discSystems">0 / 0</b></div>
-            </div>
-          </div>
-        </div>
-        <!-- Daily Missions: 3/day, the same for every player, picked and
-             reset server-side on the actual UTC calendar date (see
-             server.js's DAILY CHALLENGES block). Progress is tracked from
-             real gameplay events and rides the same account save as
-             everything else; rewards are granted by the server, not the
-             client -- see fetchDailyChallenges()/renderDailyChallenges()/
-             claimDailyChallenge() below. -->
-        <div class="lp holo">
-          <div class="lp-head">
-            <span class="lp-title">DAILY MISSIONS</span>
-            <span class="micro">RESETS DAILY</span>
+            <span class="lp-title voidbreak">MINIGAME: VOIDBREAK</span>
           </div>
           <div class="lp-body">
-            <div id="dcList" class="dc-list">
-              <div class="dc-status">SYNCING&hellip;</div>
+            <div class="vb-preview">
+              <svg viewBox="0 0 240 90" preserveAspectRatio="none" fill="none" aria-hidden="true">
+                <rect x="0" y="0" width="240" height="90" fill="#04050c"/>
+                <circle cx="120" cy="42" r="26" stroke="#00f0ff" stroke-width="1.5" opacity=".7"/>
+                <circle cx="120" cy="42" r="9" fill="#a05cff" opacity=".85"/>
+                <path d="M120 16 L131 42 L120 68 L109 42 Z" stroke="#ff2d55" stroke-width="1.2" opacity=".8"/>
+              </svg>
+              <span class="vb-tag">ENTER THE VOID</span>
             </div>
+            <button class="vb-play-btn" id="btnVoidbreakPlay" type="button">PLAY</button>
           </div>
         </div>
-
       </aside>
     </main>
 
@@ -4002,42 +3259,13 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.5-5A8 8 0 1 1 21 12z"/>
         </svg>
-        <span>FLEET COMMS</span>
+        <span>LOBBY CHAT</span>
         <span class="chat-unread hidden" id="chatUnread">0</span>
       </button>
-      <!-- Journey status strip. Same three numbers the Discovery panel
-           shows, in the one place a player glances at without reading:
-           the bottom of the screen. syncVoidbreakProfile() writes both. -->
-      <div class="journey-strip">
-        <div class="js-item">
-          <svg viewBox="0 0 22 22" fill="none" aria-hidden="true">
-            <ellipse cx="11" cy="11" rx="9.5" ry="4" stroke="#3fd0ff" stroke-width="1.2" opacity=".7" transform="rotate(-20 11 11)"/>
-            <circle cx="11" cy="11" r="2" fill="#a05cff"/>
-          </svg>
-          <span class="js-k">GALAXY</span>
-          <span class="js-v" id="footGalaxy">1 / 1</span>
-          <span class="js-bar"><i id="footGalaxyFill" style="width:0%"></i></span>
-        </div>
-        <div class="js-item">
-          <svg viewBox="0 0 22 22" fill="none" aria-hidden="true">
-            <circle cx="11" cy="11" r="6" stroke="#5dffa0" stroke-width="1.3"/>
-            <ellipse cx="11" cy="11" rx="10" ry="3" stroke="#5dffa0" stroke-width="1.1" opacity=".6" transform="rotate(-22 11 11)"/>
-          </svg>
-          <span class="js-k">PLANETS DISCOVERED</span>
-          <span class="js-v" id="footPlanets">0 / 0</span>
-        </div>
-        <div class="js-item">
-          <svg viewBox="0 0 22 22" fill="none" aria-hidden="true">
-            <path d="M11 2 L13.4 8.6 L20 11 L13.4 13.4 L11 20 L8.6 13.4 L2 11 L8.6 8.6 Z" stroke="#ffce54" stroke-width="1.2" fill="none"/>
-          </svg>
-          <span class="js-k">SYSTEMS CLEARED</span>
-          <span class="js-v" id="footSystems">0 / 0</span>
-        </div>
-      </div>
       <div class="spacer"></div>
       <button class="ghost-btn" data-act="controls">CONTROLS</button>
       <button class="ghost-btn" data-act="patch">PATCH NOTES</button>
-      <span class="version-tag" id="lobbyVersion">VOIDBREAK v1.0.0</span>
+      <span class="version-tag" id="lobbyVersion">v1.0.0</span>
     </footer>
 
     <!-- ---------- LOBBY CHAT ----------
@@ -4046,7 +3274,7 @@
          there is no second connection and no polling. -->
     <div class="chat-panel hidden" id="lobbyChat">
       <div class="chat-head">
-        <span class="chat-title">FLEET COMMS</span>
+        <span class="chat-title">LOBBY CHAT</span>
         <span class="chat-count" id="chatCount"></span>
         <button class="chat-close" id="chatCollapse" type="button" title="Collapse">&ndash;</button>
       </div>
@@ -4095,60 +3323,9 @@
     </div>
   </div>
 
-  <!-- ==============================================================
-       VOIDBREAK ARENA -- the PvP half of the universe.
-       This is the old Duel Arena mode select, moved out of the lobby
-       centre and given its own screen so the main menu can be about
-       exploration. NOTHING about the match flow changed: the mode
-       carousel below is the same #lobbyModeCards the lobby used to
-       host, driven by the same LOBBY_MODES/renderLobbyModes() code,
-       and #arenaPlay forwards to the same hidden legacy buttons.
-       ============================================================== -->
-  <div class="menu-overlay hidden va-screen" id="menuVbArena">
-    <div class="va-bg" aria-hidden="true">
-      <div class="lb-stars lb-stars-far"></div>
-      <div class="lb-neb lb-neb-violet"></div>
-      <div class="lb-vignette"></div>
-    </div>
-    <div class="va-inner">
-      <div class="va-head">
-        <div class="va-title">VOIDBREAK ARENA</div>
-        <div class="va-sub">PILOT VERSUS PILOT &middot; FOUGHT ACROSS THE UNIVERSE</div>
-      </div>
-
-      <div class="va-locations" id="vaLocations"></div>
-
-      <button class="play-btn va-play" id="arenaPlay">
-        <span class="play-shape" aria-hidden="true">
-          <span class="play-edge"></span>
-          <span class="play-fill"></span>
-          <span class="play-sheen"></span>
-        </span>
-        <span class="play-content">
-          <span class="play-label">DEPLOY</span>
-          <span class="play-sub"><span id="lobbyPlaySub">ONLINE MULTIPLAYER</span><span class="chev">&raquo;</span></span>
-        </span>
-      </button>
-
-      <div class="mode-carousel">
-        <button class="carousel-arrow" id="lobbyModePrev" title="Previous mode">&lsaquo;</button>
-        <div class="mode-cards" id="lobbyModeCards"></div>
-        <button class="carousel-arrow" id="lobbyModeNext" title="Next mode">&rsaquo;</button>
-      </div>
-      <div class="mode-dots" id="lobbyModeDots"></div>
-
-      <div class="va-actions">
-        <button class="menu-btn" data-act="ranked">RANKED LADDER</button>
-        <button class="menu-btn" data-act="leaderboards">LEADERBOARDS</button>
-        <button class="menu-btn" data-act="pilotgear">PILOT GEAR</button>
-      </div>
-    </div>
-    <button class="menu-back" id="btnBackVbArena">&larr; back to the void</button>
-  </div>
-
   <!-- GAME TYPE MENU (Classic vs Football) -->
   <div class="menu-overlay hidden" id="menuGameType">
-    <div class="menu-title">SELECT ENGAGEMENT</div>
+    <div class="menu-title">SELECT GAME TYPE</div>
     <div class="menu-group">
       <button class="menu-btn" id="btnModeClassic">CLASSIC<br><span style="font-size:9px;color:var(--ink-dim);letter-spacing:1.5px;">FIRST TO 3 ROUNDS</span></button>
       <button class="menu-btn accent-2" id="btnModeFootball">&#9917; FOOTBALL<br><span style="font-size:9px;color:var(--ink-dim);letter-spacing:1.5px;">FIRST TO 3 GOALS</span></button>
@@ -4161,7 +3338,7 @@
   <!-- SETTINGS -->
   <div class="menu-overlay hidden" id="menuSettings">
     <div class="shop-panel settings-panel">
-      <div class="menu-title">COMMANDER SETTINGS</div>
+      <div class="menu-title">PLAYER SETTINGS</div>
 
       <div class="settings-section-label">PLAYER SETTINGS</div>
       <div class="settings-note">
@@ -4241,7 +3418,7 @@
   <!-- ADMIN PANEL -->
   <div class="menu-overlay hidden" id="menuAdmin">
     <div class="shop-panel admin-panel">
-      <div class="menu-title">VOIDBREAK // ADMIN</div>
+      <div class="menu-title">DUEL ARENA // ADMIN</div>
       <div class="admin-section-label">ABILITY BALANCE</div>
 
       <select class="admin-select" id="adminAbilitySelect"></select>
@@ -4412,7 +3589,7 @@
   <!-- LEADERBOARDS -->
   <div class="menu-overlay hidden" id="menuLeaderboard">
     <div class="shop-panel">
-      <div class="menu-title">COMMANDER LEADERBOARDS</div>
+      <div class="menu-title">LEADERBOARDS</div>
       <div class="shop-tabs">
         <button class="shop-tab selected" id="lbTabCoins" data-sort="coins">COINS</button>
         <button class="shop-tab" id="lbTabKills" data-sort="kills">KILLS</button>
@@ -4483,7 +3660,7 @@
 
   <div class="menu-overlay hidden" id="menuRanked">
     <div class="shop-panel ranked-panel">
-      <div class="menu-title">COMMANDER RANK</div>
+      <div class="menu-title">RANKED</div>
       <div class="rk-season" id="rkSeason">SEASON 1</div>
 
       <div class="rk-card" id="rkCard">
@@ -4516,9 +3693,9 @@
   <!-- RANKED QUEUE -->
   <div class="menu-overlay hidden" id="menuRankedQueue">
     <div class="rq-wrap">
-      <div class="menu-title">COMMANDER RANK</div>
+      <div class="menu-title">RANKED</div>
       <div class="rq-spinner"><i></i><i></i><i></i></div>
-      <div class="rq-status" id="rqStatus">SCANNING FOR A RIVAL PILOT...</div>
+      <div class="rq-status" id="rqStatus">SEARCHING FOR OPPONENT...</div>
       <div class="rq-timer">QUEUE TIME: <b id="rqTimer">00:00</b></div>
       <div class="rq-detail" id="rqDetail"></div>
 
@@ -4568,7 +3745,7 @@
   <!-- RANKED LEADERBOARD -->
   <div class="menu-overlay hidden" id="menuRankedLadder">
     <div class="shop-panel">
-      <div class="menu-title">ARENA LADDER</div>
+      <div class="menu-title">RANKED LEADERBOARD</div>
       <div class="rk-season" id="rlSeason">SEASON 1</div>
       <div class="rl-you hidden" id="rlYou"></div>
       <div class="shop-body" id="rankedLadderBody"></div>
@@ -4578,7 +3755,7 @@
 
   <!-- ONLINE LOBBY -->
   <div class="menu-overlay hidden" id="menuOnline">
-    <div class="menu-title">PILOT DUEL</div>
+    <div class="menu-title">ONLINE MATCH</div>
     <div id="onlineStatusWrap">
       <div class="currency-box" id="onlineStatusMsg" style="color:var(--p1); border-color:rgba(63,208,255,0.35); background:rgba(63,208,255,0.06);">CONNECTING...</div>
     </div>
@@ -4598,18 +3775,18 @@
        lobby.js) rather than the legacy two-slot relay.
        ============================================================ -->
   <div class="menu-overlay hidden" id="menuOnlineHub">
-    <div class="menu-title">VOIDBREAK ARENA</div>
+    <div class="menu-title">ONLINE</div>
     <div class="mp-panel">
       <div class="mp-section">
-        <div class="mp-heading">PILOT VERSUS PILOT</div>
+        <div class="mp-heading">PVP</div>
         <div class="mp-grid" id="mpPvpGrid"></div>
       </div>
       <div class="mp-section">
-        <div class="mp-heading alt">DEEP-SPACE CO-OP</div>
+        <div class="mp-heading alt">VOIDBREAK CO-OP</div>
         <div class="mp-grid" id="mpCoopGrid"></div>
       </div>
       <div class="mp-section">
-        <div class="mp-heading">JOIN A SQUADRON</div>
+        <div class="mp-heading">JOIN A ROOM</div>
         <div class="menu-row" style="align-items:center; flex-wrap:wrap; justify-content:center;">
           <input class="mp-input" id="mpJoinCode" maxlength="5" placeholder="CODE"
                  autocomplete="off" autocapitalize="characters" spellcheck="false">
@@ -4618,7 +3795,7 @@
         </div>
         <div class="mp-rows" id="mpBrowseRows"></div>
       </div>
-      <div class="mp-note" id="mpHubNote">SIGN IN TO FLY ONLINE.</div>
+      <div class="mp-note" id="mpHubNote">SIGN IN TO PLAY ONLINE MATCHES.</div>
     </div>
     <button class="menu-back" id="btnBackOnlineHub">&larr; back</button>
   </div>
@@ -4646,14 +3823,14 @@
   <div class="menu-overlay hidden" id="menuShop">
     <div class="shop-panel">
       <div class="shop-header">
-        <div class="menu-title">VOID MARKET</div>
+        <div class="menu-title">SHOP</div>
         <div class="currency-box" id="coinsDisplayShop">◈ <span id="coinsAmountShop">0</span> COINS</div>
         <div class="currency-box crystal" id="crystalsDisplayShop">&#9670; <span id="crystalsAmountShop">0</span> CRYSTALS</div>
       </div>
       <div class="shop-tabs">
-        <button class="shop-tab selected" id="tabSkins" data-tab="skins">SHIP SKINS</button>
-        <button class="shop-tab" id="tabPowers" data-tab="powers">SHIP SYSTEMS</button>
-        <button class="shop-tab" id="tabAbilities" data-tab="abilities">PILOT ABILITIES</button>
+        <button class="shop-tab selected" id="tabSkins" data-tab="skins">SKINS SHOP</button>
+        <button class="shop-tab" id="tabPowers" data-tab="powers">POWERS SHOP</button>
+        <button class="shop-tab" id="tabAbilities" data-tab="abilities">ABILITIES SHOP</button>
         <button class="shop-tab crystal-tab" id="tabCrystals" data-tab="crystals">CRYSTALS</button>
       </div>
       <div class="shop-body" id="shopBody"></div>
@@ -4809,32 +3986,14 @@
   </div>
 </div>
 
-<!-- THE JOURNEY -- Voidbreak's galaxy exploration campaign (galaxy map,
-     solar systems, discovery, the Home Planet, the ship). It runs
-     entirely inside its own iframe (its own document/window/globals/
-     CSS/audio/rAF loop), so it can never collide with or be affected by
-     the shell's own arena code, and vice versa. The shell owns identity,
-     account, currencies, social and PvP; this owns the campaign.
-     See launchVoidbreak() below, which can deep-link straight to the
-     galaxy map, the Home Planet or the loadout. -->
+<!-- VOIDBREAK MINIGAME -- runs entirely inside its own iframe (its own
+     document/window/globals/CSS/audio/rAF loop), so it can never collide
+     with or be affected by anything in the Duel Arena page, and vice
+     versa. See btnVoidbreakPlay/launchVoidbreak below. -->
 <div id="voidbreakOverlay" class="hidden">
   <iframe id="voidbreakFrame" title="Voidbreak" allow="autoplay"></iframe>
-  <button id="btnVoidbreakExit" type="button" title="Back to the main menu">&larr; MAIN MENU</button>
+  <button id="btnVoidbreakExit" type="button" title="Exit to Duel Arena">&larr; EXIT TO DUEL ARENA</button>
 </div>
-
-<!-- The universe content layer (galaxies, systems, discoveries, ship
-     systems). Exactly the same file voidbreak.html and server.js load --
-     it is pure data with no secrets and no game logic, which is why it
-     is on server.js's PUBLIC_FILES allowlist. The shell reads it so the
-     main menu can name the player's galaxy, size the discovery ring and
-     label their ship WITHOUT duplicating any of that content here; a
-     galaxy added to voidbreakUniverse.js shows up on this menu with no
-     edit to index.html at all.
-     Loaded synchronously (no defer/async) so `window.VBUniverse` is
-     guaranteed to exist before the inline script below runs, and guarded
-     at every use site anyway (see vbUni()) so a failed fetch degrades to
-     "—" on two labels rather than a broken lobby. -->
-<script src="voidbreakUniverse.js"></script>
 
 <script>
 (function(){
@@ -6369,7 +5528,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     if(!loggedIn || !sessionToken){
       mpCloseMenus();
       menuMain.classList.remove('hidden');
-      lobbyToast('SIGN IN TO FLY ONLINE');
+      lobbyToast('SIGN IN TO PLAY ONLINE MATCHES');
       return;
     }
     menuMain.classList.add('hidden');
@@ -7648,11 +6807,6 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     const chatInputEl = document.getElementById('chatInput');
     if(chatInputEl) chatInputEl.classList.toggle('owner-typing', isAdmin);
     lobbySync();
-    // The Voidbreak save is per-account, so the journey readout on the
-    // main menu has to be re-pulled whenever the account changes -- on
-    // sign-in it switches from the guest/empty view to this account's
-    // real progress, and on sign-out back again.
-    syncVoidbreakProfile();
     refreshLobbyRank();
     renderLobbyFriends();
     // Re-fetch now that sessionToken is set, so the panel switches from
@@ -8046,11 +7200,6 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     chatSetOpen(false);
     chatReset();
     lobbySync();
-    // The Voidbreak save is per-account, so the journey readout on the
-    // main menu has to be re-pulled whenever the account changes -- on
-    // sign-in it switches from the guest/empty view to this account's
-    // real progress, and on sign-out back again.
-    syncVoidbreakProfile();
     refreshLobbyRank();
     renderLobbyFriends();
     // Drop back to the anonymous view -- same challenge list, but no
@@ -13800,248 +12949,37 @@ if(tutorialActive) tutorialUpdate(dt);
     for(const k in keysPressed) keysPressed[k]=false;
   }
 
-  // ==================================================================
-  // ARENA LOCATIONS -- where in the Voidbreak universe a duel happens.
-  //
-  // PRESENTATION ONLY, and deliberately so. A location supplies a
-  // palette and a backdrop routine and NOTHING else: the arena's
-  // geometry (CLASSIC_COVERS and friends), its spawns, its collision,
-  // its bullet physics and every network message are identical in all
-  // five. That is the whole reason this could be added to a shipped,
-  // balanced PvP mode without re-testing balance -- there is no
-  // location where a wall is somewhere else or a sightline is longer.
-  //
-  // AGREEMENT ACROSS CLIENTS: an online match must show every player
-  // the same place. Rather than add a message to the protocol (a server
-  // change, a version skew risk, and a thing to keep in sync forever),
-  // the location is DERIVED from an identifier the server already gave
-  // everyone: the match id. locationForSeed() is a pure function of
-  // that string, so two clients that agree on the match id agree on the
-  // location without exchanging a single extra byte. Offline modes
-  // (local, vs computer) have no shared id and no one to agree with, so
-  // they use the player's own pick from the Arena screen.
-  // ==================================================================
-  const ARENA_LOCATIONS = [
-    {
-      id: 'station',
-      name: 'ABANDONED SPACE STATION',
-      sub: 'DERELICT ORBITAL',
-      color: '#7fd8ff',
-      grid: 'rgba(120,190,255,0.045)',
-      axis: 'rgba(150,210,255,0.075)',
-      cover: ['#37435c', '#212837'],
-      coverEdge: '#54627a',
-      coverLip: 'rgba(170,205,235,0.6)',
-      // Drawn behind the grid. Keep every backdrop cheap: these run
-      // once per frame on the same canvas as the match.
-      back(g){
-        // hull plating bands + a few dead viewports
-        g.fillStyle = 'rgba(28,40,64,0.35)';
-        for(let y = 60; y < H; y += 150) g.fillRect(0, y, W, 34);
-        g.fillStyle = 'rgba(120,190,255,0.06)';
-        for(let x = 70; x < W; x += 190){
-          g.fillRect(x, 24, 46, 18);
-          g.fillRect(x, H - 42, 46, 18);
-        }
-      }
-    },
-    {
-      id: 'ruins',
-      name: 'ALIEN PLANET RUINS',
-      sub: 'PRECURSOR SITE',
-      color: '#7dffbe',
-      grid: 'rgba(110,235,180,0.04)',
-      axis: 'rgba(130,255,200,0.07)',
-      cover: ['#2f4a3e', '#1a2a24'],
-      coverEdge: '#4f7566',
-      coverLip: 'rgba(150,240,200,0.55)',
-      back(g){
-        g.strokeStyle = 'rgba(110,235,180,0.10)';
-        g.lineWidth = 1;
-        // broken glyph rings half-buried in the floor
-        for(let i = 0; i < 4; i++){
-          const cx = 120 + i * 210, cy = i % 2 ? H - 70 : 70;
-          g.beginPath(); g.arc(cx, cy, 46, 0, Math.PI * 2); g.stroke();
-          g.beginPath(); g.arc(cx, cy, 28, 0.4, Math.PI * 1.5); g.stroke();
-        }
-      }
-    },
-    {
-      id: 'asteroid',
-      name: 'ASTEROID FIELD',
-      sub: 'UNCHARTED BELT',
-      color: '#ffb877',
-      grid: 'rgba(255,190,130,0.035)',
-      axis: 'rgba(255,205,150,0.06)',
-      cover: ['#4a3d32', '#2a231d'],
-      coverEdge: '#6d5b4a',
-      coverLip: 'rgba(255,215,170,0.5)',
-      back(g){
-        // drifting rocks, deterministic positions so nothing strobes
-        g.fillStyle = 'rgba(255,190,130,0.055)';
-        for(let i = 0; i < 26; i++){
-          const x = ((i * 137) % W), y = ((i * 271) % H), r = 4 + (i % 5) * 3;
-          g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
-        }
-      }
-    },
-    {
-      id: 'void',
-      name: 'VOID DIMENSION',
-      sub: 'OUTSIDE REALITY',
-      color: '#c77dff',
-      grid: 'rgba(180,120,255,0.05)',
-      axis: 'rgba(200,140,255,0.09)',
-      cover: ['#3a2a56', '#1e1533'],
-      coverEdge: '#61478c',
-      coverLip: 'rgba(215,175,255,0.6)',
-      back(g){
-        const cx = W / 2, cy = H / 2;
-        for(let i = 1; i <= 5; i++){
-          g.strokeStyle = 'rgba(180,120,255,' + (0.09 - i * 0.012).toFixed(3) + ')';
-          g.lineWidth = 1.5;
-          g.beginPath(); g.arc(cx, cy, i * 68, 0, Math.PI * 2); g.stroke();
-        }
-      }
-    },
-    {
-      id: 'facility',
-      name: 'ANCIENT ALIEN FACILITY',
-      sub: 'SEALED COMPLEX',
-      color: '#ff6fb0',
-      grid: 'rgba(255,110,180,0.04)',
-      axis: 'rgba(255,140,200,0.075)',
-      cover: ['#4d2c40', '#2a1726'],
-      coverEdge: '#7a4a66',
-      coverLip: 'rgba(255,185,225,0.55)',
-      back(g){
-        g.strokeStyle = 'rgba(255,110,180,0.10)';
-        g.lineWidth = 1.2;
-        // conduit runs along the floor and ceiling
-        for(const y of [46, H - 46]){
-          g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke();
-          for(let x = 40; x < W; x += 120){
-            g.beginPath(); g.arc(x, y, 5, 0, Math.PI * 2); g.stroke();
-          }
-        }
-      }
-    }
-  ];
-  const ARENA_LOC_BY_ID = {};
-  ARENA_LOCATIONS.forEach(l => { ARENA_LOC_BY_ID[l.id] = l; });
-
-  // The player's own preference, used only where there is nobody to
-  // agree with (local / vs computer). 'auto' means "surprise me", which
-  // is the default and what most players will leave it on.
-  let arenaLocPref = 'auto';
-  try{
-    const stored = localStorage.getItem('vb_arena_location');
-    if(stored && (stored === 'auto' || ARENA_LOC_BY_ID[stored])) arenaLocPref = stored;
-  }catch(e){ /* private mode / storage disabled -- 'auto' is fine */ }
-
-  // The location actually being fought in. Set by resolveArenaLocation()
-  // at the start of every match and read by the draw routines.
-  let arenaLocation = ARENA_LOCATIONS[0];
-
-  // FNV-1a over the seed string. Any stable string hash would do; what
-  // matters is that it is pure, cheap, and identical on every client.
-  function locationForSeed(seed){
-    let h = 0x811c9dc5;
-    const str = String(seed || '');
-    for(let i = 0; i < str.length; i++){
-      h ^= str.charCodeAt(i);
-      h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
-    }
-    return ARENA_LOCATIONS[h % ARENA_LOCATIONS.length];
-  }
-
-  // Called once per match start. A networked match uses the shared match
-  // id so every client lands on the same location; anything local uses
-  // the player's preference, falling back to a random pick on 'auto'.
-  function resolveArenaLocation(){
-    const sharedId = (ARENA.active && ARENA.matchId) ? ARENA.matchId
-                   : (RANKED.active && RANKED.matchId) ? RANKED.matchId
-                   : null;
-    if(sharedId){
-      arenaLocation = locationForSeed(sharedId);
-    } else if(mode === 'online'){
-      // Plain online duels have no match id of their own, but both
-      // clients DO share a room/seed-free session -- without an agreed
-      // identifier the only honest choice is the one location both
-      // sides are guaranteed to compute the same way.
-      arenaLocation = ARENA_LOCATIONS[0];
-    } else if(arenaLocPref !== 'auto' && ARENA_LOC_BY_ID[arenaLocPref]){
-      arenaLocation = ARENA_LOC_BY_ID[arenaLocPref];
-    } else {
-      arenaLocation = ARENA_LOCATIONS[Math.floor(Math.random() * ARENA_LOCATIONS.length)];
-    }
-    showArenaLocLabel();
-    return arenaLocation;
-  }
-
-  let arenaLocLabelTimer = null;
-  function showArenaLocLabel(){
-    const el = document.getElementById('arenaLocLabel');
-    if(!el || !arenaLocation) return;
-    el.innerHTML = '<span class="al-n" style="color:' + arenaLocation.color + '">'
-      + arenaLocation.name + '</span><span class="al-s">' + arenaLocation.sub + '</span>';
-    el.style.borderColor = arenaLocation.color + '55';
-    el.classList.remove('hidden', 'faded');
-    if(arenaLocLabelTimer) clearTimeout(arenaLocLabelTimer);
-    // Fades rather than vanishes, and only after the opening seconds --
-    // long enough to read, short enough to stay out of the HUD's way.
-    arenaLocLabelTimer = setTimeout(()=>{ el.classList.add('faded'); }, 3600);
-  }
-  function hideArenaLocLabel(){
-    const el = document.getElementById('arenaLocLabel');
-    if(el) el.classList.add('hidden');
-    if(arenaLocLabelTimer){ clearTimeout(arenaLocLabelTimer); arenaLocLabelTimer = null; }
-  }
-
   function drawGrid(){
-    // The location's own backdrop goes down first, then the same grid
-    // this arena has always had -- only its colour comes from the
-    // location. Grid spacing, the centre line and every coordinate are
-    // unchanged, so nothing a player reads position from has moved.
-    const loc = arenaLocation || ARENA_LOCATIONS[0];
-    if(loc.back){
-      ctx.save();
-      try{ loc.back(ctx); } catch(e){ /* a backdrop must never kill a frame */ }
-      ctx.restore();
-    }
-    ctx.strokeStyle = loc.grid || 'rgba(255,255,255,0.035)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.035)';
     ctx.lineWidth = 1;
     for(let x=0;x<=W;x+=30){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
     for(let y=0;y<=H;y+=30){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
-    ctx.strokeStyle = loc.axis || 'rgba(255,255,255,0.06)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
     ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
   }
 
   function drawCovers(){
-    const loc = arenaLocation || ARENA_LOCATIONS[0];
-    const top = (loc.cover && loc.cover[0]) || '#333c4e';
-    const bot = (loc.cover && loc.cover[1]) || '#202633';
     for(const c of covers){
       ctx.save();
       ctx.shadowBlur = 14;
       ctx.shadowColor = 'rgba(0,0,0,0.6)';
       ctx.shadowOffsetY = 3;
       const grad = ctx.createLinearGradient(c.x, c.y, c.x, c.y+c.h);
-      grad.addColorStop(0, top);
-      grad.addColorStop(1, bot);
+      grad.addColorStop(0, '#333c4e');
+      grad.addColorStop(1, '#202633');
       ctx.fillStyle = grad;
       ctx.fillRect(c.x, c.y, c.w, c.h);
       ctx.restore();
       // Thin illuminated top/left edge -- cheap "metallic panel" highlight
       // without any change to the rect's actual collision geometry.
-      ctx.strokeStyle = loc.coverLip || 'rgba(160,190,220,0.55)';
+      ctx.strokeStyle = 'rgba(160,190,220,0.55)';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(c.x+0.5, c.y+c.h-0.5);
       ctx.lineTo(c.x+0.5, c.y+0.5);
       ctx.lineTo(c.x+c.w-0.5, c.y+0.5);
       ctx.stroke();
-      ctx.strokeStyle = loc.coverEdge || '#4a5568';
+      ctx.strokeStyle = '#4a5568';
       ctx.lineWidth = 1.5;
       ctx.strokeRect(c.x+0.5, c.y+0.5, c.w-1, c.h-1);
     }
@@ -14637,10 +13575,6 @@ if(tutorialActive) tutorialUpdate(dt);
     p2Legend.style.display = mode==='local' ? '' : 'none';
     canvas.style.cursor = (aimMode==='mouse') ? 'crosshair' : 'default';
     covers = (gameType === 'football') ? FOOTBALL_COVERS : (gameType === 'heist') ? HEIST_COVERS : (gameType === 'bombrun') ? BOMB_COVERS : CLASSIC_COVERS;
-    // Which Voidbreak location this duel is fought in. Chosen AFTER
-    // `covers` so it can never be mistaken for something that picks the
-    // layout -- it only picks the palette (see ARENA_LOCATIONS).
-    resolveArenaLocation();
     if(aimMode==='mouse'){
       p1LegendCol.innerHTML = '<b>PLAYER ONE</b>'
         + '<div class="row"><span class="key">W A S D</span>move</div>'
@@ -14781,15 +13715,6 @@ if(tutorialActive) tutorialUpdate(dt);
     updateCurrencyDisplay();
     menuShop.classList.remove('hidden');
   });
-
-  // Straight to the arena equip tab. Same overlay, same code path as
-  // the Void Market button above -- it only starts on a different tab.
-  function openPilotGear(){
-    menuMain.classList.add('hidden');
-    selectShopTab('abilities');
-    updateCurrencyDisplay();
-    menuShop.classList.remove('hidden');
-  }
   // The Crystal pill's own "+" button (data-act="crystalshop") opens
   // the SAME shop overlay straight to the CRYSTALS tab, rather than a
   // separate screen -- one shop, four tabs, per the "don't build a
@@ -14853,7 +13778,6 @@ if(tutorialActive) tutorialUpdate(dt);
     // Friends presence: back in the menus.
     if(typeof syncActivity === 'function') syncActivity();
     stopMusic();
-    hideArenaLocLabel();
     exitBtn.classList.add('hidden');
     restartBtn.classList.add('hidden');
     menuOnline.classList.add('hidden');
@@ -15040,9 +13964,9 @@ if(tutorialActive) tutorialUpdate(dt);
 
   function tutCardWelcome(){
     tutCardShow(
-      '<div class="tut-wm">VOIDBREAK ARENA</div>'
+      '<div class="tut-wm">DUEL ARENA</div>'
       + '<div class="tut-plate">TRAINING PROTOCOL</div>'
-      + '<div class="tut-wline">PILOT COMBAT, ONE ON ONE</div>'
+      + '<div class="tut-wline">TOP-DOWN ARENA DUELS</div>'
       + '<div class="tut-wline dim">LEARN THE BASICS IN ABOUT A MINUTE</div>'
       + '<div class="tut-card-btns">'
       + '<button class="tut-cta" id="tutStartBtn"><span>' + (isTouchDevice?'TAP TO BEGIN':'PRESS ANY KEY TO BEGIN') + '</span></button>'
@@ -15693,43 +14617,29 @@ if(tutorialActive) tutorialUpdate(dt);
   btnAdminConfirmGive.addEventListener('click', confirmAdminGiveCredits);
 
   // ============================================================
-  // THE JOURNEY -- Voidbreak's galaxy exploration campaign, launched
-  // from START JOURNEY and from the Galaxy Map / Home Planet / Loadout
-  // destinations.
-  //
-  // The campaign lives in voidbreak.html, loaded into its own iframe
-  // (own document/window/globals/CSS/audio/rAF loop), so nothing in the
-  // shell ever touches its code and nothing in it can collide with or
-  // interfere with the shell's arena code. ESC/P inside the iframe are
-  // its own pause controls, untouched -- the only way back out is the
-  // MAIN MENU button drawn outside the iframe.
-  //
-  // This separation is why the identity change is cheap: the shell owns
-  // account, currencies, social, PvP and the menu; the iframe owns the
-  // campaign. Neither had to learn about the other to be rebranded.
+  // VOIDBREAK MINIGAME -- launched from the lobby's bottom-right card.
+  // The entire game lives in voidbreak.html, loaded into its own iframe
+  // (own document/window/globals/CSS/audio/rAF loop), so nothing here
+  // ever touches Voidbreak's code and nothing in Voidbreak can collide
+  // with or interfere with Duel Arena. ESC/P inside the iframe are
+  // Voidbreak's own pause controls, untouched -- the only way back to
+  // Duel Arena is the small EXIT button drawn outside the iframe.
   // ============================================================
   const voidbreakOverlay = document.getElementById('voidbreakOverlay');
   const voidbreakFrame = document.getElementById('voidbreakFrame');
+  const btnVoidbreakPlay = document.getElementById('btnVoidbreakPlay');
   const btnVoidbreakExit = document.getElementById('btnVoidbreakExit');
 
-  // `screen` deep-links straight to one of Voidbreak's own screens
-  // instead of its menu -- 'galaxy', 'planet' or 'loadout'. It is read
-  // by voidbreak.html's boot (see its ?screen= handling) and is purely a
-  // starting view: every one of those screens is reachable by hand from
-  // the Voidbreak menu exactly as before, so an unknown or omitted value
-  // simply lands on the menu.
-  function launchVoidbreak(screen){
+  function launchVoidbreak(){
     // A cache-busted src forces a genuinely fresh document/window every
     // launch -- a brand new rAF loop, WebAudio context, and event
     // listeners each time, so repeated Play -> Exit -> Play never
     // accumulates state or duplicate listeners from a previous session.
-    voidbreakFrame.src = 'voidbreak.html?t=' + Date.now()
-      + (screen ? '&screen=' + encodeURIComponent(screen) : '');
+    voidbreakFrame.src = 'voidbreak.html?t=' + Date.now();
     voidbreakOverlay.classList.remove('hidden');
     menuMain.classList.add('hidden');
-    closeVbArena({ silent: true });
     voidbreakFrame.focus();
-    // Friends presence: friends see "ON AN EXPEDITION".
+    // Friends presence: friends see "IN VOIDBREAK".
     if(typeof syncActivity === 'function') syncActivity();
   }
   function exitVoidbreak(){
@@ -15739,12 +14649,9 @@ if(tutorialActive) tutorialUpdate(dt);
     // running invisibly in the background.
     voidbreakFrame.src = 'about:blank';
     menuMain.classList.remove('hidden');
-    // Shards, galaxy, ship and discovery counts will usually have moved
-    // while the player was in there -- re-read them so the main menu is
-    // never showing a stale journey.
-    if(typeof syncVoidbreakProfile === 'function') syncVoidbreakProfile();
     if(typeof syncActivity === 'function') syncActivity();
   }
+  btnVoidbreakPlay.addEventListener('click', launchVoidbreak);
   btnVoidbreakExit.addEventListener('click', exitVoidbreak);
 
   // Voidbreak (running in its own iframe, see launchVoidbreak above)
@@ -15820,7 +14727,7 @@ if(tutorialActive) tutorialUpdate(dt);
   const LOBBY_MODES = [
     {
       id: 'local',  btn: 'btnLocal',
-      name: 'SPLIT COCKPIT', desc: 'TWO PILOTS, ONE KEYBOARD',
+      name: 'LOCAL 2 PLAYER', desc: 'SHARED KEYBOARD VERSUS',
       players: '2-4',
       art: `<svg class="mc-art" viewBox="0 0 190 92" preserveAspectRatio="xMidYMid slice" fill="none">
         <rect width="190" height="92" fill="#0a0f1a"/>
@@ -15835,7 +14742,7 @@ if(tutorialActive) tutorialUpdate(dt);
     },
     {
       id: 'online', btn: 'btnOnline',
-      name: 'PILOT DUEL', desc: 'ONE-ON-ONE ACROSS THE VOID',
+      name: 'ONLINE MULTIPLAYER', desc: 'DUEL A REAL OPPONENT',
       players: '2',
       art: `<svg class="mc-art" viewBox="0 0 190 92" preserveAspectRatio="xMidYMid slice" fill="none">
         <rect width="190" height="92" fill="#0a0f1a"/>
@@ -15851,7 +14758,7 @@ if(tutorialActive) tutorialUpdate(dt);
     },
     {
       id: 'arena',  btn: 'btnOnlineHub',
-      name: 'SQUADRON BATTLE', desc: 'TEAMS, FFA &amp; DEEP-SPACE CO-OP',
+      name: 'ONLINE ARENA', desc: 'TEAMS, FFA & VOIDBREAK CO-OP',
       players: '2-4',
       art: `<svg class="mc-art" viewBox="0 0 190 92" preserveAspectRatio="xMidYMid slice" fill="none">
         <rect width="190" height="92" fill="#0a0f1a"/>
@@ -15868,7 +14775,7 @@ if(tutorialActive) tutorialUpdate(dt);
     },
     {
       id: 'ai',     btn: 'btnAI',
-      name: 'COMBAT SIM', desc: 'TRAIN AGAINST DRONE PILOTS',
+      name: 'VS COMPUTER', desc: 'PRACTICE AGAINST BOTS',
       players: '1-4',
       art: `<svg class="mc-art" viewBox="0 0 190 92" preserveAspectRatio="xMidYMid slice" fill="none">
         <rect width="190" height="92" fill="#0a0f1a"/>
@@ -16082,7 +14989,7 @@ if(tutorialActive) tutorialUpdate(dt);
   ];
 
   function renderPatchNotes(){
-    let html = '<div class="pn-intro">PRE-RELEASE — VOIDBREAK IS STILL IN ACTIVE DEVELOPMENT. THIS LIST GROWS AS NEW UPDATES SHIP.</div>';
+    let html = '<div class="pn-intro">PRE-RELEASE — DUEL ARENA IS STILL IN ACTIVE DEVELOPMENT. THIS LIST GROWS AS NEW UPDATES SHIP.</div>';
     html += PATCH_NOTES.map(entry => {
       let body = '<div class="pn-version"><b>' + entry.version + '</b><span>' + entry.title.toUpperCase() + '</span></div>';
       body += PATCH_NOTE_CATS.map(([key, cls]) => {
@@ -16137,11 +15044,10 @@ if(tutorialActive) tutorialUpdate(dt);
   const NEWS_PLACEHOLDER_ART =
     '<div class="news-art">'
     + '<svg viewBox="0 0 240 110" preserveAspectRatio="none" fill="none" aria-hidden="true">'
-    + '<circle cx="180" cy="40" r="26" stroke="#a05cff" stroke-width="1.3" opacity=".7"/>'
-    + '<circle cx="180" cy="40" r="9" fill="#a05cff" opacity=".7"/>'
     + '<path d="M30 70 L96 46 L84 62 L110 56 L44 84 L58 68 Z" fill="#3fd0ff" opacity=".75"/>'
+    + '<path d="M210 70 L144 46 L156 62 L130 56 L196 84 L182 68 Z" fill="#ff5f9e" opacity=".75"/>'
     + '<path d="M0 96 H240" stroke="rgba(160,200,255,.35)" stroke-width="1"/>'
-    + '</svg><span class="na-cap">VOIDBREAK UPDATES</span></div>';
+    + '</svg><span class="na-cap">ARENA UPDATES</span></div>';
 
   function renderNewsWidget(){
     const tag = document.getElementById('lobbyNewsTag');
@@ -16223,50 +15129,10 @@ if(tutorialActive) tutorialUpdate(dt);
   function lobbyStartSelectedMode(){
     // Hands straight back to the original mode button -- the game type /
     // match size flow after this is unchanged.
-    //
-    // The mode carousel now lives on the VOIDBREAK ARENA screen rather
-    // than in the lobby centre, so the "are we still on a menu screen?"
-    // guard checks BOTH: either one being visible means the player is
-    // still in the shell and a deploy is legitimate. Once a match has
-    // actually started both are hidden and this is a no-op, exactly as
-    // it was when only the lobby existed.
-    const lobby = lobbyEl('menuMain');
-    const arena = lobbyEl('menuVbArena');
-    const onLobby = lobby && !lobby.classList.contains('hidden');
-    const onArena = arena && !arena.classList.contains('hidden');
-    if(!onLobby && !onArena) return; // already left the menus
-    // Deploying from the Arena screen closes it first, so the match
-    // flow's own overlays (game type, match size, the lobby room) are
-    // not drawn underneath a screen that is still up.
-    if(onArena) closeVbArena({ silent: true });
+    const menu = lobbyEl('menuMain');
+    if(!menu || menu.classList.contains('hidden')) return; // already left the lobby
     const btn = lobbyEl(LOBBY_MODES[lobbyModeIndex].btn);
     if(btn) btn.click();
-  }
-
-  // ================================================================
-  // VOIDBREAK ARENA screen
-  // ----------------------------------------------------------------
-  // A screen, not a system. It hosts the existing mode carousel and
-  // forwards to the existing legacy buttons; every match, every lobby
-  // room and every netcode path below is untouched by it.
-  // ================================================================
-  function openVbArena(){
-    const arena = lobbyEl('menuVbArena');
-    const lobby = lobbyEl('menuMain');
-    if(!arena) return;
-    renderArenaLocations();
-    renderLobbyModes();
-    arena.classList.remove('hidden');
-    if(lobby) lobby.classList.add('hidden');
-  }
-  function closeVbArena(opts){
-    const arena = lobbyEl('menuVbArena');
-    const lobby = lobbyEl('menuMain');
-    if(arena) arena.classList.add('hidden');
-    // `silent` is used when something else is about to take over the
-    // screen (a match starting), so the lobby is not flashed up for a
-    // frame underneath it.
-    if(lobby && !(opts && opts.silent)) lobby.classList.remove('hidden');
   }
 
   // Pushes the live account data into the lobby. Called from
@@ -16287,18 +15153,6 @@ if(tutorialActive) tutorialUpdate(dt);
       levelTag.textContent = 'LV ' + myLevel;
     }
 
-    // Commander level strip -- the same XP numbers the Profile shows,
-    // surfaced on the main menu so progression is visible without
-    // opening anything.
-    setTxt('lobbyLevelNum', myLevel);
-    const xpFill = lobbyEl('lobbyXpFill');
-    if(xpFill){
-      const pct = myXpForNextLevel > 0
-        ? Math.min(100, (myXpIntoLevel / myXpForNextLevel) * 100) : 0;
-      xpFill.style.width = pct + '%';
-    }
-    setTxt('lobbyXpText', myXpIntoLevel.toLocaleString() + ' / ' + myXpForNextLevel.toLocaleString() + ' XP');
-
     const av = lobbyEl('lobbyAvatar');
     if(av && typeof skinColor === 'function'){
       const c = skinColor(p1SkinId);
@@ -16308,234 +15162,9 @@ if(tutorialActive) tutorialUpdate(dt);
     }
   }
 
-  /* ================================================================
-     VOIDBREAK PROFILE MIRROR
-     ----------------------------------------------------------------
-     The main menu shows four things that live in the VOIDBREAK save
-     rather than the Duel Arena account record: Void Shards, the current
-     galaxy, the ship designation, and discovery progress.
-
-     This reads them from the SAME endpoint Voidbreak itself reads
-     (GET /voidbreak/state) and resolves them against the SAME content
-     file Voidbreak itself uses (voidbreakUniverse.js). It writes
-     nothing, ever -- a display mirror cannot corrupt a save it never
-     posts. A guest, an offline server, a missing universe module or an
-     account that has never played Voidbreak all land on the same
-     honest empty state rather than an error.
-     ================================================================ */
-  const VBP = {
-    shards: 0,          // spendable Void Shards (earned - spent)
-    galaxyId: 1,
-    galaxyName: '',
-    shipParts: 0,       // total recovered ship components
-    discovered: 0, discoverable: 0,
-    cleared: 0, clearable: 0,
-    galaxiesCleared: 0, galaxyTotal: 0,
-    title: '',          // equipped Voidbreak title, if any
-    prestige: 0,
-    loaded: false
-  };
-
-  // The universe content module, if it loaded. Every caller guards on
-  // this, so a failed/blocked fetch of voidbreakUniverse.js costs two
-  // labels and nothing else.
-  function vbUni(){ return (typeof window !== 'undefined' && window.VBUniverse) ? window.VBUniverse : null; }
-
-  // Ship designation from the ship's REAL part count -- every hull
-  // plate, engine, weapon mount, emitter, cell, scanner and cargo bay
-  // recovered from a first clear, added up. One mark per four
-  // components, so the name is a readout of how much of the ship has
-  // actually been rebuilt rather than a decorative string.
-  const VB_SHIP_MARKS = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'];
-  const VB_PARTS_PER_MARK = 4;
-  function vbShipName(parts){
-    const mark = VB_SHIP_MARKS[Math.min(VB_SHIP_MARKS.length - 1,
-      Math.floor((parts || 0) / VB_PARTS_PER_MARK))];
-    return 'VOID RUNNER MK-' + mark;
-  }
-  // Total recovered ship components. shipPower() returns the per-system
-  // levels; shipLevel() takes a system id, which is why this sums the
-  // former rather than calling the latter with none.
-  function vbShipParts(uni){
-    const U = vbUni();
-    if(!U || !U.shipPower) return 0;
-    const power = U.shipPower(uni || {});
-    let total = 0;
-    for(const k in power){
-      if(typeof power[k] === 'number') total += power[k];
-    }
-    return total;
-  }
-
-  // Reads a /voidbreak/state response into VBP. Pure; no network, no
-  // writes. `endgame` is the server's own resolved view of the Voidbreak
-  // cosmetic catalog -- the only place the DISPLAY NAME of an equipped
-  // title lives, since that catalog is defined server-side in
-  // voidbreak.js. Reading it here rather than mirroring the catalog is
-  // what keeps a title the shell shows and a title Voidbreak shows the
-  // same string forever.
-  function vbAbsorbSave(data, endgame){
-    const U = vbUni();
-    VBP.loaded = true;
-    VBP.title = '';
-    VBP.prestige = (endgame && endgame.prestige && endgame.prestige.level) || 0;
-    if(endgame && Array.isArray(endgame.items)){
-      const t = endgame.items.find(it => it.cat === 'title' && it.equipped);
-      if(t && t.name) VBP.title = t.name;
-    }
-    if(!data){
-      VBP.shards = 0; VBP.galaxyId = 1; VBP.shipParts = 0;
-      VBP.discovered = 0; VBP.cleared = 0; VBP.galaxiesCleared = 0;
-    } else {
-      VBP.shards = Math.max(0, (data.shards || 0) - (data.shardsSpent || 0));
-      const uni = data.universe || {};
-      VBP.galaxyId = uni.galaxy || 1;
-      VBP.shipParts = vbShipParts(uni);
-      VBP.discovered = 0;
-      const disc = uni.discovered || {};
-      for(const k in disc){
-        if(Object.prototype.hasOwnProperty.call(disc, k) && Array.isArray(disc[k])) VBP.discovered += disc[k].length;
-      }
-      VBP.cleared = (U && U.totalCleared) ? U.totalCleared(uni) : 0;
-      VBP.galaxiesCleared = (U && U.galaxiesCleared) ? U.galaxiesCleared(uni) : 0;
-    }
-    // Totals come from the content file, never from the save -- so a
-    // galaxy added to voidbreakUniverse.js resizes these fractions with
-    // no edit here.
-    if(U && U.GALAXIES){
-      VBP.galaxyTotal = U.GALAXIES.length;
-      const g = U.galaxyById ? U.galaxyById(VBP.galaxyId) : null;
-      VBP.galaxyName = g ? g.name : '';
-      let sites = 0, systems = 0;
-      U.GALAXIES.forEach(gx => {
-        (gx.systems || []).forEach(sys => {
-          systems++;
-          sites += (sys.discoveries || []).length;
-        });
-      });
-      VBP.discoverable = sites;
-      VBP.clearable = systems;
-    }
-    renderVoidbreakProfile();
-  }
-
-  function renderVoidbreakProfile(){
-    const setTxt = (id, val)=>{ const el = lobbyEl(id); if(el) el.textContent = val; };
-    const known = VBP.loaded && VBP.galaxyTotal > 0;
-
-    setTxt('lobbyShards', VBP.shards.toLocaleString());
-    setTxt('lobbyShardsStat', VBP.shards.toLocaleString());
-    setTxt('lobbyGalaxy', known && VBP.galaxyName ? VBP.galaxyName : '\u2014');
-    setTxt('lobbyShip', VBP.loaded ? vbShipName(VBP.shipParts) : '\u2014');
-
-    const pct = VBP.discoverable > 0
-      ? Math.round((VBP.discovered / VBP.discoverable) * 100) : 0;
-    setTxt('discPct', pct + '%');
-    const arc = lobbyEl('discArc');
-    if(arc){
-      // r=27 -> circumference 169.6. Drawn as a dash of the covered
-      // fraction followed by a gap big enough to never wrap.
-      const C = 2 * Math.PI * 27;
-      arc.setAttribute('stroke-dasharray', ((pct / 100) * C).toFixed(1) + ' 999');
-    }
-    const frac = (a, b) => a.toLocaleString() + ' / ' + b.toLocaleString();
-    setTxt('discPlanets', frac(VBP.discovered, VBP.discoverable));
-    setTxt('discSystems', frac(VBP.cleared, VBP.clearable));
-    setTxt('footPlanets', frac(VBP.discovered, VBP.discoverable));
-    setTxt('footSystems', frac(VBP.cleared, VBP.clearable));
-    setTxt('footGalaxy', VBP.galaxyId + ' / ' + (VBP.galaxyTotal || 1));
-    const gf = lobbyEl('footGalaxyFill');
-    if(gf) gf.style.width = (VBP.galaxyTotal > 0 ? (VBP.galaxiesCleared / VBP.galaxyTotal) * 100 : 0) + '%';
-
-    const sub = lobbyEl('lobbyJourneySub');
-    if(sub){
-      sub.textContent = (known && VBP.galaxyName)
-        ? ('CONTINUE IN ' + VBP.galaxyName)
-        : 'EXPLORE \u00b7 DISCOVER \u00b7 GROW';
-    }
-  }
-
-  // Pulls the Voidbreak save. Called at boot, on sign-in/out, and every
-  // time the player comes back out of Voidbreak (where the numbers will
-  // usually have changed). Never throws into the caller.
-  function syncVoidbreakProfile(){
-    const url = ACCOUNT_SERVER_URL + '/voidbreak/state'
-      + (loggedIn && sessionToken ? '?sessionToken=' + encodeURIComponent(sessionToken) : '');
-    fetch(url)
-      .then(r => r.ok ? r.json() : null)
-      .then(j => { vbAbsorbSave(j && j.data ? j.data : null, j && j.endgame ? j.endgame : null); })
-      .catch(() => { vbAbsorbSave(null, null); });
-  }
-
-  // The arena-location picker on the VOIDBREAK ARENA screen. It sets a
-  // preference for the modes that have nobody to agree with (local / vs
-  // computer) -- a networked match always derives its location from the
-  // shared match id instead, which the note under the row says out loud
-  // rather than letting a player think their pick was ignored.
-  function renderArenaLocations(){
-    const wrap = lobbyEl('vaLocations');
-    if(!wrap) return;
-    wrap.innerHTML = '';
-    const mk = (id, name, sub, color)=>{
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'va-loc' + (arenaLocPref === id ? ' sel' : '');
-      b.style.color = color;
-      b.innerHTML = '<span class="vl-dot"></span>'
-        + '<span class="vl-n">' + name + '</span>'
-        + '<span class="vl-s">' + sub + '</span>';
-      b.addEventListener('click', ()=>{
-        arenaLocPref = id;
-        try{ localStorage.setItem('vb_arena_location', id); }catch(e){}
-        renderArenaLocations();
-        lobbyToast(id === 'auto' ? 'LOCATION: RANDOM' : 'LOCATION: ' + name);
-      });
-      wrap.appendChild(b);
-    };
-    mk('auto', 'RANDOM', 'ANYWHERE', '#9fb8d8');
-    ARENA_LOCATIONS.forEach(l => mk(l.id, l.name, l.sub, l.color));
-    const note = document.createElement('div');
-    note.className = 'micro';
-    note.style.cssText = 'width:100%;text-align:center;margin-top:2px;';
-    note.textContent = 'APPLIES TO LOCAL AND VS COMPUTER \u2014 ONLINE MATCHES PICK A SHARED LOCATION FOR EVERY PILOT';
-    wrap.appendChild(note);
-  }
-
-  // The one routing table for every menu destination. Shared by the
-  // lobby, the Arena screen and the nav bar, so a destination is wired
-  // in exactly one place no matter how many buttons point at it.
-  function lobbyRoute(act){
-    if(act === 'journey')            { launchVoidbreak(); }
-    else if(act === 'galaxy')        { launchVoidbreak('galaxy'); }
-    else if(act === 'planet')        { launchVoidbreak('planet'); }
-    else if(act === 'loadout')       { launchVoidbreak('loadout'); }
-    // The arena's own equip screen: the ability and ship systems a
-    // pilot takes into a duel, which live in the Void Market's own
-    // tabs. Distinct from the campaign's Void Loadout above -- these
-    // two arm different parts of the game and always have.
-    else if(act === 'pilotgear')     { closeVbArena({ silent: true }); openPilotGear(); }
-    else if(act === 'arena')         { openVbArena(); }
-    else if(act === 'play')          { lobbyStartSelectedMode(); }
-    else if(act === 'ranked')        { closeVbArena({ silent: true }); openRankedHub(); }
-    else if(act === 'shop')          { closeVbArena({ silent: true }); lobbyEl('btnShop').click(); }
-    else if(act === 'crystalshop')   { openCrystalShop(); }
-    else if(act === 'battlepass')    { openBattlePass(); }
-    else if(act === 'leaderboards')  { closeVbArena({ silent: true }); lobbyEl('btnLeaderboard').click(); }
-    else if(act === 'settings')      { lobbyEl('btnSettings').click(); }
-    else if(act === 'admin')         { lobbyEl('btnAdmin').click(); }
-    else if(act === 'controls')      { lobbyControlsModal(); }
-    else if(act === 'profile')       { openRankedProfileModal(); }
-    else if(act === 'friends')       { openFriends(); }
-    else if(act === 'mail')          { lobbySoonModal('TRANSMISSIONS', 'THERE IS NO MAIL OR NOTIFICATION SYSTEM YET.'); }
-    else if(act === 'patch')         { lobbyPatchNotesModal(); }
-  }
-
   function initLobby(){
     renderLobbyModes();
-    renderArenaLocations();
     lobbySync();
-    renderVoidbreakProfile();
-    syncVoidbreakProfile();
     refreshLobbyRank();
     renderLobbyFriends();
     fetchDailyChallenges();
@@ -16548,34 +15177,49 @@ if(tutorialActive) tutorialUpdate(dt);
     if(prev) prev.addEventListener('click', ()=> selectLobbyMode(lobbyModeIndex - 1));
     if(next) next.addEventListener('click', ()=> selectLobbyMode(lobbyModeIndex + 1));
 
-    // The two hero buttons share one press-feedback treatment: START
-    // JOURNEY in the lobby, DEPLOY on the Arena screen.
-    const wireHero = (id, onClick)=>{
-      const btn = lobbyEl(id);
-      if(!btn) return;
-      btn.addEventListener('click', onClick);
+    const playBtn = lobbyEl('lobbyPlay');
+    if(playBtn){
+      playBtn.addEventListener('click', lobbyStartSelectedMode);
       // :active alone can be inconsistent across browsers/touch, so the
       // press feedback is also driven explicitly via a class toggle.
-      const press = ()=> btn.classList.add('pressed');
-      const release = ()=> btn.classList.remove('pressed');
-      btn.addEventListener('mousedown', press);
-      btn.addEventListener('touchstart', press, { passive: true });
+      const press = ()=> playBtn.classList.add('pressed');
+      const release = ()=> playBtn.classList.remove('pressed');
+      playBtn.addEventListener('mousedown', press);
+      playBtn.addEventListener('touchstart', press, { passive: true });
       ['mouseup','mouseleave','touchend','touchcancel','blur'].forEach(evt=>{
-        btn.addEventListener(evt, release);
+        playBtn.addEventListener(evt, release);
       });
-    };
-    wireHero('lobbyJourney', ()=> launchVoidbreak());
-    wireHero('arenaPlay', lobbyStartSelectedMode);
+    }
 
-    const backArena = lobbyEl('btnBackVbArena');
-    if(backArena) backArena.addEventListener('click', ()=> closeVbArena());
-
-    // Every [data-act] control routes through lobbyRoute(), on both the
-    // lobby and the Arena screen.
-    document.querySelectorAll('#menuMain [data-act], #menuVbArena [data-act]').forEach(el=>{
+    // Every [data-act] control routes to an existing system, or to a
+    // clearly-labelled placeholder for something not built yet.
+    document.querySelectorAll('#menuMain [data-act]').forEach(el=>{
       el.addEventListener('click', (e)=>{
         e.stopPropagation();
-        lobbyRoute(el.dataset.act);
+        const act = el.dataset.act;
+        if(act === 'play')          { lobbyStartSelectedMode(); }
+        else if(act === 'ranked')   { openRankedHub(); }
+        else if(act === 'modes')    {
+          const cards = lobbyEl('lobbyModeCards');
+          if(cards){
+            cards.animate(
+              [{ transform:'scale(1)' }, { transform:'scale(1.04)' }, { transform:'scale(1)' }],
+              { duration: 420, easing:'ease-out' }
+            );
+          }
+          lobbyToast('PICK A MODE, THEN HIT PLAY');
+        }
+        else if(act === 'shop')         { lobbyEl('btnShop').click(); }
+        else if(act === 'crystalshop')  { openCrystalShop(); }
+        else if(act === 'battlepass')   { openBattlePass(); }
+        else if(act === 'leaderboards') { lobbyEl('btnLeaderboard').click(); }
+        else if(act === 'settings')     { lobbyEl('btnSettings').click(); }
+        else if(act === 'admin')        { lobbyEl('btnAdmin').click(); }
+        else if(act === 'controls')     { lobbyControlsModal(); }
+        else if(act === 'profile')      { openRankedProfileModal(); }
+        else if(act === 'friends')      { openFriends(); }
+        else if(act === 'mail')         { lobbySoonModal('MAIL', 'THERE IS NO MAIL OR NOTIFICATION SYSTEM YET.'); }
+        else if(act === 'patch')        { lobbyPatchNotesModal(); }
       });
     });
 
@@ -16598,33 +15242,19 @@ if(tutorialActive) tutorialUpdate(dt);
       syncAdmin();
     }
 
-    // Menu-only keyboard shortcuts. Guarded on !started so they can
+    // Lobby-only keyboard shortcuts. Guarded on !started so they can
     // never interfere with in-match input.
-    //
-    // The arrow keys drive the mode carousel, which now lives on the
-    // Arena screen -- so they only do anything while that screen is up.
-    // On the lobby, Enter starts the journey; on the Arena screen it
-    // deploys the selected mode, and Escape backs out to the lobby.
     window.addEventListener('keydown', (e)=>{
-      if(started) return;
-      const lobby = lobbyEl('menuMain');
-      const arena = lobbyEl('menuVbArena');
-      const onLobby = lobby && !lobby.classList.contains('hidden');
-      const onArena = arena && !arena.classList.contains('hidden');
-      if(!onLobby && !onArena) return;
+      const menu = lobbyEl('menuMain');
+      if(started || !menu || menu.classList.contains('hidden')) return;
       const modal = lobbyEl('lobbyModal');
       if(modal && !modal.classList.contains('hidden')){
         if(e.key === 'Escape') lobbyCloseModal();
         return;
       }
-      if(onArena){
-        if(e.key === 'ArrowLeft')       { e.preventDefault(); selectLobbyMode(lobbyModeIndex - 1); }
-        else if(e.key === 'ArrowRight') { e.preventDefault(); selectLobbyMode(lobbyModeIndex + 1); }
-        else if(e.key === 'Enter')      { e.preventDefault(); lobbyStartSelectedMode(); }
-        else if(e.key === 'Escape')     { e.preventDefault(); closeVbArena(); }
-        return;
-      }
-      if(e.key === 'Enter'){ e.preventDefault(); launchVoidbreak(); }
+      if(e.key === 'ArrowLeft')  { e.preventDefault(); selectLobbyMode(lobbyModeIndex - 1); }
+      else if(e.key === 'ArrowRight'){ e.preventDefault(); selectLobbyMode(lobbyModeIndex + 1); }
+      else if(e.key === 'Enter') { e.preventDefault(); lobbyStartSelectedMode(); }
     });
   }
 
@@ -17155,7 +15785,7 @@ if(tutorialActive) tutorialUpdate(dt);
   const menuFriendProfile = frEl('menuFriendProfile');
 
   const PRESENCE_LABEL = {
-    online: 'ONLINE', inMatch: 'IN THE ARENA', voidbreak: 'ON AN EXPEDITION', offline: 'OFFLINE'
+    online: 'ONLINE', inMatch: 'IN MATCH', voidbreak: 'IN VOIDBREAK', offline: 'OFFLINE'
   };
 
   function frEscape(s){
@@ -17328,7 +15958,7 @@ if(tutorialActive) tutorialUpdate(dt);
     empty.className = 'chat-empty';
     empty.textContent = loggedIn
       ? 'NO MESSAGES YET \u2014 SAY HELLO'
-      : 'SIGN IN TO JOIN FLEET COMMS';
+      : 'SIGN IN TO JOIN THE LOBBY CHAT';
     log.appendChild(empty);
   }
 
@@ -18012,163 +16642,39 @@ if(tutorialActive) tutorialUpdate(dt);
   // ---- PROFILE MODAL ---------------------------------------------
   // Reuses the existing lobby modal rather than adding another screen.
   // Shows the account's normal progression AND its ranked section.
-  // ================================================================
-  // COMMANDER PROFILE
-  // ----------------------------------------------------------------
-  // One screen for who the player is across the whole game: the
-  // commander (level, galaxy, ship, discovery), the arena (ranked
-  // standing, records), and LEGACY -- everything they earned back when
-  // this was Duel Arena.
-  //
-  // NOTHING here migrates, rewrites or deletes any stored data. Every
-  // number is read from state the account already had: `coins`,
-  // `crystals`, `stats`, the owned-cosmetic Sets loaded by
-  // applyAccount(), /ranked/me, and the Voidbreak save mirror (VBP).
-  // That is the whole migration story for old players -- their record
-  // was never in a format that needed converting, so the safest
-  // "migration" is the one that reads it where it already lives.
-  // ================================================================
-
-  // An OG is any account that played the game before it became
-  // Voidbreak. There is no flag for that on the record and inventing
-  // one retroactively would be a lie, so it is inferred from evidence
-  // that can only have come from arena play: a match record, or a
-  // cosmetic that is no longer obtainable the same way.
-  function legacyIsOG(){
-    return (stats.kills > 0) || (stats.wins > 0)
-        || ownedPowers.size > 0 || ownedAbilities.size > 0
-        || ownedSkins.size > 2;   // 'cyan' and 'red' are granted to everyone
-  }
-
-  function legacyOwnedNames(set, table){
-    const names = [];
-    set.forEach(id => {
-      const def = table ? table.find(x => x.id === id) : null;
-      names.push(def && def.name ? def.name : String(id).toUpperCase());
-    });
-    return names.sort();
-  }
-
-  function legacyChips(names){
-    if(!names.length) return '<div class="rl-empty" style="padding:8px">NONE</div>';
-    return '<div class="lg-chips">'
-      + names.map(n => '<span class="lg-chip">' + escapeHtmlRk(n) + '</span>').join('')
-      + '</div>';
-  }
-
-  // The Legacy block. Shown to everyone -- an account with nothing in it
-  // reads as "nothing yet" rather than being hidden, because a player
-  // who DID have progress needs to be able to find this without
-  // guessing whether it exists.
-  function renderLegacyBlock(){
-    const og = legacyIsOG();
-    let html = '<div class="rk-season" style="margin:16px 0 8px">LEGACY</div>';
-
-    html += '<div class="lg-banner' + (og ? ' og' : '') + '">'
-      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'
-      + '<path d="M7 3h10v5a5 5 0 0 1-10 0z"/><path d="M7 4H4v1a3.5 3.5 0 0 0 3 3.4"/>'
-      + '<path d="M17 4h3v1a3.5 3.5 0 0 1-3 3.4"/><path d="M9.5 14h5M8 21h8M12 14v7"/></svg>'
-      + '<div class="lg-b-text">'
-      + '<b>' + (og ? 'OG DUEL ARENA PILOT' : 'NO LEGACY RECORD YET') + '</b>'
-      + '<span>' + (og
-          ? 'YOU FLEW BEFORE THE VOID OPENED. EVERYTHING YOU EARNED IS STILL YOURS.'
-          : 'ARENA PROGRESS EARNED FROM HERE ON IS RECORDED IN THIS SECTION.')
-      + '</span></div></div>';
-
-    html += '<div class="rr-grid">'
-      + '<div class="rr-row"><span>ARENA ELIMINATIONS</span><b>' + stats.kills.toLocaleString() + '</b></div>'
-      + '<div class="rr-row"><span>ARENA WINS</span><b>' + stats.wins.toLocaleString() + '</b></div>'
-      + '<div class="rr-row"><span>COINS</span><b>' + coins.toLocaleString() + '</b></div>'
-      + '<div class="rr-row"><span>CRYSTALS</span><b>' + crystals.toLocaleString() + '</b></div>'
-      + '</div>';
-
-    html += '<div class="lg-sec">SHIP SKINS &middot; ' + ownedSkins.size + '</div>'
-      + legacyChips(legacyOwnedNames(ownedSkins, SKINS));
-    html += '<div class="lg-sec">ABILITIES &middot; ' + ownedAbilities.size + '</div>'
-      + legacyChips(legacyOwnedNames(ownedAbilities, ABILITIES));
-    html += '<div class="lg-sec">SYSTEMS &middot; ' + ownedPowers.size + '</div>'
-      + legacyChips(legacyOwnedNames(ownedPowers, POWERS));
-
-    const collectibles = ownedBadges.size + ownedBanners.size
-      + ownedPlayerIcons.size + ownedEmotes.size + ownedKillEffects.size
-      + ownedAbilityCosmetics.size;
-    if(collectibles > 0){
-      html += '<div class="lg-sec">BATTLE PASS COLLECTIBLES &middot; ' + collectibles + '</div>'
-        + '<div class="rr-grid">'
-        + '<div class="rr-row"><span>BADGES</span><b>' + ownedBadges.size + '</b></div>'
-        + '<div class="rr-row"><span>BANNERS</span><b>' + ownedBanners.size + '</b></div>'
-        + '<div class="rr-row"><span>PLAYER ICONS</span><b>' + ownedPlayerIcons.size + '</b></div>'
-        + '<div class="rr-row"><span>EMOTES</span><b>' + ownedEmotes.size + '</b></div>'
-        + '<div class="rr-row"><span>KILL EFFECTS</span><b>' + ownedKillEffects.size + '</b></div>'
-        + '<div class="rr-row"><span>ABILITY SKINS</span><b>' + ownedAbilityCosmetics.size + '</b></div>'
-        + '</div>';
-    }
-
-    html += '<div class="lg-note">NOTHING IN THIS SECTION WAS RESET, CONVERTED OR SPENT BY THE MOVE '
-      + 'TO VOIDBREAK. IT IS THE SAME RECORD, READ FROM THE SAME PLACE.</div>';
-    return html;
-  }
-
-  // Commander header: who you are, where you are, what you fly. Reads
-  // the Voidbreak mirror (VBP), which may legitimately be empty for an
-  // account that has never launched an expedition.
-  function renderCommanderBlock(){
-    const disc = VBP.discoverable > 0
-      ? Math.round((VBP.discovered / VBP.discoverable) * 100) : 0;
-    return '<div class="cmd-card">'
-      + '<div class="cmd-card-tag">COMMANDER'
-        + (VBP.prestige > 0 ? ' \u00b7 PRESTIGE ' + VBP.prestige : '') + '</div>'
-      + '<div class="cmd-card-name">' + escapeHtmlRk(accountName || 'GUEST') + '</div>'
-      + (VBP.title ? '<div class="cmd-card-title">' + escapeHtmlRk(VBP.title) + '</div>' : '')
-      + '<div class="cmd-card-rows">'
-      + '<div><span>GALAXY</span><b>' + escapeHtmlRk(VBP.galaxyName || '—') + '</b></div>'
-      + '<div><span>SHIP</span><b>' + (VBP.loaded ? vbShipName(VBP.shipParts) : '—') + '</b></div>'
-      + '</div></div>'
-      + '<div class="rr-grid">'
-      + '<div class="rr-row"><span>VOID SHARDS</span><b>' + VBP.shards.toLocaleString() + '</b></div>'
-      + '<div class="rr-row"><span>GALAXIES CLEARED</span><b>'
-        + VBP.galaxiesCleared + ' / ' + (VBP.galaxyTotal || '—') + '</b></div>'
-      + '<div class="rr-row"><span>SYSTEMS CLEARED</span><b>'
-        + VBP.cleared + ' / ' + (VBP.clearable || '—') + '</b></div>'
-      + '<div class="rr-row"><span>SITES DISCOVERED</span><b>'
-        + VBP.discovered + ' / ' + (VBP.discoverable || '—') + ' (' + disc + '%)</b></div>'
-      + '</div>';
-  }
-
   async function openRankedProfileModal(){
     if(!loggedIn){
-      lobbyOpenModal('COMMANDER',
-        '<div class="rl-empty">SIGN IN TO VIEW YOUR COMMANDER PROFILE.<br>'
+      lobbyOpenModal('PROFILE',
+        '<div class="rl-empty">SIGN IN WITH GOOGLE TO VIEW YOUR PROFILE.<br>'
         + 'GUEST PROGRESS IS NOT SAVED.</div>');
       return;
     }
-    lobbyOpenModal('COMMANDER', '<div class="rl-empty">LOADING...</div>');
-
-    // Both reads in parallel -- the ranked record and a fresh pull of the
-    // Voidbreak save, so the galaxy/ship/discovery lines are current
-    // rather than whatever the lobby last cached.
+    lobbyOpenModal('PROFILE', '<div class="rl-empty">LOADING...</div>');
     let data = null;
-    const ranked = fetch(ACCOUNT_SERVER_URL + '/ranked/me?sessionToken=' + encodeURIComponent(sessionToken))
-      .then(res => res.ok ? res.json() : null)
-      .catch(() => null);
-    try{ syncVoidbreakProfile(); }catch(e){}
-    data = await ranked;
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/ranked/me?sessionToken=' + encodeURIComponent(sessionToken));
+      if(res.ok) data = await res.json();
+    } catch(e){ /* fall through to the offline view below */ }
 
     let html = renderXPBlock()
-      + '<div class="rr-grid">' + renderUsernameRow() + '</div>'
-      + renderCommanderBlock();
+      + '<div class="rr-grid">'
+      + renderUsernameRow()
+      + '<div class="rr-row"><span>COINS</span><b>' + coins.toLocaleString() + '</b></div>'
+      + '<div class="rr-row"><span>CRYSTALS</span><b>' + crystals.toLocaleString() + '</b></div>'
+      + '<div class="rr-row"><span>KILLS</span><b>' + stats.kills + '</b></div>'
+      + '<div class="rr-row"><span>WINS</span><b>' + stats.wins + '</b></div>'
+      + '</div>';
 
     if(!data){
-      html += '<div class="rl-empty">ARENA STATS UNAVAILABLE — SERVER OFFLINE</div>'
-        + renderLegacyBlock();
-      lobbyOpenModal('COMMANDER', html);
+      html += '<div class="rl-empty">RANKED STATS UNAVAILABLE — SERVER OFFLINE</div>';
+      lobbyOpenModal('PROFILE', html);
       wireUsernameEditor();
       return;
     }
 
     const r = data.ranked;
-    html += '<div class="rk-season" style="margin:16px 0 8px">'
-      + ((data.config && data.config.seasonName) || 'SEASON').toUpperCase() + ' · VOIDBREAK ARENA</div>';
+    html += '<div class="rk-season" style="margin:14px 0 8px">'
+      + ((data.config && data.config.seasonName) || 'SEASON').toUpperCase() + ' · RANKED</div>';
 
     html += '<div style="text-align:center;margin-bottom:10px">'
       + '<div style="font-size:22px;font-weight:900;letter-spacing:2px;color:'
@@ -18195,9 +16701,7 @@ if(tutorialActive) tutorialUpdate(dt);
         + '</div>';
     }
 
-    html += renderLegacyBlock();
-
-    lobbyOpenModal('COMMANDER', html);
+    lobbyOpenModal('PROFILE', html);
     wireUsernameEditor();
   }
 

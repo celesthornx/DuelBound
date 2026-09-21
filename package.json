@@ -1,10 +1,10 @@
 {
-  "name": "voidbreak",
+  "name": "duelarenaonline",
   "version": "1.0.0",
-  "description": "VOIDBREAK -- a galaxy exploration adventure, with PvP combat as one part of the universe.",
+  "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node test/voidbreakSave.test.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js"
   },
   "keywords": [],
