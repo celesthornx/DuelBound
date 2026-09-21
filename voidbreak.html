@@ -83,21 +83,6 @@ body.ingame #cv{cursor:none}
 #dashLabel{font-family:'Orbitron';font-size:10px;letter-spacing:3px;color:#5f8fa0}
 #dashUI.ready #dashLabel{color:#fff;text-shadow:0 0 10px var(--cy)}
 #dashUI.ready #dashFill{box-shadow:0 0 14px var(--cy)}
-#gearUI{display:flex;gap:8px;margin-top:6px}
-.gear-chip{position:relative;display:flex;align-items:center;gap:7px;padding:4px 10px;
-  background:rgba(8,12,26,.72);border:1px solid rgba(0,240,255,.22);
-  transform:skewX(-16deg);overflow:hidden}
-.gear-chip.hide{display:none}
-.gear-chip>b,.gear-chip>span{transform:skewX(16deg)}
-.gear-chip>b{font-family:'Orbitron';font-size:9px;letter-spacing:2px;color:#4e7d8e}
-.gear-chip>span{font-family:'Orbitron';font-size:10px;letter-spacing:2px;color:#7fa7b8}
-.gear-chip>i{position:absolute;left:0;top:0;bottom:0;width:100%;
-  background:rgba(4,8,18,.78);transform-origin:right;pointer-events:none}
-.gear-chip.ready{border-color:rgba(0,240,255,.7)}
-.gear-chip.ready>span{color:#eafcff;text-shadow:0 0 10px var(--cy)}
-.gear-chip.ready>b{color:var(--cy)}
-.gear-chip.active{border-color:rgba(255,206,84,.8);box-shadow:0 0 14px rgba(255,206,84,.3)}
-.gear-chip.active>span{color:#ffe7a8;text-shadow:0 0 10px rgba(255,206,84,.7)}
 #weaponUI{display:flex;align-items:center;gap:12px;background:rgba(8,12,26,.7);border:1px solid rgba(0,240,255,.25);
   padding:8px 16px 8px 12px;clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,0 100%)}
 #weaponIcon{width:34px;height:34px;color:var(--cy);filter:drop-shadow(0 0 8px rgba(0,240,255,.6))}
@@ -206,21 +191,6 @@ input[type=range]{width:180px;accent-color:var(--cy)}
 .wconfirm{display:none;margin-top:8px;font-family:'Orbitron';font-size:9px;letter-spacing:1.5px;color:var(--gn);
   border:1px solid rgba(56,255,156,.5);padding:4px 2px;text-align:center;background:rgba(56,255,156,.08)}
 .wcard.armed .wconfirm{display:block}
-/* Void Loadout screen */
-.lo-panel{max-height:88vh;overflow-y:auto}
-.lo-tabs{display:flex;gap:8px;justify-content:center;margin:2px 0 10px;flex-wrap:wrap}
-.lo-tab{font-family:'Orbitron';font-size:11px;letter-spacing:2px;padding:8px 16px;cursor:pointer;
-  background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.14);color:#8fb0c0;transition:all .15s}
-.lo-tab:hover{border-color:rgba(0,240,255,.5);color:#dff8ff}
-.lo-tab.on{border-color:var(--cy);color:#eafcff;background:rgba(0,240,255,.09);box-shadow:0 0 18px rgba(0,240,255,.16)}
-.lo-tab em{display:block;font-style:normal;font-size:9px;letter-spacing:1.4px;color:#5f8fa0;margin-top:3px}
-.lo-tab.on em{color:var(--cy)}
-.lo-slotline{text-align:center;font-size:12px;letter-spacing:1.4px;color:#7fa7b8;margin-bottom:12px;line-height:1.5}
-.wcard.equipped{border-color:var(--gn);background:rgba(56,255,156,.07);box-shadow:0 0 22px rgba(56,255,156,.2)}
-.wcard .wreq{font-family:'Orbitron';font-size:9px;letter-spacing:1.2px;color:var(--gold);margin-top:6px;line-height:1.5}
-.wcard .wmast{font-family:'Orbitron';font-size:9px;letter-spacing:1.2px;color:var(--vi,#a05cff);margin-top:6px}
-.wcard .wequip{display:none;margin-top:8px;font-family:'Orbitron';font-size:9px;letter-spacing:1.5px;color:var(--gn)}
-.wcard.equipped .wequip{display:block}
 .ws-foot{display:flex;align-items:center;gap:14px;margin-top:16px;flex-wrap:wrap}
 #wsInfo{flex:1;font-size:12.5px;letter-spacing:1.5px;color:#7ea4b5;min-width:240px}
 #wsInfo b{color:#dff8ff;font-family:'Orbitron';font-size:11px}
@@ -453,21 +423,6 @@ input[type=range]{width:180px;accent-color:var(--cy)}
 #touchDashBtn.ready{box-shadow:0 0 16px rgba(0,240,255,.55)}
 #touchDashBtn.ready::before{background:none}
 #touchDashBtn.pressed{background:rgba(0,240,255,.22)}
-.touch-gear{position:absolute;pointer-events:auto;touch-action:none;z-index:16;
-  width:calc(var(--action-size) * .84);height:calc(var(--action-size) * .84);border-radius:50%;
-  display:flex;align-items:center;justify-content:center;
-  font-family:'Orbitron';font-weight:700;font-size:9px;letter-spacing:1px;color:var(--vi,#a05cff);
-  background:rgba(8,12,26,.55);border:2px solid rgba(160,92,255,.45);
-  box-shadow:0 0 10px rgba(160,92,255,.2)}
-.touch-gear.hide{display:none}
-.touch-gear.ready{box-shadow:0 0 16px rgba(160,92,255,.55);border-color:rgba(160,92,255,.85)}
-.touch-gear.pressed{background:rgba(160,92,255,.22)}
-#touchSecBtn{
-  right:calc(env(safe-area-inset-right,0px) + var(--dash-anchor-x) + var(--action-size) * .72);
-  bottom:calc(env(safe-area-inset-bottom,0px) + var(--dash-anchor-y) - var(--action-size) * .1)}
-#touchAbBtn{
-  right:calc(env(safe-area-inset-right,0px) + var(--dash-anchor-x) - var(--action-size) * .42);
-  bottom:calc(env(safe-area-inset-bottom,0px) + var(--dash-anchor-y) + var(--action-size) * .74)}
 
 /* ---- responsive: small/short viewports (phones, and tablets in
    portrait) -- shrink HUD/menu chrome so nothing overlaps the touch
@@ -777,13 +732,6 @@ input[type=range]{width:180px;accent-color:var(--cy)}
   <div class="joy-zone joy-move" id="joyMoveZone"><div class="joy-base" id="joyMoveBase"><div class="joy-knob"></div></div></div>
   <div class="joy-zone joy-aim" id="joyAimZone"><div class="joy-base" id="joyAimBase"><div class="joy-knob"></div></div></div>
   <button type="button" id="touchDashBtn">DASH</button>
-  <!-- Void Loadout on touch. Same one-frame `pressed` flag the dash
-       button sets, so both slots flow through the exact same
-       useSecondary()/useAbility() path the keyboard uses -- there is no
-       second input path to keep in sync. Each hides itself when its
-       slot is empty (see updateTouchGearButtons). -->
-  <button type="button" id="touchSecBtn" class="touch-gear">SYS</button>
-  <button type="button" id="touchAbBtn" class="touch-gear">ABL</button>
 </div>
 <div class="rotate-gate hidden" id="rotateGate">
   <div class="rotate-icon">⟲</div>
@@ -812,13 +760,6 @@ input[type=range]{width:180px;accent-color:var(--cy)}
       <div class="barwrap hp"><div id="hpFill"></div><div id="hpText">100 / 100</div></div>
       <div class="barwrap en"><div id="enFill"></div></div>
       <div id="dashUI"><div id="dashBar"><div id="dashFill"></div></div><span id="dashLabel">DASH [SPACE]</span></div>
-      <!-- Void Loadout: the equipped secondary and ability, with their
-           live cooldowns. Hidden entirely when a slot is empty, so a
-           player running nothing there sees no dead UI. -->
-      <div id="gearUI">
-        <div class="gear-chip" id="gearSec"><b></b><span></span><i></i></div>
-        <div class="gear-chip" id="gearAb"><b></b><span></span><i></i></div>
-      </div>
     </div>
     <div id="weaponUI">
       <div id="weaponIcon"></div>
@@ -844,7 +785,6 @@ input[type=range]{width:180px;accent-color:var(--cy)}
     </div>
     <div class="diff-hint" id="diffHint">NORMAL SELECTED</div>
     <button class="btn primary" id="btnCoop">ONLINE CO-OP</button>
-    <button class="btn" id="btnLoadout">VOID LOADOUT</button>
     <button class="btn" id="btnForge">VOID FORGE</button>
     <div class="endgame-row">
       <button type="button" class="btn endgame-btn" id="btnShop">SHOP</button>
@@ -1083,19 +1023,7 @@ input[type=range]{width:180px;accent-color:var(--cy)}
     <div class="krow"><span class="key">W A S D</span>Move</div>
     <div class="krow"><span class="key">MOUSE</span>Aim · <b>LEFT CLICK / HOLD</b> to fire</div>
     <div class="krow"><span class="key">SPACE</span>Dash (costs energy, brief invulnerability)</div>
-    <div class="krow"><span class="key">Q</span>Secondary system (costs energy)</div>
-    <div class="krow"><span class="key">E</span>Ability (costs energy)</div>
     <div class="krow"><span class="key">ESC / P</span>Pause</div>
-  </div>
-  <div class="howto-sec"><h3>YOUR VOID LOADOUT</h3>
-    <div class="tdesc">Three slots, chosen once on the <b>VOID LOADOUT</b> screen and carried into
-    every expedition until you change them. You are never asked to pick a weapon again on the way
-    into a run.</div>
-    <div class="trow"><span class="tname" style="color:var(--cy)">PRIMARY</span><span class="tdesc">Your weapon. Unlocked in the VOID FORGE or dropped by guardians. Mastery levels show on the card.</span></div>
-    <div class="trow"><span class="tname" style="color:var(--pu)">SECONDARY</span><span class="tdesc">A system on <b>Q</b> — missiles, a combat drone, or a barrier. Earned by clearing solar systems.</span></div>
-    <div class="trow"><span class="tname" style="color:var(--gold)">ABILITY</span><span class="tdesc">A power on <b>E</b> — overdrive, a hunter's mark, or a phase blink. Also earned by exploring.</span></div>
-    <div class="tdesc">Both slots spend the same energy the dash spends, so a fight is a choice between
-    getting out and hitting back.</div>
   </div>
   <div class="howto-sec"><h3>PROGRESSION</h3>
     <div class="tdesc">Each solar system is a chain of 10 sectors ending in a guardian boss.<br>
@@ -1189,20 +1117,13 @@ input[type=range]{width:180px;accent-color:var(--cy)}
   <div class="ovnav"><button class="btn" id="forgeBack">BACK</button></div>
 </div></div>
 
-<!-- VOID LOADOUT -- three slots, chosen once and kept. This replaces
-     the old "pick a weapon before every run" screen: the same weapon
-     grid is here, but it is a permanent equip rather than a gate in
-     front of every launch. -->
-<div class="overlay" id="ov-weapons"><div class="panel lo-panel" style="width:880px">
-  <h2 class="ovtitle">VOID LOADOUT</h2>
-  <div class="ovsub" id="wsSub">EQUIPPED FOR EVERY EXPEDITION UNTIL YOU CHANGE IT</div>
-  <div class="lo-tabs" id="loTabs"></div>
-  <div class="lo-slotline" id="loSlotLine"></div>
+<div class="overlay" id="ov-weapons"><div class="panel" style="width:800px">
+  <h2 class="ovtitle">LOADOUT</h2><div class="ovsub" id="wsSub">SELECT YOUR STARTING WEAPON</div>
   <div class="wgrid" id="wsGrid"></div>
   <div class="ws-foot">
     <div id="wsInfo"></div>
     <button class="btn" id="wsBack">BACK</button>
-    <button class="btn primary" id="wsStart">LAUNCH</button>
+    <button class="btn primary" id="wsStart">START RUN</button>
   </div>
 </div></div>
 
@@ -1231,7 +1152,7 @@ input[type=range]{width:180px;accent-color:var(--cy)}
   <div class="ovsub" style="color:#e2849b">THE VOID CONSUMES YOU</div>
   <div class="endstats" id="goStats"></div>
   <div class="endshards" id="goShards"></div>
-  <div class="ovnav"><button class="btn" id="goMenu">MAIN MENU</button><button class="btn" id="goLoadout">LOADOUT</button><button class="btn" id="goForge">FORGE</button><button class="btn primary" id="goAgain">PLAY AGAIN</button></div>
+  <div class="ovnav"><button class="btn" id="goMenu">MAIN MENU</button><button class="btn" id="goForge">FORGE</button><button class="btn primary" id="goAgain">PLAY AGAIN</button></div>
 </div></div>
 
 <div class="overlay" id="ov-victory"><div class="panel" style="width:480px">
@@ -1240,7 +1161,7 @@ input[type=range]{width:180px;accent-color:var(--cy)}
   <div class="vicunlock" id="vicUnlock"></div>
   <div class="endstats" id="vicStats"></div>
   <div class="endshards" id="vicShards"></div>
-  <div class="ovnav"><button class="btn" id="vicMenu">MAIN MENU</button><button class="btn" id="vicLoadout">LOADOUT</button><button class="btn" id="vicForge">FORGE</button><button class="btn primary" id="vicAgain">PLAY AGAIN</button></div>
+  <div class="ovnav"><button class="btn" id="vicMenu">MAIN MENU</button><button class="btn" id="vicForge">FORGE</button><button class="btn primary" id="vicAgain">PLAY AGAIN</button></div>
 </div></div>
 
 <!-- The shared universe content layer (galaxies, solar systems,
@@ -1311,12 +1232,6 @@ const ACCOUNT_CACHE_PREFIX='voidbreak_cloud_v1_';
 const DEF_SAVE={shards:0,forge:{vit:0,pow:0,swift:0,core:0,drive:0,edge:0},
   weapons:{pulse:true,scatter:false,rail:false,plasma:false,voidb:false,voidc:false},
   lastWeapon:'pulse',lastDifficulty:'normal',runs:0,best:0,kills:0,beaten:{},
-  // VOID LOADOUT -- mirrors voidbreak.js's DEF_SAVE.loadout. A
-  // preference, not progression: it says which of the options this
-  // account has ALREADY earned is equipped. What it is allowed to
-  // name is gated by universe progress at use time (see
-  // gearUnlocked()), so there is no separate ownership list.
-  loadout:{primary:'pulse',secondary:'missile',ability:'overdrive'},
   // Endgame fields -- mirrors voidbreak.js's DEF_SAVE (see its header for
   // the server-owned vs client-reported split). Only `mastery` is
   // written by this file; shardsSpent/shopOwned/equipped/
@@ -1335,112 +1250,6 @@ const DEF_SAVE={shards:0,forge:{vit:0,pow:0,swift:0,core:0,drive:0,edge:0},
   universe:{galaxy:1,systems:{},discovered:{},drive:{},ship:{},coins:0,coinsSpent:0,
     planet:{buildings:{},decorations:{}}},
   settings:{vol:0.8,music:true,sfx:true,shake:true,dmgnum:true}};
-
-/* =================================================================
-   VOID LOADOUT -- SECONDARY SYSTEMS AND ABILITIES
-
-   Voidbreak used to ask which weapon you wanted before EVERY run. That
-   is a question with one answer for most of a playthrough, asked
-   dozens of times. It is now a loadout: three slots, chosen once on
-   the LOADOUT screen, saved with the account, and carried into every
-   expedition, co-op run and arena drop until the player changes it.
-
-   WHAT UNLOCKS THEM. Nothing here is bought. Secondaries and abilities
-   are earned by EXPLORING -- systems cleared and guardians beaten --
-   which is the fantasy the whole game is now built around, and which
-   also means this needed no new currency, no new price list, no new
-   purchase endpoint and no new ownership field for a client to lie
-   about. `req(save)` is asked at render time and again at equip time;
-   an id that is not unlocked simply cannot be selected, and a saved id
-   that somehow is not available falls back to the default (see
-   activeSecondary()/activeAbility()).
-
-   ENERGY. Both slots spend the same energy pool the dash already uses,
-   so the loadout is a real decision during a fight rather than three
-   free buttons: dashing away from a boss costs you the missile salvo
-   you were saving. Nothing here regenerates energy or adds a second
-   resource.
-   ================================================================= */
-const SECONDARIES={
-  none:{id:'none',name:'NONE',short:'EMPTY',icon:'w_pulse',cd:0,energy:0,
-    desc:'No secondary system. The bay stays empty.',
-    req:()=>true,reqText:''},
-  missile:{id:'missile',name:'MISSILE POD',short:'MISSILES',icon:'up_multishot',cd:7,energy:22,
-    desc:'Launches 3 seeking micro-missiles that curve onto the nearest targets and detonate on impact.',
-    req:()=>true,reqText:'AVAILABLE FROM THE START'},
-  drone:{id:'drone',name:'COMBAT DRONE',short:'DRONE',icon:'up_homing',cd:20,energy:34,
-    desc:'Deploys an autonomous drone for 14s. It orbits you and fires on whatever you are fighting.',
-    req:s=>uniSystemsCleared(s)>=3,reqText:'CLEAR 3 SOLAR SYSTEMS'},
-  barrier:{id:'barrier',name:'BARRIER PROJECTOR',short:'BARRIER',icon:'up_dashshield',cd:15,energy:30,
-    desc:'Raises a shield that stops every hit for 3s. Long cooldown -- it is an answer to one attack, not a wall.',
-    req:s=>uniSystemsCleared(s)>=6||!!(s&&s.beaten&&s.beaten[3]),reqText:'CLEAR 6 SYSTEMS, OR BEAT THE SECTOR 3 GUARDIAN'}
-};
-const SECONDARY_KEYS=['none','missile','drone','barrier'];
-
-const VB_ABILITIES={
-  none:{id:'none',name:'NONE',short:'EMPTY',icon:'w_pulse',cd:0,energy:0,
-    desc:'No ability. The slot stays empty.',
-    req:()=>true,reqText:''},
-  overdrive:{id:'overdrive',name:'OVERDRIVE',short:'OVERDRIVE',icon:'up_firerate',cd:18,energy:25,
-    desc:'+45% fire rate and +25% damage for 6s. The straightforward answer to anything with a health bar.',
-    req:()=>true,reqText:'AVAILABLE FROM THE START'},
-  mark:{id:'mark',name:"HUNTER'S MARK",short:'MARK',icon:'up_pierce',cd:12,energy:20,
-    desc:'Marks the largest target near your aim for 8s. Your shots curve toward it and hit 25% harder.',
-    req:s=>uniSystemsCleared(s)>=5,reqText:'CLEAR 5 SOLAR SYSTEMS'},
-  blink:{id:'blink',name:'PHASE BLINK',short:'BLINK',icon:'up_speed',cd:7,energy:26,
-    desc:'Teleport 240 units toward your aim, passing through anything, and land briefly invulnerable.',
-    req:s=>uniSystemsCleared(s)>=10,reqText:'CLEAR 10 SOLAR SYSTEMS'}
-};
-const ABILITY_KEYS=['none','overdrive','mark','blink'];
-
-// How many systems this save has cleared. Reads the universe module
-// when it loaded and falls back to counting the map directly when it
-// did not, so the gates below still work on an offline tab.
-function uniSystemsCleared(s){
-  const u=(s||save||{}).universe;
-  if(!u)return 0;
-  if(UNI_OK&&UNI.totalCleared)return UNI.totalCleared(u);
-  return Object.keys(u.systems||{}).length;
-}
-function gearUnlocked(def){
-  if(!def)return false;
-  try{ return !!def.req(save); }catch(e){ return false; }
-}
-
-// The loadout as it is ACTUALLY applied. Every read of the equipped
-// gear goes through these three, so a save that names something the
-// account cannot use (an older save, a prestige reset, a gate that
-// moved) degrades to the default instead of throwing or handing the
-// player something they did not earn.
-function loadoutOf(){
-  const l=(save&&save.loadout)||{};
-  return{primary:l.primary,secondary:l.secondary,ability:l.ability};
-}
-function activePrimary(){
-  const l=loadoutOf();
-  if(l.primary&&save.weapons[l.primary])return l.primary;
-  if(save.weapons[save.lastWeapon])return save.lastWeapon;
-  return 'pulse';
-}
-function activeSecondary(){
-  const d=SECONDARIES[loadoutOf().secondary];
-  return (d&&gearUnlocked(d))?d:SECONDARIES.missile;
-}
-function activeAbility(){
-  const d=VB_ABILITIES[loadoutOf().ability];
-  return (d&&gearUnlocked(d))?d:VB_ABILITIES.overdrive;
-}
-// Writes one slot and persists. Refuses anything not unlocked/owned,
-// so the UI cannot equip past a gate even if a card is mis-rendered.
-function setLoadout(slot,id){
-  if(!save.loadout)save.loadout=Object.assign({},DEF_SAVE.loadout);
-  if(slot==='primary'){ if(!save.weapons[id])return false; save.loadout.primary=id; save.lastWeapon=id; }
-  else if(slot==='secondary'){ if(!gearUnlocked(SECONDARIES[id]))return false; save.loadout.secondary=id; }
-  else if(slot==='ability'){ if(!gearUnlocked(VB_ABILITIES[id]))return false; save.loadout.ability=id; }
-  else return false;
-  saveGameCloud();
-  return true;
-}
 
 /* ---------- UNIVERSE MODULE ----------
    voidbreakUniverse.js is loaded by the <script> tag above. If that
@@ -1489,24 +1298,6 @@ function normalizeSave(s){
   out.equipped=Object.assign({skin:'',trail:'',hit:'',kill:'',theme:'',title:'',badge:''},out.equipped||{});
   out.equippedWeaponSkins=Object.assign({},out.equippedWeaponSkins||{});
   out.masteryClaimed=Array.isArray(out.masteryClaimed)?out.masteryClaimed.slice():[];
-  // Void Loadout defaults. A save predating the loadout simply has no
-  // `loadout` key, so it lands on the starter kit -- and its old
-  // `lastWeapon` is carried into the primary slot, which is the one
-  // piece of the old per-run weapon choice that was worth keeping: a
-  // returning player's expedition launches with the weapon they last
-  // picked, exactly as it would have before. Unknown ids fall back
-  // rather than being dropped, so a slot is never left empty.
-  {
-    const l=(out.loadout&&typeof out.loadout==='object')?out.loadout:{};
-    const primary=(typeof l.primary==='string'&&out.weapons[l.primary])
-      ? l.primary
-      : (out.weapons[out.lastWeapon]?out.lastWeapon:'pulse');
-    out.loadout={
-      primary:primary,
-      secondary:SECONDARIES[l.secondary]?l.secondary:'missile',
-      ability:VB_ABILITIES[l.ability]?l.ability:'overdrive'};
-    out.lastWeapon=primary;
-  }
   out.prestige={level:Math.max(0,Math.floor(Number((out.prestige||{}).level)||0)),
     history:Array.isArray((out.prestige||{}).history)?out.prestige.history.slice(-50):[]};
   // Legacy migration: saves predating the `beaten` map inferred "you've
@@ -1589,16 +1380,6 @@ function mergeSaveData(a,b){
   const weapons={};for(const k of SAVE_WEAPON_KEYS)weapons[k]=!!(a.weapons[k]||b.weapons[k]);
   const beaten=Object.assign({},a.beaten,b.beaten);
   const lastWeapon=weapons[a.lastWeapon]?a.lastWeapon:(weapons[b.lastWeapon]?b.lastWeapon:'pulse');
-  // Same rule as lastWeapon, one slot at a time (mirrors
-  // voidbreak.js's mergeSaveData): `a` wins as long as it names
-  // something valid, and the primary additionally has to be a
-  // weapon the MERGED weapons map actually owns.
-  const aL=a.loadout||{},bL=b.loadout||{};
-  const pickGear=(x,y,tbl,dflt)=>(tbl[x]?x:(tbl[y]?y:dflt));
-  const loadout={
-    primary:weapons[aL.primary]?aL.primary:(weapons[bL.primary]?bL.primary:lastWeapon),
-    secondary:pickGear(aL.secondary,bL.secondary,SECONDARIES,'missile'),
-    ability:pickGear(aL.ability,bL.ability,VB_ABILITIES,'overdrive')};
   // Endgame fields follow the same never-summed rule (mirrors
   // voidbreak.js's mergeSaveData exactly).
   const mastery={};for(const k of SAVE_WEAPON_KEYS){
@@ -1606,7 +1387,7 @@ function mergeSaveData(a,b){
   const shopOwned=[];for(const id of ((a.shopOwned||[]).concat(b.shopOwned||[])))if(shopOwned.indexOf(id)===-1)shopOwned.push(id);
   const masteryClaimed=[];for(const k of ((a.masteryClaimed||[]).concat(b.masteryClaimed||[])))if(masteryClaimed.indexOf(k)===-1)masteryClaimed.push(k);
   const aP=a.prestige||{},bP=b.prestige||{};
-  return{shards:Math.max(a.shards||0,b.shards||0),forge,weapons,lastWeapon,loadout,
+  return{shards:Math.max(a.shards||0,b.shards||0),forge,weapons,lastWeapon,
     runs:Math.max(a.runs||0,b.runs||0),best:Math.max(a.best||0,b.best||0),
     kills:Math.max(a.kills||0,b.kills||0),beaten,mastery,
     shardsSpent:Math.max(a.shardsSpent||0,b.shardsSpent||0),shopOwned,masteryClaimed,
@@ -1882,7 +1663,6 @@ async function flushCloudSave(){
   // value and refuses with "requirements not met" -- a claim button that
   // can never actually be pressed successfully.
   const payload={shards:save.shards,forge:save.forge,weapons:save.weapons,lastWeapon:save.lastWeapon,
-    loadout:save.loadout,
     runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten,mastery:save.mastery,
     // The client-reported half of the universe. `planet`/`coinsSpent`
     // are deliberately NOT sent -- they are server-owned and the server
@@ -1948,7 +1728,6 @@ async function pushCloudSaveNow(){
   // value and refuses with "requirements not met" -- a claim button that
   // can never actually be pressed successfully.
   const payload={shards:save.shards,forge:save.forge,weapons:save.weapons,lastWeapon:save.lastWeapon,
-    loadout:save.loadout,
     runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten,mastery:save.mastery,
     // The client-reported half of the universe. `planet`/`coinsSpent`
     // are deliberately NOT sent -- they are server-owned and the server
@@ -2532,31 +2311,8 @@ touchDashBtn.addEventListener('touchstart',e=>{
 },{passive:false});
 touchDashBtn.addEventListener('touchend',e=>{touchDashBtn.classList.remove('pressed');e.preventDefault();},{passive:false});
 touchDashBtn.addEventListener('touchcancel',()=>touchDashBtn.classList.remove('pressed'));
-// The two loadout buttons, wired exactly like the dash button above.
-const touchSecBtn=el('touchSecBtn'),touchAbBtn=el('touchAbBtn');
-function wireTouchGear(btn,code){
-  btn.addEventListener('touchstart',e=>{
-    pressed[code]=true;btn.classList.add('pressed');initAudio();e.preventDefault();
-  },{passive:false});
-  btn.addEventListener('touchend',e=>{btn.classList.remove('pressed');e.preventDefault();},{passive:false});
-  btn.addEventListener('touchcancel',()=>btn.classList.remove('pressed'));
-}
-wireTouchGear(touchSecBtn,'KeyQ');
-wireTouchGear(touchAbBtn,'KeyE');
-function updateTouchGearButtons(){
-  if(!isTouchDevice||!player)return;
-  const paint=(btn,def,cd)=>{
-    if(!def||def.id==='none'){btn.classList.add('hide');return;}
-    btn.classList.remove('hide');
-    btn.textContent=cd>0?Math.ceil(cd):def.short.slice(0,4);
-    btn.classList.toggle('ready',cd<=0);
-  };
-  paint(touchSecBtn,activeSecondary(),player.secCd);
-  paint(touchAbBtn,activeAbility(),player.abCd);
-}
 function updateTouchDashButton(){
   if(!isTouchDevice||!player)return;
-  updateTouchGearButtons();
   const ready=player.dashCd<=0;
   touchDashBtn.classList.toggle('ready',ready);
   touchDashBtn.style.setProperty('--cd',ready?0:clamp(1-player.dashCd/player.dashCD,0,1));
@@ -3715,11 +3471,10 @@ function launchSelectedSystem(){
     const meta=UNI.DISCOVERY_KINDS[first.kind]||UNI.DISCOVERY_KINDS.planet;
     showReveal('SURVEY COMPLETE',first.name,meta.label+' · '+first.note,2400);
   }
+  selectedLevel=lv.levelIdx>=0?lv.levelIdx:0;
+  pendingSystem={galaxyId:uniGalaxyId,systemId:sys.id,level:lv};
   SFX.ui();
-  // Straight into the run with the saved loadout. The old flow stopped
-  // here to ask which weapon to bring, every single time; that question
-  // is now answered once on the LOADOUT screen.
-  launchExpedition(lv.levelIdx>=0?lv.levelIdx:0,{galaxyId:uniGalaxyId,systemId:sys.id,level:lv});
+  go('weapons');
 }
 // The system a launch is armed for. Cleared whenever the player backs
 // out to a non-launching screen so a stale destination can never leak
@@ -4418,9 +4173,6 @@ function newPlayer(weapon){
     burnS:0,explodeS:0,lifestealS:0,dashshieldS:0,homingS:0,resonanceS:0,stasisS:0,anchorS:0,
     dashT:0,dashCd:0,dashDur:0.17,dashDir:0,invuln:0,shield:0,dashHits:null,
     dead:false,thrustT:0,ghostT:0,
-    // Void Loadout: the two equipped slots and their live state. Both
-    // cooldowns start at 0 so a run opens with everything available.
-    secCd:0,abCd:0,odT:0,markT:0,markTarget:null,
   };
 }
 function recomputeStats(){
@@ -4449,18 +4201,6 @@ function updatePlayer(dt){
   if(p.dead)return;
   p.fireTimer-=dt;p.invuln-=dt;p.muzzle-=dt;p.shield-=dt;
   if(p.dashCd>0){p.dashCd-=dt;if(p.dashCd<=0){SFX.dashReady();el('dashUI').classList.add('ready');}}
-  // Void Loadout timers. The mark drops the moment its target dies, so
-  // it can never keep curving shots toward a corpse.
-  if(p.secCd>0)p.secCd=Math.max(0,p.secCd-dt);
-  if(p.abCd>0)p.abCd=Math.max(0,p.abCd-dt);
-  if(p.odT>0)p.odT=Math.max(0,p.odT-dt);
-  if(p.markT>0){
-    p.markT=Math.max(0,p.markT-dt);
-    if(!targetAlive(p.markTarget))p.markT=0;
-    if(p.markT<=0)p.markTarget=null;
-  }
-  if(pressed['KeyQ'])useSecondary();
-  if(pressed['KeyE'])useAbility();
   p.energy=Math.min(p.maxenergy,p.energy+p.energyRegen*dt);
   // Touch aim (the right stick) drives facing directly from its drag
   // angle when active; otherwise this is the original mouse-relative-
@@ -4554,11 +4294,7 @@ function updatePlayer(dt){
 }
 function fireWeapon(){
   const p=player,w=WEAPONS[p.weapon];
-  // OVERDRIVE (ability slot) is applied here and nowhere else, as two
-  // multipliers on the numbers this function was already computing --
-  // so it can never drift out of sync with a weapon's real stats.
-  const od=p.odT>0;
-  p.fireTimer=1/(w.rate*p.fireRateMult*(od?1.45:1));
+  p.fireTimer=1/(w.rate*p.fireRateMult);
   p.muzzle=0.06;
   SFX.shoot(w.sfx);
   const roll=()=>Math.random()<p.crit;
@@ -4569,10 +4305,9 @@ function fireWeapon(){
     let hitAny=false;
     const hitList=t=>{const d=dist(p.x,p.y,t.x,t.y);
       if(d<range+t.r&&Math.abs(angDiff(p.faceAng,angTo(p.x,p.y,t.x,t.y)))<arc/2)return true;return false;};
-    const mdmg=w.dmg*p.dmgMult*(od?1.25:1);
     for(const e of enemies){if(e.dead||e.noHit)continue;
-      if(hitList(e)){hitAny=true;damageEnemy(e,mdmg*(roll()?2.2:1),roll(),Math.cos(p.faceAng)*(w.kb||320),Math.sin(p.faceAng)*(w.kb||320));}}
-    if(bossActive&&boss&&!boss.dead&&hitList(boss)){hitAny=true;damageBoss(mdmg*(roll()?2.2:1),roll());}
+      if(hitList(e)){hitAny=true;damageEnemy(e,w.dmg*p.dmgMult*(roll()?2.2:1),roll(),Math.cos(p.faceAng)*(w.kb||320),Math.sin(p.faceAng)*(w.kb||320));}}
+    if(bossActive&&boss&&!boss.dead&&hitList(boss)){hitAny=true;damageBoss(w.dmg*p.dmgMult*(roll()?2.2:1),roll());}
     if(hitAny)addShake(3);
     if(room&&room.type==='coin'&&room.coin&&!room.coin.ended){
       room.coin.shots++;
@@ -4601,7 +4336,7 @@ function fireWeapon(){
     bullets.push({
       x:p.x+Math.cos(a)*22,y:p.y+Math.sin(a)*22,px:p.x,py:p.y,
       vx:Math.cos(a)*w.speed*p.bSpd,vy:Math.sin(a)*w.speed*p.bSpd,
-      dmg:w.dmg*p.dmgMult*(od?1.25:1),crit:roll(),pierce:(w.pierce||0)+p.pierceAdd,
+      dmg:w.dmg*p.dmgMult,crit:roll(),pierce:(w.pierce||0)+p.pierceAdd,
       size:w.size*(roll()?1.25:1),c:shotColor,trailC:trailC,trailTier:trailTier,glowMult:glowMult,
       life:w.life,beam:!!w.beam,explode:w.explode||null,
       kb:w.kb||26,hitSet:new Set()});
@@ -4646,209 +4381,18 @@ function playerDie(){
   el('lowhp').style.opacity=0;
 }
 
-
-/* ---------- 9b · LOADOUT GEAR IN PLAY ----------
-   The secondary system and the ability, as they actually behave in a
-   run. Both spend the SAME energy pool the dash spends, so a loadout is
-   a decision inside a fight rather than three independent free buttons.
-
-   Everything below is built out of systems that already existed:
-   missiles are `bullets` entries with a seek target, the barrier is the
-   dash-shield the player already had, the drone fires the player's own
-   weapon at a fraction of its damage, and the mark rides the existing
-   per-bullet homing path. There is no second combat system here.
-   ---------------------------------------------------------------- */
-let drones=[];
-
-// Nearest live target to (x,y), boss included. `notDead` covers both the
-// enemy `dead/noHit` flags and the boss's own `dying` state.
-function nearestTarget(x,y,maxD){
-  let best=null,bd=(maxD||1e9)**2;
-  for(const e of enemies){
-    if(e.dead||e.noHit)continue;
-    const d2=(e.x-x)**2+(e.y-y)**2;
-    if(d2<bd){bd=d2;best=e;}
-  }
-  if(bossActive&&boss&&!boss.dead&&!boss.dying){
-    const d2=(boss.x-x)**2+(boss.y-y)**2;
-    if(d2<bd){bd=d2;best=boss;}
-  }
-  return best;
-}
-function targetAlive(t){
-  if(!t)return false;
-  if(t===boss)return bossActive&&boss&&!boss.dead&&!boss.dying;
-  return !t.dead&&!t.noHit;
-}
-
-// Shared gate for both slots: a run is live, the game is not paused or
-// mid-transition, the cooldown is up and the energy is there. Failing on
-// energy gives the same error+flash the dash already gives, so the
-// feedback is one language rather than three.
-function gearReady(p,cdKey,def){
-  if(!p||p.dead||uiOpen||transition!==null)return false;
-  if(!def||def.id==='none')return false;
-  if(p[cdKey]>0)return false;
-  if(p.energy<def.energy){SFX.error();flashEnergyBar();return false;}
-  return true;
-}
-
-function useSecondary(){
-  const p=player,def=activeSecondary();
-  if(!gearReady(p,'secCd',def))return;
-  p.energy-=def.energy;p.secCd=def.cd;
-  if(def.id==='missile'){
-    // Three missiles fanned off the nose, each seeking independently.
-    // They carry the weapon's own damage scaling so the pod stays
-    // relevant late without being a second damage curve to balance.
-    const base=WEAPONS[p.weapon].dmg*p.dmgMult*1.6;
-    for(let i=-1;i<=1;i++){
-      const a=p.faceAng+i*0.34;
-      bullets.push({
-        x:p.x+Math.cos(a)*20,y:p.y+Math.sin(a)*20,px:p.x,py:p.y,
-        vx:Math.cos(a)*520,vy:Math.sin(a)*520,
-        dmg:base,crit:false,pierce:0,size:5,
-        c:[255,170,90],trailC:[255,140,70],trailTier:2,glowMult:1.3,
-        life:2.4,beam:false,explode:{r:78,dmg:base*0.7},kb:90,
-        seek:'near',seekRate:5.0,hitSet:new Set()});
-    }
-    SFX.shoot('voidc');addShake(2.5);
-  } else if(def.id==='drone'){
-    drones.push({x:p.x,y:p.y,ang:Math.random()*TAU,t:14,fire:0});
-    ringFX(p.x,p.y,[120,255,200],52,0.35);SFX.portal();
-  } else if(def.id==='barrier'){
-    // Reuses p.shield, which hurtPlayer() already treats as "stop this
-    // hit outright" -- so the barrier needs no new branch anywhere in
-    // the damage path.
-    p.shield=Math.max(p.shield,3.0);
-    ringFX(p.x,p.y,[120,200,255],64,0.4);
-    SFX.block();addShake(2);
-  }
-  updateGearHUD();
-}
-
-function useAbility(){
-  const p=player,def=activeAbility();
-  if(!gearReady(p,'abCd',def))return;
-  p.energy-=def.energy;p.abCd=def.cd;
-  if(def.id==='overdrive'){
-    p.odT=6;
-    ringFX(p.x,p.y,[255,210,120],60,0.35);SFX.dashReady();addShake(3);
-  } else if(def.id==='mark'){
-    // Marks what you are LOOKING at, not simply what is closest, so the
-    // ability rewards aim: the search centre is a point out along the
-    // facing angle rather than the player's own position.
-    const fx=p.x+Math.cos(p.faceAng)*180,fy=p.y+Math.sin(p.faceAng)*180;
-    const t=nearestTarget(fx,fy,520)||nearestTarget(p.x,p.y,520);
-    if(t){p.markTarget=t;p.markT=8;SFX.ui();ringFX(t.x,t.y,[255,90,190],t.r+26,0.4);}
-    else{
-      // Nothing to mark: hand the cooldown and the energy straight back
-      // rather than eating them for a press that did nothing.
-      p.abCd=0;p.energy=Math.min(p.maxenergy,p.energy+def.energy);
-      SFX.error();toast('NO TARGET IN RANGE');
-    }
-  } else if(def.id==='blink'){
-    const d=240;
-    let nx=p.x+Math.cos(p.faceAng)*d,ny=p.y+Math.sin(p.faceAng)*d;
-    if(room){
-      const hw=room.w/2-p.r,hh=room.h/2-p.r;
-      nx=clamp(nx,-hw,hw);ny=clamp(ny,-hh,hh);
-    }
-    part({x:p.x,y:p.y,life:0.3,ml:0.3,size:11,c:[190,120,255],type:'ghost',ang:p.faceAng});
-    ringFX(p.x,p.y,[190,120,255],44,0.28);
-    p.x=nx;p.y=ny;p.vx*=0.3;p.vy*=0.3;
-    p.invuln=Math.max(p.invuln,0.35);
-    ringFX(p.x,p.y,[190,120,255],44,0.28);SFX.dash();addShake(3);
-  }
-  updateGearHUD();
-}
-
-// The drone: orbits, and fires the player's own weapon at a third of its
-// damage on whatever is nearest. It has no health and cannot be hit --
-// it is a timed effect, not a second body for enemies to path to.
-function updateDrones(dt){
-  for(let i=drones.length-1;i>=0;i--){
-    const d=drones[i];
-    d.t-=dt;
-    if(d.t<=0){ringFX(d.x,d.y,[120,255,200],30,0.25);drones.splice(i,1);continue;}
-    d.ang+=dt*1.9;
-    const ox=player.x+Math.cos(d.ang)*62,oy=player.y+Math.sin(d.ang)*62;
-    d.x=lerp(d.x,ox,1-Math.pow(0.0008,dt));
-    d.y=lerp(d.y,oy,1-Math.pow(0.0008,dt));
-    d.fire-=dt;
-    if(d.fire<=0){
-      const t=nearestTarget(d.x,d.y,560);
-      if(t){
-        d.fire=0.42;
-        const w=WEAPONS[player.weapon];
-        const a=angTo(d.x,d.y,t.x,t.y);
-        bullets.push({
-          x:d.x,y:d.y,px:d.x,py:d.y,
-          vx:Math.cos(a)*760,vy:Math.sin(a)*760,
-          dmg:w.dmg*player.dmgMult*0.34,crit:false,pierce:0,size:3.4,
-          c:[120,255,200],trailC:null,trailTier:0,glowMult:1,
-          life:1.0,beam:false,explode:null,kb:16,
-          seek:'near',seekRate:2.2,hitSet:new Set()});
-        SFX.shoot('pulse');
-      }
-    }
-  }
-}
-function drawDrones(){
-  for(const d of drones){
-    const fade=d.t<1.5?d.t/1.5:1;
-    ctx.save();
-    ctx.globalAlpha=fade;
-    ctx.globalCompositeOperation='lighter';
-    drawGlow(d.x,d.y,[120,255,200],16);
-    ctx.globalCompositeOperation='source-over';
-    ctx.translate(d.x,d.y);ctx.rotate(d.ang*2.4);
-    ctx.fillStyle='rgba(8,26,22,0.9)';
-    ctx.strokeStyle='rgba(120,255,200,0.9)';ctx.lineWidth=1.6;
-    ctx.beginPath();
-    ctx.moveTo(0,-8);ctx.lineTo(7,0);ctx.lineTo(0,8);ctx.lineTo(-7,0);
-    ctx.closePath();ctx.fill();ctx.stroke();
-    ctx.fillStyle='rgba(190,255,235,0.95)';
-    ctx.beginPath();ctx.arc(0,0,2.4,0,TAU);ctx.fill();
-    ctx.restore();
-  }
-}
-// The mark's own ring, drawn on the target so it is obvious which thing
-// your shots are curving toward.
-function drawMark(){
-  const p=player;
-  if(!(p.markT>0)||!targetAlive(p.markTarget))return;
-  const t=p.markTarget,ph=performance.now()*0.004;
-  ctx.save();
-  ctx.strokeStyle=`rgba(255,90,190,${0.45+Math.sin(ph)*0.2})`;
-  ctx.lineWidth=2;
-  ctx.beginPath();ctx.arc(t.x,t.y,t.r+14+Math.sin(ph)*3,0,TAU);ctx.stroke();
-  ctx.setLineDash([6,8]);
-  ctx.beginPath();ctx.arc(t.x,t.y,t.r+24,ph,ph+TAU);ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.restore();
-}
-
 /* ---------- 10 · COMBAT ---------- */
 function updateBullets(dt){
   for(let i=bullets.length-1;i>=0;i--){const b=bullets[i];
     b.px=b.x;b.py=b.y;
-    // Steering, in priority order: a live HUNTER'S MARK beats the
-    // bullet's own seek (you marked that thing on purpose), which beats
-    // the HOMING upgrade. Only one of the three ever turns a bullet, so
-    // a marked, seeking, homing shot is not three times as agile.
-    let seekT=null,seekRate=0;
-    if(player.markT>0&&targetAlive(player.markTarget)){
-      seekT=player.markTarget;seekRate=4.2;
-    }else if(b.seek){
-      seekT=nearestTarget(b.x,b.y,600);seekRate=b.seekRate||3.0;
-    }else if(player.homingS>0){
-      seekT=nearestTarget(b.x,b.y,400);seekRate=3.2*player.homingS;
-    }
-    if(seekT){
-      const ta=angTo(b.x,b.y,seekT.x,seekT.y),ca=Math.atan2(b.vy,b.vx);
-      const na=lerpAng(ca,ta,clamp(seekRate*dt,0,1));
-      const sp=Math.hypot(b.vx,b.vy);b.vx=Math.cos(na)*sp;b.vy=Math.sin(na)*sp;
+    if(player.homingS>0){
+      let best=null,bd=400*400;
+      for(const e of enemies){if(e.dead||e.noHit)continue;const d2=(e.x-b.x)**2+(e.y-b.y)**2;
+        if(d2<bd){bd=d2;best=e;}}
+      if(bossActive&&boss&&!boss.dead){const d2=(boss.x-b.x)**2+(boss.y-b.y)**2;if(d2<bd){bd=d2;best=boss;}}
+      if(best){const ta=angTo(b.x,b.y,best.x,best.y),ca=Math.atan2(b.vy,b.vx);
+        const na=lerpAng(ca,ta,clamp(3.2*player.homingS*dt,0,1));
+        const sp=Math.hypot(b.vx,b.vy);b.vx=Math.cos(na)*sp;b.vy=Math.sin(na)*sp;}
     }
     b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;
     // Projectile trail cosmetic -- a short-lived spark dropped behind
@@ -4887,9 +4431,7 @@ function updateBullets(dt){
         b.hitSet.add(e);
         const crit=b.crit;
         const vl=Math.hypot(b.vx,b.vy)||1;
-        // HUNTER'S MARK pays out here, on the marked target only.
-        const mk=(player.markT>0&&player.markTarget===e)?1.25:1;
-        damageEnemy(e,b.dmg*mk*(crit?2.2:1),crit,b.vx/vl*b.kb,b.vy/vl*b.kb);
+        damageEnemy(e,b.dmg*(crit?2.2:1),crit,b.vx/vl*b.kb,b.vy/vl*b.kb);
         if(b.explode)explodeAt(b.x,b.y,b.explode.r,b.explode.dmg*player.dmgMult,b.c);
         else if(player.explodeS>0)explodeAt(b.x,b.y,explodeR(),explodeDmg(b),b.c);
         if(player.burnS>0)applyBurn(e);
@@ -4915,8 +4457,7 @@ function updateBullets(dt){
       const rr=boss.r+b.size;
       if((boss.x-b.x)**2+(boss.y-b.y)**2<rr*rr){
         b.hitSet.add(boss);
-        const mkB=(player.markT>0&&player.markTarget===boss)?1.25:1;
-        damageBoss(b.dmg*mkB*(b.crit?2.2:1),b.crit);
+        damageBoss(b.dmg*(b.crit?2.2:1),b.crit);
         if(b.explode)explodeAt(b.x,b.y,b.explode.r,b.explode.dmg*player.dmgMult,b.c);
         else if(player.explodeS>0)explodeAt(b.x,b.y,explodeR(),explodeDmg(b),b.c);
         b.pierce--;
@@ -6878,14 +6419,8 @@ function startRun(weapon,levelIdx,dest){
   selectedLevel=levelIdx;
   newRun(levelIdx,dest);
   player=newPlayer(weapon);
-  // Keep the loadout's primary and the legacy lastWeapon pointing at
-  // whatever actually launched. A co-op run can start with a weapon the
-  // player did not pick on this screen, and the loadout should reflect
-  // what they flew, same as lastWeapon always did.
-  if(!save.loadout)save.loadout=Object.assign({},DEF_SAVE.loadout);
-  if(save.weapons[weapon])save.loadout.primary=weapon;
   save.lastWeapon=weapon;saveGameCloud();
-  enemies=[];bullets=[];ebullets=[];particles=[];dmgNums=[];pickups=[];portals=[];spawnQueue=[];props=[];swings=[];hurtArcs=[];hazards=[];zones=[];gravFields=[];shardFlyers=[];drones=[];
+  enemies=[];bullets=[];ebullets=[];particles=[];dmgNums=[];pickups=[];portals=[];spawnQueue=[];props=[];swings=[];hurtArcs=[];hazards=[];zones=[];gravFields=[];shardFlyers=[];
   boss=null;bossActive=false;transition=null;deathSeq=null;
   vicT=0;vicWarped=false;runActive=true;
   timeScale=1;tsTarget=1;hurtFlash=0;hitstopT=0;whiteT=0;
@@ -6953,7 +6488,7 @@ function makeWaves(){
 }
 function buildRoom(type){
   const m=ROOMMETA[type],env=run.level.env;
-  enemies=[];bullets=[];ebullets=[];pickups=[];portals=[];spawnQueue=[];props=[];swings=[];hazards=[];zones=[];gravFields=[];drones=[];
+  enemies=[];bullets=[];ebullets=[];pickups=[];portals=[];spawnQueue=[];props=[];swings=[];hazards=[];zones=[];gravFields=[];
   boss=null;bossActive=false;
   room={type,w:m.size[0],h:m.size[1],tw:m.size[0],th:m.size[1],
     waves:[],wi:0,waveDelay:0.7,
@@ -7545,7 +7080,7 @@ function coopBeginRun(cfg){
   run.coop=true;
   player=newPlayer(me.weapon);
   enemies=[];bullets=[];ebullets=[];particles=[];dmgNums=[];pickups=[];portals=[];
-  spawnQueue=[];props=[];swings=[];hurtArcs=[];hazards=[];zones=[];gravFields=[];shardFlyers=[];drones=[];
+  spawnQueue=[];props=[];swings=[];hurtArcs=[];hazards=[];zones=[];gravFields=[];shardFlyers=[];
   boss=null;bossActive=false;transition=null;deathSeq=null;
   vicT=0;vicWarped=false;runActive=true;
   timeScale=1;tsTarget=1;hurtFlash=0;hitstopT=0;whiteT=0;
@@ -8074,7 +7609,6 @@ function update(dt){
   if(room.type==='boss'&&bossActive&&boss&&!boss.dead)updateBoss(dt);
   updateEnemies(dt);
   updateBullets(dt);
-  updateDrones(dt);
   updateEBullets(dt);
   updatePickups(dt);
   updateShardFlyers(dt);
@@ -8403,8 +7937,6 @@ function renderWorld(){
   // CO-OP squadmates, drawn before the local player so your own ship
   // always reads on top of theirs in a scrum.
   coopDrawMates();
-  drawMark();
-  drawDrones();
   if(player&&!player.dead&&!vicWarped&&
      (state==='playing'||state==='victory'||(state==='settings'&&runActive)))drawPlayer();
   for(const s of swings){
@@ -9595,35 +9127,8 @@ function updateHUD(force){
   const dR=Math.round(dP*50)/50;
   if(force||hudCache.dash!==dR){hudCache.dash=dR;el('dashFill').style.transform='scaleX('+dP+')';}
   if(player.dashCd<=0)el('dashUI').classList.add('ready');
-  updateGearHUD();
   setTxt('shardCount',run.shards);
   setTxt('sectorLabel','L'+run.level.id+' · SECTOR '+run.depth+' / '+run.totalDepth);
-}
-
-// The two loadout chips. Called from updateHUD (so cooldowns tick on
-// screen) and directly on use (so the chip reacts on the same frame as
-// the press). An empty slot hides its chip rather than showing a dead
-// one, and every read is guarded so this can never throw into the HUD.
-const GEAR_KEYNAME={secondary:'Q',ability:'E'};
-function updateGearHUD(){
-  const p=player;if(!p)return;
-  const paint=(id,def,cd,keyLabel,active)=>{
-    const chip=el(id);if(!chip)return;
-    if(!def||def.id==='none'){chip.classList.add('hide');return;}
-    chip.classList.remove('hide');
-    const ready=cd<=0;
-    chip.classList.toggle('ready',ready&&!active);
-    chip.classList.toggle('active',!!active);
-    const b=chip.querySelector('b'),sp=chip.querySelector('span'),bar=chip.querySelector('i');
-    if(b&&b.textContent!==keyLabel)b.textContent=keyLabel;
-    const label=ready?def.short:(Math.ceil(cd)+'s');
-    if(sp&&sp.textContent!==label)sp.textContent=label;
-    // The sweep is the REMAINING cooldown, scaled from the right, so a
-    // chip visibly refills toward ready rather than draining.
-    if(bar)bar.style.transform='scaleX('+(def.cd>0?clamp(cd/def.cd,0,1):0)+')';
-  };
-  paint('gearSec',activeSecondary(),p.secCd,GEAR_KEYNAME.secondary,false);
-  paint('gearAb',activeAbility(),p.abCd,GEAR_KEYNAME.ability,p.odT>0||p.markT>0);
 }
 function flashEnergyBar(){
   const b=el('enFill');
@@ -9737,15 +9242,12 @@ function go(s){
   else if(s==='levels'){el('ov-levels').classList.add('on');buildLevelChain();}
   else if(s==='weapons'){
     el('ov-weapons').classList.add('on');buildWeaponSelect();
-    // The loadout is now a standing choice rather than a step in a
-    // launch, so the subtitle says what is equipped and where LAUNCH
-    // would take you -- not "pick something to continue".
     const lv=(pendingSystem&&pendingSystem.level)||LEVELS[selectedLevel];
     const where=pendingSystem
       ? (UNI.galaxyById(pendingSystem.galaxyId).name+' — '+lv.name)
       : ('LEVEL '+lv.id+' — '+lv.name);
-    el('wsSub').textContent='EQUIPPED FOR EVERY EXPEDITION · LAUNCH GOES TO '+where
-      +' · '+DIFFICULTY_MODES[pendingDifficulty].label+' MODE';
+    el('wsSub').textContent=where+' · CLICK A WEAPON, THEN CLICK IT AGAIN TO LAUNCH'+
+      ' · '+DIFFICULTY_MODES[pendingDifficulty].label+' MODE';
   }
   else if(s==='playing'){el('hud').classList.remove('hidden');}
   document.body.classList.toggle('ingame',s==='playing');
@@ -9859,7 +9361,7 @@ function buildLevelChain(){
       <div><div class="lname">LEVEL ${lv.id} — ${lv.name}</div>
       <div class="lmeta">${stars} · ${lv.depth} SECTORS · GUARDIAN: ${BOSSMETA[lv.boss].name}</div></div>
       <div class="lstatus">${beatenLvl?'✓ CLEARED':unlocked?'▶ ENTER':'LOCKED'}</div>`;
-    if(unlocked)card.addEventListener('click',()=>{SFX.ui();launchExpedition(i,null);});
+    if(unlocked)card.addEventListener('click',()=>{SFX.ui();selectedLevel=i;go('weapons');});
     else{
       card.addEventListener('click',()=>{
         SFX.error();
@@ -10352,156 +9854,70 @@ async function buildLeaderboard(){
   }
 }
 
-/* ---- VOID LOADOUT SCREEN ----
-   Three slots behind three tabs, all rendering into the same grid the
-   weapon select already used (.wgrid/.wcard), so this is a new SCREEN
-   rather than a new visual system.
-
-   Selecting equips immediately and saves -- there is no confirm step,
-   because a loadout is no longer a gate in front of a launch and a
-   mis-click costs one more click to undo. LAUNCH is still here for the
-   player who opened this on the way into an expedition. -->
-*/
-let loSlot='primary',launching=false;
-// Where BACK goes. Set by whoever opened the screen, so the loadout is
-// reachable from the menu without the back button dumping the player on
-// the level list they never visited.
-let loadoutReturn='levels';
-const LO_SLOTS=[
-  {id:'primary',  label:'PRIMARY',   sub:'WEAPON'},
-  {id:'secondary',label:'SECONDARY', sub:'SYSTEM · Q'},
-  {id:'ability',  label:'ABILITY',   sub:'E'}
-];
-
+/* ---- LOADOUT: click = select · click again = launch ---- */
+let selWeapon='pulse',armedWeapon=false,launching=false;
 function buildWeaponSelect(){
-  buildLoadoutTabs();
-  buildLoadoutGrid();
-}
-function buildLoadoutTabs(){
-  const tabs=el('loTabs');if(!tabs)return;
-  tabs.innerHTML='';
-  const cur={primary:WEAPONS[activePrimary()],secondary:activeSecondary(),ability:activeAbility()};
-  LO_SLOTS.forEach(sl=>{
-    const b=document.createElement('div');
-    b.className='lo-tab'+(loSlot===sl.id?' on':'');
-    b.innerHTML=sl.label+'<em>'+((cur[sl.id]&&cur[sl.id].name)||'NONE')+'</em>';
-    b.addEventListener('click',()=>{loSlot=sl.id;SFX.ui();buildWeaponSelect();});
-    tabs.appendChild(b);
-  });
-  const line=el('loSlotLine');
-  if(line){
-    const sl=LO_SLOTS.find(x=>x.id===loSlot);
-    line.textContent=sl?(sl.label+' SLOT · '+sl.sub):'';
-  }
-}
-
-function buildLoadoutGrid(){
   const grid=el('wsGrid');grid.innerHTML='';
-  if(loSlot==='primary')buildPrimaryCards(grid);
-  else buildGearCards(grid,loSlot);
-  updateWsInfo();
-}
-
-function buildPrimaryCards(grid){
-  const equipped=activePrimary();
+  selWeapon=save.weapons[save.lastWeapon]?save.lastWeapon:'pulse';
+  if(!save.weapons[selWeapon])selWeapon='pulse';
+  armedWeapon=false;
   WEAPON_KEYS.forEach(k=>{
     const w=WEAPONS[k];
     const owned=save.weapons[k];
     const gated=w.gate&&!save.beaten[w.gate]&&!owned;
     const gateBoss=w.gate?BOSSMETA[LEVELS[w.gate-1].boss].name:'';
     const card=document.createElement('div');
-    card.className='wcard'+((owned||!gated)?'':' locked')+(k===equipped?' equipped':'');
-    // Mastery is the weapon progression this screen exists to surface:
-    // it was only ever visible on the Mastery screen before.
-    const ml=masteryLevel(k);
+    card.className='wcard'+((owned||!gated)?'':' locked');
     const stats=owned?`<div class="wstat">DMG<div class="wbar"><i style="width:${w.bars[0]*100}%"></i></div></div>
       <div class="wstat">RATE<div class="wbar"><i style="width:${w.bars[1]*100}%"></i></div></div>
       <div class="wstat">RANGE<div class="wbar"><i style="width:${w.bars[2]*100}%"></i></div></div>
-      <div class="wstat">AREA<div class="wbar"><i style="width:${w.bars[3]*100}%"></i></div></div>
-      <div class="wmast">MASTERY ${ml} / ${MASTERY_MAX_LEVEL}</div>`:
+      <div class="wstat">AREA<div class="wbar"><i style="width:${w.bars[3]*100}%"></i></div></div>`:
       `<div class="wcost">${gated?'LOCKED · DEFEAT '+gateBoss:'LOCKED · ◆ '+w.cost}</div>`;
     card.innerHTML=`<div class="wi">${svgIcon(w.icon)}</div>
       <div class="wn">${w.name}</div><div class="wd">${w.desc}</div>${stats}
-      <div class="wequip">✓ EQUIPPED</div>`;
+      <div class="wconfirm">✓ SELECTED — CLICK TO LAUNCH</div>`;
     if(owned)card.addEventListener('click',()=>{
-      if(k===equipped)return;
-      setLoadout('primary',k);SFX.ui();buildWeaponSelect();
+      if(launching)return;
+      if(k===selWeapon&&armedWeapon){launchRun();return;}
+      selWeapon=k;armedWeapon=true;
+      SFX.ui();
+      refreshWeaponCards();
     });
     else if(gated)card.addEventListener('click',()=>{SFX.error();toast('DEFEAT '+gateBoss+' TO UNLOCK');});
     else card.addEventListener('click',()=>{SFX.error();toast('UNLOCK THIS WEAPON IN THE VOID FORGE');});
     card.dataset.wk=k;
     grid.appendChild(card);
   });
+  refreshWeaponCards();
 }
-
-function buildGearCards(grid,slot){
-  const isSec=slot==='secondary';
-  const keys=isSec?SECONDARY_KEYS:ABILITY_KEYS;
-  const table=isSec?SECONDARIES:VB_ABILITIES;
-  const equipped=(isSec?activeSecondary():activeAbility()).id;
-  keys.forEach(k=>{
-    const g=table[k];
-    const unlocked=gearUnlocked(g);
-    const card=document.createElement('div');
-    card.className='wcard'+(unlocked?'':' locked')+(k===equipped?' equipped':'');
-    const cost=g.id==='none'?'':
-      `<div class="wstat">COOLDOWN<div class="wbar"><i style="width:${clamp(g.cd/22,0,1)*100}%"></i></div></div>
-       <div class="wstat">ENERGY<div class="wbar"><i style="width:${clamp(g.energy/40,0,1)*100}%"></i></div></div>
-       <div class="wcost">${g.cd}s · ${g.energy} ENERGY</div>`;
-    const req=unlocked?'':`<div class="wreq">LOCKED · ${g.reqText}</div>`;
-    card.innerHTML=`<div class="wi">${svgIcon(g.icon)}</div>
-      <div class="wn">${g.name}</div><div class="wd">${g.desc}</div>${cost}${req}
-      <div class="wequip">✓ EQUIPPED</div>`;
-    if(unlocked)card.addEventListener('click',()=>{
-      if(k===equipped)return;
-      setLoadout(slot,k);SFX.ui();buildWeaponSelect();
-    });
-    else card.addEventListener('click',()=>{SFX.error();toast(g.reqText);});
-    grid.appendChild(card);
+function refreshWeaponCards(){
+  el('wsGrid').querySelectorAll('.wcard').forEach(c=>{
+    const k=c.dataset.wk;
+    c.classList.toggle('sel',k===selWeapon);
+    c.classList.toggle('armed',k===selWeapon&&armedWeapon);
   });
+  updateWsInfo();
 }
-
 function updateWsInfo(){
+  const lv=LEVELS[selectedLevel];
   const f=save.forge;
-  const w=WEAPONS[activePrimary()];
-  const sec=activeSecondary(),ab=activeAbility();
-  el('wsInfo').innerHTML='<b>'+w.name+'</b> · '+sec.name+' · '+ab.name+
+  const w=WEAPONS[selWeapon];
+  el('wsInfo').innerHTML='L'+lv.id+' · '+lv.name+' — WEAPON <b>'+w.name+'</b>'+
     ' &nbsp;·&nbsp; FORGE: +'+(f.vit*20)+' HP · +'+(f.pow*10)+'% DMG · +'+(f.swift*6)+'% SPD · '+Math.round(f.edge*4)+'% CRIT';
 }
-
-// LAUNCH from the loadout screen. Uses whatever destination was armed
-// before the screen opened; with none armed (the player came here
-// straight from the menu) it launches the currently selected level, the
-// same thing LAUNCH EXPEDITION does.
 function launchRun(){
   if(launching||state!=='weapons')return;
+  if(!save.weapons[selWeapon])return;
   launching=true;
   SFX.portal();
   el('wsStart').textContent='LAUNCHING…';
   el('wsStart').disabled=true;
   const dest=pendingSystem;
   setTimeout(()=>{
-    startRun(activePrimary(),selectedLevel,dest);
+    startRun(selWeapon,selectedLevel,dest);
     launching=false;
-    el('wsStart').textContent='LAUNCH';
+    el('wsStart').textContent='START RUN';
     el('wsStart').disabled=false;
-    whiteT=0.45;
-  },260);
-}
-
-// The one entry point every launch path now uses. It skips the loadout
-// screen entirely -- that is the whole point of a saved loadout -- and
-// goes straight from "set course" to the run, with the gear the player
-// already chose.
-function launchExpedition(levelIdx,dest){
-  if(launching)return;
-  launching=true;
-  SFX.portal();
-  selectedLevel=levelIdx;
-  pendingSystem=dest||null;
-  setTimeout(()=>{
-    startRun(activePrimary(),selectedLevel,dest||null);
-    launching=false;
     whiteT=0.45;
   },260);
 }
@@ -10526,7 +9942,6 @@ function applyAudioSettings(){
 }
 /* --- wire buttons --- */
 el('btnStart').addEventListener('click',()=>{SFX.ui();go(UNI_OK?'system':'levels');});
-el('btnLoadout').addEventListener('click',()=>{SFX.ui();loadoutReturn='menu';go('weapons');});
 el('btnPlanet').addEventListener('click',()=>{SFX.ui();go('planet');});
 if(!UNI_OK){
   el('btnPlanet').style.display='none';
@@ -10585,7 +10000,7 @@ el('howtoBack').addEventListener('click',()=>{SFX.ui();go('menu');});
 el('setBack').addEventListener('click',()=>{SFX.ui();
   if(settingsReturn==='pause'){go('playing');setPause(true);}else go('menu');});
 el('forgeBack').addEventListener('click',()=>{SFX.ui();go('menu');refreshMenuStats();});
-el('wsBack').addEventListener('click',()=>{SFX.ui();go(loadoutReturn);});
+el('wsBack').addEventListener('click',()=>{SFX.ui();go('levels');});
 el('wsStart').addEventListener('click',()=>{SFX.ui();launchRun();});
 el('pauseResume').addEventListener('click',()=>{SFX.ui();setPause(false);});
 el('pauseSettings').addEventListener('click',()=>{SFX.ui();settingsReturn='pause';setPause(false);go('settings');syncSettingsUI();});
@@ -10601,11 +10016,9 @@ el('pauseQuit').addEventListener('click',()=>{
 });
 el('goAgain').addEventListener('click',()=>{SFX.ui();go('levels');});
 el('goForge').addEventListener('click',()=>{SFX.ui();go('forge');});
-el('goLoadout').addEventListener('click',()=>{SFX.ui();loadoutReturn='menu';go('weapons');});
 el('goMenu').addEventListener('click',()=>{SFX.ui();Music.set('menu');go('menu');refreshMenuStats();});
 el('vicAgain').addEventListener('click',()=>{SFX.ui();go('levels');});
 el('vicForge').addEventListener('click',()=>{SFX.ui();go('forge');});
-el('vicLoadout').addEventListener('click',()=>{SFX.ui();loadoutReturn='menu';go('weapons');});
 el('vicMenu').addEventListener('click',()=>{SFX.ui();Music.set('menu');go('menu');refreshMenuStats();});
 el('volMaster').addEventListener('input',e=>{
   save.settings.vol=e.target.value/100;applyAudioSettings();saveGame();});
@@ -10659,23 +10072,6 @@ setTimeout(()=>{if(!cloudBootstrapped)handleSessionHandshake(null,null);},3000);
 
 refreshMenuStats();
 syncSettingsUI();
-
-// ?screen=<name> -- the shell's GALAXY MAP / HOME PLANET / LOADOUT
-// destinations open this page directly on that screen instead of making
-// the player walk in through the menu (see index.html's
-// launchVoidbreak). It is only a STARTING VIEW: every one of these is
-// reachable by hand exactly as before, BACK still returns to the menu,
-// and an unknown or missing value simply stays on the menu. A screen
-// that needs the universe module is skipped when that module did not
-// load, for the same reason go() itself redirects those.
-try{
-  const m=/[?&]screen=([a-z]+)(&|$)/.exec(location.search);
-  const want=m?m[1]:null;
-  if(want==='loadout'){loadoutReturn='menu';go('weapons');}
-  else if(want==='galaxy'&&UNI_OK)go('galaxy');
-  else if(want==='planet'&&UNI_OK)go('planet');
-}catch(e){}
-
 cam.x=0;cam.y=0;
 requestAnimationFrame(t=>{last=t;requestAnimationFrame(frame);});
 </script>

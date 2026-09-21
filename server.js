@@ -6497,15 +6497,7 @@ function coopBroadcast(match, payload) {
 function coopLoadoutFor(sub) {
     const account = accounts[sub];
     const save = (account && account.voidbreak && account.voidbreak.data) || Voidbreak.defaultSaveData();
-    // The Void Loadout's primary is what the player actually flies now;
-    // `lastWeapon` is the pre-loadout field and stays the fallback so a
-    // save written before the loadout existed still starts a co-op run
-    // with the weapon its owner last used. Either way the answer is
-    // re-checked against the STORED weapons map, so a client still
-    // cannot bring a weapon it has not unlocked.
-    const loadout = (save.loadout && typeof save.loadout === "object") ? save.loadout : {};
-    let weapon = typeof loadout.primary === "string" ? loadout.primary
-               : (typeof save.lastWeapon === "string" ? save.lastWeapon : "pulse");
+    let weapon = typeof save.lastWeapon === "string" ? save.lastWeapon : "pulse";
     if (!save.weapons || !save.weapons[weapon]) weapon = "pulse";
     return { weapon: weapon, forge: save.forge || {} };
 }
@@ -8080,7 +8072,7 @@ async function startServer() {
         .catch(e => console.log("[static] warm failed:", e.message));
 
     httpServer.listen(PORT, "0.0.0.0", () => {
-        console.log("VOIDBREAK SERVER STARTED on port " + PORT);
+        console.log("DUEL ARENA SERVER STARTED on port " + PORT);
         console.log("Open http://localhost:" + PORT + " on this computer,");
         console.log("or http://<this computer's LAN IP>:" + PORT + " on the other player's computer.");
     });
