@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>VOIDBREAK</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -12,9 +12,25 @@
   --bg:#04050c; --panel:rgba(10,14,30,.92);
 }
 *{margin:0;padding:0;box-sizing:border-box;user-select:none;-webkit-user-select:none}
-html,body{width:100%;height:100%;overflow:hidden;background:var(--bg)}
+/* overscroll-behavior stops iOS Safari's rubber-band bounce/scroll-chain
+   on a drag that starts outside the joystick zones (see canvas#cv's
+   touch-action below for why a gap existed at all) -- pure damage
+   control, gameplay never scrolls the page regardless. */
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);overscroll-behavior:none}
 body{font-family:'Rajdhani',sans-serif;color:#cfeef5}
-canvas#cv{position:fixed;inset:0;display:block}
+/* touch-action:none on the FULL canvas (not just the two joystick
+   zones) is what actually matters here: those zones cover the bottom
+   ~68% of the screen, so the HUD strip above them -- #hud and
+   .mobile-controls are both pointer-events:none, so an untouched touch
+   there always fell straight through to the canvas -- had no gesture
+   guard at all. A two-finger touch (one per joystick, exactly how this
+   game is normally played) starting anywhere near that gap could be
+   read by Safari as the start of a pinch-zoom, and a drag through it as
+   a page scroll/bounce -- both show up to a player as the "visual
+   glitches" / "freezing" of the whole page zooming or sliding mid-fight
+   on iPhone/iPad specifically (desktop has no touch surface, so mouse
+   input here is completely unaffected either way). */
+canvas#cv{position:fixed;inset:0;display:block;touch-action:none}
 body.ingame #cv{cursor:none}
 
 /* ---- screen fx layers ---- */
@@ -2341,9 +2357,27 @@ const Music={
 
 /* ---------- 04 · CANVAS & CAMERA ---------- */
 const cv=el('cv'),ctx=cv.getContext('2d');
-let W=innerWidth,H=innerHeight,dpr=Math.min(window.devicePixelRatio||1,1.75);
-function resize(){W=innerWidth;H=innerHeight;dpr=Math.min(window.devicePixelRatio||1,1.75);
-  cv.width=W*dpr;cv.height=H*dpr;cv.style.width=W+'px';cv.style.height=H+'px';}
+// W/H/dpr start at -1 (never a real size) specifically so the FIRST
+// resize() call below -- which must always actually size the canvas --
+// doesn't get caught by that same guard.
+let W=-1,H=-1,dpr=-1;
+// Reallocating the canvas backing store (cv.width=/cv.height=) clears
+// and resizes its actual pixel buffer -- real work, not free. iOS
+// Safari fires 'resize' more than a plain window-size change would
+// suggest (its dynamic address bar/toolbar showing or hiding fires it
+// too), so a same-size call is common there in particular; skip the
+// reallocation on one since nothing about the canvas actually needs to
+// change. touch-action:none + overscroll-behavior:none above already
+// stop the scroll gesture that toolbar behavior normally keys off of,
+// so this now mostly guards against the rare firing that gets through
+// anyway (an in-call rotation glitch, some other UA quirk) rather than
+// being the primary fix.
+function resize(){
+  const nw=innerWidth,nh=innerHeight,ndpr=Math.min(window.devicePixelRatio||1,1.75);
+  if(nw===W&&nh===H&&ndpr===dpr)return;
+  W=nw;H=nh;dpr=ndpr;
+  cv.width=W*dpr;cv.height=H*dpr;cv.style.width=W+'px';cv.style.height=H+'px';
+}
 addEventListener('resize',resize);resize();
 const cam={x:0,y:0,zoom:1,baseZoom:1,punchV:0,sx:0,sy:0,shake:0};
 function addShake(n){if(save.settings.shake)cam.shake=Math.min(34,cam.shake+n);}
@@ -2388,6 +2422,24 @@ function makeGlow(r,g,b,rad){
   x.fillStyle=gr;x.fillRect(0,0,rad*2,rad*2);glowCache[key]=c;return c;
 }
 function drawGlow(x,y,c,rad){ctx.drawImage(makeGlow(c[0],c[1],c[2],rad),x-rad,y-rad,rad*2,rad*2);}
+
+// A CanvasGradient is a reusable drawing resource, not a one-shot value
+// -- the SAME object can be assigned to ctx.fillStyle and painted with
+// as many times, across as many frames, as needed. Cached the same way
+// makeGlow caches its sprites above (memoized by the inputs that
+// actually change the gradient's own stops), so renderWorld's pillar
+// background stops rebuilding an identical gradient per pillar per
+// frame -- see the call site in renderWorld.
+const pillarGradCache={};
+function pillarGradient(pc,hh){
+  const key=pc[0]+'_'+pc[1]+'_'+pc[2]+'_'+hh;
+  let g=pillarGradCache[key];if(g)return g;
+  g=ctx.createLinearGradient(0,-hh,0,hh);
+  g.addColorStop(0,rgba(pc,0.16));
+  g.addColorStop(0.5,rgba(pc,0.05));
+  g.addColorStop(1,rgba(pc,0));
+  pillarGradCache[key]=g;return g;
+}
 
 /* ---------- 05 · INPUT ---------- */
 const keys={},pressed={};
@@ -2439,8 +2491,14 @@ function updateMobileControlsTier(){
   mobileControlsEl.dataset.tier=(isTabletUA||shortSide>=600)?'tablet':'phone';
 }
 
+// The two joystick bases never change, so their knob children are
+// resolved once here instead of a querySelector() on every single
+// touchmove (which on iOS can fire well past 60 times/sec per active
+// touch -- two sticks held at once is two of these calls per event).
+const joyKnobCache=new Map();
 function positionJoyKnob(baseEl,dx,dy){
-  const knob=baseEl.querySelector('.joy-knob');
+  let knob=joyKnobCache.get(baseEl);
+  if(knob===undefined){knob=baseEl.querySelector('.joy-knob');joyKnobCache.set(baseEl,knob);}
   if(knob)knob.style.transform=`translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
 }
 function joyBaseCenter(baseEl){
@@ -4352,7 +4410,19 @@ let frameCount=0;
 const u=id=>(run&&run.upgrades[id])||0;
 
 /* ---------- 08 · FX HELPERS ---------- */
-function part(p){if(particles.length>750)particles.shift();particles.push(p);}
+// particles.shift() used to drop the array's FIRST element whenever the
+// cap was hit -- Array#shift is O(n) (every remaining element has to be
+// re-indexed down by one), and this branch can run many times in a
+// single frame during a big kill/combo burst while already at the cap.
+// Every particle here is short-lived, similarly-sized visual noise with
+// no ordering the player could ever perceive, so which ONE gets dropped
+// to make room doesn't matter -- only that the array stays bounded.
+// Swap the first slot with the last element and pop() instead: same
+// "drop one, stay at the cap" result, O(1) instead of O(n).
+function part(p){
+  if(particles.length>750){particles[0]=particles[particles.length-1];particles.pop();}
+  particles.push(p);
+}
 function sparks(x,y,c,n,spd){
   for(let i=0;i<n;i++){const a=rand(0,TAU),s=rand(spd*0.3,spd);
     part({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:rand(0.25,0.55),ml:0.55,size:rand(1.5,3.5),c,type:'spark',drag:4});}
@@ -8223,12 +8293,16 @@ function renderWorld(){
   // distant glowing structures
   if(room.pillars){
     const pc=env.pillarC||[70,100,255];
+    // The gradient is identical for every pillar in the room (it only
+    // depends on pc/hh, both constant for the room's whole lifetime) --
+    // only each pillar's fillRect X position (pl.x+sway) actually
+    // differs. This used to construct a brand-new CanvasGradient per
+    // pillar, PER FRAME (up to 9 on the latest levels' environments) for
+    // what is purely decorative background dressing; one cached,
+    // reused object does exactly the same drawing.
+    const g=pillarGradient(pc,hh);
     for(const pl of room.pillars){
       const sway=Math.sin(performance.now()*0.0004+pl.ph)*18;
-      const g=ctx.createLinearGradient(0,-hh,0,hh);
-      g.addColorStop(0,rgba(pc,0.16));
-      g.addColorStop(0.5,rgba(pc,0.05));
-      g.addColorStop(1,rgba(pc,0));
       ctx.fillStyle=g;
       ctx.fillRect(pl.x+sway-pl.w/2,-hh,pl.w,room.h);
       ctx.globalCompositeOperation='lighter';

@@ -1617,6 +1617,17 @@ function resolveSaveConflict(incoming, stored, opts) {
     // progression fields themselves are order-independent (MAX/OR).
     const merged = cmp >= 0 ? mergeSaveData(incoming, stored) : mergeSaveData(stored, incoming);
 
+    // The Void Loadout (and lastWeapon, its legacy mirror) is a CHOICE,
+    // not progress: picking a different secondary or ability moves no
+    // number in the progress vector at all. So it can't ride the "who has
+    // more progress" rule above -- that made a pure loadout change look
+    // like "nothing new", the stored save came back, the client adopted
+    // it, and the player's pick snapped back to the default. The upload
+    // is the player's latest choice, so it wins whenever the merged
+    // account can actually use it (a primary it owns, a secondary/ability
+    // id that exists) -- the same validity rule mergeSaveData applies.
+    applyIncomingLoadout(merged, incoming);
+
     return {
         data: merged,
         winner: cmp > 0 ? "incoming" : (cmp < 0 ? "stored" : "tie"),
@@ -1627,9 +1638,26 @@ function resolveSaveConflict(incoming, stored, opts) {
         // other than a straight "stored already had at least this" is a
         // real write. Compared on the progress vector rather than the
         // flattened total, so a change the weighting happens to round
-        // away (a handful of shards, a few mastery XP) still persists.
-        changed: compareSaves(merged, stored) !== 0
+        // away (a handful of shards, a few mastery XP) still persists --
+        // plus the loadout, which the progress vector can't see at all.
+        changed: compareSaves(merged, stored) !== 0 || loadoutDiffers(merged, stored)
     };
+}
+
+function applyIncomingLoadout(merged, incoming) {
+    const l = (incoming && incoming.loadout) || {};
+    const out = Object.assign({}, merged.loadout);
+    if ((merged.weapons || {})[l.primary]) out.primary = l.primary;
+    if (SECONDARY_IDS.indexOf(l.secondary) !== -1) out.secondary = l.secondary;
+    if (ABILITY_IDS.indexOf(l.ability) !== -1) out.ability = l.ability;
+    merged.loadout = out;
+    if ((merged.weapons || {})[out.primary]) merged.lastWeapon = out.primary;
+}
+
+function loadoutDiffers(a, b) {
+    const la = (a && a.loadout) || {}, lb = (b && b.loadout) || {};
+    return la.primary !== lb.primary || la.secondary !== lb.secondary ||
+        la.ability !== lb.ability || (a && a.lastWeapon) !== (b && b.lastWeapon);
 }
 
 // True if a save is exactly the untouched starting state -- used to

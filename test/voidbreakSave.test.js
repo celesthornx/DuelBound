@@ -93,6 +93,41 @@ const r2 = V.resolveSaveConflict(fresh, old, {});
 t('empty save never beats real progress', r2.data.shards === 4200, r2.reason);
 t('arbiter output keeps the loadout', !!r2.data.loadout, r2.data.loadout);
 
+// Picking gear on the Loadout screen changes NO progress at all. That
+// upload used to look like "nothing new" to the arbiter, which handed
+// back the stored save -- and the client adopted it, snapping the pick
+// straight back to the default. The loadout is a choice, so the upload
+// wins it, and the change has to count as a real write.
+const pick = V.sanitizeSaveData(Object.assign(JSON.parse(JSON.stringify(old)),
+  { loadout: { primary: 'scatter', secondary: 'drone', ability: 'blink' } }));
+const r3 = V.resolveSaveConflict(pick, old, {});
+t('a pure loadout change is stored (secondary + ability)',
+  r3.data.loadout.secondary === 'drone' && r3.data.loadout.ability === 'blink', r3.data.loadout);
+t('a pure loadout change is stored (primary + lastWeapon)',
+  r3.data.loadout.primary === 'scatter' && r3.data.lastWeapon === 'scatter', r3.data.loadout);
+t('a pure loadout change counts as a write', r3.changed === true, r3.reason);
+const none = V.sanitizeSaveData(Object.assign(JSON.parse(JSON.stringify(old)),
+  { loadout: { primary: 'rail', secondary: 'none', ability: 'none' } }));
+const r4 = V.resolveSaveConflict(none, r3.data, {});
+t('"none" is a real choice, not a reset to default',
+  r4.data.loadout.secondary === 'none' && r4.data.loadout.ability === 'none', r4.data.loadout);
+const same = V.resolveSaveConflict(JSON.parse(JSON.stringify(r4.data)), r4.data, {});
+t('an identical re-upload is still a no-op', same.changed === false, same.reason);
+// A device BEHIND on progress still gets to change its gear, and still
+// can't drag progress down while doing it.
+const behind = V.sanitizeSaveData({ shards: 10, weapons: { pulse: true },
+  loadout: { primary: 'pulse', secondary: 'barrier', ability: 'mark' } });
+const r5 = V.resolveSaveConflict(behind, old, {});
+t('a lower-progress device can still change its loadout',
+  r5.data.loadout.secondary === 'barrier' && r5.data.loadout.ability === 'mark', r5.data.loadout);
+t('...without lowering progress', r5.data.shards === 4200 && r5.data.weapons.rail === true, r5.data.shards);
+// A primary the account doesn't own is refused; the rest of the pick still lands.
+const bogus = V.sanitizeSaveData(Object.assign(JSON.parse(JSON.stringify(old)),
+  { loadout: { primary: 'voidc', secondary: 'drone', ability: 'blink' } }));
+bogus.loadout.primary = 'voidc';
+const r6 = V.resolveSaveConflict(bogus, old, {});
+t('an unowned primary is never equipped', r6.data.loadout.primary !== 'voidc' && r6.data.weapons.voidc !== true, r6.data.loadout);
+
 console.log('\n7. applyClientSave -- server-owned fields stay server-owned');
 const stored = V.sanitizeSaveData({ shards: 500, shardsSpent: 200, shopOwned: ['title_breaker'],
   loadout: { primary: 'pulse', secondary: 'drone', ability: 'mark' } });

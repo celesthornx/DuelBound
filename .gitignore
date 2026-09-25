@@ -20,3 +20,4 @@ stripePurchases.json
 # test/voidbreakSave.test.js, which `npm test` runs.)
 *.testonly.html
 *.testonly.js
+*.perftest.html
