@@ -184,7 +184,10 @@ function defaultAccount(name, email) {
         // saved Voidbreak progress to the cloud yet" (distinct from an
         // all-zero save, which is a real save that just hasn't earned
         // anything). See voidbreak.js and the /voidbreak/* endpoints.
-        voidbreak: null
+        voidbreak: null,
+        // PLAYTIME -- see the PLAYTIME section below. A brand-new account
+        // has no history to estimate, so estimateDone starts true.
+        playtime: defaultPlaytime(true)
     };
 }
 
@@ -707,6 +710,148 @@ function ensureAccountCurrency(sub) {
 // the renamed field immediately rather than only after that ONE
 // account happens to be touched again. Mirrors reconcileFriendships()'s
 // "normalise everything once, persist only what actually changed" shape.
+// =====================================================================
+// PLAYTIME -- how long each player has actually been connected.
+//
+// MEASURED time (`seconds`) accrues from the presence system: an account
+// is "playing" while it has at least one authenticated live connection
+// (the same signal the friends list and lobby chat already trust). A
+// periodic tick banks elapsed time for everyone online, and the last
+// disconnect banks the remainder, so a server restart loses at most one
+// tick rather than a whole session. Each tick is clamped, so a suspended
+// or stalled process can never book a multi-hour jump.
+//
+// This never existed before, so there is no true record of time played
+// prior to it. What CAN be recovered is an ESTIMATE from durable stats
+// every account already carries (casual wins/kills, ranked games,
+// Voidbreak runs). It lives in a separate field (`estimatedSeconds`),
+// is computed exactly once per account (`estimateDone`), and the admin
+// panel labels it as an estimate -- it is never folded into the
+// measured counter, so the measured number stays a real measurement.
+// =====================================================================
+const PLAYTIME_TICK_MS = 60 * 1000;
+const PLAYTIME_MAX_TICK_SEC = 150;          // clamp per accrual step
+const PLAYTIME_PERSIST_EVERY_MS = 5 * 60 * 1000;
+// Estimation assumptions (minutes per unit of recorded activity).
+const EST_MIN_PER_CASUAL_MATCH = 4;
+const EST_MIN_PER_RANKED_GAME = 5;
+const EST_MIN_PER_VOIDBREAK_RUN = 6;
+const EST_CASUAL_MATCHES_PER_WIN = 2;       // assumes ~50% win rate
+const EST_KILLS_PER_MATCH = 3;
+const EST_MAX_SECONDS = 2000 * 3600;        // sanity cap for corrupt stats
+
+function defaultPlaytime(estimateDone) {
+    return { seconds: 0, estimatedSeconds: 0, estimateBasis: "", estimateDone: !!estimateDone,
+             firstSeenAt: 0, lastSeenAt: 0, sessions: 0 };
+}
+
+function safeNum(n) {
+    const v = Math.floor(Number(n));
+    return isFinite(v) && v > 0 ? v : 0;
+}
+
+// Pure. Casual wins and kills describe the SAME casual matches, so the
+// larger of the two match estimates is used rather than their sum.
+function estimatePriorPlaytime(account) {
+    const wins = safeNum(account.wins);
+    const kills = safeNum(account.kills);
+    const ranked = safeNum(account.ranked && account.ranked.games);
+    const vbRuns = safeNum(account.voidbreak && account.voidbreak.data && account.voidbreak.data.runs);
+    const casual = Math.max(wins * EST_CASUAL_MATCHES_PER_WIN, Math.ceil(kills / EST_KILLS_PER_MATCH));
+    const minutes = casual * EST_MIN_PER_CASUAL_MATCH + ranked * EST_MIN_PER_RANKED_GAME +
+        vbRuns * EST_MIN_PER_VOIDBREAK_RUN;
+    const parts = [];
+    if (casual) parts.push("~" + casual + " casual matches");
+    if (ranked) parts.push(ranked + " ranked games");
+    if (vbRuns) parts.push(vbRuns + " Voidbreak runs");
+    return { seconds: Math.min(EST_MAX_SECONDS, minutes * 60), basis: parts.join(", ") };
+}
+
+// Idempotent. Fills a missing/malformed playtime block and runs the
+// one-time historical estimate. Returns true if anything changed.
+function ensureAccountPlaytime(sub) {
+    const account = accounts[sub];
+    if (!account) return false;
+    let dirty = false;
+    const pt = account.playtime;
+    if (!pt || typeof pt !== "object") {
+        account.playtime = defaultPlaytime(false);
+        dirty = true;
+    } else {
+        const d = defaultPlaytime(false);
+        for (const k of Object.keys(d)) {
+            if (typeof pt[k] !== typeof d[k]) { pt[k] = d[k]; dirty = true; }
+        }
+    }
+    if (!account.playtime.estimateDone) {
+        const est = estimatePriorPlaytime(account);
+        account.playtime.estimatedSeconds = est.seconds;
+        account.playtime.estimateBasis = est.basis;
+        account.playtime.estimateDone = true;
+        dirty = true;
+    }
+    return dirty;
+}
+
+// Admin-only view of one account's activity. Includes the live,
+// not-yet-banked part of an ongoing session so the panel is current.
+function adminActivityFields(sub) {
+    const account = accounts[sub];
+    ensureAccountPlaytime(sub);
+    const pt = account.playtime;
+    const row = presence.get(sub);
+    const online = !!(row && row.conns.size > 0);
+    const live = online && row.playAnchor
+        ? Math.max(0, Math.min(PLAYTIME_MAX_TICK_SEC, Math.floor((Date.now() - row.playAnchor) / 1000))) : 0;
+    const measured = pt.seconds + live;
+    const email = account.email || "";
+    return {
+        email: email,
+        emailIsGmail: /@(gmail|googlemail)\.com$/i.test(email),
+        signInMethod: String(sub).indexOf("local:") === 0 ? "password" : "google",
+        online: online,
+        playtimeSeconds: measured,
+        playtimeEstimatedSeconds: pt.estimatedSeconds,
+        playtimeTotalSeconds: measured + pt.estimatedSeconds,
+        playtimeEstimateBasis: pt.estimateBasis,
+        playSessions: pt.sessions,
+        firstSeenAt: pt.firstSeenAt,
+        lastSeenAt: online ? Date.now() : pt.lastSeenAt
+    };
+}
+
+function migrateAllAccountsPlaytime() {
+    let n = 0;
+    for (const sub of Object.keys(accounts)) {
+        if (ensureAccountPlaytime(sub)) {
+            n++;
+            persistAccount(sub).catch(e =>
+                console.log("[playtime] migration write failed for " + sub + ":", e.message));
+        }
+    }
+    if (n) console.log("[playtime] initialised playtime for " + n + " account(s) (historical time estimated)");
+}
+
+// Banks elapsed connected time for one presence row into its account.
+function accruePlaytime(sub, row, now, forcePersist) {
+    const account = accounts[sub];
+    if (!account || !row) return;
+    ensureAccountPlaytime(sub);
+    const pt = account.playtime;
+    const anchor = row.playAnchor || now;
+    const sec = Math.max(0, Math.min(PLAYTIME_MAX_TICK_SEC, Math.floor((now - anchor) / 1000)));
+    // Advance by whole banked seconds only, so fractions carry over.
+    row.playAnchor = sec > 0 ? anchor + sec * 1000 : anchor;
+    if ((now - row.playAnchor) / 1000 > PLAYTIME_MAX_TICK_SEC) row.playAnchor = now;
+    pt.seconds += sec;
+    pt.lastSeenAt = now;
+    if (forcePersist || now - (row.playPersistedAt || 0) >= PLAYTIME_PERSIST_EVERY_MS) {
+        row.playPersistedAt = now;
+        persistAccount(sub).catch(e =>
+            console.log("[playtime] persist failed for " + sub + ":", e.message));
+    }
+}
+
 function migrateAllAccountsCurrency() {
     let migrated = 0;
     for (const sub of Object.keys(accounts)) {
@@ -1980,6 +2125,16 @@ function presenceAttach(sub, conn) {
     if (wasOffline) {
         row.activity = Friends.PRESENCE.ONLINE;
         row.since = Date.now();
+        // Playtime session starts.
+        row.playAnchor = Date.now();
+        row.playPersistedAt = Date.now();
+        if (accounts[sub]) {
+            ensureAccountPlaytime(sub);
+            const pt = accounts[sub].playtime;
+            if (!pt.firstSeenAt) pt.firstSeenAt = Date.now();
+            pt.lastSeenAt = Date.now();
+            pt.sessions += 1;
+        }
     }
     return wasOffline;
 }
@@ -1991,11 +2146,20 @@ function presenceDetach(sub, conn) {
     if (!row) return false;
     row.conns.delete(conn);
     if (row.conns.size === 0) {
+        accruePlaytime(sub, row, Date.now(), true); // bank the tail of the session
         presence.delete(sub);
         return true;
     }
     return false;
 }
+
+// Periodically bank playtime for everyone online (see PLAYTIME above).
+setInterval(() => {
+    const now = Date.now();
+    for (const [sub, row] of presence) {
+        if (row.conns.size > 0) accruePlaytime(sub, row, now, false);
+    }
+}, PLAYTIME_TICK_MS).unref();
 
 // Client-reported activity label. Validated against a fixed list, and
 // only ever applied to an account that already has a live connection.
@@ -3740,7 +3904,9 @@ const httpServer = http.createServer(async (req, res) => {
                 // routine save (and Duel Arena's own saveProgress() runs
                 // after every match). Voidbreak's progress only ever
                 // changes inside /voidbreak/save.
-                voidbreak: existing.voidbreak || null
+                voidbreak: existing.voidbreak || null,
+                // Server-measured; never read from the request body.
+                playtime: existing.playtime || defaultPlaytime(false)
             };
             try {
                 await persistAccount(sub);
@@ -5259,6 +5425,32 @@ const httpServer = http.createServer(async (req, res) => {
     // show its current balance -- never email or anything else from the
     // account record. Reads the same `accounts` object /save writes to,
     // so the balance shown is always the authoritative one, live.
+    // ---- GET /admin/playtime?sessionToken=...&sort=total|measured|recent ----
+    // Every player's playtime and account email, admin only. Emails are
+    // deliberately exposed nowhere else (friend lists use account ids).
+    if (req.method === "GET" && req.url.startsWith("/admin/playtime")) {
+        const urlObj = new URL(req.url, "http://x");
+        if (!isAdminSession(urlObj.searchParams.get("sessionToken"))) {
+            sendJson(res, 403, { error: "Forbidden -- admin access required" });
+            return;
+        }
+        const sort = urlObj.searchParams.get("sort") || "total";
+        const rows = Object.keys(accounts).map(sub => Object.assign(
+            { id: sub, name: accounts[sub].name || "Player" }, adminActivityFields(sub)));
+        const key = sort === "measured" ? "playtimeSeconds" : sort === "recent" ? "lastSeenAt" : "playtimeTotalSeconds";
+        rows.sort((a, b) => (b[key] - a[key]) || a.name.localeCompare(b.name));
+        let measured = 0, estimated = 0;
+        for (const r of rows) { measured += r.playtimeSeconds; estimated += r.playtimeEstimatedSeconds; }
+        sendJson(res, 200, {
+            players: rows,
+            totals: { players: rows.length, online: rows.filter(r => r.online).length,
+                      measuredSeconds: measured, estimatedSeconds: estimated },
+            trackingNote: "Measured = connected time recorded since playtime tracking began. " +
+                "Estimated = one-time estimate of earlier play, derived from each account's match, ranked and Voidbreak history."
+        });
+        return;
+    }
+
     if (req.method === "GET" && req.url.startsWith("/admin/search-players")) {
         const urlObj = new URL(req.url, "http://x");
         const sessionToken = urlObj.searchParams.get("sessionToken");
@@ -5291,7 +5483,8 @@ const httpServer = http.createServer(async (req, res) => {
                     // player feels the second.
                     voidShards: vbData ? (vbData.shards || 0) : 0,
                     voidShardsSpendable: vbData ? Voidbreak.spendableShards(vbData) : 0,
-                    hasVoidbreakSave: !!vb
+                    hasVoidbreakSave: !!vb,
+                    ...adminActivityFields(sub)
                 };
             });
         sendJson(res, 200, { results: results });
@@ -7997,6 +8190,7 @@ async function startServer() {
         // below this point must see `coins`/`crystals`, never a
         // still-unmigrated `credits`.
         migrateAllAccountsCurrency();
+        migrateAllAccountsPlaytime();
         // Rebuilt from what is actually stored, so the login lookup can
         // never drift from the accounts it points at.
         buildUsernameIndex();
