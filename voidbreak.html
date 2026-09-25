@@ -2219,11 +2219,20 @@ function adoptEndgame(view){
   for(const k of Object.keys(view.mastery||{}))
     for(const lv of (view.mastery[k].claimed||[]))claimed.push(k+':'+lv);
   save.masteryClaimed=claimed;
+  // NOTE: Forge levels and weapon ownership are deliberately NOT taken
+  // from the view here. This function is called with a knowingly STALE
+  // view in the sign-in merge path (see the localWins branch of the
+  // cloud bootstrap, which adopts the pre-merge cloudResp.endgame and
+  // only then pushes the merged save), so folding progression in from it
+  // would discard a guest's or an offline device's Forge levels and
+  // weapons before they were ever uploaded. The purchase endpoints
+  // return the level they granted, so the buyer applies just that.
   applyUiTheme();
   refreshMenuStats();
   if(state==='shop')buildShop();
   if(state==='mastery')buildMastery();
   if(state==='prestige')buildPrestige();
+  if(state==='forge')buildForge();
 }
 
 // Spendable balance. Mirrors the server's derivation exactly
@@ -7772,9 +7781,29 @@ function buildForge(){
       <div class="pips">${pips}</div>
       <button class="fbuy" ${lvl>=f.max?'disabled':spendableShards()<cost?'disabled':''}>
         ${lvl>=f.max?'MAXED':'◆ '+cost}</button>`;
-    row.querySelector('.fbuy').addEventListener('click',()=>{
+    row.querySelector('.fbuy').addEventListener('click',async ()=>{
       if(lvl>=f.max)return;
       if(spendableShards()<cost){SFX.error();toast('NOT ENOUGH VOID SHARDS');return;}
+      // SIGNED IN: the server charges this, against the stored save,
+      // through the same shardsSpent ledger the shop uses. Paying by
+      // lowering `shards` here instead is what made every upgrade free
+      // -- the upload MAX-merges `shards`, so the deduction was thrown
+      // away while the new level stuck.
+      if(cloudSyncEnabled&&cloudSessionToken){
+        const r=await endgamePost('/voidbreak/forge/buy',{upgradeId:f.id});
+        if(!r.ok){SFX.error();toast(r.error||'PURCHASE FAILED');return;}
+        // The level the SERVER granted, and the spend it recorded (the
+        // latter arrives via the endgame view endgamePost already
+        // adopted, which is what lowers the spendable balance).
+        save.forge[f.id]=r.level;
+        writeAccountCache(cloudAccountId,save,Date.now());
+        SFX.buy();
+        toast(f.name+' · LEVEL '+r.level);
+        buildForge();
+        return;
+      }
+      // GUEST: the save is local-only, so there is no merge to undo the
+      // deduction and nothing to charge server-side.
       save.shards-=cost;save.forge[f.id]++;saveGameCloud();SFX.buy();
       toast(f.name+' · LEVEL '+save.forge[f.id]);
       buildForge();
@@ -7794,8 +7823,19 @@ function buildForge(){
       <div class="wn">${w.name}${owned&&mLv>0?' <span class="wmast">M'+mLv+'</span>':''}</div>
       <div class="wd">${w.desc}</div>
       <div class="wcost">${owned?'UNLOCKED':gated?'DEFEAT '+gateBoss:'◆ '+cost+' SHARDS'}</div>`;
-    if(!owned&&!gated)card.addEventListener('click',()=>{
+    if(!owned&&!gated)card.addEventListener('click',async ()=>{
       if(spendableShards()<cost){SFX.error();toast('NOT ENOUGH VOID SHARDS');return;}
+      // Charged server-side when signed in, for the same reason the
+      // Forge rows above are.
+      if(cloudSyncEnabled&&cloudSessionToken){
+        const r=await endgamePost('/voidbreak/weapon/buy',{weapon:k});
+        if(!r.ok){SFX.error();toast(r.error||'PURCHASE FAILED');return;}
+        save.weapons[k]=true;
+        writeAccountCache(cloudAccountId,save,Date.now());
+        SFX.buy();
+        toast('UNLOCKED · '+w.name);buildForge();
+        return;
+      }
       save.shards-=cost;save.weapons[k]=true;saveGameCloud();SFX.buy();
       toast('UNLOCKED · '+w.name);buildForge();
     });

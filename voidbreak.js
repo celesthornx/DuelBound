@@ -242,6 +242,47 @@ function findCosmetic(id) {
 }
 
 // =====================================================================
+// THE FORGE AND THE WEAPON RACK -- prices
+//
+// Mirrors voidbreak.html's own FORGE table and the `cost`/`gate` fields
+// on its WEAPONS, deliberately, for the same reason the shop catalog
+// lives here: this is the ONLY place a Forge or weapon price is decided.
+// The client renders these numbers, it never sends one.
+//
+// Why this module owns them at all (it did not used to): a purchase used
+// to be made by the client lowering its own `shards` and uploading the
+// save. But `shards` is MAX-merged on the way in (see mergeSaveData --
+// it can only ever rise), and a save carrying a new Forge level or a new
+// weapon outranks the stored one on `forgeTotal`/`weaponsOwned` before
+// `shardsEarned` is even looked at. So the level stuck and the payment
+// was thrown away: every Forge upgrade and every weapon was free, all
+// 6,805 shards of the progression. Charging through the same
+// `shardsSpent` ledger the shop uses is what actually makes them cost
+// something, because that ledger only ever grows.
+const FORGE_UPGRADES = [
+    { id: "vit",   name: "VITALITY MATRIX", max: 6, cost: l => 60 + l * 45 },
+    { id: "pow",   name: "NULL ENERGY",     max: 6, cost: l => 80 + l * 60 },
+    { id: "swift", name: "PHASE BOOTS",     max: 5, cost: l => 55 + l * 40 },
+    { id: "core",  name: "ENERGY CORE",     max: 5, cost: l => 45 + l * 35 },
+    { id: "drive", name: "PHASE DRIVE",     max: 5, cost: l => 65 + l * 50 },
+    { id: "edge",  name: "CRITICAL EDGE",   max: 6, cost: l => 70 + l * 55 }
+];
+const FORGE_BY_ID = {};
+for (const f of FORGE_UPGRADES) FORGE_BY_ID[f.id] = f;
+
+// `gate` is the level whose Guardian must be beaten first (Void Cannon).
+const WEAPON_CATALOG = [
+    { key: "pulse",   name: "PULSE RIFLE",    cost: 0 },
+    { key: "scatter", name: "SCATTER CANNON", cost: 120 },
+    { key: "rail",    name: "RAILGUN",        cost: 260 },
+    { key: "plasma",  name: "PLASMA ORB",     cost: 200 },
+    { key: "voidb",   name: "VOID BLADE",     cost: 150 },
+    { key: "voidc",   name: "VOID CANNON",    cost: 340, gate: 3 }
+];
+const WEAPON_BY_KEY = {};
+for (const w of WEAPON_CATALOG) WEAPON_BY_KEY[w.key] = w;
+
+// =====================================================================
 // WEAPON MASTERY
 //
 // 10 levels per weapon. XP comes from actually USING the weapon, and is
@@ -567,6 +608,76 @@ function buyCosmetic(save, itemId) {
     return { ok: true, save: next, item: it };
 }
 
+// ---- FORGE / WEAPON PURCHASE -------------------------------------
+// Same shape and same guarantees as buyCosmetic above: the price comes
+// from this module's own table (with the account's prestige discount
+// applied here, never sent), the balance comes from the STORED record,
+// and payment is an increment of the monotonic `shardsSpent` ledger --
+// never a decrement of `shards`, which a MAX merge would simply undo.
+
+// What one more level of `id` costs this account right now.
+function forgePrice(save, id) {
+    const def = FORGE_BY_ID[id];
+    if (!def) return null;
+    const s = save || DEF_SAVE;
+    const level = Math.max(0, Math.floor(Number((s.forge || {})[id]) || 0));
+    if (level >= def.max) return null;
+    return discountedPrice(s, def.cost(level));
+}
+
+function weaponPrice(save, key) {
+    const def = WEAPON_BY_KEY[key];
+    if (!def) return null;
+    return discountedPrice(save, def.cost);
+}
+
+// The prestige cost discount, applied in exactly one place so the price
+// a client is shown and the price it is charged cannot drift.
+function discountedPrice(save, base) {
+    const level = Math.max(0, Math.floor(Number(((save || DEF_SAVE).prestige || {}).level) || 0));
+    return Math.max(1, Math.round(base * (1 - prestigeCostDiscount(level))));
+}
+
+function buyForgeUpgrade(save, id) {
+    const def = FORGE_BY_ID[id];
+    if (!def) return { ok: false, code: 400, error: "Unknown upgrade" };
+    const s = save || defaultSaveData();
+    const level = Math.max(0, Math.floor(Number((s.forge || {})[id]) || 0));
+    if (level >= def.max) return { ok: false, code: 409, error: def.name + " is already maxed" };
+
+    const price = discountedPrice(s, def.cost(level));
+    if (spendableShards(s) < price) return { ok: false, code: 400, error: "Not enough Void Shards" };
+
+    const next = cloneSave(s);
+    next.shardsSpent = (Math.floor(Number(s.shardsSpent) || 0)) + price;
+    next.forge = Object.assign({}, next.forge);
+    next.forge[id] = level + 1;
+    return { ok: true, save: next, cost: price, level: level + 1, name: def.name };
+}
+
+function buyWeapon(save, key) {
+    const def = WEAPON_BY_KEY[key];
+    if (!def) return { ok: false, code: 400, error: "Unknown weapon" };
+    const s = save || defaultSaveData();
+    if ((s.weapons || {})[key]) return { ok: false, code: 409, error: "You already own this" };
+    // The starter weapon is never for sale -- it is always owned (see
+    // sanitizeSaveData), so asking to buy it is a bug, not a purchase.
+    if (def.cost <= 0) return { ok: false, code: 400, error: "That weapon is already yours" };
+    // The Void Cannon's unlock gate, checked against the stored record.
+    if (def.gate && !(s.beaten || {})[def.gate]) {
+        return { ok: false, code: 403, error: "Locked -- defeat the Guardian of level " + def.gate + " first" };
+    }
+
+    const price = discountedPrice(s, def.cost);
+    if (spendableShards(s) < price) return { ok: false, code: 400, error: "Not enough Void Shards" };
+
+    const next = cloneSave(s);
+    next.shardsSpent = (Math.floor(Number(s.shardsSpent) || 0)) + price;
+    next.weapons = Object.assign({}, next.weapons);
+    next.weapons[key] = true;
+    return { ok: true, save: next, cost: price, name: def.name };
+}
+
 // ---- EQUIP -------------------------------------------------------
 function equipCosmetic(save, itemId) {
     const s = save || defaultSaveData();
@@ -703,8 +814,29 @@ function endgameView(save) {
         }
     }
 
+    // The Forge and the weapon rack, priced HERE so the numbers on the
+    // buttons are the numbers that will be charged.
+    const forge = FORGE_UPGRADES.map(function (f) {
+        const level = Math.max(0, Math.floor(Number((s.forge || {})[f.id]) || 0));
+        return {
+            id: f.id, name: f.name, max: f.max, level: level,
+            price: level >= f.max ? null : discountedPrice(s, f.cost(level))
+        };
+    });
+    const weapons = WEAPON_CATALOG.map(function (w) {
+        const owned = !!(s.weapons || {})[w.key];
+        return {
+            key: w.key, name: w.name, owned: owned,
+            gate: w.gate || null,
+            locked: !!(w.gate && !(s.beaten || {})[w.gate]) && !owned,
+            price: (owned || w.cost <= 0) ? null : discountedPrice(s, w.cost)
+        };
+    });
+
     const pLevel = (s.prestige || {}).level || 0;
     return {
+        forge: forge,
+        weapons: weapons,
         spendable: spendableShards(s),
         shards: Math.floor(Number(s.shards) || 0),
         shardsSpent: Math.floor(Number(s.shardsSpent) || 0),
@@ -1056,6 +1188,12 @@ module.exports = {
     FORGE_KEYS,
     WEAPON_KEYS,
     EQUIP_SLOTS,
+    FORGE_UPGRADES,
+    WEAPON_CATALOG,
+    forgePrice,
+    weaponPrice,
+    buyForgeUpgrade,
+    buyWeapon,
     sanitizeSaveData,
     mergeSaveData,
     isDefaultSave,

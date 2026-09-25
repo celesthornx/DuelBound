@@ -4495,6 +4495,76 @@ const httpServer = http.createServer(async (req, res) => {
         return;
     }
 
+    // ---- POST /voidbreak/forge/buy ---- body: { sessionToken, upgradeId } ----
+    //
+    // The Forge and the weapon rack are transactions for the same reason
+    // the shop is. They used to be paid for by the CLIENT lowering its
+    // own `shards` and uploading the save -- but `shards` is MAX-merged
+    // on the way in, and a save carrying a new Forge level outranks the
+    // stored one before the balance is even compared, so the level stuck
+    // and the payment was discarded. Every upgrade was free. Charging
+    // here, against the stored record and through the same monotonic
+    // `shardsSpent` ledger the shop uses, is what makes them cost
+    // something.
+    if (req.method === "POST" && req.url === "/voidbreak/forge/buy") {
+        try {
+            const body = await readJsonBody(req);
+            const auth = voidbreakEndgameAuth(body);
+            if (auth.error) { sendJson(res, auth.error, { error: auth.message }); return; }
+
+            const current = auth.account.voidbreak ? auth.account.voidbreak.data : Voidbreak.defaultSaveData();
+            // The level, the price (including the prestige discount) and
+            // the balance all come from `current`; the body contributes
+            // an upgrade id and nothing else.
+            const result = Voidbreak.buyForgeUpgrade(current, body.upgradeId);
+            if (!result.ok) { sendJson(res, result.code || 400, { error: result.error }); return; }
+
+            if (!(await commitVoidbreakSave(auth.sub, auth.account, result.save))) {
+                sendJson(res, 503, { error: "Could not save purchase -- try again" });
+                return;
+            }
+            sendJson(res, 200, {
+                ok: true, upgradeId: body.upgradeId, level: result.level,
+                price: result.cost, name: result.name,
+                data: result.save,
+                endgame: Voidbreak.endgameView(result.save),
+                version: auth.account.voidbreak.version
+            });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // ---- POST /voidbreak/weapon/buy ---- body: { sessionToken, weapon } ----
+    // Same as the Forge above, plus the Void Cannon's "defeat the
+    // Guardian of level 3 first" gate, checked against the STORED save.
+    if (req.method === "POST" && req.url === "/voidbreak/weapon/buy") {
+        try {
+            const body = await readJsonBody(req);
+            const auth = voidbreakEndgameAuth(body);
+            if (auth.error) { sendJson(res, auth.error, { error: auth.message }); return; }
+
+            const current = auth.account.voidbreak ? auth.account.voidbreak.data : Voidbreak.defaultSaveData();
+            const result = Voidbreak.buyWeapon(current, body.weapon);
+            if (!result.ok) { sendJson(res, result.code || 400, { error: result.error }); return; }
+
+            if (!(await commitVoidbreakSave(auth.sub, auth.account, result.save))) {
+                sendJson(res, 503, { error: "Could not save purchase -- try again" });
+                return;
+            }
+            sendJson(res, 200, {
+                ok: true, weapon: body.weapon, price: result.cost, name: result.name,
+                data: result.save,
+                endgame: Voidbreak.endgameView(result.save),
+                version: auth.account.voidbreak.version
+            });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
     // ---- POST /voidbreak/shop/equip ---- body: { sessionToken, itemId } ----
     if (req.method === "POST" && req.url === "/voidbreak/shop/equip") {
         try {
