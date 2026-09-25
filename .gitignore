@@ -4,12 +4,20 @@ node_modules/
 # stays tracked -- it is the migration seed for the persistent store.
 *.tmp-*
 *.corrupt-*
+# sessions.json holds LIVE session tokens and stripePurchases.json holds
+# payment records; both are written by the file backend the moment the
+# server is run locally. Neither is seed data and committing either would
+# publish credentials/purchase history, so they stay out of the repo.
+sessions.json
+stripePurchases.json
 
 # Test-harness builds. These are generated from index.html / server.js by
 # injecting test-only hooks (a session-minting endpoint, state getters)
 # so the game can be driven headlessly. They are rebuilt from source on
 # every test run and must never be committed -- shipping one would expose
 # an unauthenticated session endpoint.
+# (The real, committed tests live in test/ and inject nothing -- see
+# test/voidbreakSave.test.js, which `npm test` runs.)
 *.testonly.html
 *.testonly.js
 *.perftest.html

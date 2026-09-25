@@ -55,6 +55,13 @@ const Catalog = require("./catalog");
 const Billing = require("./billing");
 const BattlePass = require("./battlepass");
 const Voidbreak = require("./voidbreak");
+// Online lobbies / flexible match configurations / Voidbreak co-op.
+// party.js  -- what match types exist and who is on whose team
+// lobby.js  -- the room players sit in before a match exists
+// voidbreakCoop.js -- the shared, server-authoritative PvE simulation
+const Party = require("./party");
+const Lobby = require("./lobby");
+const VoidbreakCoop = require("./voidbreakCoop");
 
 const accounts = {}; // sub -> account record (populated in startServer())
 
@@ -733,7 +740,12 @@ const XP_REWARDS = {
     bombrun_win: 50,
     ranked_win: 60,
     ranked_loss: 10,
-    voidbreak_complete: 80
+    voidbreak_complete: 80,
+    // Co-op Voidbreak. Granted by the SERVER when its own simulation
+    // confirms the run was completed (see payCoopPlayer) -- there is no
+    // client report for it, and /xp/report refuses the reason outright,
+    // exactly like heist_win/bombrun_win/ranked_win.
+    voidbreak_coop_complete: 90
 };
 
 // COINS earned for the same fixed set of reasons XP already is, so both
@@ -761,7 +773,10 @@ const COIN_REWARDS = {
     bombrun_win: 50,
     ranked_win: 0,
     ranked_loss: 0,
-    voidbreak_complete: 0
+    voidbreak_complete: 0,
+    // A co-op run is a real cooperative match, so unlike a solo clear it
+    // pays Coins as well -- at the same rate a Heist/Bomb Run win does.
+    voidbreak_coop_complete: 50
 };
 // A single client report can claim at most this many "kill" units at
 // once (see the /xp/report handler) -- a real match cannot produce an
@@ -2730,6 +2745,42 @@ function validateAdminReason(raw) {
 // in-match latency spikes: 55 MB of static traffic over 12 seconds took
 // ping p99 from 0.67 ms to 7.97 ms. See static.js for the full note.
 // =====================================================================
+// =====================================================================
+// VOIDBREAK SAVE COMMIT
+//
+// The one place a Voidbreak save record is replaced. Every writer --
+// the shop/mastery/prestige HTTP transactions, the admin Void Shard
+// grant, and the co-op match rooms in the WebSocket layer -- goes
+// through this, so "charged but didn't get the item" and "granted but
+// never persisted" are both impossible: the in-memory record is rolled
+// back if the account write fails.
+//
+// It lived inside the HTTP request handler until co-op needed it too.
+// The body is unchanged.
+// =====================================================================
+async function commitVoidbreakSave(sub, account, nextData, opts) {
+    const previous = account.voidbreak;
+    const version = (previous ? previous.version : 0) + 1;
+    account.voidbreak = {
+        data: nextData,
+        updatedAt: Date.now(),
+        version: version,
+        // The version at which this account most recently prestiged.
+        // /voidbreak/save reads it to spot a device that is still
+        // holding a save from before that reset (see the comment
+        // there); every other writer just carries it forward.
+        prestigeVersion: (opts && opts.markPrestige) ? version
+            : (previous ? previous.prestigeVersion || 0 : 0)
+    };
+    try {
+        await persistAccount(sub);
+    } catch (e) {
+        account.voidbreak = previous;
+        return false;
+    }
+    return true;
+}
+
 const Static = require("./static");
 
 const staticServer = Static.createStaticServer(__dirname, {
@@ -2740,7 +2791,54 @@ const staticServer = Static.createStaticServer(__dirname, {
     revalidate: process.env.NODE_ENV !== "production"
 });
 
+// =====================================================================
+// PUBLIC STATIC FILES
+//
+// The static server resolves any path under the repo root, and the
+// route table above falls through to it for every unmatched GET. That
+// means GET /accounts.json, GET /server.js and GET /storage.js were all
+// being served to anybody who asked -- the account seed (with real
+// e-mail addresses) and the whole server source, including the new
+// match-room and co-op modules.
+//
+// This is the allowlist. Only a handful of files are ever requested by
+// the game (index.html, voidbreak.html, bgm.mp3 and the one shared
+// content module below -- everything else the clients ask for is an API
+// route handled above), so the safe set is small and explicit rather
+// than a pattern that has to be kept ahead of whatever gets added to
+// this directory next.
+//
+// /voidbreakUniverse.js is the ONE server-side .js file on this list,
+// and it is here deliberately: it is the shared definition of what the
+// universe contains (galaxies, solar systems, discoveries, planet
+// buildings, ship systems), which voidbreak.html needs in order to draw
+// any of it. It holds content data and pure lookup helpers only -- no
+// credentials, no account data, no server logic, and nothing that
+// decides a currency amount on its own (the server re-derives every
+// price and gate from its own copy when it validates a request; see
+// voidbreak.js's buildOnPlanet). Serving it is exactly as safe as
+// serving the level tables already embedded in voidbreak.html.
+//
+// Adding any OTHER .js from this directory would be a mistake -- the
+// rest of them are the server.
+// =====================================================================
+const PUBLIC_FILES = new Set([
+    "/",
+    "/index.html",
+    "/voidbreak.html",
+    "/voidbreakUniverse.js",
+    "/bgm.mp3",
+    "/favicon.ico"
+]);
+
 async function serveStatic(req, res) {
+    const requested = req.url.split("?")[0];
+    if (!PUBLIC_FILES.has(requested)) {
+        res.writeHead(404, { "Content-Type": "text/plain" });
+        res.end("Not found: " + requested);
+        return;
+    }
+
     let served = false;
     try {
         served = await staticServer.serve(req, res);
@@ -3821,7 +3919,8 @@ const httpServer = http.createServer(async (req, res) => {
             // Heist/Bomb Run/Ranked wins are awarded server-side at the
             // moment the server itself confirms them -- never via this
             // client-facing endpoint, so a forged report can't double it.
-            if (reason === "heist_win" || reason === "bombrun_win" || reason === "ranked_win" || reason === "ranked_loss") {
+            if (reason === "heist_win" || reason === "bombrun_win" || reason === "ranked_win" ||
+                reason === "ranked_loss" || reason === "voidbreak_coop_complete") {
                 sendJson(res, 400, { error: "This reward is granted automatically" });
                 return;
             }
@@ -4378,31 +4477,10 @@ const httpServer = http.createServer(async (req, res) => {
         return { sub: sub, account: target };
     }
 
-    // Commits a new save produced by one of voidbreak.js's pure
-    // transaction functions. In-memory rollback on a failed write is
-    // what keeps "charged but didn't get the item" impossible.
-    async function commitVoidbreakSave(sub, account, nextData, opts) {
-        const previous = account.voidbreak;
-        const version = (previous ? previous.version : 0) + 1;
-        account.voidbreak = {
-            data: nextData,
-            updatedAt: Date.now(),
-            version: version,
-            // The version at which this account most recently prestiged.
-            // /voidbreak/save reads it to spot a device that is still
-            // holding a save from before that reset (see the comment
-            // there); every other writer just carries it forward.
-            prestigeVersion: (opts && opts.markPrestige) ? version
-                : (previous ? previous.prestigeVersion || 0 : 0)
-        };
-        try {
-            await persistAccount(sub);
-        } catch (e) {
-            account.voidbreak = previous;
-            return false;
-        }
-        return true;
-    }
+    // commitVoidbreakSave now lives at module scope (see the VOIDBREAK
+    // SAVE COMMIT section further up) so the co-op match rooms in the
+    // WebSocket layer can pay out a run through the exact same
+    // copy-then-commit path these HTTP transactions use.
 
     // ---- POST /voidbreak/shop/buy ---- body: { sessionToken, itemId } ----
     if (req.method === "POST" && req.url === "/voidbreak/shop/buy") {
@@ -4451,6 +4529,83 @@ const httpServer = http.createServer(async (req, res) => {
             sendJson(res, 200, {
                 ok: true, itemId: result.item.id,
                 endgame: Voidbreak.endgameView(result.save),
+                version: auth.account.voidbreak.version
+            });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // ---- POST /voidbreak/planet/build ----
+    // body: { sessionToken, plot, buildingId }
+    //
+    // Home Planet construction SPENDS a currency, so it gets the same
+    // treatment the shop does rather than riding along on /voidbreak/save
+    // (which carries the colony forward from the stored record and
+    // discards whatever the client claims about it -- see
+    // voidbreak.js's applyClientSave). The body contributes a plot index
+    // and a building id; the cost, the territory check, the requirement
+    // gate and the level are all decided in voidbreak.js against the
+    // STORED save.
+    if (req.method === "POST" && req.url === "/voidbreak/planet/build") {
+        try {
+            const body = await readJsonBody(req);
+            const auth = voidbreakEndgameAuth(body);
+            if (auth.error) { sendJson(res, auth.error, { error: auth.message }); return; }
+
+            const current = auth.account.voidbreak ? auth.account.voidbreak.data : Voidbreak.defaultSaveData();
+            const result = Voidbreak.buildOnPlanet(current, body.plot, body.buildingId);
+            if (!result.ok) { sendJson(res, result.code || 400, { error: result.error }); return; }
+
+            if (!(await commitVoidbreakSave(auth.sub, auth.account, result.save))) {
+                sendJson(res, 503, { error: "Could not save construction -- try again" });
+                return;
+            }
+            sendJson(res, 200, {
+                ok: true,
+                plot: result.plot,
+                buildingId: result.building.id,
+                level: result.level,
+                spent: result.spent,
+                endgame: Voidbreak.endgameView(result.save),
+                data: result.save,
+                version: auth.account.voidbreak.version
+            });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // ---- POST /voidbreak/planet/decorate ----
+    // body: { sessionToken, plot, decorationId }   (decorationId null clears)
+    //
+    // Costs nothing, so the only thing being enforced here is that the
+    // player actually FOUND the thing they are placing -- which is a read
+    // of the stored discovery log, not of the request.
+    if (req.method === "POST" && req.url === "/voidbreak/planet/decorate") {
+        try {
+            const body = await readJsonBody(req);
+            const auth = voidbreakEndgameAuth(body);
+            if (auth.error) { sendJson(res, auth.error, { error: auth.message }); return; }
+
+            const current = auth.account.voidbreak ? auth.account.voidbreak.data : Voidbreak.defaultSaveData();
+            const wanted = (body.decorationId === null || body.decorationId === undefined) ? null : String(body.decorationId);
+            const result = Voidbreak.placeDecoration(current, body.plot, wanted);
+            if (!result.ok) { sendJson(res, result.code || 400, { error: result.error }); return; }
+
+            if (!(await commitVoidbreakSave(auth.sub, auth.account, result.save))) {
+                sendJson(res, 503, { error: "Could not save placement -- try again" });
+                return;
+            }
+            sendJson(res, 200, {
+                ok: true,
+                plot: result.plot,
+                decorationId: result.decoration ? result.decoration.id : null,
+                cleared: !!result.cleared,
+                endgame: Voidbreak.endgameView(result.save),
+                data: result.save,
                 version: auth.account.voidbreak.version
             });
         } catch (e) {
@@ -5613,6 +5768,1133 @@ function otherId(id) {
 }
 
 // =====================================================================
+// ONLINE LOBBIES AND MATCH ROOMS
+//
+// What this replaces
+// ------------------
+// Casual online used to be ONE pair of global slots (`slots` above), so
+// the whole server could host exactly one duel, always 1v1, always
+// "P1 vs P2". That path is untouched and still works exactly as it did
+// -- it is what the original ONLINE MULTIPLAYER button uses.
+//
+// Everything below is the NEW path, and it is built the way ranked
+// already proved works here: a MATCH ROOM per match, several at a time,
+// each owning its own combat state. What it adds on top is that a room
+// is described by DATA (see party.js) rather than by code that knows
+// there are two players:
+//
+//   * PvP rooms: 1v1, 1v1v1, 1v1v1v1, 2v1, 2v2 -- and any future
+//     configuration, which is one entry in party.js's MATCH_TYPES and
+//     no change at all down here.
+//   * CO-OP rooms: 2-4 players sharing ONE Voidbreak PvE simulation
+//     (see voidbreakCoop.js), which this layer ticks and broadcasts.
+//
+// TRUST
+// -----
+// Every rule a client could want to lie about is decided here:
+//   * which slot a connection is          -- from the lobby, never sent
+//   * which team a slot is on             -- from the lobby, never sent
+//   * whether a hit lands, and for how much -- combat.js, team-checked
+//   * who won a round, and the match      -- party.js against combat.js
+//   * what a player is paid               -- this file, once, at the end
+// A client never sends a player id, a team id, a damage number, a kill,
+// a win, a reward, or a match result. There is no message for any of
+// those, which is the strongest form the guarantee can take.
+// =====================================================================
+
+const lobbies = new Map();        // lobbyId -> lobby record (lobby.js)
+const lobbyByCode = new Map();    // CODE -> lobbyId
+const lobbyOfSub = new Map();     // accountId -> lobbyId
+const arenaMatches = new Map();   // matchId -> PvP match room
+const coopMatches = new Map();    // matchId -> co-op match room
+const matchOfSub = new Map();     // accountId -> matchId (either kind)
+
+let nextLobbySeq = 1;
+let nextMatchSeq = 1;
+function newLobbyId() { return "lb_" + (nextLobbySeq++) + "_" + crypto.randomBytes(3).toString("hex"); }
+function newArenaMatchId() { return "am_" + (nextMatchSeq++) + "_" + crypto.randomBytes(3).toString("hex"); }
+
+// How long a match room may live before it is torn down regardless of
+// what its players are doing. Mirrors ranked's own matchTimeoutMs guard:
+// a room nobody ever finishes must not leak.
+const ARENA_MATCH_TIMEOUT_MS = 30 * 60 * 1000;
+const COOP_MATCH_TIMEOUT_MS = 45 * 60 * 1000;
+// Between a round ending and the next one starting. The SERVER owns
+// this timer, so every client's countdown agrees.
+const ARENA_ROUND_GAP_MS = 2600;
+// A match starts when everyone has loaded in, or after this, whichever
+// comes first -- one client failing to report ready can't hang a lobby.
+const ARENA_LOAD_TIMEOUT_MS = 15000;
+// How long a disconnected player's slot is held before their team
+// forfeits it. Short enough that nobody waits around, long enough to
+// survive a phone changing network.
+const ARENA_DISCONNECT_GRACE_MS = 12000;
+
+function mpError(conn, message) {
+    send(conn, { type: "mp_error", message: message });
+}
+
+// The multiplayer position frame, built as a string directly for the
+// same reason positionFrame() is (see its comment): it runs once per
+// player per network tick and the generic serialiser was the single
+// most-executed allocation on this server. `id` is stamped from the
+// CONNECTION's own slot -- a client cannot move anybody but itself.
+function mpPositionFrame(slot, data) {
+    let s = '{"type":"mp_pos","id":' + slot +
+            ',"x":' + finiteNum(data.x) +
+            ',"y":' + finiteNum(data.y) +
+            ',"facing":' + finiteNum(data.facing);
+    if (typeof data.seq === "number" && isFinite(data.seq)) s += ',"seq":' + (data.seq | 0);
+    if (data.d === 1) s += ',"d":1';
+    return s + "}";
+}
+
+// ---------------------------------------------------------------------
+// LOBBY PLUMBING
+// ---------------------------------------------------------------------
+
+function lobbyOf(conn) {
+    if (!conn.authSub) return null;
+    const id = lobbyOfSub.get(conn.authSub);
+    return id ? lobbies.get(id) || null : null;
+}
+
+// Every connection currently sitting in this lobby, by account id.
+// A member with no live socket simply does not receive -- their record
+// stays so the roster does not shuffle under everyone else.
+function connsInLobby(lobby) {
+    const out = [];
+    for (const m of lobby.members) {
+        const conn = mpConnBySub.get(m.sub);
+        if (conn) out.push({ member: m, conn: conn });
+    }
+    return out;
+}
+
+// The socket a given account is using for lobby/match traffic. Set when
+// a connection sends its first mp_* message on an authenticated socket,
+// so a player with the game open in two tabs cannot end up half in a
+// lobby on one and half in a match on the other.
+const mpConnBySub = new Map();
+
+function broadcastLobby(lobby) {
+    for (const row of connsInLobby(lobby)) {
+        // publicView is per-viewer (it marks "you" and "host"), so this
+        // is one serialise per member rather than one for the room. A
+        // lobby is at most four people and this only runs on a roster
+        // change, never per frame.
+        send(row.conn, { type: "mp_lobby", lobby: Lobby.publicView(lobby, row.member.sub) });
+    }
+}
+
+function destroyLobby(lobby) {
+    lobby.state = "closed";
+    lobbies.delete(lobby.id);
+    if (lobbyByCode.get(lobby.code) === lobby.id) lobbyByCode.delete(lobby.code);
+    for (const m of lobby.members) {
+        if (lobbyOfSub.get(m.sub) === lobby.id) lobbyOfSub.delete(m.sub);
+    }
+    lobby.members = [];
+}
+
+function uniqueLobbyCode() {
+    for (let i = 0; i < 40; i++) {
+        const code = Lobby.makeCode(Math.random);
+        if (!lobbyByCode.has(code)) return code;
+    }
+    return null;
+}
+
+// The identity a lobby member is created from. Read from the ACCOUNT,
+// never from the message -- a client cannot name itself.
+function lobbyIdentityFor(sub) {
+    const account = accounts[sub];
+    if (!account) return null;
+    ensureAccountXP(sub);
+    return { sub: sub, name: account.name, level: account.level || 1 };
+}
+
+function handleLobbyCreate(conn, typeId, isPrivate) {
+    if (lobbyOfSub.has(conn.authSub)) { mpError(conn, "You are already in a lobby"); return; }
+    if (matchOfSub.has(conn.authSub)) { mpError(conn, "You are already in a match"); return; }
+    if (!Party.isMatchType(typeId)) { mpError(conn, "Unknown match type"); return; }
+
+    const code = uniqueLobbyCode();
+    if (!code) { mpError(conn, "Could not allocate a room code -- try again"); return; }
+
+    const created = Lobby.createLobby({
+        id: newLobbyId(), code: code, typeId: typeId,
+        hostSub: conn.authSub, now: Date.now(), private: !!isPrivate
+    });
+    if (!created.ok) { mpError(conn, created.error); return; }
+
+    const lobby = created.lobby;
+    const me = lobbyIdentityFor(conn.authSub);
+    if (!me) { mpError(conn, "Sign in to play online"); return; }
+    Lobby.join(lobby, me, Date.now());
+
+    lobbies.set(lobby.id, lobby);
+    lobbyByCode.set(code, lobby.id);
+    lobbyOfSub.set(conn.authSub, lobby.id);
+    conn.lobbyId = lobby.id;
+    broadcastLobby(lobby);
+}
+
+function handleLobbyJoin(conn, rawCode) {
+    if (lobbyOfSub.has(conn.authSub)) { mpError(conn, "You are already in a lobby"); return; }
+    if (matchOfSub.has(conn.authSub)) { mpError(conn, "You are already in a match"); return; }
+
+    const code = Lobby.normalizeCode(rawCode);
+    if (!code) { mpError(conn, "That is not a valid room code"); return; }
+    const id = lobbyByCode.get(code);
+    const lobby = id ? lobbies.get(id) : null;
+    if (!lobby) { mpError(conn, "No room with that code"); return; }
+
+    const me = lobbyIdentityFor(conn.authSub);
+    if (!me) { mpError(conn, "Sign in to play online"); return; }
+
+    // join() is where "full", "already started" and "already in" are
+    // all refused -- this layer never second-guesses it.
+    const result = Lobby.join(lobby, me, Date.now());
+    if (!result.ok) { mpError(conn, result.error); return; }
+
+    lobbyOfSub.set(conn.authSub, lobby.id);
+    conn.lobbyId = lobby.id;
+    broadcastLobby(lobby);
+}
+
+// QUICK PLAY. Finds the fullest open PUBLIC lobby of the requested type
+// (fullest, so players collect into one room instead of spreading one
+// per room and nobody ever starting) and joins it; creates one if there
+// is none.
+function handleLobbyQuick(conn, typeId) {
+    if (!Party.isMatchType(typeId)) { mpError(conn, "Unknown match type"); return; }
+    if (lobbyOfSub.has(conn.authSub)) { mpError(conn, "You are already in a lobby"); return; }
+
+    let best = null;
+    for (const lobby of lobbies.values()) {
+        if (lobby.private || lobby.typeId !== typeId || lobby.state !== "open") continue;
+        if (lobby.members.length >= lobby.maxPlayers) continue;
+        if (!best || lobby.members.length > best.members.length) best = lobby;
+    }
+    if (best) { handleLobbyJoin(conn, best.code); return; }
+    handleLobbyCreate(conn, typeId, false);
+}
+
+function handleLobbyLeave(conn, silent) {
+    const lobby = lobbyOf(conn);
+    if (!lobby) return;
+    const result = Lobby.leave(lobby, conn.authSub, Date.now());
+    lobbyOfSub.delete(conn.authSub);
+    conn.lobbyId = null;
+    if (!silent) send(conn, { type: "mp_left" });
+    if (!result.ok) return;
+    if (result.empty) { destroyLobby(lobby); return; }
+    broadcastLobby(lobby);
+}
+
+function handleLobbyBrowse(conn) {
+    const rows = [];
+    for (const lobby of lobbies.values()) {
+        if (lobby.private || lobby.state !== "open") continue;
+        if (lobby.members.length >= lobby.maxPlayers) continue;
+        rows.push(Lobby.browserRow(lobby));
+    }
+    rows.sort((a, b) => (b.players - a.players) || a.label.localeCompare(b.label));
+    send(conn, { type: "mp_browse", rows: rows.slice(0, 40) });
+}
+
+// ---------------------------------------------------------------------
+// PvP MATCH ROOMS
+// ---------------------------------------------------------------------
+
+function arenaMatchOf(conn) {
+    return conn.mpMatchId ? arenaMatches.get(conn.mpMatchId) || null : null;
+}
+
+// The public description of a match, built ONCE and sent to everybody.
+// Slots, teams and spawn points are all decided here; a client is told
+// what it is, never asked.
+function arenaMatchIntro(match, slot) {
+    return {
+        type: "mp_match",
+        matchId: match.id,
+        typeId: match.typeId,
+        label: match.label,
+        kind: "pvp",
+        yourSlot: slot,
+        yourTeam: match.teams[slot],
+        roundsToWin: match.roundsToWin,
+        teamCount: match.teamCount,
+        maxPlayers: match.maxPlayers,
+        players: match.slots.map(s => ({
+            slot: s,
+            team: match.teams[s],
+            name: match.players[s].name,
+            level: match.players[s].level,
+            spawn: match.spawns[s]
+        }))
+    };
+}
+
+function arenaBroadcast(match, payload, exceptSlot) {
+    const raw = JSON.stringify(payload);
+    for (const s of match.slots) {
+        if (s === exceptSlot) continue;
+        const p = match.players[s];
+        if (p && p.conn) sendRaw(p.conn, raw);
+    }
+}
+
+function createArenaMatch(lobby) {
+    const type = Party.getMatchType(lobby.typeId);
+    const now = Date.now();
+    const id = newArenaMatchId();
+
+    const teams = {};
+    const spawns = {};
+    const slots = [];
+    for (const m of lobby.members) {
+        teams[m.slot] = m.team;
+        spawns[m.slot] = Party.spawnIndexForSlot(type, m.slot);
+        slots.push(m.slot);
+    }
+    slots.sort((a, b) => a - b);
+
+    const match = {
+        id: id,
+        kind: "pvp",
+        lobbyId: lobby.id,
+        typeId: type.id,
+        label: type.label,
+        teamCount: type.teamCount,
+        maxPlayers: type.maxPlayers,
+        roundsToWin: type.roundsToWin,
+        slots: slots,
+        teams: teams,
+        spawns: spawns,
+        players: {},
+        roundWins: {},
+        round: 1,
+        state: "loading",
+        finished: false,
+        resultApplied: false,
+        createdAt: now,
+        roundTimer: null,
+        loadTimer: null,
+        timeoutTimer: null,
+        // One combat state per room, with this room's OWN roster and
+        // team layout -- which is what makes friendly fire impossible
+        // and lets several matches run at once without interfering.
+        combat: Combat.createCombatMatch(abilityConfig, { slots: slots, teams: teams })
+    };
+    for (let t = 1; t <= type.teamCount; t++) match.roundWins[t] = 0;
+
+    for (const m of lobby.members) {
+        const conn = mpConnBySub.get(m.sub) || null;
+        match.players[m.slot] = {
+            slot: m.slot, sub: m.sub, name: m.name, level: m.level,
+            team: m.team, conn: conn, connected: !!conn, loaded: false,
+            kills: 0, disconnectTimer: null
+        };
+        if (conn) {
+            conn.mpMatchId = id;
+            conn.mpSlot = m.slot;
+            conn.mpKind = "pvp";
+        }
+        matchOfSub.set(m.sub, id);
+        // Shields come from the player's OWN account loadout, read here
+        // -- never from anything the client reports (same rule casual
+        // and ranked already follow).
+        const acct = accounts[m.sub];
+        const kevlar = acct && Array.isArray(acct.equippedPowers) &&
+            acct.equippedPowers.indexOf("kevlar") >= 0;
+        match.combat.setShields(m.slot, kevlar ? 1 : 0);
+    }
+
+    arenaMatches.set(id, match);
+    Lobby.markLive(lobby, id, now);
+
+    match.timeoutTimer = setTimeout(() => {
+        if (!match.finished) endArenaMatch(match, null, "timeout");
+    }, ARENA_MATCH_TIMEOUT_MS);
+
+    match.loadTimer = setTimeout(() => {
+        if (match.state === "loading") startArenaRound(match);
+    }, ARENA_LOAD_TIMEOUT_MS);
+
+    for (const s of slots) {
+        const p = match.players[s];
+        if (p.conn) send(p.conn, arenaMatchIntro(match, s));
+    }
+    console.log("[mp] " + type.id + " match " + id + " started with " + slots.length + " player(s)");
+    return match;
+}
+
+function startArenaRound(match) {
+    if (match.finished) return;
+    if (match.loadTimer) { clearTimeout(match.loadTimer); match.loadTimer = null; }
+    match.combat.resetRound();
+    match.state = "playing";
+    arenaBroadcast(match, {
+        type: "mp_round_start",
+        round: match.round,
+        wins: match.roundWins
+    });
+}
+
+// The ONLY place a round is decided. It reads combat.js for who is
+// alive and party.js for what that means -- no client input at all.
+function evaluateArenaRound(match) {
+    if (match.finished || match.state !== "playing") return;
+    const verdict = Party.resolveRoundWinner(
+        match.teams, match.slots, slot => match.combat.isAlive(slot));
+    if (!verdict.decided) return;
+
+    match.state = "roundEnd";
+
+    if (verdict.team !== null) match.roundWins[verdict.team]++;
+
+    arenaBroadcast(match, {
+        type: "mp_round_end",
+        round: match.round,
+        winnerTeam: verdict.team,
+        drawn: verdict.drawn,
+        wins: match.roundWins,
+        nextInMs: ARENA_ROUND_GAP_MS
+    });
+
+    // Round-win XP for everyone on the winning team. Server-decided, so
+    // there is no client report to forge or replay.
+    if (verdict.team !== null) {
+        for (const s of match.slots) {
+            if (match.teams[s] !== verdict.team) continue;
+            const p = match.players[s];
+            if (p && p.sub) awardXPAndNotify(p.conn, XP_REWARDS.round_win, "round_win", COIN_REWARDS.round_win);
+        }
+    }
+
+    if (verdict.team !== null && match.roundWins[verdict.team] >= match.roundsToWin) {
+        match.roundTimer = setTimeout(() => endArenaMatch(match, verdict.team, "rounds"), ARENA_ROUND_GAP_MS);
+        return;
+    }
+
+    match.round++;
+    match.roundTimer = setTimeout(() => startArenaRound(match), ARENA_ROUND_GAP_MS);
+}
+
+// Kills, round wins and match wins are all awarded from the server's own
+// state machine, at the moment it confirms them. Nothing here comes from
+// a client report, so none of it can be forged or double-claimed.
+async function awardArenaKill(sub) {
+    const account = accounts[sub];
+    if (!account) return;
+    account.kills = (account.kills || 0) + 1;
+    await awardXP(sub, XP_REWARDS.kill, "kill", COIN_REWARDS.kill);
+}
+
+async function awardArenaMatchWin(sub, playerCount) {
+    const account = accounts[sub];
+    if (!account) return null;
+    account.wins = (account.wins || 0) + 1;
+    // Mirrors matchWinBonus() in index.html and /xp/report's own
+    // player-count scaling: 40 Coins plus 10 per player beyond two.
+    const coins = 40 + Math.max(0, Math.min(4, playerCount) - 2) * 10;
+    return awardXP(sub, XP_REWARDS.match_win, "match_win", coins);
+}
+
+function endArenaMatch(match, winnerTeam, reason) {
+    if (!match || match.resultApplied) return;
+    match.resultApplied = true;   // claim BEFORE any await -- no interleaving
+    match.finished = true;
+    match.state = "finished";
+
+    if (match.roundTimer) { clearTimeout(match.roundTimer); match.roundTimer = null; }
+    if (match.loadTimer) { clearTimeout(match.loadTimer); match.loadTimer = null; }
+    if (match.timeoutTimer) { clearTimeout(match.timeoutTimer); match.timeoutTimer = null; }
+    for (const s of match.slots) {
+        const p = match.players[s];
+        if (p && p.disconnectTimer) { clearTimeout(p.disconnectTimer); p.disconnectTimer = null; }
+    }
+
+    const playerCount = match.slots.length;
+    const winners = winnerTeam === null ? [] : Party.slotsOnTeam(match.teams, winnerTeam);
+
+    arenaBroadcast(match, {
+        type: "mp_match_end",
+        winnerTeam: winnerTeam,
+        reason: reason,
+        wins: match.roundWins,
+        winners: winners,
+        scoreboard: match.slots.map(s => ({
+            slot: s, team: match.teams[s],
+            name: match.players[s].name,
+            kills: match.players[s].kills,
+            connected: match.players[s].connected
+        }))
+    });
+
+    for (const s of winners) {
+        const p = match.players[s];
+        // Only a player who was actually still in the match is paid --
+        // a forfeit does not pay the player who left.
+        if (p && p.sub && p.connected) {
+            awardArenaMatchWin(p.sub, playerCount)
+                .then(result => { if (result && p.conn) send(p.conn, Object.assign({ type: "xpAward" }, result)); })
+                .catch(e => console.log("[mp] match win award failed:", e.message));
+        }
+    }
+
+    cleanupArenaMatch(match);
+    console.log("[mp] match " + match.id + " finished (" + reason + ")" +
+        (winnerTeam ? " -- team " + winnerTeam + " wins" : ""));
+}
+
+function cleanupArenaMatch(match) {
+    for (const s of match.slots) {
+        const p = match.players[s];
+        if (!p) continue;
+        if (matchOfSub.get(p.sub) === match.id) matchOfSub.delete(p.sub);
+        if (p.conn && p.conn.mpMatchId === match.id) {
+            p.conn.mpMatchId = null;
+            p.conn.mpSlot = null;
+            p.conn.mpKind = null;
+        }
+        p.conn = null;
+    }
+    arenaMatches.delete(match.id);
+
+    // Everyone lands back in the room they came from rather than the
+    // main menu, and the room is cleaned up if nobody is left in it.
+    const lobby = lobbies.get(match.lobbyId);
+    if (lobby) {
+        Lobby.returnToLobby(lobby, Date.now());
+        if (!lobby.members.length) destroyLobby(lobby);
+        else broadcastLobby(lobby);
+    }
+}
+
+// Re-attaches a returning player to the match they dropped out of, if
+// that match is still live and their slot has not been forfeited yet
+// (see the grace window in handleArenaDisconnect). This is what makes
+// that window mean something: a phone changing network mid-round comes
+// back into the same match instead of losing it.
+//
+// Identity comes from the ACCOUNT, which was proved with a session
+// token this server issued -- a client cannot ask to be re-attached as
+// somebody else, because it never names who it is.
+function tryArenaReconnect(conn) {
+    const matchId = matchOfSub.get(conn.authSub);
+    if (!matchId) return false;
+    const match = arenaMatches.get(matchId);
+    if (!match || match.finished) return false;
+
+    let slot = null;
+    for (const s of match.slots) {
+        if (match.players[s].sub === conn.authSub) { slot = s; break; }
+    }
+    if (slot === null) return false;
+    const me = match.players[slot];
+    if (me.connected && me.conn) return false;   // still here on another socket
+
+    if (me.disconnectTimer) { clearTimeout(me.disconnectTimer); me.disconnectTimer = null; }
+    me.connected = true;
+    me.conn = conn;
+    conn.mpMatchId = match.id;
+    conn.mpSlot = slot;
+    conn.mpKind = "pvp";
+
+    // The returning client rebuilds its whole view from the same intro
+    // every player got, plus the CURRENT round and score -- so it comes
+    // back in step with everyone else rather than a round behind.
+    send(conn, arenaMatchIntro(match, slot));
+    send(conn, { type: "mp_round_start", round: match.round, wins: match.roundWins });
+    arenaBroadcast(match, { type: "mp_player_back", slot: slot }, slot);
+    console.log("[mp] slot " + slot + " reconnected to match " + match.id);
+    return true;
+}
+
+// A player's socket dropped mid-match. Their slot is held briefly, then
+// forfeited: they are eliminated from the round, which lets the normal
+// round/win machinery decide the consequences (a 2v2 becomes a 1v2, a
+// 1v1 ends). Never a special-cased "the other player wins".
+function handleArenaDisconnect(conn) {
+    const match = arenaMatchOf(conn);
+    if (!match || match.finished) return;
+    const slot = conn.mpSlot;
+    const me = match.players[slot];
+    if (!me) return;
+
+    me.connected = false;
+    me.conn = null;
+    arenaBroadcast(match, { type: "mp_player_left", slot: slot, graceMs: ARENA_DISCONNECT_GRACE_MS });
+
+    const anyoneLeft = match.slots.some(s => match.players[s].connected);
+    if (!anyoneLeft) { endArenaMatch(match, null, "everyoneLeft"); return; }
+
+    if (me.disconnectTimer) clearTimeout(me.disconnectTimer);
+    me.disconnectTimer = setTimeout(() => {
+        if (match.finished) return;
+        const still = match.players[slot];
+        if (!still || still.connected) return; // they came back
+        // Out of the round. If that leaves one team standing, the normal
+        // round evaluation ends the round; if it leaves one team in the
+        // MATCH, the match is over.
+        match.combat.forceEliminate(slot);
+        const teamsWithAnyone = [];
+        for (const s of match.slots) {
+            if (!match.players[s].connected) continue;
+            const t = match.teams[s];
+            if (teamsWithAnyone.indexOf(t) === -1) teamsWithAnyone.push(t);
+        }
+        if (teamsWithAnyone.length <= 1) {
+            endArenaMatch(match, teamsWithAnyone[0] || null, "forfeit");
+            return;
+        }
+        arenaBroadcast(match, {
+            type: "mp_health", slot: slot, by: 0, health: 0, shields: 0,
+            blocked: false, eliminated: true, kind: "disconnect"
+        });
+        evaluateArenaRound(match);
+    }, ARENA_DISCONNECT_GRACE_MS);
+}
+
+// ---------------------------------------------------------------------
+// PvP IN-MATCH RELAY
+//
+// Gameplay payloads are relayed to the rest of the room the same way
+// casual play relays them to one opponent -- the shapes are unchanged,
+// the only additions are the `id` stamp (always the CONNECTION's own
+// slot, never anything the message claims) and the team-aware hit
+// resolution.
+// ---------------------------------------------------------------------
+
+// Message types that are pure presentation and may be relayed as-is,
+// with the sender's slot stamped on. Anything not on this list is
+// dropped rather than forwarded, so a new message type cannot appear on
+// the wire without being considered here first.
+const MP_RELAY_TYPES = new Set([
+    "mp_bullet", "mp_shockwave", "mp_timewarp", "mp_decoy",
+    "mp_gravitytrap", "mp_portal", "mp_portalClear", "mp_phaseshift",
+    "mp_skin", "mp_emote"
+]);
+
+function handleArenaMessage(conn, data) {
+    const match = arenaMatchOf(conn);
+    if (!match || match.finished) return true;
+    const slot = conn.mpSlot;
+    const me = match.players[slot];
+    if (!me) return true;
+
+    if (data.type === "mp_ingame_ready") {
+        me.loaded = true;
+        if (match.state === "loading" && match.slots.every(s => !match.players[s].connected || match.players[s].loaded)) {
+            startArenaRound(match);
+        }
+        return true;
+    }
+
+    if (data.type === "mp_pos") {
+        if (typeof data.seq === "number") conn.lastSeq = data.seq;
+        // Volatile: a position is only worth sending while it is still
+        // current (see sendVolatile). Serialised ONCE for the whole
+        // room rather than once per recipient -- this is the hottest
+        // line in a 4-player match.
+        const frame = mpPositionFrame(slot, data);
+        for (const s of match.slots) {
+            if (s === slot) continue;
+            const p = match.players[s];
+            if (p && p.conn) sendVolatile(p.conn, frame);
+        }
+        return true;
+    }
+
+    // THE authoritative hit. The message carries only WHO the victim's
+    // client thinks shot them; combat.js decides whether that is even a
+    // legal shooter (alive, in this match, on another team) and what the
+    // damage is. A teammate named here is refused outright.
+    if (data.type === "mp_hit") {
+        if (match.state !== "playing") return true;
+        const result = match.combat.claimHit(slot, Date.now(), data.by);
+        if (!result.accepted) return true;
+        arenaBroadcast(match, {
+            type: "mp_health",
+            slot: result.slot, by: result.by,
+            health: result.health, shields: result.shields,
+            blocked: result.blocked, eliminated: result.eliminated,
+            kind: result.kind
+        });
+        if (result.eliminated) {
+            const killer = match.players[result.by];
+            if (killer && killer.sub) {
+                killer.kills++;
+                awardArenaKill(killer.sub)
+                    .then(() => {})
+                    .catch(e => console.log("[mp] kill award failed:", e.message));
+            }
+            evaluateArenaRound(match);
+        }
+        return true;
+    }
+
+    if (data.type === "mp_ability") {
+        match.combat.activateAbility(slot, data.ability, Date.now());
+        return true;
+    }
+
+    if (MP_RELAY_TYPES.has(data.type)) {
+        // Projectiles are registered as damage sources so a hit claim
+        // can be checked against something that was really fired.
+        if (data.type === "mp_bullet") match.combat.trackBullet(slot, data, Date.now());
+        else if (data.type === "mp_shockwave") match.combat.trackShockwave(slot, Date.now());
+
+        const payload = Object.assign({}, data);
+        payload.id = slot;   // stamped from the connection, never trusted from the message
+        const raw = JSON.stringify(payload);
+        for (const s of match.slots) {
+            if (s === slot) continue;
+            const p = match.players[s];
+            if (!p || !p.conn) continue;
+            // Decoys are the one relay whose only value is being current.
+            if (data.type === "mp_decoy") sendVolatile(p.conn, raw);
+            else sendRaw(p.conn, raw);
+        }
+        return true;
+    }
+
+    if (data.type === "mp_leave_match") {
+        handleArenaDisconnect(conn);
+        // Leaving a match on purpose also leaves the room it came from.
+        handleLobbyLeave(conn, false);
+        return true;
+    }
+
+    return true;
+}
+
+// ---------------------------------------------------------------------
+// VOIDBREAK CO-OP MATCH ROOMS
+//
+// The simulation itself lives in voidbreakCoop.js. This layer owns the
+// clock, the sockets and the payout.
+// ---------------------------------------------------------------------
+
+function coopMatchOf(conn) {
+    return conn.mpMatchId ? coopMatches.get(conn.mpMatchId) || null : null;
+}
+
+function coopBroadcast(match, payload) {
+    const raw = JSON.stringify(payload);
+    for (const slot of Object.keys(match.players)) {
+        const p = match.players[slot];
+        if (p.conn) sendRaw(p.conn, raw);
+    }
+}
+
+// The player's build comes from their OWN STORED Voidbreak save, read
+// here, server-side. A client cannot claim max forge levels or a weapon
+// it has not unlocked, because it is never asked.
+function coopLoadoutFor(sub) {
+    const account = accounts[sub];
+    const save = (account && account.voidbreak && account.voidbreak.data) || Voidbreak.defaultSaveData();
+    // The Void Loadout's primary is what the player actually flies now;
+    // `lastWeapon` is the pre-loadout field and stays the fallback so a
+    // save written before the loadout existed still starts a co-op run
+    // with the weapon its owner last used. Either way the answer is
+    // re-checked against the STORED weapons map, so a client still
+    // cannot bring a weapon it has not unlocked.
+    const loadout = (save.loadout && typeof save.loadout === "object") ? save.loadout : {};
+    let weapon = typeof loadout.primary === "string" ? loadout.primary
+               : (typeof save.lastWeapon === "string" ? save.lastWeapon : "pulse");
+    if (!save.weapons || !save.weapons[weapon]) weapon = "pulse";
+    return { weapon: weapon, forge: save.forge || {} };
+}
+
+function createCoopMatch(lobby) {
+    const now = Date.now();
+    const id = newArenaMatchId();
+
+    const runPlayers = [];
+    const players = {};
+    for (const m of lobby.members) {
+        const loadout = coopLoadoutFor(m.sub);
+        runPlayers.push({
+            slot: m.slot, sub: m.sub, name: m.name,
+            weapon: loadout.weapon, forge: loadout.forge
+        });
+        const conn = mpConnBySub.get(m.sub) || null;
+        players[m.slot] = { slot: m.slot, sub: m.sub, name: m.name, conn: conn, connected: !!conn, loaded: false };
+        if (conn) {
+            conn.mpMatchId = id;
+            conn.mpSlot = m.slot;
+            conn.mpKind = "coop";
+        }
+        matchOfSub.set(m.sub, id);
+    }
+
+    const run = VoidbreakCoop.createRun({
+        id: id,
+        levelIdx: lobby.settings.levelIdx,
+        difficulty: lobby.settings.difficulty,
+        players: runPlayers
+    });
+
+    const match = {
+        id: id, kind: "coop", lobbyId: lobby.id, typeId: lobby.typeId,
+        players: players, run: run, started: false, finished: false,
+        createdAt: now, timeoutTimer: null, loadTimer: null
+    };
+    coopMatches.set(id, match);
+    Lobby.markLive(lobby, id, now);
+
+    match.timeoutTimer = setTimeout(() => {
+        if (!match.finished) finishCoopMatch(match, "timeout");
+    }, COOP_MATCH_TIMEOUT_MS);
+    match.loadTimer = setTimeout(() => beginCoopRun(match), ARENA_LOAD_TIMEOUT_MS);
+
+    const config = run.config();
+    for (const slot of Object.keys(players)) {
+        const p = players[slot];
+        if (p.conn) {
+            send(p.conn, Object.assign({ type: "vb_match", matchId: id, yourSlot: p.slot }, config));
+        }
+    }
+    console.log("[coop] run " + id + " created: level " + (config.levelIdx + 1) +
+        " " + config.difficulty + ", " + runPlayers.length + " player(s)");
+    return match;
+}
+
+function beginCoopRun(match) {
+    if (match.started || match.finished) return;
+    if (match.loadTimer) { clearTimeout(match.loadTimer); match.loadTimer = null; }
+    match.started = true;
+    match.run.begin(Date.now());
+    coopBroadcast(match, { type: "vb_begin" });
+}
+
+// Pays out ONE player, exactly once. Shards go through the same
+// copy-then-commit path the shop and the admin grant use, so a failed
+// write can never leave a balance that is not on disk -- and
+// markRewarded() is what makes a reconnect, a second disconnect or a
+// duplicate end-of-run message unable to pay twice.
+async function payCoopPlayer(match, slot) {
+    const reward = match.run.rewardsFor(slot);
+    if (!reward || !reward.sub) return;
+    match.run.markRewarded(slot);
+
+    // The socket is captured HERE, before the first await. The room is
+    // torn down as soon as the run ends (see cleanupCoopMatch, which
+    // nulls every player's conn), so reading it back after the account
+    // write would find nothing and the player would never be told what
+    // they earned.
+    const conn = (match.players[slot] && match.players[slot].conn) || null;
+
+    const account = accounts[reward.sub];
+    if (!account) return;
+
+    if (reward.shards > 0) {
+        const baseData = account.voidbreak ? account.voidbreak.data : Voidbreak.defaultSaveData();
+        const previousShards = Math.max(0, Math.floor(Number(baseData.shards) || 0));
+        // A co-op run counts as a run in the player's Voidbreak record.
+        // It deliberately does NOT touch `kills` (which counts Guardians
+        // slain -- co-op has no Guardian, see voidbreakCoop.js's
+        // LIMITATIONS) or `beaten` (co-op does not clear a sector for
+        // the solo campaign), so the existing ladder stays honest.
+        const nextData = Voidbreak.sanitizeSaveData(Object.assign({}, baseData, {
+            shards: previousShards + reward.shards,
+            runs: Math.max(0, Math.floor(Number(baseData.runs) || 0)) + 1
+        }));
+        const merged = Voidbreak.applyClientSave(nextData, baseData);
+        const ok = await commitVoidbreakSave(reward.sub, account, merged);
+        if (!ok) {
+            console.log("[coop] could not persist shard payout for " + reward.sub);
+            return;
+        }
+    }
+
+    // Account XP for finishing a co-op run. Granted here, from the
+    // server's own confirmation that the run completed -- there is no
+    // client-facing reason code for it (see /xp/report), so it cannot
+    // be reported, replayed or farmed from a browser.
+    if (reward.victory) {
+        const result = await awardXP(reward.sub, XP_REWARDS.voidbreak_coop_complete,
+            "voidbreak_coop_complete", COIN_REWARDS.voidbreak_coop_complete);
+        if (result && conn) send(conn, Object.assign({ type: "xpAward" }, result));
+    }
+
+    if (conn) {
+        const save = account.voidbreak ? account.voidbreak.data : null;
+        send(conn, {
+            type: "vb_reward",
+            shards: reward.shards,
+            kills: reward.kills,
+            waves: reward.waves,
+            victory: reward.victory,
+            totalShards: save ? save.shards : null,
+            spendable: save ? Voidbreak.spendableShards(save) : null
+        });
+    }
+}
+
+function finishCoopMatch(match, reason) {
+    if (match.finished) return;
+    match.finished = true;
+    if (match.timeoutTimer) { clearTimeout(match.timeoutTimer); match.timeoutTimer = null; }
+    if (match.loadTimer) { clearTimeout(match.loadTimer); match.loadTimer = null; }
+
+    for (const slot of match.run.playerSlots()) {
+        payCoopPlayer(match, slot).catch(e => console.log("[coop] payout failed:", e.message));
+    }
+
+    coopBroadcast(match, { type: "vb_over", reason: reason, victory: match.run.victory });
+    cleanupCoopMatch(match);
+    console.log("[coop] run " + match.id + " ended (" + reason + ")");
+}
+
+function cleanupCoopMatch(match) {
+    for (const slot of Object.keys(match.players)) {
+        const p = match.players[slot];
+        if (matchOfSub.get(p.sub) === match.id) matchOfSub.delete(p.sub);
+        if (p.conn && p.conn.mpMatchId === match.id) {
+            p.conn.mpMatchId = null;
+            p.conn.mpSlot = null;
+            p.conn.mpKind = null;
+        }
+        p.conn = null;
+    }
+    coopMatches.delete(match.id);
+
+    const lobby = lobbies.get(match.lobbyId);
+    if (lobby) {
+        Lobby.returnToLobby(lobby, Date.now());
+        if (!lobby.members.length) destroyLobby(lobby);
+        else broadcastLobby(lobby);
+    }
+}
+
+function handleCoopDisconnect(conn) {
+    const match = coopMatchOf(conn);
+    if (!match || match.finished) return;
+    const slot = conn.mpSlot;
+    const p = match.players[slot];
+    if (!p) return;
+    p.connected = false;
+    p.conn = null;
+    // Pay out what they actually earned before removing them, and mark
+    // them paid -- so coming back cannot earn the same shards twice.
+    payCoopPlayer(match, slot).catch(e => console.log("[coop] payout on disconnect failed:", e.message));
+    match.run.disconnect(slot, Date.now());
+    coopBroadcast(match, { type: "vb_player_left", slot: slot });
+    if (match.run.finished) finishCoopMatch(match, "ended");
+}
+
+function handleCoopMessage(conn, data) {
+    const match = coopMatchOf(conn);
+    if (!match || match.finished) return true;
+    const slot = conn.mpSlot;
+    const now = Date.now();
+
+    if (data.type === "vb_ready") {
+        const p = match.players[slot];
+        if (p) p.loaded = true;
+        const allLoaded = Object.keys(match.players)
+            .every(s => !match.players[s].connected || match.players[s].loaded);
+        if (allLoaded) beginCoopRun(match);
+        return true;
+    }
+
+    if (data.type === "vb_pos") {
+        match.run.reportPosition(slot, data.x, data.y, data.a, now);
+        return true;
+    }
+
+    // "My shot connected on enemy N." Carries no damage number; see
+    // voidbreakCoop.js's claimHit for everything that is checked.
+    if (data.type === "vb_hit") {
+        const result = match.run.claimHit(slot, Math.floor(Number(data.e)), now);
+        if (result.ok) {
+            // The shooter is told the number so it can draw its own
+            // damage/crit popup. Everyone else learns the enemy's new
+            // health from the next snapshot, and its death from the
+            // kill event -- no per-hit fan-out to the whole party.
+            send(conn, { type: "vb_hitok", e: result.enemyId, d: result.dmg, c: result.crit ? 1 : 0 });
+        }
+        return true;
+    }
+
+    if (data.type === "vb_upgrade") {
+        const result = match.run.chooseUpgrade(slot, String(data.id || ""));
+        if (result.ok) send(conn, { type: "vb_upgraded", id: result.id, maxhp: result.maxhp, hp: result.hp });
+        else send(conn, { type: "mp_error", message: result.error });
+        return true;
+    }
+
+    if (data.type === "vb_leave_match") {
+        handleCoopDisconnect(conn);
+        handleLobbyLeave(conn, false);
+        return true;
+    }
+
+    return true;
+}
+
+// ---------------------------------------------------------------------
+// THE CO-OP TICK
+//
+// ONE timer for every live run, not one per run -- the same reason the
+// shadow detector above uses a single timer. Each step is measured in
+// microseconds (see voidbreakCoop.js), and the loop does nothing at all
+// while no co-op run exists.
+// ---------------------------------------------------------------------
+setInterval(() => {
+    if (!coopMatches.size) return;
+    const now = Date.now();
+    for (const match of Array.from(coopMatches.values())) {
+        if (!match.started || match.finished) continue;
+        const out = match.run.step(now);
+
+        if (out.events && out.events.length) {
+            // EVENTS are the authoritative facts (spawned / killed /
+            // hurt / wave changed / run over). Reliable, never dropped.
+            const raw = JSON.stringify({ type: "vb_ev", e: out.events });
+            for (const slot of Object.keys(match.players)) {
+                const p = match.players[slot];
+                if (p.conn) sendRaw(p.conn, raw);
+            }
+        }
+        if (out.snapshot) {
+            // SNAPSHOTS are only worth sending while they are current,
+            // so they go out volatile -- a client whose socket is
+            // already backed up gets the NEXT one instead of a queue of
+            // stale ones (see sendVolatile).
+            const raw = JSON.stringify({ type: "vb_s", s: out.snapshot });
+            for (const slot of Object.keys(match.players)) {
+                const p = match.players[slot];
+                if (p.conn) sendVolatile(p.conn, raw);
+            }
+        }
+        if (match.run.finished) finishCoopMatch(match, match.run.victory ? "victory" : "defeat");
+    }
+}, VoidbreakCoop.TICK_MS).unref();
+
+// ---------------------------------------------------------------------
+// LOBBY SWEEP -- rooms nobody came back to must not accumulate.
+// ---------------------------------------------------------------------
+setInterval(() => {
+    const now = Date.now();
+    for (const lobby of Array.from(lobbies.values())) {
+        if (lobby.state === "live") continue;
+        if (Lobby.isStale(lobby, now)) {
+            for (const row of connsInLobby(lobby)) send(row.conn, { type: "mp_left", reason: "idle" });
+            destroyLobby(lobby);
+        }
+    }
+}, 60000).unref();
+
+// ---------------------------------------------------------------------
+// MESSAGE ROUTING -- every mp_*/vb_* message enters here.
+// ---------------------------------------------------------------------
+function handleMultiplayerMessage(conn, data) {
+    const type = data.type;
+
+    // Everything below needs a verified account. conn.authSub is set by
+    // presence_hello and ONLY by presence_hello, which requires a
+    // session token this server itself issued -- a client cannot simply
+    // declare who it is.
+    if (!conn.authSub || !accounts[conn.authSub]) {
+        mpError(conn, "Sign in to play online");
+        return true;
+    }
+
+    // This socket is now the account's multiplayer connection.
+    mpConnBySub.set(conn.authSub, conn);
+
+    // A returning player picks their match back up if it is still live
+    // and their slot has not been forfeited yet.
+    if (!conn.mpMatchId) tryArenaReconnect(conn);
+
+    // ---- in-match traffic first: it is by far the most frequent ----
+    if (conn.mpMatchId) {
+        // Room management is not available while a match is live --
+        // teams, readiness and the run's settings are all frozen once
+        // it starts. The refusal is explicit rather than a silent drop
+        // so a client that asks is told why, and so this rule is
+        // stated in one place instead of being an accident of routing.
+        if (type === "mp_team" || type === "mp_ready" || type === "mp_settings" ||
+            type === "mp_start" || type === "mp_create" || type === "mp_join" ||
+            type === "mp_quick") {
+            mpError(conn, "The match has already started");
+            return true;
+        }
+        if (conn.mpKind === "pvp") return handleArenaMessage(conn, data);
+        if (conn.mpKind === "coop") return handleCoopMessage(conn, data);
+    }
+
+    if (type === "mp_types") {
+        send(conn, {
+            type: "mp_types",
+            pvp: Party.listMatchTypes("pvp"),
+            coop: Party.listMatchTypes("coop"),
+            levels: VoidbreakCoop.LEVELS.map((l, i) => ({ idx: i, id: l.id, name: l.name })),
+            totalWaves: VoidbreakCoop.TOTAL_WAVES
+        });
+        return true;
+    }
+
+    if (type === "mp_create") { handleLobbyCreate(conn, data.typeId, data.private); return true; }
+    if (type === "mp_join")   { handleLobbyJoin(conn, data.code); return true; }
+    if (type === "mp_quick")  { handleLobbyQuick(conn, data.typeId); return true; }
+    if (type === "mp_browse") { handleLobbyBrowse(conn); return true; }
+    if (type === "mp_leave")  { handleLobbyLeave(conn, false); return true; }
+
+    const lobby = lobbyOf(conn);
+    if (!lobby) { mpError(conn, "You are not in a lobby"); return true; }
+
+    if (type === "mp_team") {
+        const result = Lobby.setTeam(lobby, conn.authSub, Math.floor(Number(data.team)), Date.now());
+        if (!result.ok) { mpError(conn, result.error); return true; }
+        broadcastLobby(lobby);
+        return true;
+    }
+
+    if (type === "mp_ready") {
+        const result = Lobby.setReady(lobby, conn.authSub, !!data.ready, Date.now());
+        if (!result.ok) { mpError(conn, result.error); return true; }
+        broadcastLobby(lobby);
+        return true;
+    }
+
+    if (type === "mp_settings") {
+        const result = Lobby.setSettings(lobby, conn.authSub, data, Date.now(), VoidbreakCoop.LEVELS.length);
+        if (!result.ok) { mpError(conn, result.error); return true; }
+        broadcastLobby(lobby);
+        return true;
+    }
+
+    if (type === "mp_start") {
+        // startCheck is the ONE definition of "may this start": host,
+        // open, enough players, teams balanced, everyone ready.
+        const check = Lobby.startCheck(lobby, conn.authSub);
+        if (!check.ok) { mpError(conn, check.error); return true; }
+        if (lobby.kind === "coop") createCoopMatch(lobby);
+        else createArenaMatch(lobby);
+        broadcastLobby(lobby);
+        return true;
+    }
+
+    return true;
+}
+
+// Called from the socket's close handler for every connection.
+function handleMultiplayerDisconnect(conn) {
+    if (!conn.authSub) return;
+    if (conn.mpKind === "pvp") handleArenaDisconnect(conn);
+    else if (conn.mpKind === "coop") handleCoopDisconnect(conn);
+    if (conn.lobbyId) handleLobbyLeave(conn, true);
+    if (mpConnBySub.get(conn.authSub) === conn) mpConnBySub.delete(conn.authSub);
+}
+
+// =====================================================================
 // NETWORK DIAGNOSTICS (opt-in)
 //
 // Off by default and, when off, costs one boolean test per message --
@@ -5709,6 +6991,12 @@ function netSnapshot() {
         sockets: sockets,
         casualSlotsUsed: (slots[1] ? 1 : 0) + (slots[2] ? 1 : 0),
         rankedMatches: rankedMatches.size,
+        // The new flexible match rooms, so a live instance's load is
+        // visible in the same place every other number already is.
+        lobbies: lobbies.size,
+        arenaMatches: arenaMatches.size,
+        coopMatches: coopMatches.size,
+        coopRuns: Array.from(coopMatches.values()).map(m => m.run.debugState()),
         rankedQueued: rankedQueue.size,
         presenceAccounts: presence.size,
         msgsInPerSec: +(netStats.msgsIn / secs).toFixed(1),
@@ -5891,9 +7179,17 @@ wss.on("connection", (socket, request) => {
     // players need to be visible to their friends without occupying one
     // of the two casual duel slots (see the FRIENDS section above).
     let isPresenceOnly = false;
+    // A LOBBY/MATCH-ROOM connection (?mp=1) is the same idea: it plays
+    // online, but through a match room of its own (see ONLINE LOBBIES
+    // AND MATCH ROOMS), so it must never consume one of the two legacy
+    // casual slots -- four players opening the new online hub would
+    // otherwise lock every casual duel on the server out.
+    let isMatchRoomOnly = false;
     try {
-        isPresenceOnly = /[?&]presence=1(&|$)/.test(request && request.url ? request.url : "");
-    } catch (e) { isPresenceOnly = false; }
+        const url = (request && request.url) ? request.url : "";
+        isPresenceOnly = /[?&]presence=1(&|$)/.test(url);
+        isMatchRoomOnly = /[?&]mp=1(&|$)/.test(url);
+    } catch (e) { isPresenceOnly = false; isMatchRoomOnly = false; }
 
     // Every connection gets a lightweight envelope. For CASUAL play this
     // is exactly the old `player` object in one of the two global slots
@@ -5914,7 +7210,15 @@ wss.on("connection", (socket, request) => {
         rankedSlot: null,
         // friends/presence state
         authSub: null,
-        presenceOnly: isPresenceOnly
+        presenceOnly: isPresenceOnly,
+        // lobby / flexible-match-room state (see ONLINE LOBBIES AND
+        // MATCH ROOMS). All null on a connection that never opens the
+        // online hub, which is every existing client.
+        matchRoomOnly: isMatchRoomOnly,
+        lobbyId: null,
+        mpMatchId: null,
+        mpSlot: null,
+        mpKind: null
     };
 
     // ---- Casual slot assignment (unchanged) ----
@@ -5926,7 +7230,7 @@ wss.on("connection", (socket, request) => {
     // a casual slot, or idle players in the lobby would lock out the
     // players actually trying to duel.
     let id = null;
-    if (!isPresenceOnly) {
+    if (!isPresenceOnly && !isMatchRoomOnly) {
         if (!slots[1]) id = 1;
         else if (!slots[2]) id = 2;
     }
@@ -5954,7 +7258,7 @@ wss.on("connection", (socket, request) => {
             send(conn, { type: "opponentJoined" });
             send(opponent, { type: "opponentJoined" });
         }
-    } else if (!isPresenceOnly) {
+    } else if (!isPresenceOnly && !isMatchRoomOnly) {
         // No casual slot free. Previously this closed the socket; now it
         // stays open so ranked queueing still works, and the client is
         // told the casual lobby is full exactly as before.
@@ -6155,6 +7459,19 @@ wss.on("connection", (socket, request) => {
         }
 
         // =============================================================
+        // ONLINE LOBBIES / FLEXIBLE MATCH ROOMS / VOIDBREAK CO-OP
+        //
+        // Routed before ranked and before the casual relay: a
+        // connection inside a match room talks only to its room, and
+        // must never reach the global casual slots.
+        // =============================================================
+        if (typeof data.type === "string" &&
+            (data.type.indexOf("mp_") === 0 || data.type.indexOf("vb_") === 0)) {
+            handleMultiplayerMessage(conn, data);
+            return;
+        }
+
+        // =============================================================
         // RANKED MESSAGES -- handled before (and entirely separately
         // from) the casual relay below.
         // =============================================================
@@ -6257,6 +7574,14 @@ wss.on("connection", (socket, request) => {
 
             // Everything else is a straight relay to the room opponent.
             send(foe.conn, data);
+            return;
+        }
+
+        // A match-room connection measures its RTT the same way a
+        // casual one does. Answered straight back to the sender; it
+        // needs no opponent and no casual slot.
+        if (data.type === "ping" && (conn.matchRoomOnly || conn.mpMatchId)) {
+            send(conn, { type: "pong", t: data.t, ack: conn.lastSeq || 0 });
             return;
         }
 
@@ -6631,6 +7956,13 @@ wss.on("connection", (socket, request) => {
         // browser can never leave a ghost in the queue.
         handleRankedDisconnect(conn);
 
+        // Lobby / match-room cleanup: forfeits the slot in a live match
+        // after a grace period, pays out a co-op run's earned shards
+        // exactly once, and removes the player from any room they were
+        // still sitting in -- so neither a match nor a lobby can be
+        // left orphaned in memory by a closed browser.
+        handleMultiplayerDisconnect(conn);
+
         // Casual slot cleanup -- unchanged, but only for a connection
         // that actually held a slot.
         if (conn.id !== null) {
@@ -6748,7 +8080,7 @@ async function startServer() {
         .catch(e => console.log("[static] warm failed:", e.message));
 
     httpServer.listen(PORT, "0.0.0.0", () => {
-        console.log("DUEL ARENA SERVER STARTED on port " + PORT);
+        console.log("VOIDBREAK SERVER STARTED on port " + PORT);
         console.log("Open http://localhost:" + PORT + " on this computer,");
         console.log("or http://<this computer's LAN IP>:" + PORT + " on the other player's computer.");
     });

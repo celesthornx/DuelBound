@@ -41,6 +41,12 @@
 //     honestly-earned totals, never invents a third number.
 // =====================================================================
 
+// The universe content layer (galaxies, systems, discoveries, planet
+// buildings, ship systems). Shared verbatim with the client -- see the
+// header of voidbreakUniverse.js for why that one is shared rather than
+// mirrored the way DEF_SAVE below is.
+const Universe = require("./voidbreakUniverse");
+
 // The exact shape voidbreak.html's own `DEF_SAVE` uses -- kept in sync
 // with it deliberately (this file does not invent a new progression
 // model, it only re-describes the existing one so the server can
@@ -53,6 +59,18 @@ const DEF_SAVE = {
     forge: { vit: 0, pow: 0, swift: 0, core: 0, drive: 0, edge: 0 },
     weapons: { pulse: true, scatter: false, rail: false, plasma: false, voidb: false, voidc: false },
     lastWeapon: "pulse",
+
+    // ---- VOID LOADOUT ----
+    // What the player flies with, chosen once and kept. Purely a
+    // PREFERENCE, exactly like lastWeapon above: it decides which of the
+    // player's already-earned options is equipped, never what they are
+    // allowed to have. Which secondaries and abilities exist at all is
+    // gated by universe progress (systems cleared / guardians beaten),
+    // which is separate, already-validated save state -- so there is no
+    // new ownership list here for a client to lie about, and an
+    // unavailable id simply falls back to the default at use time.
+    loadout: { primary: "pulse", secondary: "missile", ability: "overdrive" },
+
     runs: 0,
     best: 0,
     kills: 0,
@@ -96,12 +114,68 @@ const DEF_SAVE = {
     equippedWeaponSkins: {}, // { weaponKey: itemId }
     mastery: {},         // { weaponKey: xp }
     masteryClaimed: [],  // ["rail:4", ...] -- one entry per claimed mastery level
-    prestige: { level: 0, history: [] }
+    prestige: { level: 0, history: [] },
+
+    // ---- UNIVERSE FIELDS (Galaxy Map / Solar Systems / Discovery /
+    // Ship Progression / Home Planet) ----
+    //
+    // One nested block rather than a dozen new top-level keys, because
+    // every function in this file that touches a save (sanitize, merge,
+    // conflict-resolve, prestige) then has exactly ONE new thing to
+    // handle instead of twelve, and a future galaxy adds content to
+    // voidbreakUniverse.js without adding a field here at all.
+    //
+    // The same SERVER-OWNED vs CLIENT-REPORTED split the endgame fields
+    // use applies, and for the same reasons:
+    //
+    //   * CLIENT-REPORTED (sanitized, clamped, monotonic-merged, but not
+    //     simulated server-side -- identical trust tier to `shards`,
+    //     `kills` and `beaten`, which have always been reported this
+    //     way): `galaxy`, `systems`, `discovered`, `drive`, `ship`,
+    //     `coins`. These are the outcome of playing the game, and there
+    //     is no server-side Voidbreak to check them against.
+    //
+    //   * SERVER-OWNED (stripped from every incoming save and carried
+    //     forward from the stored record; writable only by the
+    //     dedicated transactional endpoint /voidbreak/planet/build):
+    //     `coinsSpent` and `planet`. Construction SPENDS a currency, so
+    //     it gets the same treatment the Void Shard Shop gets -- the
+    //     client sends a plot index and a building id, and this module
+    //     decides against the STORED record whether that is affordable
+    //     and allowed.
+    //
+    // `coinsSpent` is a monotonic ledger for exactly the reason
+    // `shardsSpent` is one: `coins` is MAX-merged, so a mutable balance
+    // would let a stale save "win" the merge and refund every building
+    // the player ever placed. Spendable = coins - coinsSpent, floored.
+    universe: {
+        galaxy: 1,       // which galaxy the player is currently in
+        systems: {},     // { "1:3": 1 } -- cleared systems, keyed galaxy:system
+        discovered: {},  // { "1:3": ["g1s3_star", ...] } -- sites found
+        drive: {},       // { "1": 5 } -- Galaxy Drive pieces held, per galaxy
+        ship: {},        // { hull: 2, engine: 1, ... } -- ship part levels
+        coins: 0,        // lifetime coins earned (planet construction currency)
+        coinsSpent: 0,   // SERVER-OWNED monotonic spend ledger
+        planet: {        // SERVER-OWNED colony state
+            buildings: {},   // { "17": { id: "command", level: 2 } } -- keyed by plot index
+            decorations: {}  // { "23": { id: "dec_monolith" } }
+        }
+    }
 };
 
 const FORGE_KEYS = Object.keys(DEF_SAVE.forge);
 const WEAPON_KEYS = Object.keys(DEF_SAVE.weapons);
 const EQUIP_SLOTS = Object.keys(DEF_SAVE.equipped);
+
+// The closed sets the Void Loadout's two non-weapon slots are validated
+// against. Kept in sync with voidbreak.html's SECONDARIES/VB_ABILITIES
+// by hand, exactly as DEF_SAVE itself is kept in sync with that file's
+// own DEF_SAVE -- this module re-describes the shape the client owns, it
+// does not invent a second one. Only the IDS live here: what each does,
+// what it costs in energy and when it unlocks are gameplay, and gameplay
+// is the client's, same as the WEAPONS table has always been.
+const SECONDARY_IDS = ["none", "missile", "drone", "barrier"];
+const ABILITY_IDS = ["none", "overdrive", "mark", "blink"];
 
 // =====================================================================
 // VOID SHARD SHOP -- catalog
@@ -121,8 +195,8 @@ const EQUIP_SLOTS = Object.keys(DEF_SAVE.equipped);
 // Individual prices are what a player actually feels, and they're set
 // against that income: a common is ~1 Level-1 clear, an epic ~1 clear
 // of a mid level, a legendary ~1.5 Level-8 clears. Nothing is priced
-// out of reach of a mid-game player. The catalog TOTAL (60 items,
-// 88,700 shards) is deliberately a long tail rather than a checklist to
+// out of reach of a mid-game player. The catalog TOTAL (61 items,
+// 90,900 shards) is deliberately a long tail rather than a checklist to
 // finish in an evening -- and roughly half of it is mythic tier that
 // can't be bought with shards alone at all, being gated behind mastery
 // 10 or a prestige level, so shard income is never the only thing
@@ -155,6 +229,7 @@ const COSMETICS = [
     item("skin_abyss", "ABYSSAL DRIFT", "skin", "epic", { hull: [70, 110, 255], glow: [40, 80, 255] }),
     item("skin_gold", "GILDED VANGUARD", "skin", "legendary", { hull: [255, 215, 130], glow: [255, 201, 92] }),
     item("skin_void", "VOIDWALKER", "skin", "legendary", { hull: [230, 230, 255], glow: [190, 130, 255] }),
+    item("skin_tuff", "TUFF", "skin", "legendary", { hull: [72, 78, 92], glow: [190, 70, 255] }),
     item("skin_prestige", "ASCENDANT", "skin", "mythic", { hull: [255, 255, 255], glow: [255, 201, 92], req: { prestige: 1 } }),
 
     // ---- WEAPON SKINS (per-weapon projectile/UI color) ----
@@ -387,8 +462,10 @@ function prestigeStatus(save) {
 // The exact, itemized reset the confirmation screen promises. Anything
 // not listed in RESETS is preserved verbatim -- and that's asserted by
 // tests, not just by this comment.
-const PRESTIGE_RESETS = ["weapons (except PULSE RIFLE)", "all Forge upgrades", "unspent Void Shards", "level unlocks"];
-const PRESTIGE_KEEPS = ["every shop cosmetic you own", "all weapon mastery XP and levels", "prestige level, badges and titles", "lifetime runs / best sector / bosses slain"];
+const PRESTIGE_RESETS = ["weapons (except PULSE RIFLE)", "all Forge upgrades", "unspent Void Shards", "level unlocks",
+    "galaxy and solar-system progress", "Galaxy Drive pieces", "recovered ship components", "unspent Coins"];
+const PRESTIGE_KEEPS = ["every shop cosmetic you own", "all weapon mastery XP and levels", "prestige level, badges and titles", "lifetime runs / best sector / bosses slain",
+    "your Home Planet, every building on it and all its territory", "every discovery you have ever logged"];
 
 // Generous sanity ceilings -- not a balance/anti-cheat model, purely a
 // guard against a corrupt or hostile payload storing an absurd number
@@ -400,10 +477,148 @@ const MAX_COUNTER = 1000000;
 const MAX_LEVEL_ID = 100;      // Voidbreak currently ships 5 levels; this just leaves headroom for more without a code change here
 const MAX_BEATEN_ENTRIES = 200; // matches MAX_LEVEL_ID headroom, keeps the object bounded
 
+// ---- universe bounds ----
+// These are sized off voidbreakUniverse.js rather than guessed, so a
+// galaxy added there does not need a number changed here. The +8 slack
+// on the system cap covers a client that is one deploy ahead of this
+// server (it may legitimately report a system this process has not
+// loaded yet); everything past that is dropped rather than stored.
+const MAX_COINS = 10000000;
+const MAX_GALAXY_ID = 100;
+const MAX_SYSTEM_ENTRIES = 400;
+const MAX_DISCOVERIES_PER_SYSTEM = 32;
+const MAX_DISCOVERY_ID_LEN = 48;
+const MAX_PLOT_INDEX = 4096;
+
 function clampInt(n, lo, hi, fallback) {
     const v = Math.floor(Number(n));
     if (!isFinite(v)) return fallback;
     return Math.max(lo, Math.min(hi, v));
+}
+
+// Turns an arbitrary client-reported `universe` blob into a safe,
+// correctly-shaped one. Never throws, never trusts a key, and never
+// grows without bound: every map is length-capped and every id is
+// checked against what voidbreakUniverse.js actually defines, so a
+// hostile payload cannot park a megabyte of junk (or a system in a
+// galaxy that does not exist) in the account record.
+//
+// Server-owned members (`coinsSpent`, `planet`) are NOT read from `raw`
+// here at all -- they come back as safe empties and applyClientSave()
+// then overwrites them from the stored record, which is what makes them
+// unwritable by a client. Same construction sanitizeSaveData() already
+// uses for shardsSpent/shopOwned/equipped.
+function sanitizeUniverse(raw) {
+    const src = (raw && typeof raw === "object") ? raw : {};
+    const out = Universe.emptyUniverse();
+
+    out.galaxy = clampInt(src.galaxy, 1, MAX_GALAXY_ID, 1);
+
+    // ---- cleared systems ----
+    const rawSystems = (src.systems && typeof src.systems === "object") ? src.systems : {};
+    let sysCount = 0;
+    for (const key of Object.keys(rawSystems)) {
+        if (sysCount >= MAX_SYSTEM_ENTRIES) break;
+        if (!rawSystems[key]) continue;            // only true entries mean anything
+        if (!/^\d{1,3}:\d{1,3}$/.test(key)) continue; // "galaxy:system" or nothing
+        out.systems[key] = 1;
+        sysCount++;
+    }
+
+    // ---- discoveries ----
+    // Ids are matched against the galaxy's own discovery list, so an
+    // invented id can never enter the record (and therefore can never
+    // unlock a decoration that was never found).
+    const rawDisc = (src.discovered && typeof src.discovered === "object") ? src.discovered : {};
+    let discSystems = 0;
+    for (const key of Object.keys(rawDisc)) {
+        if (discSystems >= MAX_SYSTEM_ENTRIES) break;
+        if (!/^\d{1,3}:\d{1,3}$/.test(key)) continue;
+        const list = rawDisc[key];
+        if (!Array.isArray(list)) continue;
+        const parts = key.split(":");
+        const system = Universe.systemAt(Math.floor(Number(parts[0])), Math.floor(Number(parts[1])));
+        const known = system ? (system.discoveries || []).map(function (d) { return d.id; }) : null;
+        const clean = [];
+        for (const id of list) {
+            if (clean.length >= MAX_DISCOVERIES_PER_SYSTEM) break;
+            if (typeof id !== "string" || !id || id.length > MAX_DISCOVERY_ID_LEN) continue;
+            // A system this server has not loaded yet (client one deploy
+            // ahead) keeps its ids verbatim but still length-capped;
+            // a system it HAS loaded only keeps ids that really exist.
+            if (known && known.indexOf(id) === -1) continue;
+            if (clean.indexOf(id) === -1) clean.push(id);
+        }
+        if (clean.length) { out.discovered[key] = clean; discSystems++; }
+    }
+
+    // ---- Galaxy Drive pieces ----
+    // Capped at the galaxy's real system count where that is known, so
+    // "I hold 900 pieces" cannot complete a drive early.
+    const rawDrive = (src.drive && typeof src.drive === "object") ? src.drive : {};
+    let driveCount = 0;
+    for (const key of Object.keys(rawDrive)) {
+        if (driveCount >= MAX_GALAXY_ID) break;
+        if (!/^\d{1,3}$/.test(key)) continue;
+        const total = Universe.driveTotal(Math.floor(Number(key)));
+        const cap = total > 0 ? total : MAX_SYSTEM_ENTRIES;
+        const n = clampInt(rawDrive[key], 0, cap, 0);
+        if (n > 0) { out.drive[key] = n; driveCount++; }
+    }
+
+    // ---- ship part levels ----
+    const rawShip = (src.ship && typeof src.ship === "object") ? src.ship : {};
+    for (const id of Universe.SHIP_SYSTEM_IDS) {
+        const n = clampInt(rawShip[id], 0, Universe.SHIP_PART_MAX, 0);
+        if (n > 0) out.ship[id] = n;
+    }
+
+    out.coins = clampInt(src.coins, 0, MAX_COINS, 0);
+
+    // Server-owned -- left as the empties emptyUniverse() supplied.
+    return out;
+}
+
+// Older saves predate the universe layer entirely: an existing player
+// has `beaten` levels but no `universe.systems`. Backfilling is not
+// optional politeness -- without it a veteran with all eight levels
+// cleared would open the galaxy map to a locked Galaxy 1, and the very
+// first thing the new direction did would be to take their progress
+// away.
+//
+// Galaxy 1's systems carry `levelId`, which IS the old level id, so the
+// mapping is exact rather than a guess. Runs once per save and is
+// idempotent: it only ever adds, so a save that has already been
+// migrated (or that legitimately cleared a system without the legacy
+// level) passes through untouched.
+function migrateUniverse(save) {
+    if (!save || !save.universe) return save;
+    const u = save.universe;
+    const beaten = save.beaten || {};
+    const galaxy = Universe.galaxyById(1);
+    if (!galaxy) return save;
+
+    let added = 0;
+    for (const system of galaxy.systems) {
+        if (!system.levelId || !beaten[system.levelId]) continue;
+        const key = Universe.systemKey(1, system.id);
+        if (u.systems[key]) continue;
+        u.systems[key] = 1;
+        // A cleared system is a fully surveyed one -- see the client's
+        // own reveal rule, which does exactly this on a clear.
+        u.discovered[key] = (system.discoveries || []).map(function (d) { return d.id; });
+        added++;
+    }
+    if (added > 0) {
+        // Drive pieces follow the systems that were actually cleared, so
+        // a migrated veteran holds the pieces their clears earned -- and
+        // a completed Galaxy 1 opens Galaxy 2 immediately, which is the
+        // correct reward for work already done.
+        const held = Universe.drivePieces(u, 1);
+        const earned = Universe.clearedInGalaxy(u, 1);
+        if (earned > held) u.drive["1"] = earned;
+    }
+    return save;
 }
 
 // Turns an arbitrary client-reported value into a safe, correctly-shaped
@@ -426,6 +641,22 @@ function sanitizeSaveData(raw) {
 
     let lastWeapon = typeof raw.lastWeapon === "string" ? raw.lastWeapon : "pulse";
     if (WEAPON_KEYS.indexOf(lastWeapon) === -1 || !weapons[lastWeapon]) lastWeapon = "pulse";
+
+    // The loadout is three ids out of three closed sets. Anything else
+    // -- a missing object, a wrong type, an unknown id, a primary the
+    // account does not own -- collapses to the default rather than being
+    // rejected, because a bad preference should never cost a player a
+    // save. SECONDARY_IDS/ABILITY_IDS are the whole validation: what a
+    // given account may actually EQUIP is decided by universe progress
+    // at use time, not stored here.
+    const rawLoadout = (raw.loadout && typeof raw.loadout === "object") ? raw.loadout : {};
+    let lPrimary = typeof rawLoadout.primary === "string" ? rawLoadout.primary : lastWeapon;
+    if (WEAPON_KEYS.indexOf(lPrimary) === -1 || !weapons[lPrimary]) lPrimary = lastWeapon;
+    let lSecondary = typeof rawLoadout.secondary === "string" ? rawLoadout.secondary : "missile";
+    if (SECONDARY_IDS.indexOf(lSecondary) === -1) lSecondary = "missile";
+    let lAbility = typeof rawLoadout.ability === "string" ? rawLoadout.ability : "overdrive";
+    if (ABILITY_IDS.indexOf(lAbility) === -1) lAbility = "overdrive";
+    const loadout = { primary: lPrimary, secondary: lSecondary, ability: lAbility };
 
     const beaten = {};
     const rawBeaten = (raw.beaten && typeof raw.beaten === "object") ? raw.beaten : {};
@@ -454,6 +685,7 @@ function sanitizeSaveData(raw) {
         forge: forge,
         weapons: weapons,
         lastWeapon: lastWeapon,
+        loadout: loadout,
         runs: clampInt(raw.runs, 0, MAX_COUNTER, 0),
         best: clampInt(raw.best, 0, MAX_COUNTER, 0),
         kills: clampInt(raw.kills, 0, MAX_COUNTER, 0),
@@ -469,7 +701,8 @@ function sanitizeSaveData(raw) {
         equipped: { skin: "", trail: "", hit: "", kill: "", theme: "", title: "", badge: "" },
         equippedWeaponSkins: {},
         masteryClaimed: [],
-        prestige: { level: 0, history: [] }
+        prestige: { level: 0, history: [] },
+        universe: sanitizeUniverse(raw.universe)
     };
 }
 
@@ -513,11 +746,99 @@ function applyClientSave(clean, stored) {
     }
     clean.mastery = merged;
 
+    // ---- universe: server-owned half carried forward ----
+    // The colony and its spend ledger are taken from the STORED record
+    // exactly like shopOwned/shardsSpent above, so an ordinary save can
+    // never place a building, raise one a level, or un-spend a coin.
+    // Only /voidbreak/planet/build can, and it goes through
+    // buildOnPlanet() below against this same stored record.
+    const prevU = prev.universe || Universe.emptyUniverse();
+    if (!clean.universe) clean.universe = Universe.emptyUniverse();
+    clean.universe.coinsSpent = Math.max(0, Math.floor(Number(prevU.coinsSpent) || 0));
+    clean.universe.planet = clonePlanet(prevU.planet);
+
+    // ---- universe: client-reported half, forced monotonic ----
+    // Everything here is progress, and progress does not go backwards.
+    // Taking the max against the stored record means a device that is
+    // behind (an offline tab finally flushing, a second device mid-sync)
+    // can add what it found and never subtract what another device did
+    // -- the same rule `shards` and `beaten` have always followed.
+    const reportedU = clean.universe;
+    reportedU.systems = Object.assign({}, prevU.systems || {}, reportedU.systems || {});
+    reportedU.discovered = mergeDiscovered(prevU.discovered, reportedU.discovered);
+    const drive = {};
+    for (const key of Object.keys(Object.assign({}, prevU.drive || {}, reportedU.drive || {}))) {
+        const n = Math.max(
+            Math.floor(Number((prevU.drive || {})[key]) || 0),
+            Math.floor(Number((reportedU.drive || {})[key]) || 0));
+        if (n > 0) drive[key] = n;
+    }
+    reportedU.drive = drive;
+    const ship = {};
+    for (const id of Universe.SHIP_SYSTEM_IDS) {
+        const n = Math.max(
+            Math.floor(Number((prevU.ship || {})[id]) || 0),
+            Math.floor(Number((reportedU.ship || {})[id]) || 0));
+        if (n > 0) ship[id] = Math.min(n, Universe.SHIP_PART_MAX);
+    }
+    reportedU.ship = ship;
+    reportedU.coins = Math.max(0, Math.floor(Number(reportedU.coins) || 0),
+        Math.floor(Number(prevU.coins) || 0));
+
     // `shards` is the pre-existing client-reported balance. It must never
     // fall below what's already been spent in the shop, or the derived
     // spendable balance would go negative.
     if (clean.shards < 0) clean.shards = 0;
+
+    // Last, so it sees the fully reconciled save: a pre-universe record
+    // (or a client that has not migrated itself yet) gets its Galaxy 1
+    // progress derived from the levels it already beat. Idempotent and
+    // additive -- running it on an already-migrated save changes nothing.
+    migrateUniverse(clean);
     return clean;
+}
+
+// A deep-enough copy of the colony that a caller mutating the result can
+// never reach into the stored record. The nesting is exactly two levels
+// (plot -> { id, level }), so this is cheaper and clearer than a
+// JSON round trip and cannot be tripped by a stray non-plain value.
+function clonePlanet(planet) {
+    const src = planet || {};
+    const out = { buildings: {}, decorations: {} };
+    for (const key of Object.keys(src.buildings || {})) {
+        const entry = src.buildings[key];
+        if (!entry || typeof entry !== "object") continue;
+        if (!Universe.BUILDING_BY_ID[entry.id]) continue;
+        out.buildings[key] = { id: entry.id, level: Math.max(1, Math.floor(Number(entry.level) || 1)) };
+    }
+    for (const key of Object.keys(src.decorations || {})) {
+        const entry = src.decorations[key];
+        if (!entry || typeof entry !== "object") continue;
+        if (!Universe.DECORATION_BY_ID[entry.id]) continue;
+        out.decorations[key] = { id: entry.id };
+    }
+    return out;
+}
+
+// Union of two discovery maps. Finding something is permanent and
+// unordered, so the union is always the truthful answer -- there is no
+// version of "these two devices disagree about a discovery" where the
+// right move is to forget one.
+function mergeDiscovered(a, b) {
+    const out = {};
+    const sources = [a || {}, b || {}];
+    for (const src of sources) {
+        for (const key of Object.keys(src)) {
+            const list = Array.isArray(src[key]) ? src[key] : [];
+            if (!out[key]) out[key] = [];
+            for (const id of list) {
+                if (out[key].length >= MAX_DISCOVERIES_PER_SYSTEM) break;
+                if (out[key].indexOf(id) === -1) out[key].push(id);
+            }
+        }
+    }
+    for (const key of Object.keys(out)) if (!out[key].length) delete out[key];
+    return out;
 }
 
 // Spendable Void Shards = reported balance minus the server's spend
@@ -637,6 +958,12 @@ function applyPrestige(save) {
     next.weapons = {};
     for (const k of WEAPON_KEYS) next.weapons[k] = (k === "pulse");
     next.lastWeapon = "pulse";
+    // Prestige takes the weapons back, so the loadout has to let go of
+    // them too -- leaving `primary` pointed at a railgun the account no
+    // longer owns would sanitize back to pulse on the next save anyway,
+    // just less visibly. The secondary and ability slots reset with it:
+    // both are gated on universe progress, which this same reset clears.
+    next.loadout = { primary: "pulse", secondary: "missile", ability: "overdrive" };
     next.forge = {};
     for (const k of FORGE_KEYS) next.forge[k] = 0;
     next.beaten = {};
@@ -647,6 +974,27 @@ function applyPrestige(save) {
     next.shards = 0;
     next.shardsSpent = 0;
 
+    // The universe half of the reset. A New Expedition sets out again
+    // from the Frontier: galaxy progression, drive pieces, recovered
+    // ship components and the coin balance all go, exactly mirroring
+    // what happens to levels, weapons, Forge and shards above (and coins
+    // zero both sides of their ledger for the same reason shards do --
+    // zeroing one side alone would either refund or bankrupt the
+    // colony).
+    //
+    // What survives is everything the expedition LEARNED and BUILT:
+    // `discovered` (a catalogue of places that have been seen is not
+    // un-seen by going out again) and `planet` (the colony is the
+    // physical record of the whole journey; demolishing it would erase
+    // the one part of the game that is meant to accumulate forever).
+    // Territory survives with it -- see plotsUnlockedFor(), which reads
+    // the colony as well as the systems cleared precisely so a reset
+    // cannot strand a standing building outside its own borders.
+    const keptUniverse = next.universe || Universe.emptyUniverse();
+    next.universe = Universe.emptyUniverse();
+    next.universe.discovered = keptUniverse.discovered || {};
+    next.universe.planet = keptUniverse.planet || { buildings: {}, decorations: {} };
+
     // --- PRESERVE (everything in PRESTIGE_KEEPS) ---
     // shopOwned, equipped, equippedWeaponSkins, mastery, masteryClaimed,
     // runs, best and kills are all carried through untouched by cloneSave.
@@ -656,6 +1004,109 @@ function applyPrestige(save) {
         history: ((s.prestige || {}).history || []).concat([{ level: newLevel, at: Date.now() }]).slice(-50)
     };
     return { ok: true, save: next, level: newLevel };
+}
+
+// =====================================================================
+// HOME PLANET CONSTRUCTION -- the one transactional universe operation
+//
+// Built to exactly the shape buyCosmetic() above uses, because it is
+// exactly the same kind of operation: the client names a thing, and this
+// function decides against the STORED save whether that is legal and
+// affordable, then returns a NEW save rather than mutating the old one.
+// Nothing about the cost, the requirement, the level or the plot comes
+// from the request -- `plot` and `buildingId` are the whole of the
+// client's contribution, and both are validated here.
+//
+// Placing a building on a plot that already holds one is an UPGRADE of
+// that building, not a second one, which is why there is a single entry
+// point rather than a build/upgrade pair.
+// =====================================================================
+function buildOnPlanet(save, plot, buildingId) {
+    const building = Universe.BUILDING_BY_ID[buildingId];
+    if (!building) return { ok: false, code: 400, error: "Unknown structure" };
+
+    const s = save || defaultSaveData();
+    const u = s.universe || Universe.emptyUniverse();
+
+    const plotIndex = Math.floor(Number(plot));
+    if (!isFinite(plotIndex) || plotIndex < 0 || plotIndex >= Universe.PLOT_COUNT) {
+        return { ok: false, code: 400, error: "No such plot" };
+    }
+    // Territory is derived from progress the SERVER holds, so a client
+    // cannot build past its own borders by asking nicely.
+    if (plotIndex >= Universe.plotsUnlockedFor(u)) {
+        return { ok: false, code: 403, error: "That plot is outside your territory" };
+    }
+
+    const existing = Universe.buildingAt(u, plotIndex);
+    if (existing && existing.id !== buildingId) {
+        return { ok: false, code: 409, error: "That plot already holds a different structure" };
+    }
+    if ((u.planet && u.planet.decorations && u.planet.decorations[String(plotIndex)])) {
+        return { ok: false, code: 409, error: "That plot already holds a decoration" };
+    }
+
+    const currentLevel = Universe.buildingLevel(u, buildingId);
+    if (currentLevel >= building.maxLevel) {
+        return { ok: false, code: 409, error: building.name + " is already at maximum level" };
+    }
+    // Upgrading means upgrading THE one that exists, so a second plot
+    // cannot be used to fork a building's level track.
+    if (currentLevel > 0 && !existing) {
+        return { ok: false, code: 409, error: "You already have a " + building.name + " -- upgrade it in place" };
+    }
+    if (!Universe.buildingRequirementMet(u, buildingId)) {
+        return { ok: false, code: 403, error: "Locked -- " + (Universe.requirementText(buildingId) || "requirement not met") };
+    }
+
+    const cost = Universe.buildingCost(u, buildingId);
+    if (cost === null) return { ok: false, code: 409, error: "Nothing left to build here" };
+    if (Universe.spendableCoins(u) < cost) return { ok: false, code: 400, error: "Not enough Coins" };
+
+    const next = cloneSave(s);
+    if (!next.universe) next.universe = Universe.emptyUniverse();
+    if (!next.universe.planet) next.universe.planet = { buildings: {}, decorations: {} };
+    next.universe.coinsSpent = (Math.floor(Number(u.coinsSpent) || 0)) + cost;
+    next.universe.planet.buildings[String(plotIndex)] = { id: buildingId, level: currentLevel + 1 };
+    return { ok: true, save: next, building: building, level: currentLevel + 1, plot: plotIndex, spent: cost };
+}
+
+// Placing a decoration costs nothing -- it is unlocked by having FOUND
+// the thing, which is progress the server already holds in
+// `universe.discovered` and re-checks here. Passing a null decorationId
+// clears the plot, which is the only way anything ever leaves a plot
+// (buildings are never removed; see buildOnPlanet).
+function placeDecoration(save, plot, decorationId) {
+    const s = save || defaultSaveData();
+    const u = s.universe || Universe.emptyUniverse();
+
+    const plotIndex = Math.floor(Number(plot));
+    if (!isFinite(plotIndex) || plotIndex < 0 || plotIndex >= Universe.PLOT_COUNT) {
+        return { ok: false, code: 400, error: "No such plot" };
+    }
+    if (plotIndex >= Universe.plotsUnlockedFor(u)) {
+        return { ok: false, code: 403, error: "That plot is outside your territory" };
+    }
+    if (Universe.buildingAt(u, plotIndex)) {
+        return { ok: false, code: 409, error: "That plot already holds a structure" };
+    }
+
+    const next = cloneSave(s);
+    if (!next.universe) next.universe = Universe.emptyUniverse();
+    if (!next.universe.planet) next.universe.planet = { buildings: {}, decorations: {} };
+
+    if (decorationId === null || decorationId === "") {
+        delete next.universe.planet.decorations[String(plotIndex)];
+        return { ok: true, save: next, cleared: true, plot: plotIndex };
+    }
+
+    const dec = Universe.DECORATION_BY_ID[decorationId];
+    if (!dec) return { ok: false, code: 400, error: "Unknown decoration" };
+    if (Universe.unlockedDecorations(u).indexOf(decorationId) === -1) {
+        return { ok: false, code: 403, error: "You have not found that yet" };
+    }
+    next.universe.planet.decorations[String(plotIndex)] = { id: decorationId };
+    return { ok: true, save: next, decoration: dec, plot: plotIndex };
 }
 
 function cloneSave(s) {
@@ -720,7 +1171,48 @@ function endgameView(save) {
             resets: PRESTIGE_RESETS,
             keeps: PRESTIGE_KEEPS,
             history: ((s.prestige || {}).history || []).slice(-10)
-        }
+        },
+        // The universe half, resolved server-side for the same reason
+        // the shop half is: the colony's spendable balance, what each
+        // building costs NEXT, and whether its requirement is met are
+        // all decisions, and the client should render decisions rather
+        // than make them. It still draws the planet from `save.universe`
+        // (which it has anyway); this is what it draws the BUY BUTTONS
+        // from.
+        universe: universeView(s)
+    };
+}
+
+function universeView(save) {
+    const s = save || defaultSaveData();
+    const u = s.universe || Universe.emptyUniverse();
+    const buildings = Universe.BUILDINGS.map(function (b) {
+        const level = Universe.buildingLevel(u, b.id);
+        return {
+            id: b.id, name: b.name, glyph: b.glyph, desc: b.desc, color: b.color,
+            level: level, maxLevel: b.maxLevel,
+            cost: Universe.buildingCost(u, b.id),
+            unlocked: Universe.buildingRequirementMet(u, b.id),
+            requirement: Universe.requirementText(b.id),
+            effect: b.effect ? b.effect(Math.max(1, level)) : "",
+            nextEffect: b.effect && level < b.maxLevel ? b.effect(level + 1) : ""
+        };
+    });
+    return {
+        coins: Math.max(0, Math.floor(Number(u.coins) || 0)),
+        coinsSpent: Math.max(0, Math.floor(Number(u.coinsSpent) || 0)),
+        spendableCoins: Universe.spendableCoins(u),
+        coinMultiplier: Universe.coinMultiplier(u),
+        plotsUnlocked: Universe.plotsUnlockedFor(u),
+        plotCount: Universe.PLOT_COUNT,
+        buildings: buildings,
+        planet: Universe.emptyUniverse().planet && clonePlanet(u.planet),
+        decorationsUnlocked: Universe.unlockedDecorations(u),
+        galaxy: Math.max(1, Math.floor(Number(u.galaxy) || 1)),
+        galaxiesCleared: Universe.galaxiesCleared(u),
+        systemsCleared: Universe.totalCleared(u),
+        surveyReveal: Universe.surveyReveal(u),
+        ship: Universe.shipPower(u)
     };
 }
 
@@ -749,6 +1241,22 @@ function mergeSaveData(a, b) {
     // side first at every call site).
     let lastWeapon = weapons[a.lastWeapon] ? a.lastWeapon : (weapons[b.lastWeapon] ? b.lastWeapon : "pulse");
 
+    // The loadout merges the same way, and for the same reason: three
+    // preferences with no stakes. `a` (the more-recent side at every
+    // call site) wins each slot as long as it names something the merged
+    // account can actually equip, which for the primary means a weapon
+    // the MERGED weapons map owns -- so a merge can never leave a player
+    // pointed at a weapon they do not have.
+    const aL = a.loadout || {}, bL = b.loadout || {};
+    const pickPrimary = weapons[aL.primary] ? aL.primary : (weapons[bL.primary] ? bL.primary : lastWeapon);
+    const pickId = (x, y, set, dflt) =>
+        (set.indexOf(x) !== -1 ? x : (set.indexOf(y) !== -1 ? y : dflt));
+    const loadout = {
+        primary: pickPrimary,
+        secondary: pickId(aL.secondary, bL.secondary, SECONDARY_IDS, "missile"),
+        ability: pickId(aL.ability, bL.ability, ABILITY_IDS, "overdrive")
+    };
+
     // Endgame fields follow the same never-summed rule. shardsSpent is
     // MAX'd for the same reason `shards` is: it only ever grows (the
     // server is the only writer), so MAX keeps the true spend total and
@@ -776,6 +1284,7 @@ function mergeSaveData(a, b) {
         forge: forge,
         weapons: weapons,
         lastWeapon: lastWeapon,
+        loadout: loadout,
         runs: Math.max(a.runs || 0, b.runs || 0),
         best: Math.max(a.best || 0, b.best || 0),
         kills: Math.max(a.kills || 0, b.kills || 0),
@@ -786,8 +1295,55 @@ function mergeSaveData(a, b) {
         equippedWeaponSkins: Object.assign({}, b.equippedWeaponSkins || {}, a.equippedWeaponSkins || {}),
         mastery: mastery,
         masteryClaimed: masteryClaimed,
-        prestige: { level: prestigeLevel, history: prestigeHistory.slice(-50) }
+        prestige: { level: prestigeLevel, history: prestigeHistory.slice(-50) },
+        universe: mergeUniverse(a.universe, b.universe)
     };
+}
+
+// The universe half of mergeSaveData, under the same never-summed rule
+// the rest of this module follows: every number is MAX'd, every set is
+// UNION'd, and nothing is ever added together. Summing two devices'
+// coin totals would be the exact double-earn bug the header warns about
+// for shards; summing drive pieces would let two devices finish a
+// galaxy neither of them actually finished.
+//
+// The colony is the one non-numeric member, so it merges per PLOT:
+// whichever side has the higher level on a given plot wins, and a plot
+// only one side has built on is kept. A building is never destroyed by
+// a merge -- there is no honest reading of two saves in which a
+// structure the player paid for should disappear.
+function mergeUniverse(a, b) {
+    const ua = a || Universe.emptyUniverse();
+    const ub = b || Universe.emptyUniverse();
+    const out = Universe.emptyUniverse();
+
+    out.galaxy = Math.max(1, Math.floor(Number(ua.galaxy) || 1), Math.floor(Number(ub.galaxy) || 1));
+    out.systems = Object.assign({}, ub.systems || {}, ua.systems || {});
+    out.discovered = mergeDiscovered(ua.discovered, ub.discovered);
+
+    for (const key of Object.keys(Object.assign({}, ua.drive || {}, ub.drive || {}))) {
+        const n = Math.max(Math.floor(Number((ua.drive || {})[key]) || 0),
+                           Math.floor(Number((ub.drive || {})[key]) || 0));
+        if (n > 0) out.drive[key] = n;
+    }
+    for (const id of Universe.SHIP_SYSTEM_IDS) {
+        const n = Math.max(Math.floor(Number((ua.ship || {})[id]) || 0),
+                           Math.floor(Number((ub.ship || {})[id]) || 0));
+        if (n > 0) out.ship[id] = Math.min(n, Universe.SHIP_PART_MAX);
+    }
+
+    out.coins = Math.max(Math.floor(Number(ua.coins) || 0), Math.floor(Number(ub.coins) || 0));
+    out.coinsSpent = Math.max(Math.floor(Number(ua.coinsSpent) || 0), Math.floor(Number(ub.coinsSpent) || 0));
+
+    const pa = clonePlanet(ua.planet), pb = clonePlanet(ub.planet);
+    out.planet = { buildings: {}, decorations: {} };
+    for (const key of Object.keys(Object.assign({}, pa.buildings, pb.buildings))) {
+        const ea = pa.buildings[key], eb = pb.buildings[key];
+        if (ea && eb) out.planet.buildings[key] = (ea.level >= eb.level) ? ea : eb;
+        else out.planet.buildings[key] = ea || eb;
+    }
+    out.planet.decorations = Object.assign({}, pb.decorations, pa.decorations);
+    return out;
 }
 
 // =====================================================================
@@ -845,20 +1401,49 @@ function mergeSaveData(a, b) {
 // =====================================================================
 
 // Ordered, most significant first. Each entry is [name, extractor].
+// The universe signals sit immediately below prestige and above the
+// legacy level signals on purpose. Galaxies and solar systems are now
+// the outer shell of progression -- a save that has conquered a galaxy
+// is unambiguously further along than one that has not, whatever its
+// level ids say -- while everything below them is untouched and in its
+// original order, so two pre-universe saves still arbitrate exactly as
+// they did before this existed (all the new signals read 0 and the
+// comparison falls straight through to `highestLevel`).
 const PROGRESS_SIGNALS = [
     ["prestigeLevel",  s => Math.max(0, Math.floor(Number((s.prestige || {}).level) || 0))],
+    ["galaxiesCleared",s => Universe.galaxiesCleared(s.universe)],
+    ["systemsCleared", s => Universe.totalCleared(s.universe)],
+    ["drivePieces",    s => totalDrivePieces(s)],
     ["highestLevel",   s => highestBeatenLevel(s)],
     ["levelsBeaten",   s => countBeaten(s)],
     ["weaponsOwned",   s => WEAPON_KEYS.reduce((n, k) => n + ((s.weapons || {})[k] ? 1 : 0), 0)],
     ["forgeTotal",     s => FORGE_KEYS.reduce((n, k) => n + (Math.max(0, Math.floor(Number((s.forge || {})[k]) || 0))), 0)],
+    ["shipParts",      s => Universe.SHIP_SYSTEM_IDS.reduce((n, k) => n + Universe.shipLevel(s.universe, k), 0)],
     ["masteryXp",      s => WEAPON_KEYS.reduce((n, k) => n + Math.max(0, Math.floor(Number((s.mastery || {})[k]) || 0)), 0)],
     ["masteryClaimed", s => (Array.isArray(s.masteryClaimed) ? s.masteryClaimed.length : 0)],
     ["shopOwned",      s => (Array.isArray(s.shopOwned) ? s.shopOwned.length : 0)],
+    ["planetBuilt",    s => Universe.countBuildings(s.universe)],
+    ["discoveries",    s => totalDiscoveries(s)],
     ["shardsEarned",   s => Math.max(0, Math.floor(Number(s.shards) || 0))],
+    ["coinsEarned",    s => Math.max(0, Math.floor(Number((s.universe || {}).coins) || 0))],
     ["runs",           s => Math.max(0, Math.floor(Number(s.runs) || 0))],
     ["best",           s => Math.max(0, Math.floor(Number(s.best) || 0))],
     ["kills",          s => Math.max(0, Math.floor(Number(s.kills) || 0))]
 ];
+
+function totalDrivePieces(s) {
+    const drive = ((s || {}).universe || {}).drive || {};
+    let n = 0;
+    for (const key of Object.keys(drive)) n += Math.max(0, Math.floor(Number(drive[key]) || 0));
+    return n;
+}
+
+function totalDiscoveries(s) {
+    const found = ((s || {}).universe || {}).discovered || {};
+    let n = 0;
+    for (const key of Object.keys(found)) n += (Array.isArray(found[key]) ? found[key].length : 0);
+    return n;
+}
 
 function highestBeatenLevel(s) {
     let highest = 0;
@@ -893,6 +1478,8 @@ function calculateProgressScore(save) {
     // lexicographic result, which makes it readable in a log line.
     const total =
         components.prestigeLevel  * 1000000000 +
+        components.galaxiesCleared * 100000000 +
+        components.systemsCleared  * 20000000 +
         components.highestLevel   * 10000000 +
         components.levelsBeaten   * 1000000 +
         components.weaponsOwned   * 100000 +
@@ -931,6 +1518,16 @@ function compareSaves(a, b) {
 function mergeKeptAcrossPrestige(stored, incoming) {
     const out = cloneSave(stored);
     const a = incoming || DEF_SAVE;
+    // The two universe members prestige explicitly KEEPS are merged
+    // upward for the same reason the lifetime counters below are: a
+    // device that kept playing after the prestige legitimately found
+    // sites and placed buildings the stored record has not seen. Every
+    // member prestige RESETS is left as the stored record has it -- that
+    // is the progress the prestige consumed, and taking it from the
+    // stale save would undo the reset.
+    if (!out.universe) out.universe = Universe.emptyUniverse();
+    out.universe.discovered = mergeDiscovered(out.universe.discovered, (a.universe || {}).discovered);
+    out.universe.planet = mergeUniverse(out.universe, a.universe || {}).planet;
     out.runs = Math.max(out.runs || 0, a.runs || 0);
     out.best = Math.max(out.best || 0, a.best || 0);
     out.kills = Math.max(out.kills || 0, a.kills || 0);
@@ -1041,6 +1638,20 @@ function isDefaultSave(s) {
     if (!s) return true;
     if (s.shards || s.runs || s.best || s.kills) return false;
     if (Object.keys(s.beaten || {}).length) return false;
+    // A save can now be non-default purely through the universe layer --
+    // a player who surveyed a system or laid a foundation but has not
+    // yet beaten anything still has progress worth protecting, and
+    // treating that as "empty" would let a bootstrap overwrite it.
+    const u = s.universe;
+    if (u) {
+        if (Math.floor(Number(u.coins) || 0) > 0) return false;
+        if (Object.keys(u.systems || {}).length) return false;
+        if (Object.keys(u.discovered || {}).length) return false;
+        if (Object.keys(u.drive || {}).length) return false;
+        if (Object.keys(u.ship || {}).length) return false;
+        if (Universe.countBuildings(u)) return false;
+        if (Object.keys((u.planet || {}).decorations || {}).length) return false;
+    }
     for (const key of FORGE_KEYS) if ((s.forge || {})[key]) return false;
     for (const key of WEAPON_KEYS) if (key !== "pulse" && (s.weapons || {})[key]) return false;
     return true;
@@ -1064,6 +1675,15 @@ module.exports = {
     calculateProgressScore,
     compareSaves,
     resolveSaveConflict,
+
+    // universe / home planet (see voidbreakUniverse.js for the content)
+    Universe,
+    sanitizeUniverse,
+    migrateUniverse,
+    mergeUniverse,
+    buildOnPlanet,
+    placeDecoration,
+    universeView,
 
     // endgame: catalog + pure transaction logic (server source of truth)
     COSMETICS,
