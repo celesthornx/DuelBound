@@ -607,6 +607,35 @@
     color: var(--ink-dim); text-align:center; padding:6px 0;
   }
   .admin-search-error{ color: #ff5f6d; }
+  /* ---- PLAYER ACTIVITY (playtime + account email) ---- */
+  .admin-pt-toolbar{ display:flex; gap:6px; width:100%; flex-wrap:wrap; }
+  .admin-pt-toolbar input{ flex:1 1 140px; min-width:0; background: rgba(255,255,255,0.03);
+    border:1px solid var(--grid); color: var(--ink); padding:8px 10px;
+    font-family:'Share Tech Mono', monospace; font-size:11px; letter-spacing:1px; }
+  .admin-pt-sort{ flex:0 1 auto; width:auto; margin:0; }
+  .admin-pt-summary{ width:100%; font-family:'Share Tech Mono', monospace; font-size:11px;
+    letter-spacing:1px; color: var(--ink-dim); display:flex; gap:12px; flex-wrap:wrap; }
+  .admin-pt-summary b{ color: var(--ink); font-weight:400; }
+  /* flex:none -- the admin panel is a scrolling flex column, which would
+     otherwise shrink this scroll box to zero height. */
+  .admin-pt-list{ flex:none; width:100%; max-height:320px; overflow-y:auto; display:flex; flex-direction:column; gap:4px; }
+  .admin-pt-row{ flex:none; }
+  .admin-pt-row{ border:1px solid var(--grid); background: rgba(255,255,255,0.03); padding:7px 10px;
+    display:grid; grid-template-columns: minmax(0,1fr) auto; gap:2px 10px; }
+  .admin-pt-name{ font-family:'Chakra Petch', sans-serif; font-weight:600; font-size:12px;
+    letter-spacing:1px; color: var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .admin-pt-dot{ display:inline-block; width:7px; height:7px; border-radius:50%;
+    background:#56607a; margin-right:6px; vertical-align:middle; }
+  .admin-pt-dot.on{ background:#38ff9c; box-shadow:0 0 6px #38ff9c; }
+  .admin-pt-time{ font-family:'Share Tech Mono', monospace; font-size:12px; color:#ffce54; text-align:right; }
+  .admin-pt-email{ font-family:'Share Tech Mono', monospace; font-size:10.5px; color: var(--p1);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; user-select:text; -webkit-user-select:text; }
+  .admin-pt-email.none{ color: var(--ink-dim); }
+  .admin-pt-meta{ font-family:'Share Tech Mono', monospace; font-size:10px; color: var(--ink-dim); text-align:right; }
+  .admin-pt-est{ grid-column:1 / -1; font-family:'Share Tech Mono', monospace; font-size:10px; color: var(--ink-dim); }
+  .admin-pt-note{ width:100%; font-size:10.5px; line-height:1.4; color: var(--ink-dim); }
+  .admin-search-result-sub{ display:block; font-family:'Share Tech Mono', monospace; font-weight:400;
+    font-size:10px; color: var(--ink-dim); margin-top:2px; text-align:left; }
   .admin-search-result{
     display:flex; justify-content:space-between; align-items:center;
     width:100%; background: rgba(255,255,255,0.03);
@@ -4401,6 +4430,20 @@
       <div class="admin-status-msg" id="adminNewsStatusMsg"></div>
 
       <div class="admin-news-list" id="adminNewsList"></div>
+
+      <div class="admin-section-label admin-section-label-p1">PLAYER ACTIVITY</div>
+      <div class="admin-pt-toolbar">
+        <input type="text" id="adminPtFilter" placeholder="FILTER BY NAME OR EMAIL" autocomplete="off">
+        <select class="admin-select admin-pt-sort" id="adminPtSort">
+          <option value="total">MOST PLAYED</option>
+          <option value="measured">MOST PLAYED (MEASURED ONLY)</option>
+          <option value="recent">RECENTLY SEEN</option>
+        </select>
+        <button class="menu-btn admin-search-btn" id="btnAdminPtRefresh">REFRESH</button>
+      </div>
+      <div class="admin-pt-summary" id="adminPtSummary"></div>
+      <div class="admin-pt-list" id="adminPtList"></div>
+      <div class="admin-pt-note" id="adminPtNote"></div>
 
       <div class="admin-section-label">ADMIN LOG</div>
       <div class="admin-log" id="adminLogBody"></div>
@@ -9001,6 +9044,77 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     return hh + ':' + mm;
   }
 
+  // ==========================================================
+  // PLAYER ACTIVITY -- playtime + account email per player.
+  // Everything shown comes from GET /admin/playtime (admin-gated
+  // server-side). "Measured" is connected time the server recorded;
+  // "estimated" is a one-time estimate of play from before tracking
+  // existed, derived from each account's match history. They are kept
+  // and shown separately so the estimate is never mistaken for a record.
+  // ==========================================================
+  let adminPtRows = [];
+  function formatPlaytime(sec){
+    sec = Math.max(0, Math.floor(Number(sec) || 0));
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+    if(h > 0) return h + 'h ' + String(m).padStart(2,'0') + 'm';
+    if(m > 0) return m + 'm';
+    return sec > 0 ? '<1m' : '0m';
+  }
+  function formatSeen(ts, online){
+    if(online) return 'ONLINE NOW';
+    if(!ts) return 'NOT SEEN SINCE TRACKING BEGAN';
+    const diff = Date.now() - ts;
+    if(diff < 60000) return 'SEEN JUST NOW';
+    if(diff < 3600000) return 'SEEN ' + Math.floor(diff/60000) + 'M AGO';
+    if(diff < 86400000) return 'SEEN ' + Math.floor(diff/3600000) + 'H AGO';
+    return 'SEEN ' + new Date(ts).toLocaleDateString();
+  }
+  function renderAdminPlaytime(){
+    const list = document.getElementById('adminPtList');
+    if(!list) return;
+    const q = (document.getElementById('adminPtFilter').value || '').trim().toLowerCase();
+    const rows = adminPtRows.filter(r => !q || (r.name || '').toLowerCase().includes(q)
+      || (r.email || '').toLowerCase().includes(q) || r.id === q);
+    if(!rows.length){ list.innerHTML = '<div class="admin-search-empty">NO PLAYERS</div>'; return; }
+    list.innerHTML = rows.map(r => {
+      const est = r.playtimeEstimatedSeconds > 0
+        ? `<div class="admin-pt-est">${formatPlaytime(r.playtimeSeconds)} measured + ~${formatPlaytime(r.playtimeEstimatedSeconds)} estimated before tracking`
+          + (r.playtimeEstimateBasis ? ` (from ${escapeHtml(r.playtimeEstimateBasis)})` : '') + `</div>`
+        : `<div class="admin-pt-est">${formatPlaytime(r.playtimeSeconds)} measured · ${r.playSessions || 0} session${r.playSessions === 1 ? '' : 's'}</div>`;
+      return `<div class="admin-pt-row">`
+        + `<div class="admin-pt-name"><span class="admin-pt-dot${r.online ? ' on' : ''}"></span>${escapeHtml(r.name)}</div>`
+        + `<div class="admin-pt-time">${formatPlaytime(r.playtimeTotalSeconds)}</div>`
+        + (r.email
+            ? `<div class="admin-pt-email" title="${escapeHtml(r.email)}">${escapeHtml(r.email)}${r.emailIsGmail ? '' : ' (Google)'}</div>`
+            : `<div class="admin-pt-email none">${r.signInMethod === 'password' ? 'no email · password account' : 'no email on record'}</div>`)
+        + `<div class="admin-pt-meta">${formatSeen(r.lastSeenAt, r.online)}</div>`
+        + est
+        + `</div>`;
+    }).join('');
+  }
+  async function fetchAdminPlaytime(){
+    const list = document.getElementById('adminPtList');
+    if(!list || !sessionToken) return;
+    list.innerHTML = '<div class="admin-search-empty">LOADING...</div>';
+    const sort = document.getElementById('adminPtSort').value;
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/admin/playtime?sessionToken=' + encodeURIComponent(sessionToken) + '&sort=' + encodeURIComponent(sort));
+      if(res.status === 403){ list.innerHTML = '<div class="admin-search-error">UNAUTHORIZED</div>'; return; }
+      if(!res.ok){ list.innerHTML = '<div class="admin-search-error">COULD NOT LOAD PLAYTIME</div>'; return; }
+      const data = await res.json();
+      adminPtRows = data.players || [];
+      const t = data.totals || {};
+      document.getElementById('adminPtSummary').innerHTML =
+        `<span>PLAYERS <b>${t.players || 0}</b></span><span>ONLINE <b>${t.online || 0}</b></span>`
+        + `<span>MEASURED <b>${formatPlaytime(t.measuredSeconds)}</b></span>`
+        + `<span>EST. BEFORE TRACKING <b>~${formatPlaytime(t.estimatedSeconds)}</b></span>`;
+      document.getElementById('adminPtNote').textContent = data.trackingNote || '';
+      renderAdminPlaytime();
+    } catch(e){
+      list.innerHTML = '<div class="admin-search-error">COULD NOT REACH SERVER</div>';
+    }
+  }
+
   async function renderAdminLog(){
     const body = document.getElementById('adminLogBody');
     if(!body || !sessionToken) return;
@@ -9200,7 +9314,9 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     }
     el.innerHTML = results.map(r =>
       `<button type="button" class="admin-search-result" data-id="${escapeHtml(r.id)}">`
-      + `<span>${escapeHtml(r.name)}</span><span class="admin-search-result-credits">◈ ${Number(r.coins).toLocaleString()}</span>`
+      + `<span>${escapeHtml(r.name)}<span class="admin-search-result-sub">${escapeHtml(r.email || (r.signInMethod === 'password' ? 'no email (password account)' : 'no email on record'))}`
+      + ` · ${formatPlaytime(r.playtimeTotalSeconds || 0)} played</span></span>`
+      + `<span class="admin-search-result-credits">◈ ${Number(r.coins).toLocaleString()}</span>`
       + `</button>`
     ).join('');
     el.querySelectorAll('.admin-search-result').forEach(btn=>{
@@ -15613,8 +15729,12 @@ if(tutorialActive) tutorialUpdate(dt);
     resetVbAdminPanel();
     renderAdminLog();
     fetchAdminNewsList();
+    fetchAdminPlaytime();
     menuAdmin.classList.remove('hidden');
   });
+  document.getElementById('btnAdminPtRefresh').addEventListener('click', fetchAdminPlaytime);
+  document.getElementById('adminPtSort').addEventListener('change', fetchAdminPlaytime);
+  document.getElementById('adminPtFilter').addEventListener('input', renderAdminPlaytime);
   btnBackAdmin.addEventListener('click', ()=>{
     menuAdmin.classList.add('hidden');
     menuMain.classList.remove('hidden');
