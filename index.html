@@ -440,7 +440,10 @@
   .menu-btn.admin-entry{ border-color: #ff5f6d; color: #ff5f6d; }
   .menu-btn.admin-entry:hover{ background: rgba(255,95,109,0.1); box-shadow:0 0 16px rgba(255,95,109,0.3); border-color: #ff5f6d; }
 
-  .admin-panel{ width: 460px; }
+  /* 640px instead of the old 460px single column: with one tool on
+     screen at a time there is room for the ability fields, player rows
+     and log lines to breathe instead of wrapping. */
+  .shop-panel.admin-panel{ width: 640px; max-width: 94vw; }
   /* Combined selector so this wins over .shop-panel's own max-height
      regardless of source order -- the admin panel's content (ability
      balance + credit management + admin log) can run taller than the
@@ -455,6 +458,38 @@
   .shop-panel.admin-panel::-webkit-scrollbar{ width:6px; }
   .shop-panel.admin-panel::-webkit-scrollbar-thumb{ background: rgba(255,95,109,.35); border-radius:3px; }
   .shop-panel.admin-panel::-webkit-scrollbar-thumb:hover{ background: rgba(255,95,109,.55); }
+
+  /* ---- Admin tabs: one tool on screen at a time ---- */
+  .admin-head{
+    position: sticky; top: 0; z-index: 2;
+    width: 100%; flex: none;
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+    padding: 8px 0 10px;
+    background: rgba(6,9,15,.97);
+    border-bottom: 1px solid rgba(255,95,109,0.3);
+  }
+  .admin-tabs{ display:flex; flex-wrap:wrap; justify-content:center; gap:5px; width:100%; }
+  .admin-tab{
+    display:inline-flex; align-items:center; gap:6px;
+    background:transparent; border:1px solid var(--grid); color:var(--ink-dim);
+    font-family:'Chakra Petch', sans-serif; font-weight:600; letter-spacing:1px;
+    font-size:11px; padding:7px 9px; cursor:pointer; transition: all .15s ease;
+  }
+  .admin-tab:hover{ color: var(--ink); border-color: var(--ink-dim); }
+  .admin-tab.selected{ color:#ff5f6d; border-color:#ff5f6d; background: rgba(255,95,109,0.1); }
+  .admin-tab kbd{
+    font-family:'Share Tech Mono', monospace; font-size:9px; line-height:1;
+    padding:2px 4px; border:1px solid currentColor; border-radius:2px; opacity:.55;
+  }
+  .admin-pane{ width:100%; flex:none; display:flex; flex-direction:column; align-items:center; gap:14px; }
+  .admin-pane[hidden]{ display:none; }
+  .admin-pane > .admin-section-label:first-child{ margin-top: 0; }
+  .admin-back{ flex:none; }
+  @media (max-width: 560px){
+    .admin-tab{ font-size:10px; padding:6px 8px; letter-spacing:1px; }
+    .admin-tab kbd{ display:none; }
+    .admin-fields{ grid-template-columns: 1fr; }
+  }
 
   /* Same fix as .shop-panel.admin-panel above, for the same reason: the
      Settings panel's content (device compatibility, aim type, match
@@ -551,7 +586,7 @@
   }
   .admin-reset-all-btn:hover{ background: rgba(255,95,109,0.1); box-shadow:0 0 16px rgba(255,95,109,0.3); }
   .admin-log{
-    width: 100%; max-height: 140px; overflow-y: auto;
+    width: 100%; max-height: 60vh; overflow-y: auto;
     font-family:'Share Tech Mono', monospace;
     font-size: 10px; line-height: 1.7;
     color: var(--ink-dim);
@@ -624,7 +659,7 @@
   .admin-pt-summary b{ color: var(--ink); font-weight:400; }
   /* flex:none -- the admin panel is a scrolling flex column, which would
      otherwise shrink this scroll box to zero height. */
-  .admin-pt-list{ flex:none; width:100%; max-height:320px; overflow-y:auto; display:flex; flex-direction:column; gap:4px; }
+  .admin-pt-list{ flex:none; width:100%; max-height:55vh; overflow-y:auto; display:flex; flex-direction:column; gap:4px; }
   .admin-pt-row{ flex:none; }
   .admin-pt-row{ border:1px solid var(--grid); background: rgba(255,255,255,0.03); padding:7px 10px;
     display:grid; grid-template-columns: minmax(0,1fr) auto; gap:2px 10px; }
@@ -4307,7 +4342,25 @@
   <!-- ADMIN PANEL -->
   <div class="menu-overlay hidden" id="menuAdmin">
     <div class="shop-panel admin-panel">
-      <div class="menu-title">VOIDBREAK // ADMIN</div>
+      <!-- Tab bar. The panel used to be one long scroll of six tools,
+           and opening it fired every tool's fetch at once. Now only the
+           active tab is shown, and each tab loads its own data the first
+           time it is opened (see showAdminTab). Keys 1-6 switch tabs,
+           Esc closes the panel. Sticky, so it stays reachable while a
+           long tab (player activity, log) scrolls underneath it. -->
+      <div class="admin-head">
+        <div class="menu-title">VOIDBREAK // ADMIN</div>
+        <div class="admin-tabs" id="adminTabs" role="tablist">
+          <button type="button" class="admin-tab" role="tab" data-admin-tab="abilities">ABILITIES<kbd>1</kbd></button>
+          <button type="button" class="admin-tab" role="tab" data-admin-tab="currency">CURRENCY<kbd>2</kbd></button>
+          <button type="button" class="admin-tab" role="tab" data-admin-tab="voidbreak">VOID SHARDS<kbd>3</kbd></button>
+          <button type="button" class="admin-tab" role="tab" data-admin-tab="news">NEWS<kbd>4</kbd></button>
+          <button type="button" class="admin-tab" role="tab" data-admin-tab="players">PLAYERS<kbd>5</kbd></button>
+          <button type="button" class="admin-tab" role="tab" data-admin-tab="log">LOG<kbd>6</kbd></button>
+        </div>
+      </div>
+
+      <section class="admin-pane" data-admin-pane="abilities" role="tabpanel">
       <div class="admin-section-label">ABILITY BALANCE</div>
 
       <select class="admin-select" id="adminAbilitySelect"></select>
@@ -4321,7 +4374,9 @@
         <button class="menu-btn admin-reset-btn" id="btnAdminReset">RESET ABILITY</button>
       </div>
       <button class="menu-btn admin-reset-all-btn" id="btnAdminResetAll">RESET ALL ABILITIES</button>
+      </section>
 
+      <section class="admin-pane" data-admin-pane="currency" role="tabpanel">
       <div class="admin-section-label admin-section-label-p1">CURRENCY MANAGEMENT</div>
 
       <div class="admin-credit-search">
@@ -4382,6 +4437,7 @@
 
         <div class="admin-status-msg" id="adminCreditStatusMsg"></div>
       </div>
+      </section>
 
       <!-- ============================================================
            VOIDBREAK ADMIN
@@ -4393,6 +4449,7 @@
            isAdminSession() check as every other admin action -- hiding
            this panel is presentation only.
            ============================================================ -->
+      <section class="admin-pane" data-admin-pane="voidbreak" role="tabpanel">
       <div class="admin-section-label admin-section-label-p1">VOIDBREAK ADMIN</div>
 
       <div class="admin-credit-search">
@@ -4445,7 +4502,9 @@
 
         <div class="admin-status-msg" id="vbAdminStatusMsg"></div>
       </div>
+      </section>
 
+      <section class="admin-pane" data-admin-pane="news" role="tabpanel">
       <div class="admin-section-label admin-section-label-p1">NEWS &amp; EVENTS MANAGEMENT</div>
 
       <div class="admin-credit-form">
@@ -4467,7 +4526,9 @@
       <div class="admin-status-msg" id="adminNewsStatusMsg"></div>
 
       <div class="admin-news-list" id="adminNewsList"></div>
+      </section>
 
+      <section class="admin-pane" data-admin-pane="players" role="tabpanel">
       <div class="admin-section-label admin-section-label-p1">PLAYER ACTIVITY</div>
       <div class="admin-pt-toolbar">
         <input type="text" id="adminPtFilter" placeholder="FILTER BY NAME OR EMAIL" autocomplete="off">
@@ -4481,11 +4542,14 @@
       <div class="admin-pt-summary" id="adminPtSummary"></div>
       <div class="admin-pt-list" id="adminPtList"></div>
       <div class="admin-pt-note" id="adminPtNote"></div>
+      </section>
 
+      <section class="admin-pane" data-admin-pane="log" role="tabpanel">
       <div class="admin-section-label">ADMIN LOG</div>
       <div class="admin-log" id="adminLogBody"></div>
+      </section>
 
-      <button class="menu-back" id="btnBackAdmin">&larr; back</button>
+      <button class="menu-back admin-back" id="btnBackAdmin">&larr; back</button>
     </div>
   </div>
 
@@ -9092,6 +9156,13 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   // and shown separately so the estimate is never mistaken for a record.
   // ==========================================================
   let adminPtRows = [];
+  // Admin panel tabs (see showAdminTab). Declared up here, ahead of
+  // renderAdminLog, because that function reads adminActiveTab.
+  const ADMIN_TABS = ['abilities', 'currency', 'voidbreak', 'news', 'players', 'log'];
+  const ADMIN_TAB_KEY = 'duelbound_admin_tab';
+  let adminActiveTab = 'abilities';
+  // Tabs whose server data has been fetched since the panel was opened.
+  const adminTabsLoaded = new Set();
   function formatPlaytime(sec){
     sec = Math.max(0, Math.floor(Number(sec) || 0));
     const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
@@ -9157,6 +9228,14 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   async function renderAdminLog(){
     const body = document.getElementById('adminLogBody');
     if(!body || !sessionToken) return;
+    // Every admin write calls this to refresh the log. While the LOG tab
+    // isn't on screen that fetch is wasted, so just mark the log stale --
+    // showAdminTab('log') refetches it when it is actually opened.
+    const panel = document.getElementById('menuAdmin');
+    if(adminActiveTab !== 'log' || !panel || panel.classList.contains('hidden')){
+      adminTabsLoaded.delete('log');
+      return;
+    }
     try{
       const res = await fetch(ACCOUNT_SERVER_URL + '/admin/log?sessionToken=' + encodeURIComponent(sessionToken));
       if(!res.ok){ body.innerHTML = '<div class="log-row">Could not load log.</div>'; return; }
@@ -15828,6 +15907,50 @@ if(tutorialActive) tutorialUpdate(dt);
     });
   });
 
+  // Server-backed tabs and the fetch that fills each one. Tabs not
+  // listed here (abilities, currency, voidbreak) are purely local until
+  // the admin searches or saves something.
+  const ADMIN_TAB_LOADERS = {
+    news:    fetchAdminNewsList,
+    players: fetchAdminPlaytime,
+    log:     renderAdminLog,
+  };
+  const adminPanelEl = menuAdmin.querySelector('.admin-panel');
+  const adminTabBtns = menuAdmin.querySelectorAll('#adminTabs [data-admin-tab]');
+  const adminPanes   = menuAdmin.querySelectorAll('[data-admin-pane]');
+
+  function showAdminTab(tab){
+    if(!ADMIN_TABS.includes(tab)) tab = 'abilities';
+    const changed = tab !== adminActiveTab;
+    adminActiveTab = tab;
+    adminTabBtns.forEach(b=>{
+      const on = b.dataset.adminTab === tab;
+      b.classList.toggle('selected', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    adminPanes.forEach(p=>{ p.hidden = p.dataset.adminPane !== tab; });
+    if(changed && adminPanelEl) adminPanelEl.scrollTop = 0;
+    try{ localStorage.setItem(ADMIN_TAB_KEY, tab); }catch(e){}
+    // Fetch lazily: once per opening of the panel, on first view.
+    const load = ADMIN_TAB_LOADERS[tab];
+    if(load && !adminTabsLoaded.has(tab)){
+      adminTabsLoaded.add(tab);
+      load();
+    }
+  }
+  adminTabBtns.forEach(b=>{
+    b.addEventListener('click', ()=>{
+      // Clicking the tab you're already on reloads its data.
+      if(b.dataset.adminTab === adminActiveTab) adminTabsLoaded.delete(adminActiveTab);
+      showAdminTab(b.dataset.adminTab);
+    });
+  });
+
+  function closeAdminPanel(){
+    menuAdmin.classList.add('hidden');
+    menuMain.classList.remove('hidden');
+  }
+
   btnAdmin.addEventListener('click', async ()=>{
     // The button itself is only ever visible if the server already told
     // us isAdmin=true at sign-in -- but opening the panel doesn't grant
@@ -15839,17 +15962,37 @@ if(tutorialActive) tutorialUpdate(dt);
     setAdminStatus('');
     resetAdminCreditPanel();
     resetVbAdminPanel();
-    renderAdminLog();
-    fetchAdminNewsList();
-    fetchAdminPlaytime();
+    adminTabsLoaded.clear();
+    // Visible before showAdminTab, so the LOG tab's loader isn't
+    // skipped as "panel hidden".
     menuAdmin.classList.remove('hidden');
+    if(adminPanelEl) adminPanelEl.scrollTop = 0;
+    let saved = null;
+    try{ saved = localStorage.getItem(ADMIN_TAB_KEY); }catch(e){}
+    showAdminTab(saved || adminActiveTab);
   });
   document.getElementById('btnAdminPtRefresh').addEventListener('click', fetchAdminPlaytime);
   document.getElementById('adminPtSort').addEventListener('change', fetchAdminPlaytime);
   document.getElementById('adminPtFilter').addEventListener('input', renderAdminPlaytime);
-  btnBackAdmin.addEventListener('click', ()=>{
-    menuAdmin.classList.add('hidden');
-    menuMain.classList.remove('hidden');
+  btnBackAdmin.addEventListener('click', closeAdminPanel);
+  // Admin-panel keyboard: 1-6 jump to a tab, Esc closes. Digits are
+  // ignored while typing in a field (amounts, reasons, news body...).
+  window.addEventListener('keydown', (e)=>{
+    if(menuAdmin.classList.contains('hidden')) return;
+    if(e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = e.target;
+    const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+    if(e.key === 'Escape'){
+      e.preventDefault();
+      if(typing) t.blur(); else closeAdminPanel();
+      return;
+    }
+    if(typing) return;
+    const idx = '123456'.indexOf(e.key);
+    if(idx !== -1 && e.key.length === 1){
+      e.preventDefault();
+      showAdminTab(ADMIN_TABS[idx]);
+    }
   });
   adminAbilitySelect.addEventListener('change', ()=>{
     adminSelectedAbility = adminAbilitySelect.value;
