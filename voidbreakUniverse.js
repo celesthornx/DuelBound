@@ -439,11 +439,10 @@
         // swarms), which is the distinction the GDD draws between "a new
         // galaxy" and "the same galaxy with bigger numbers".
         //
-        // HONEST LIMITATION, stated rather than hidden: the bosses here
-        // are existing boss kinds. New boss art and new attack patterns
-        // are engine work, not data, and this file cannot conjure them.
-        // Their arenas, escorts and lead-ins are new; the guardians
-        // themselves are returning ones.
+        // Each system has its own guardian (see BOSSMETA in
+        // voidbreak.html): the Cinder Sentinel and the Binary Archon are
+        // variants of Frontier guardians with their own signature
+        // attacks, and the finale's Crimson Monarch is built from scratch.
         // -------------------------------------------------------------
         {
             id: 2,
@@ -466,7 +465,7 @@
                         d("g2s1_bloom", "ruin", "Emberglass Bloom", "Grown, not built, out of cooled starfall.", true)
                     ],
                     levelDef: {
-                        name: "PYRAX", diff: 1.95, depth: 10, boss: "sentinel", completionBonus: 1150,
+                        name: "PYRAX", diff: 1.95, depth: 10, boss: "cinder", completionBonus: 1150,
                         waveOpts: [["brute", 7, 1, 1], ["chaser", 3, 2, 1], ["fdrone", 3, 2, 1], ["leaper", 4, 2, 1],
                             ["core", 4, 2, 2], ["hunter", 4, 2, 2], ["orb", 3, 2, 2], ["swarm", 5, 2, 1]],
                         combos: [[["brute", 2], ["fdrone", 2]], [["hunter", 2], ["leaper", 2]],
@@ -497,7 +496,7 @@
                         d("g2s2_arc", "anomaly", "The Arc", "The bridge of fire between the two stars. It is not straight.")
                     ],
                     levelDef: {
-                        name: "EMBERFALL", diff: 2.05, depth: 10, boss: "archon", completionBonus: 1250,
+                        name: "EMBERFALL", diff: 2.05, depth: 10, boss: "binary", completionBonus: 1250,
                         waveOpts: [["sniper", 3, 2, 1], ["phantom", 4, 2, 1], ["stalker", 4, 2, 1], ["hunter", 4, 2, 1],
                             ["leech", 4, 1, 2], ["orb", 3, 2, 1], ["fdrone", 3, 2, 1], ["drone", 2, 2, 1]],
                         combos: [[["stalker", 2], ["sniper", 2]], [["leech", 1], ["hunter", 2]],
@@ -528,7 +527,7 @@
                         d("g2s3_crown", "anomaly", "The Crimson Crown", "The ring of held fire. It is a machine.", true)
                     ],
                     levelDef: {
-                        name: "THE CRIMSON THRONE", diff: 2.2, depth: 10, boss: "origin", completionBonus: 1600,
+                        name: "THE CRIMSON THRONE", diff: 2.2, depth: 10, boss: "monarch", completionBonus: 1600,
                         waveOpts: [["brute", 7, 1, 1], ["hunter", 4, 2, 1], ["leech", 4, 1, 1], ["stalker", 4, 2, 1],
                             ["core", 4, 2, 1], ["orb", 3, 2, 1], ["leaper", 4, 2, 1], ["phantom", 4, 2, 1]],
                         combos: [[["leech", 2], ["hunter", 2]], [["brute", 2], ["stalker", 2]],
@@ -569,15 +568,11 @@
         // `env.crackC` tints the floor cracks ice-blue -- the only two
         // visuals this galaxy adds to the engine.
         //
-        // `bossHpMult` exists because boss HP is fixed per boss KIND, not
-        // scaled by `diff` (see createBoss in voidbreak.html). The Null
-        // and the Fractured King were tuned as Frontier openers; pulled
-        // this deep, un-scaled, they would fall in seconds. The multiplier
-        // puts every guardian here between ~14k and ~19k HP, above
-        // Crimson Reach and rising toward the finale.
-        //
-        // Same honest limitation as Galaxy 2: these are returning
-        // guardians in new arenas with new escorts, not new boss kinds.
+        // Guardians, one per system (BOSSMETA in voidbreak.html): the
+        // Rime Warden, Prism King, Drift Maw, Sundered Giant and Waking
+        // Sleeper are variants of Frontier guardians, each with its own
+        // HP (~14k-16k), look and signature attack; the finale's
+        // Stillheart is built from scratch.
         // -------------------------------------------------------------
         {
             id: 3,
@@ -600,7 +595,7 @@
                         d("g3s1_lattice", "ruin", "The Rime Lattice", "Frost that grows in the same pattern every time it is scraped away.", true)
                     ],
                     levelDef: {
-                        name: "RIME", diff: 2.3, depth: 10, boss: "warden", bossHpMult: 1.45, completionBonus: 1700,
+                        name: "RIME", diff: 2.3, depth: 10, boss: "rime", completionBonus: 1700,
                         waveOpts: [["brute", 7, 1, 1], ["orb", 3, 2, 1], ["drone", 2, 2, 1], ["sniper", 3, 2, 1],
                             ["core", 4, 2, 2], ["leech", 4, 1, 2], ["swarm", 5, 2, 2]],
                         combos: [[["brute", 2], ["orb", 2]], [["core", 2], ["sniper", 2]],
@@ -630,7 +625,7 @@
                         d("g3s2_prism", "anomaly", "The Glacis Prism", "Splits light into colours that do not have names.")
                     ],
                     levelDef: {
-                        name: "GLACIS SPIRES", diff: 2.38, depth: 10, boss: "king", bossHpMult: 1.9, completionBonus: 1800,
+                        name: "GLACIS SPIRES", diff: 2.38, depth: 10, boss: "prism", completionBonus: 1800,
                         waveOpts: [["sniper", 3, 2, 1], ["orb", 3, 2, 1], ["phantom", 4, 2, 1], ["fdrone", 3, 2, 1],
                             ["drone", 2, 2, 1], ["core", 4, 2, 2], ["hunter", 4, 2, 2], ["stalker", 4, 1, 3]],
                         combos: [[["sniper", 3], ["core", 1]], [["phantom", 2], ["orb", 2]],
@@ -661,7 +656,7 @@
                         d("g3s3_skiff", "derelict", "Skiff Nine", "Holed from the inside. The crew left in a hurry, or did not leave.")
                     ],
                     levelDef: {
-                        name: "HOARFROST DRIFT", diff: 2.46, depth: 10, boss: "null", bossHpMult: 2.7, completionBonus: 1900,
+                        name: "HOARFROST DRIFT", diff: 2.46, depth: 10, boss: "maw", completionBonus: 1900,
                         waveOpts: [["swarm", 5, 2, 1], ["chaser", 3, 2, 1], ["leaper", 4, 2, 1], ["stalker", 4, 2, 1],
                             ["fdrone", 3, 2, 1], ["hunter", 4, 2, 2], ["brute", 7, 1, 3]],
                         combos: [[["chaser", 3], ["leaper", 2]], [["stalker", 2], ["swarm", 4]],
@@ -691,7 +686,7 @@
                         d("g3s4_heart", "ruin", "The Calving Heart", "A frozen engine at the centre of the break. It is running in reverse.", true)
                     ],
                     levelDef: {
-                        name: "THE CALVING", diff: 2.55, depth: 10, boss: "depths", bossHpMult: 1.35, completionBonus: 2050,
+                        name: "THE CALVING", diff: 2.55, depth: 10, boss: "giant", completionBonus: 2050,
                         waveOpts: [["leech", 4, 1, 1], ["core", 4, 2, 1], ["orb", 3, 2, 1], ["drone", 2, 2, 1],
                             ["hunter", 4, 2, 2], ["phantom", 4, 2, 2], ["brute", 7, 1, 2], ["sniper", 3, 2, 2]],
                         combos: [[["leech", 2], ["sniper", 2]], [["singularity", 1], ["drone", 3]],
@@ -722,7 +717,7 @@
                         d("g3s5_pod", "derelict", "Berth Zero", "The first pod. Sealed from the inside, and empty.")
                     ],
                     levelDef: {
-                        name: "CRYOVAULT", diff: 2.65, depth: 10, boss: "eclipse", bossHpMult: 1.15, completionBonus: 2200,
+                        name: "CRYOVAULT", diff: 2.65, depth: 10, boss: "sleeper", completionBonus: 2200,
                         waveOpts: [["phantom", 4, 2, 1], ["stalker", 4, 2, 1], ["hunter", 4, 2, 1], ["core", 4, 2, 1],
                             ["fdrone", 3, 2, 1], ["drone", 2, 2, 1], ["leaper", 4, 2, 2], ["leech", 4, 1, 3]],
                         combos: [[["phantom", 2], ["stalker", 2]], [["shattered", 1], ["fdrone", 2]],
@@ -753,7 +748,7 @@
                         d("g3s6_ember", "anomaly", "The Last Ember", "One point of warmth at the centre of the cold. It is being guarded.", true)
                     ],
                     levelDef: {
-                        name: "THE STILLPOINT", diff: 2.8, depth: 10, boss: "origin", bossHpMult: 1.15, completionBonus: 2600,
+                        name: "THE STILLPOINT", diff: 2.8, depth: 10, boss: "stillheart", completionBonus: 2600,
                         waveOpts: [["swarm", 5, 2, 1], ["chaser", 3, 2, 1], ["sniper", 3, 2, 1], ["brute", 7, 1, 1],
                             ["orb", 3, 2, 1], ["leaper", 4, 2, 1], ["stalker", 4, 2, 1], ["hunter", 4, 2, 1],
                             ["core", 4, 2, 2], ["phantom", 4, 2, 2], ["fdrone", 3, 2, 2], ["leech", 4, 1, 2]],

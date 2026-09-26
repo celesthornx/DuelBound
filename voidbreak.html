@@ -1276,6 +1276,10 @@ input[type=range]{width:180px;accent-color:var(--cy)}
      (galaxies past the Frontier define the same shape as `levelDef`
      data in voidbreakUniverse.js; optional bossHpMult, env.snow,
      env.crackC)
+   · Every system has its own guardian. Past the Frontier most are
+     BOSSMETA variants (`base` = the Frontier guardian they build on,
+     plus a signature attack); each galaxy finale (Crimson Monarch,
+     Stillheart) is a boss of its own.
    · CHOICES[] — physical path-choice panels shown at portals
    · BOSSMETA  — guardian metadata; boss logic dispatch on kind
    · gravFields — shared gravity-pull system (leeches, the
@@ -5090,7 +5094,17 @@ function killEnemy(e){
 }
 function updateEBullets(dt){
   for(let i=ebullets.length-1;i>=0;i--){const b=ebullets[i];
-    b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;
+    // `frozen` (the Stillheart's STILL) holds a bullet in place without
+    // aging it; it still hurts on contact. `split` (the Rime Warden's
+    // frost shards) bursts one slow shot into a ring after a delay.
+    if(!b.frozen){b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;}
+    if(b.split&&!b.frozen){b.split.t-=dt;
+      if(b.split.t<=0){
+        const sp=b.split,off=rand(0,TAU);
+        for(let k=0;k<sp.n;k++){const aa=off+k/sp.n*TAU;
+          ebullets.push({x:b.x,y:b.y,vx:Math.cos(aa)*sp.spd,vy:Math.sin(aa)*sp.spd,dmg:sp.dmg,r:6,c:b.c,life:4});}
+        sparks(b.x,b.y,b.c,8,220);ebullets.splice(i,1);continue;
+      }}
     if(b.life<=0||(room&&(b.x<-room.w/2-20||b.x>room.w/2+20||b.y<-room.h/2-20||b.y>room.h/2+20))){
       sparks(b.x,b.y,b.c,3,120);ebullets.splice(i,1);continue;}
     const p=player;
@@ -5761,6 +5775,68 @@ const BOSSMETA={
     thresholds:[0.62,0.28],ph2:'THE ORIGIN OPENS',ph3:'THE SOURCE UNBOUND',
     on2:()=>{summonEnemies('guardian',1,2);summonEnemies('stalker',2,3);},
     on3:()=>{summonEnemies('singularity',1,2);summonEnemies('shattered',1,2);}},
+
+  /* ---- Guardians beyond the Frontier ----
+     Every system past Galaxy 1 now has a guardian of its own.
+
+     Most are VARIANTS: `base` names the Frontier guardian whose
+     movement and core attack set they inherit (update + draw), and on
+     top of that each one gets its own name, HP, palette (`pal`, one
+     colour per phase), shot colour, escorts, a silhouette overlay and
+     ONE signature attack -- see updateBossSignature(). Related to a
+     Frontier guardian, never the same fight.
+
+     Each galaxy's FINALE is not a variant. The Crimson Monarch and the
+     Stillheart are built from scratch (own update, own draw, own
+     mechanics) because the last system of a galaxy is supposed to be
+     the fight that galaxy is remembered by. */
+  // Galaxy 2 -- Crimson Reach
+  cinder:{name:'THE CINDER SENTINEL',introSub:'WARDEN OF THE FALLING SHELL',color:[255,120,50],
+    base:'sentinel',hp:13200,shotC:[255,140,60],pal:[[255,160,70],[255,110,45],[255,60,40]],
+    thresholds:[0.65,0.30],ph2:'THE SHELL BREAKS',ph3:'STARFALL',
+    on2:()=>{summonEnemies('fdrone',2,4);},
+    on3:()=>{summonEnemies('brute',1,2);summonEnemies('leaper',2,4);}},
+  binary:{name:'THE BINARY ARCHON',introSub:'TWO STARS, ONE WILL',color:[255,170,70],
+    base:'archon',hp:13800,shotC:[255,180,90],pal:[[255,190,90],[255,130,60],[255,80,110]],
+    thresholds:[0.65,0.30],ph2:'THE PAIR CONVERGES',ph3:'MASS TRANSFER',
+    on2:()=>{summonEnemies('stalker',2,4);},
+    on3:()=>{summonEnemies('leech',1,2);summonEnemies('sniper',2,4);}},
+  monarch:{name:'THE CRIMSON MONARCH',introSub:'IT HOLDS A DYING STAR STILL',color:[255,60,70],
+    hp:17500,shotC:[255,120,60],
+    thresholds:[0.66,0.33],ph2:'THE THRONE HOLDS',ph3:'THE COLLAPSE RESUMES',
+    on2:()=>{monarchRaisePylons(4);},
+    on3:()=>{monarchRaisePylons(4);if(room){room.tw=1300;room.th=880;room.shrinking=true;}}},
+  // Galaxy 3 -- the Frozen Expanse
+  rime:{name:'THE RIME WARDEN',introSub:'KEEPER OF THE COLD LIGHT',color:[170,225,255],
+    base:'warden',hp:14200,shotC:[170,225,255],pal:[[180,230,255],[120,190,255],[210,160,255]],
+    thresholds:[0.65,0.30],ph2:'THE COLD DEEPENS',ph3:'WHITEOUT',
+    on2:()=>{summonEnemies('orb',2,3);},
+    on3:()=>{summonEnemies('guardian',1,1);summonEnemies('orb',2,3);}},
+  prism:{name:'THE PRISM KING',introSub:'EVERY SPIRE A LENS',color:[140,220,255],
+    base:'king',hp:14400,shotC:[150,215,255],pal:[[150,220,255],[200,170,255],[255,150,220]],
+    thresholds:[0.65,0.30],ph2:'THE LIGHT SPLITS',ph3:'KING OF A THOUSAND STARS',
+    on2:()=>{summonEnemies('sniper',2,4);},
+    on3:()=>{summonEnemies('phantom',2,4);summonEnemies('sniper',1,4);}},
+  maw:{name:'THE DRIFT MAW',introSub:'THE PACK\'S HUNGER, GIVEN A MOUTH',color:[200,235,255],
+    base:'null',hp:14000,r:62,shotC:[200,235,255],pal:[[200,235,255],[140,200,255],[255,120,140]],
+    thresholds:[0.70,0.35],ph2:'THE PACK CLOSES IN',ph3:'FEEDING FRENZY',
+    on2:()=>{room.tw=1250;room.th=840;room.shrinking=true;summonEnemies('chaser',3,5);},
+    on3:()=>{summonEnemies('stalker',2,3);summonEnemies('leaper',2,4);}},
+  giant:{name:'THE SUNDERED GIANT',introSub:'IT BREAKS, AND KEEPS BREAKING',color:[110,170,255],
+    base:'depths',hp:15100,shotC:[140,195,255],pal:[[120,180,255],[170,220,255],[255,110,150]],
+    thresholds:[0.65,0.30],ph2:'THE TIDEBREAK',ph3:'THE HEART CALVES',
+    on2:()=>{summonEnemies('leech',2,2);},
+    on3:()=>{summonEnemies('hunter',2,2);if(boss){boss.coreMode='closed';boss.coreT=3.5;}}},
+  sleeper:{name:'THE WAKING SLEEPER',introSub:'FIRST OUT OF THE VAULT',color:[180,190,255],
+    base:'eclipse',hp:16100,shotC:[190,200,255],pal:[[180,200,255],[200,150,255],[130,100,240]],
+    thresholds:[0.65,0.30],ph2:'THE VAULT OPENS',ph3:'EVERYONE WAKES',
+    on2:()=>{summonEnemies('phantom',2,4);},
+    on3:()=>{summonEnemies('stalker',2,3);summonEnemies('shattered',1,1);}},
+  stillheart:{name:'THE STILLHEART',introSub:'WHERE ALL MOTION ENDS',color:[220,240,255],
+    hp:19500,shotC:[200,235,255],
+    thresholds:[0.66,0.33],ph2:'THE LATTICE FORMS',ph3:'ABSOLUTE ZERO',
+    on2:()=>{summonEnemies('guardian',1,1);},
+    on3:()=>{summonEnemies('hunter',2,3);}},
 };
 function summonEnemies(type,n,cap){
   if(cap!==undefined&&enemies.filter(e=>e.type===type&&!e.dead).length>=cap)return;
@@ -5770,37 +5846,49 @@ function summonEnemies(type,n,cap){
 }
 function createBoss(kind){
   bossActive=false;bossIntroT=0;bossIntroStage=0;
-  if(kind==='depths'){
+  const meta=BOSSMETA[kind]||BOSSMETA.null;
+  const baseKind=meta.base||kind;
+  if(kind==='monarch'){
+    boss={kind:'monarch',x:0,y:-330,r:84,hp:17500,maxhp:17500,phase:1,t:0,invuln:0,hitFlash:0,eye:0,
+      vx:0,vy:0,dead:false,dying:0,vulnT:0,shielded:false,
+      tRadial:3.2,tVolley:2.5,tRain:4.4,tFlare:6.0,tSummon:10,
+      flare:null,beams:[],summonFlags:{}};
+  }else if(kind==='stillheart'){
+    boss={kind:'stillheart',x:0,y:-320,r:80,hp:19500,maxhp:19500,phase:1,t:0,invuln:0,hitFlash:0,eye:0,
+      vx:0,vy:0,dead:false,dying:0,vulnT:0,
+      tVolley:2.6,tWave:4.0,tFreeze:7.5,tSummon:10,spiral:0,spiralEm:0,
+      freeze:null,waves:[],summonFlags:{}};
+  }else if(baseKind==='depths'){
     boss={kind:'depths',x:0,y:-340,r:76,hp:11200,maxhp:11200,phase:1,t:0,invuln:0,hitFlash:0,eye:0,
       vx:0,vy:0,dead:false,dying:0,
       tRadial:3.6,tVolley:3.2,tZone:5.2,tPulse:7.5,tBarrage:6.5,tGrav:8.0,tShift:9.5,tSummon:11,
       barrage:null,coreMode:'closed',coreT:5,vulnT:0,summonFlags:{}};
-  }else if(kind==='warden'){
+  }else if(baseKind==='warden'){
     boss={kind:'warden',x:0,y:-340,r:66,hp:9800,maxhp:9800,phase:1,t:0,invuln:0,hitFlash:0,eye:0,
       vx:0,vy:0,dead:false,dying:0,
       tRadial:3.4,tVolley:2.7,tZone:4.8,tSummon:9.5,tSweep:3.6,tTp:6.0,tNova:6.5,tHaz:6.0,
       sweep:null,nova:null,tp:null,vulnT:0,summonFlags:{}};
-  }else if(kind==='archon'){
+  }else if(baseKind==='archon'){
     boss={kind:'archon',x:0,y:-340,r:68,hp:8800,maxhp:8800,phase:1,t:0,invuln:0,hitFlash:0,eye:0,
       vx:0,vy:0,dead:false,dying:0,
       tRadial:3.2,tVolley:2.6,tZone:4.6,tSummon:9.0,tSweep:3.4,tTp:5.5,tCollapse:8.0,tNova:5.0,
       sweep:null,nova:null,tp:null,vulnT:0,collapseTaught:false,summonFlags:{}};
-  }else if(kind==='king'){
+  }else if(baseKind==='king'){
     boss={kind:'king',x:0,y:-320,r:64,hp:7600,maxhp:7600,phase:1,t:0,invuln:0,hitFlash:0,eye:0,
       vx:0,vy:0,dead:false,dying:0,
       tRadial:3.2,tVolley:2.4,tSummon:8.5,tSlam:4.6,tSweep:3.0,tHazard:4.2,tShatter:6.5,
       sweep:null,shatter:null,slam:null,charge:null,vulnT:0,summonFlags:{}};
-  }else if(kind==='sentinel'){
+  }else if(baseKind==='sentinel'){
     boss={kind:'sentinel',x:0,y:-340,r:70,hp:12600,maxhp:12600,phase:1,t:0,invuln:0,hitFlash:0,eye:0,
       vx:0,vy:0,dead:false,dying:0,
       tRadial:3.2,tVolley:2.5,tSlam:4.4,tCharge:5.2,tHazard:5.5,tSummon:9.5,
       slam:null,charge:null,vulnT:0,chainCount:0,summonFlags:{}};
-  }else if(kind==='eclipse'){
+  }else if(baseKind==='eclipse'){
     boss={kind:'eclipse',x:0,y:-340,r:72,hp:14000,maxhp:14000,phase:1,t:0,invuln:0,hitFlash:0,eye:0,
       vx:0,vy:0,dead:false,dying:0,
       tRadial:3.0,tVolley:2.3,tTp:5.6,tGrav:7.5,tNova:7.0,tZone:5.0,tSummon:9.0,
       tp:null,nova:null,vulnT:0,blinkChain:0,summonFlags:{}};
-  }else if(kind==='origin'){
+  }else if(baseKind==='origin'){
     boss={kind:'origin',x:0,y:-360,r:88,hp:16500,maxhp:16500,phase:1,t:0,invuln:0,hitFlash:0,eye:0,
       vx:0,vy:0,dead:false,dying:0,
       tRadial:2.8,tVolley:2.1,tSpire:4.2,tGrav:7.0,tZone:4.6,tSummon:8.5,
@@ -5811,6 +5899,15 @@ function createBoss(kind){
       tRadial:3.0,tVolley:2.2,tRing:0,tSlam:0,tCharge:0,tSummon:9,tSpiral:0,
       spiral:null,charge:null,slam:null,summonFlags:{}};
   }
+  // A variant keeps its base's state and behaviour but its own identity
+  // and numbers. `base` is what updateBoss/render dispatch on; `kind`
+  // is what BOSSMETA (name, thresholds, phase hooks) is read by.
+  if(meta.base){
+    boss.kind=kind;boss.base=meta.base;boss.pal=meta.pal;boss.sig={};
+    if(meta.hp){boss.hp=meta.hp;boss.maxhp=meta.hp;}
+    if(meta.r)boss.r=meta.r;
+  }
+  boss.shotC=meta.shotC||null;
   // Single point for boss HP scaling by difficulty (contact/attack
   // damage is scaled once, centrally, in hurtPlayer() instead -- see
   // its comment -- so this only ever touches HP).
@@ -5843,18 +5940,25 @@ function bossIntro(dt){
   }
 }
 function bossShot(x,y,ang,spd,dmg,r){
-  ebullets.push({x,y,vx:Math.cos(ang)*spd,vy:Math.sin(ang)*spd,dmg,r:r||7,c:[255,70,150],life:9});
+  ebullets.push({x,y,vx:Math.cos(ang)*spd,vy:Math.sin(ang)*spd,dmg,r:r||7,c:(boss&&boss.shotC)||[255,70,150],life:9});
 }
 function updateBoss(dt){
   if(!boss)return;
-  if(boss.kind==='depths')updateDepths(dt);
-  else if(boss.kind==='warden')updateWarden(dt);
-  else if(boss.kind==='archon')updateArchon(dt);
-  else if(boss.kind==='king')updateKing(dt);
-  else if(boss.kind==='sentinel')updateSentinel(dt);
-  else if(boss.kind==='eclipse')updateEclipse(dt);
-  else if(boss.kind==='origin')updateOrigin(dt);
+  const k=boss.base||boss.kind;
+  if(k==='depths')updateDepths(dt);
+  else if(k==='warden')updateWarden(dt);
+  else if(k==='archon')updateArchon(dt);
+  else if(k==='king')updateKing(dt);
+  else if(k==='sentinel')updateSentinel(dt);
+  else if(k==='eclipse')updateEclipse(dt);
+  else if(k==='origin')updateOrigin(dt);
+  else if(k==='monarch')updateMonarch(dt);
+  else if(k==='stillheart')updateStillheart(dt);
   else updateNull(dt);
+  if(!boss||boss.dead||boss.dying>0)return;
+  if(boss.base)updateBossSignature(dt);
+  updateBossBeams(dt);
+  updateIceWaves(dt);
 }
 /* --- Level 1 guardian: THE NULL (unchanged) --- */
 function updateNull(dt){
@@ -6778,11 +6882,631 @@ function updateOrigin(dt){
   if(b.y<-hh){b.y=-hh;b.vy=Math.abs(b.vy)*0.3;}if(b.y>hh){b.y=hh;b.vy=-Math.abs(b.vy)*0.3;}
   if(!p.dead&&d<b.r+p.r+2)hurtPlayer(30,b.x,b.y);
 }
+/* =================================================================
+   GUARDIANS BEYOND THE FRONTIER
+   Variants (see BOSSMETA) run their base guardian's update and draw,
+   then updateBossSignature()/drawBossSignature() below add the one
+   attack and the silhouette that make them their own fight. The two
+   galaxy finales -- THE CRIMSON MONARCH and THE STILLHEART -- are
+   whole bosses of their own further down.
+
+   Two small shared systems serve several of them:
+   · boss.beams -- telegraphed line attacks (warn -> on). Static lances
+     for the Prism King, rotating solar flares for the Monarch.
+   · boss.waves -- expanding ice rings with a gap in them (Stillheart).
+     Walk through the gap or dash through the ring.
+   ================================================================= */
+function bossDying(dt,cols){
+  const b=boss;b.dying-=dt;
+  if(Math.random()<dt*15){
+    const bx=b.x+rand(-b.r,b.r),by=b.y+rand(-b.r,b.r);
+    burstFX(bx,by,pick(cols),12,330);addShake(6);SFX.explosion();}
+  if(b.dying<=0)bossFinalBlast();
+}
+function clampToRoom(x,y,m){
+  return [clamp(x,-room.w/2+m,room.w/2-m),clamp(y,-room.h/2+m,room.h/2-m)];
+}
+
+/* ---- beams ---- */
+function addBeam(o){
+  const b=boss;if(!b)return;
+  if(!b.beams)b.beams=[];
+  o.t=o.warn;o.st='warn';b.beams.push(o);
+}
+function updateBossBeams(dt){
+  const b=boss;if(!b||!b.beams||!b.beams.length)return;
+  const p=player;
+  for(let i=b.beams.length-1;i>=0;i--){const m=b.beams[i];
+    if(m.follow){m.x=b.x;m.y=b.y;}
+    // a rotating beam creeps while telegraphing so its sweep reads
+    // before it can hurt, then turns at full speed once lit
+    m.ang+=(m.rot||0)*dt*(m.st==='on'?1:0.2);
+    m.t-=dt;
+    if(m.st==='warn'){
+      if(m.t<=0){m.st='on';m.t=m.dur;SFX.charge();addShake(4);}
+      continue;
+    }
+    if(m.t<=0){b.beams.splice(i,1);continue;}
+    const cx=Math.cos(m.ang),cy=Math.sin(m.ang);
+    if(!p.dead&&p.invuln<=0){
+      const rx=p.x-m.x,ry=p.y-m.y,along=rx*cx+ry*cy;
+      if(along>(m.start||0)&&along<m.len&&Math.abs(rx*cy-ry*cx)<m.w/2+p.r)
+        hurtPlayer(m.dmg,m.x+cx*along,m.y+cy*along);
+    }
+    if(Math.random()<dt*24){const L=rand(m.start||0,Math.min(m.len,1400));
+      part({x:m.x+cx*L,y:m.y+cy*L,vx:rand(-40,40),vy:rand(-40,40),life:0.35,ml:0.35,
+        size:rand(2,3.5),c:m.c,type:'spark',drag:1});}
+  }
+}
+function drawBossBeams(){
+  const b=boss;
+  ctx.lineCap='round';
+  for(const m of b.beams){
+    const cx=Math.cos(m.ang),cy=Math.sin(m.ang),s0=m.start||0;
+    const x0=m.x+cx*s0,y0=m.y+cy*s0,x1=m.x+cx*m.len,y1=m.y+cy*m.len;
+    if(m.st==='warn'){
+      const pr=clamp(1-m.t/m.warn,0,1);
+      ctx.strokeStyle=rgba(m.c,0.18+pr*0.5);ctx.lineWidth=1.5+pr*3;
+      ctx.setLineDash([16,10]);
+      ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);ctx.stroke();
+      ctx.setLineDash([]);
+    }else{
+      const fade=clamp(m.t/0.12,0,1);
+      ctx.globalCompositeOperation='lighter';
+      ctx.strokeStyle=rgba(m.c,0.3*fade);ctx.lineWidth=m.w*1.9;
+      ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);ctx.stroke();
+      ctx.strokeStyle=rgba(m.c,0.8*fade);ctx.lineWidth=m.w;
+      ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);ctx.stroke();
+      ctx.globalCompositeOperation='source-over';
+      ctx.strokeStyle=`rgba(255,255,255,${0.85*fade})`;ctx.lineWidth=m.w*0.3;
+      ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);ctx.stroke();
+    }
+  }
+  ctx.lineCap='butt';
+}
+
+/* ---- ice waves ---- */
+function updateIceWaves(dt){
+  const b=boss;if(!b||!b.waves||!b.waves.length)return;
+  const p=player;
+  for(let i=b.waves.length-1;i>=0;i--){const w=b.waves[i];
+    w.r+=w.spd*dt;
+    if(w.r>w.max){b.waves.splice(i,1);continue;}
+    if(w.r<=0||w.hit||p.dead||p.invuln>0)continue;
+    const d=dist(w.x,w.y,p.x,p.y);
+    if(Math.abs(d-w.r)<12+p.r){
+      const a=angTo(w.x,w.y,p.x,p.y);
+      if(!(w.gapW&&Math.abs(angDiff(a,w.gapA))<w.gapW/2)){w.hit=true;hurtPlayer(w.dmg,w.x,w.y);}
+    }
+  }
+}
+function drawIceWaves(){
+  for(const w of boss.waves){
+    if(w.r<=0)continue;
+    const a0=w.gapA+w.gapW/2,a1=w.gapA-w.gapW/2+TAU;
+    const fade=clamp((w.max-w.r)/200,0,1);
+    ctx.globalCompositeOperation='lighter';
+    ctx.strokeStyle=rgba(w.c,0.25*fade);ctx.lineWidth=22;
+    ctx.beginPath();ctx.arc(w.x,w.y,w.r,a0,a1);ctx.stroke();
+    ctx.globalCompositeOperation='source-over';
+    ctx.strokeStyle=rgba(w.c,0.9*fade);ctx.lineWidth=5;
+    ctx.beginPath();ctx.arc(w.x,w.y,w.r,a0,a1);ctx.stroke();
+    ctx.strokeStyle=`rgba(255,255,255,${0.7*fade})`;ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.arc(w.x,w.y,w.r,a0,a1);ctx.stroke();
+  }
+}
+
+/* ---- variant signature attacks ---- */
+function binaryStars(b){
+  const r=b.r+(b.phase>=2?90:120),a=b.t*1.1;
+  return [{x:b.x+Math.cos(a)*r,y:b.y+Math.sin(a)*r},{x:b.x-Math.cos(a)*r,y:b.y-Math.sin(a)*r}];
+}
+function updateBossSignature(dt){
+  const b=boss,s=b.sig,p=player;
+  const ph=b.phase,busy=b.invuln>0||p.dead;
+  const a=angTo(b.x,b.y,p.x,p.y);
+  switch(b.kind){
+    // SHELLFALL -- a marching line of meteor strikes across your
+    // position, each leaving burning ground behind.
+    case 'cinder':{
+      if(busy)break;
+      s.tFall=(s.tFall==null?4.0:s.tFall)-dt;
+      if(s.tFall<=0){s.tFall=ph===1?5.5:ph===2?4.6:3.6;
+        const n=3+ph,ang=rand(0,TAU);
+        for(let i=0;i<n;i++){
+          const off=(i-(n-1)/2)*115;
+          const q=clampToRoom(p.x+Math.cos(ang)*off,p.y+Math.sin(ang)*off,60);
+          const t=0.95+i*0.12;
+          hazards.push({x:q[0],y:q[1],r:70,t,t0:t,c:[255,120,50],burn:true});
+        }
+        b.eye=0.4;SFX.warn();}
+      break;}
+    // BINARY VOLLEY -- two companion stars orbit it, each firing its
+    // own aimed spread; in MASS TRANSFER they also ring-burst.
+    case 'binary':{
+      if(busy)break;
+      s.tBin=(s.tBin==null?2.2:s.tBin)-dt;
+      if(s.tBin<=0){s.tBin=ph===1?2.6:ph===2?2.1:1.6;s.vol=(s.vol||0)+1;
+        for(const st of binaryStars(b)){
+          const sa=angTo(st.x,st.y,p.x,p.y);
+          for(let k=-1;k<=1;k++)bossShot(st.x,st.y,sa+k*0.16,330,11,6);
+          if(ph===3&&s.vol%2===0)for(let k=0;k<8;k++)bossShot(st.x,st.y,k/8*TAU+b.t,220,10,6);
+        }
+        SFX.bossShot();}
+      break;}
+    // FROST SHARDS -- slow ice shots that shatter into a ring.
+    case 'rime':{
+      if(busy)break;
+      s.tShard=(s.tShard==null?3.0:s.tShard)-dt;
+      if(s.tShard<=0){s.tShard=ph===1?3.8:ph===2?3.0:2.4;
+        const n=ph;
+        for(let k=0;k<n;k++){
+          const aa=a+(n>1?lerp(-0.35,0.35,k/(n-1)):0);
+          ebullets.push({x:b.x,y:b.y,vx:Math.cos(aa)*150,vy:Math.sin(aa)*150,dmg:14,r:13,c:[190,235,255],life:6,
+            split:{t:1.0+rand(0,0.25),n:ph===3?10:8,spd:230,dmg:9}});
+        }
+        b.eye=0.35;SFX.bossShot();}
+      break;}
+    // REFRACTION LANCES -- telegraphed light lines: a pair aimed at
+    // you, then a lens-line across the arena, then a five-point star.
+    case 'prism':{
+      if(busy)break;
+      s.tLance=(s.tLance==null?4.0:s.tLance)-dt;
+      if(s.tLance<=0){s.tLance=ph===1?5.0:ph===2?4.0:3.2;
+        const lc=b.pal[ph-1];
+        if(ph===3){
+          const off=a+0.31;
+          for(let k=0;k<5;k++)addBeam({x:b.x,y:b.y,ang:off+k/5*TAU,len:2000,start:b.r,w:24,warn:0.9,dur:0.35,dmg:22,c:lc});
+        }else{
+          for(const k of [-0.28,0.28])addBeam({x:b.x,y:b.y,ang:a+k,len:2000,start:b.r,w:24,warn:0.85,dur:0.3,dmg:22,c:lc});
+          if(ph===2)addBeam({x:-room.w/2,y:p.y,ang:0,len:room.w,w:22,warn:1.0,dur:0.3,dmg:20,c:lc});
+        }
+        b.eye=0.4;SFX.warn();}
+      break;}
+    // PACK CHARGE -- charges two or three times back to back, each
+    // leaving a trail of ice spikes that erupt a moment later.
+    case 'maw':{
+      if(b.charge&&b.charge.phase==='move'){
+        s.drop=(s.drop||0)-dt;
+        if(s.drop<=0){s.drop=0.09;hazards.push({x:b.x,y:b.y,r:46,t:0.8,t0:0.8,c:[190,230,255]});}
+      }
+      if(busy||b.charge)break;
+      if(s.chain>0){
+        s.gap=(s.gap||0)-dt;
+        if(s.gap<=0){s.chain--;s.gap=0.2;b.charge={phase:'wind',t:0.42,ang:a};b.eye=0.4;SFX.warn();}
+      }else{
+        s.tChain=(s.tChain==null?4.5:s.tChain)-dt;
+        if(s.tChain<=0){s.tChain=ph===1?7.0:ph===2?5.6:4.6;s.chain=ph===1?2:3;s.gap=0;}
+      }
+      break;}
+    // TIDEBREAK -- three gravity wells in a triangle around you, pulling
+    // three ways at once. CALVING -- every 12% of its health it sheds a
+    // ring of ice and a fragment.
+    case 'giant':{
+      if(s.nextCalve==null)s.nextCalve=0.88;
+      if(b.hp/b.maxhp<s.nextCalve){
+        s.nextCalve-=0.12;
+        for(let k=0;k<12;k++){const aa=k/12*TAU+b.t;
+          ebullets.push({x:b.x,y:b.y,vx:Math.cos(aa)*170,vy:Math.sin(aa)*170,dmg:12,r:10,c:[170,220,255],life:7});}
+        summonEnemies('orb',1,3);
+        burstFX(b.x,b.y,[170,220,255],26,420);addShake(10);SFX.explosion();
+        dmgNum(b.x,b.y-b.r-18,'CALVING','#aee0ff',16);
+      }
+      if(busy)break;
+      s.tTide=(s.tTide==null?6.0:s.tTide)-dt;
+      if(s.tTide<=0){s.tTide=ph===1?9.0:ph===2?7.0:6.0;
+        const off=rand(0,TAU);
+        for(let k=0;k<3;k++){const aa=off+k/3*TAU;
+          const q=clampToRoom(p.x+Math.cos(aa)*200,p.y+Math.sin(aa)*200,70);
+          gravFields.push({src:null,x:q[0],y:q[1],r:240,power:210,t:1.1,warn:1.1,dur:3.2,st:'warn',c:[150,210,255]});}
+        b.eye=0.4;SFX.warn();}
+      break;}
+    // AFTERIMAGES -- every blink leaves a frozen sleeper behind that
+    // wakes a second later in a ring of shots.
+    case 'sleeper':{
+      if(!s.ghosts)s.ghosts=[];
+      if(s.px!=null&&dist(s.px,s.py,b.x,b.y)>120)s.ghosts.push({x:s.px,y:s.py,t:1.1});
+      s.px=b.x;s.py=b.y;
+      for(let i=s.ghosts.length-1;i>=0;i--){const g=s.ghosts[i];g.t-=dt;
+        if(g.t<=0){
+          const n=ph===3?16:12,off=rand(0,TAU);
+          for(let k=0;k<n;k++)bossShot(g.x,g.y,off+k/n*TAU,240,10,6);
+          ringFX(g.x,g.y,b.pal[ph-1],110,0.4);SFX.bossShot();
+          s.ghosts.splice(i,1);
+        }}
+      break;}
+  }
+}
+function drawBossSignature(){
+  const b=boss,c=b.pal[b.phase-1],t=b.t;
+  ctx.save();ctx.translate(b.x,b.y);
+  switch(b.kind){
+    case 'cinder':{
+      ctx.globalCompositeOperation='lighter';
+      for(let i=0;i<10;i++){const aa=t*0.9+i/10*TAU,rr=b.r+46+Math.sin(t*3+i)*8;
+        drawGlow(Math.cos(aa)*rr,Math.sin(aa)*rr,[255,140,50],10);}
+      ctx.globalCompositeOperation='source-over';
+      ctx.strokeStyle=rgba([255,120,50],0.35+Math.sin(t*6)*0.15);ctx.lineWidth=2;
+      ctx.beginPath();ctx.arc(0,0,b.r+58,0,TAU);ctx.stroke();
+      break;}
+    case 'binary':{
+      const st=binaryStars(b);
+      ctx.strokeStyle=rgba(c,0.35);ctx.lineWidth=3;ctx.setLineDash([10,8]);
+      ctx.beginPath();ctx.moveTo(st[0].x-b.x,st[0].y-b.y);
+      ctx.quadraticCurveTo(Math.sin(t*2)*40,Math.cos(t*2)*40,st[1].x-b.x,st[1].y-b.y);ctx.stroke();
+      ctx.setLineDash([]);
+      for(const q of st){const x=q.x-b.x,y=q.y-b.y;
+        ctx.globalCompositeOperation='lighter';drawGlow(x,y,c,40);ctx.globalCompositeOperation='source-over';
+        ctx.fillStyle=rgb([255,235,190]);ctx.beginPath();ctx.arc(x,y,11+Math.sin(t*7)*1.5,0,TAU);ctx.fill();
+        ctx.strokeStyle=rgba(c,0.9);ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(x,y,16,0,TAU);ctx.stroke();}
+      break;}
+    case 'rime':{
+      ctx.rotate(t*0.2);
+      ctx.fillStyle=rgba([210,240,255],0.75);
+      for(let i=0;i<6;i++){ctx.save();ctx.rotate(i/6*TAU);ctx.translate(0,-b.r-14);
+        ctx.beginPath();ctx.moveTo(0,-34);ctx.lineTo(6,-8);ctx.lineTo(0,4);ctx.lineTo(-6,-8);ctx.closePath();ctx.fill();
+        ctx.restore();}
+      break;}
+    case 'prism':{
+      ctx.rotate(t*0.5);
+      const R=b.r+36;
+      ctx.strokeStyle=rgba(c,0.75);ctx.lineWidth=3;
+      ctx.beginPath();
+      for(let i=0;i<=3;i++){const aa=i/3*TAU-Math.PI/2;i?ctx.lineTo(Math.cos(aa)*R,Math.sin(aa)*R):ctx.moveTo(Math.cos(aa)*R,Math.sin(aa)*R);}
+      ctx.stroke();
+      const cols=[[255,120,160],[140,220,255],[200,255,170]];
+      for(let i=0;i<3;i++){const aa=i/3*TAU-Math.PI/2;
+        ctx.globalCompositeOperation='lighter';drawGlow(Math.cos(aa)*R,Math.sin(aa)*R,cols[i],22);
+        ctx.globalCompositeOperation='source-over';}
+      break;}
+    case 'maw':{
+      ctx.rotate(angTo(b.x,b.y,player.x,player.y));
+      const open=b.charge?0.55:0.3+Math.sin(t*4)*0.08;
+      ctx.fillStyle=rgba(c,0.9);
+      for(const sgn of [-1,1]){ctx.save();ctx.rotate(sgn*open);
+        for(let k=0;k<4;k++){const x=b.r+4-k*9,y=sgn*(8+k*9);
+          ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+18,y-sgn*4);ctx.lineTo(x,y-sgn*9);ctx.closePath();ctx.fill();}
+        ctx.restore();}
+      break;}
+    case 'giant':{
+      ctx.strokeStyle=rgba([220,240,255],0.55);ctx.lineWidth=2;
+      for(let i=0;i<4;i++){const aa=i/4*TAU+0.4;
+        ctx.beginPath();ctx.moveTo(Math.cos(aa)*14,Math.sin(aa)*14);
+        ctx.lineTo(Math.cos(aa+0.25)*b.r*0.55,Math.sin(aa+0.25)*b.r*0.55);
+        ctx.lineTo(Math.cos(aa-0.1)*b.r,Math.sin(aa-0.1)*b.r);ctx.stroke();}
+      ctx.fillStyle=rgba(c,0.8);
+      for(let i=0;i<3;i++){const aa=t*0.6+i/3*TAU,rr=b.r+52+Math.sin(t*1.3+i)*10;
+        ctx.save();ctx.translate(Math.cos(aa)*rr,Math.sin(aa)*rr);ctx.rotate(t+i);
+        ctx.beginPath();ctx.moveTo(-12,-7);ctx.lineTo(10,-10);ctx.lineTo(13,6);ctx.lineTo(-6,11);ctx.closePath();ctx.fill();
+        ctx.restore();}
+      break;}
+    case 'sleeper':{
+      const open=0.25+(b.phase-1)*0.3;
+      ctx.strokeStyle=rgba(c,0.85);ctx.lineWidth=5;
+      for(const base of [0,Math.PI]){
+        ctx.beginPath();ctx.arc(0,0,b.r+26,base+open,base+Math.PI-open);ctx.stroke();}
+      break;}
+  }
+  ctx.restore();
+}
+// Telegraph-layer effects, drawn under enemies and the boss.
+function drawBossFX(){
+  const b=boss;
+  if(b.kind==='monarch'&&b.pylonsUp){
+    ctx.strokeStyle=`rgba(255,70,80,${0.35+Math.sin(performance.now()*0.01)*0.15})`;ctx.lineWidth=3;
+    ctx.setLineDash([12,8]);ctx.lineDashOffset=-performance.now()*0.05;
+    for(const e of enemies){if(!e.pylon||e.dead)continue;
+      ctx.beginPath();ctx.moveTo(e.x,e.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
+    ctx.setLineDash([]);ctx.lineDashOffset=0;
+  }
+  if(b.kind==='sleeper'&&b.sig&&b.sig.ghosts){
+    for(const g of b.sig.ghosts){const pr=clamp(1-g.t/1.1,0,1);
+      ctx.fillStyle=rgba(b.pal[b.phase-1],0.12+pr*0.12);
+      ctx.beginPath();ctx.arc(g.x,g.y,b.r*0.9,0,TAU);ctx.fill();
+      ctx.strokeStyle=rgba(b.pal[b.phase-1],0.4+pr*0.5);ctx.lineWidth=2;
+      ctx.beginPath();ctx.arc(g.x,g.y,b.r*0.9,0,TAU);ctx.stroke();
+      ctx.beginPath();ctx.arc(g.x,g.y,b.r*0.9*(1-pr),0,TAU);ctx.stroke();}
+  }
+  if(b.waves&&b.waves.length)drawIceWaves();
+  if(b.beams&&b.beams.length)drawBossBeams();
+}
+
+/* =================================================================
+   GALAXY 2 FINALE -- THE CRIMSON MONARCH
+   The thing holding the Crimson Throne's star at the instant before
+   its death. It fights from the throne end of the arena and:
+   · SOLAR FLARES -- 2/3/4 beams anchored on it that sweep the arena.
+     It stops to channel them; the warn line shows the arc.
+   · EMBER RAIN -- strikes around you that leave burning ground.
+   · THRONE PYLONS -- at each phase it raises four pylons (elite
+     cores) and is untouchable until they fall; breaking the last one
+     staggers it, wide open.
+   · Phase III: the collapse resumes and the arena closes in.
+   ================================================================= */
+function monarchRaisePylons(n){
+  const b=boss;if(!b||!room)return;
+  const pts=[[-430,-250],[430,-250],[-430,250],[430,250]];
+  for(let i=0;i<n;i++){const q=pts[i%pts.length];
+    const e=createEnemy('core',q[0],q[1],true);e.pylon=true;enemies.push(e);
+    burstFX(q[0],q[1],[255,80,70],18,320);ringFX(q[0],q[1],[255,80,70],90,0.4);}
+  b.shielded=true;b.pylonsUp=true;
+  dmgNum(b.x,b.y-b.r-24,'THRONE PYLONS — DESTROY THEM','#ff6070',17);SFX.spawn();
+}
+function updateMonarch(dt){
+  const b=boss;if(!b)return;
+  const p=player;
+  b.t+=dt;b.hitFlash-=dt;b.invuln-=dt;b.eye-=dt;b.vulnT-=dt;
+  if(b.dying>0){bossDying(dt,[[255,60,70],[255,160,60],[255,230,150]]);return;}
+  if(b.pylonsUp&&!enemies.some(e=>e.pylon&&!e.dead)){
+    b.pylonsUp=false;b.shielded=false;b.vulnT=2.8;
+    ringFX(b.x,b.y,[255,200,120],b.r+90,0.5);burstFX(b.x,b.y,[255,200,120],30,460);
+    addShake(14);camPunch(0.07);SFX.phase();
+    dmgNum(b.x,b.y-b.r-18,'THE THRONE FALLS — ATTACK','#ffc95c',18);
+  }
+  const dx=p.x-b.x,dy=p.y-b.y,d=Math.hypot(dx,dy)||1,a=Math.atan2(dy,dx);
+  if(b.flare){b.flare.t-=dt;if(b.flare.t<=0)b.flare=null;}
+  if(b.invuln<=0&&!b.flare){
+    if(b.phase===1||b.shielded){
+      // enthroned: holds court at the far end of the arena
+      const tx=Math.cos(b.t*0.35)*260,ty=-room.h/2+230+Math.sin(b.t*0.5)*40;
+      const ta=angTo(b.x,b.y,tx,ty),spd=Math.min(95,dist(b.x,b.y,tx,ty)*2);
+      b.vx=lerp(b.vx,Math.cos(ta)*spd,clamp(2*dt,0,1));b.vy=lerp(b.vy,Math.sin(ta)*spd,clamp(2*dt,0,1));
+    }else{
+      const spd=(b.phase===2?150:190)*(b.vulnT>0?0.22:1)*curDiff().speedMult;
+      const tvx=Math.cos(a)*spd*(d>240?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.6)*75;
+      const tvy=Math.sin(a)*spd*(d>240?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.6)*75;
+      b.vx=lerp(b.vx,tvx,clamp(2.2*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.2*dt,0,1));
+    }
+  }else{b.vx*=Math.pow(0.05,dt);b.vy*=Math.pow(0.05,dt);}
+  if(b.invuln<=0&&b.vulnT<=0&&!p.dead){
+    if(!b.flare){
+      b.tRadial-=dt;
+      if(b.tRadial<=0){b.tRadial=b.phase===1?3.4:b.phase===2?2.9:2.4;
+        const n=b.phase===1?14:b.phase===2?18:22;
+        for(let i=0;i<n;i++)bossShot(b.x,b.y,i/n*TAU+b.t*0.6,225+b.phase*16,10);
+        b.eye=0.3;SFX.bossShot();}
+      b.tVolley-=dt;
+      if(b.tVolley<=0){b.tVolley=b.phase===1?2.6:b.phase===2?2.2:1.8;
+        const n=b.phase===3?7:5,sp=(n-1)*0.15;
+        for(let i=0;i<n;i++)bossShot(b.x,b.y,a-lerp(-sp/2,sp/2,i/(n-1)),370+b.phase*16,12);
+        b.eye=0.3;SFX.bossShot();}
+      b.tFlare-=dt;
+      if(b.tFlare<=0){b.tFlare=b.phase===1?7.5:b.phase===2?6.5:5.5;
+        const n=b.phase+1,dir=pick([-1,1]),rot=dir*(b.phase===1?0.5:b.phase===2?0.62:0.8);
+        const off=a+Math.PI/(n*2);
+        for(let i=0;i<n;i++)addBeam({x:b.x,y:b.y,follow:true,ang:off+i/n*TAU,rot,len:2200,start:b.r+10,
+          w:26,warn:1.0,dur:3.4,dmg:24,c:[255,120,60]});
+        b.flare={t:4.4};b.eye=0.6;SFX.warn();SFX.charge();
+        dmgNum(b.x,b.y-b.r-18,'SOLAR FLARE','#ff9a50',17);}
+    }
+    b.tRain-=dt;
+    if(b.tRain<=0){b.tRain=b.phase===1?4.6:b.phase===2?4.0:3.3;
+      const n=b.phase+1;
+      for(let i=0;i<n;i++){
+        const q=clampToRoom(p.x+rand(-260,260),p.y+rand(-260,260),70);
+        hazards.push({x:q[0],y:q[1],r:80,t:1.1,t0:1.1,c:[255,110,50],burn:true});}
+      b.eye=0.4;SFX.warn();}
+    b.tSummon-=dt;
+    if(b.tSummon<=0){b.tSummon=b.phase===1?10:b.phase===2?9:8;
+      if(b.phase===1)summonEnemies('fdrone',2,4);
+      else if(b.phase===2)summonEnemies('hunter',2,3);
+      else{summonEnemies('brute',1,2);summonEnemies('fdrone',2,4);}}
+  }
+  b.x+=b.vx*dt;b.y+=b.vy*dt;
+  const hw=room.w/2-b.r,hh=room.h/2-b.r;
+  if(b.x<-hw){b.x=-hw;b.vx=Math.abs(b.vx)*0.3;}if(b.x>hw){b.x=hw;b.vx=-Math.abs(b.vx)*0.3;}
+  if(b.y<-hh){b.y=-hh;b.vy=Math.abs(b.vy)*0.3;}if(b.y>hh){b.y=hh;b.vy=-Math.abs(b.vy)*0.3;}
+  if(!p.dead&&d<b.r+p.r+2)hurtPlayer(28,b.x,b.y);
+}
+function drawMonarch(){
+  const b=boss,ph=b.phase;
+  const phC=ph===1?[255,100,60]:ph===2?[255,60,70]:[255,40,110];
+  const open=b.vulnT>0;
+  ctx.globalCompositeOperation='lighter';
+  drawGlow(b.x,b.y,open?[255,220,160]:phC,b.r*(open?4.6:4.0));
+  ctx.globalCompositeOperation='source-over';
+  ctx.save();ctx.translate(b.x,b.y);
+  // corona -- flickering tongues of held fire
+  ctx.fillStyle=rgba(phC,0.5);
+  ctx.beginPath();
+  const N=30;
+  for(let i=0;i<=N;i++){const aa=i/N*TAU;
+    const fl=Math.sin(b.t*5+i*1.7)*0.5+Math.sin(b.t*3.1+i*0.9)*0.5;
+    const rr=b.r+14+(i%2?6:24)+fl*10;
+    i?ctx.lineTo(Math.cos(aa)*rr,Math.sin(aa)*rr):ctx.moveTo(Math.cos(aa)*rr,Math.sin(aa)*rr);}
+  ctx.closePath();ctx.fill();
+  // the held-fire ring
+  ctx.save();ctx.rotate(b.t*0.4);
+  ctx.strokeStyle=rgba([255,200,120],0.7);ctx.lineWidth=4;
+  for(let k=0;k<4;k++){ctx.beginPath();ctx.arc(0,0,b.r+50,k*TAU/4,k*TAU/4+0.95);ctx.stroke();}
+  ctx.restore();
+  // body
+  const g=ctx.createRadialGradient(0,0,8,0,0,b.r);
+  if(open){g.addColorStop(0,'rgba(255,245,220,0.98)');g.addColorStop(0.55,rgb(b.hitFlash>0?[255,255,255]:[255,150,90]));g.addColorStop(1,'rgba(60,10,14,0.92)');}
+  else{g.addColorStop(0,rgb(b.hitFlash>0?[255,255,255]:[70,12,18]));g.addColorStop(1,'rgba(20,4,8,0.96)');}
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,b.r,0,TAU);ctx.fill();
+  ctx.strokeStyle=rgba(phC,0.95);ctx.lineWidth=5;
+  ctx.beginPath();ctx.arc(0,0,b.r,0,TAU);ctx.stroke();
+  // crown
+  ctx.fillStyle=rgba([255,201,92],0.95);
+  for(let i=-3;i<=3;i++){const bx=i*16,h=30-Math.abs(i)*5;
+    ctx.beginPath();ctx.moveTo(bx-7,-b.r+4);ctx.lineTo(bx,-b.r-h);ctx.lineTo(bx+7,-b.r+4);ctx.closePath();ctx.fill();}
+  ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(0,-b.r-8,4,0,TAU);ctx.fill();
+  // eye
+  const eyeC=b.eye>0||open?[255,255,255]:[255,190,120];
+  ctx.fillStyle=rgb(eyeC);ctx.beginPath();ctx.arc(0,0,18+Math.sin(b.t*4)*2.5,0,TAU);ctx.fill();
+  ctx.globalCompositeOperation='lighter';drawGlow(0,0,eyeC,56);ctx.globalCompositeOperation='source-over';
+  ctx.restore();
+  if(b.shielded){
+    ctx.strokeStyle=`rgba(255,70,80,${0.55+Math.sin(performance.now()*0.012)*0.25})`;ctx.lineWidth=5;
+    ctx.beginPath();
+    for(let i=0;i<=6;i++){const aa=i/6*TAU+b.t*0.3;
+      const x=b.x+Math.cos(aa)*(b.r+30),y=b.y+Math.sin(aa)*(b.r+30);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+    ctx.closePath();ctx.stroke();
+  }
+  if(b.invuln>0){
+    ctx.strokeStyle=`rgba(190,130,255,${0.5+Math.sin(performance.now()*0.02)*0.3})`;ctx.lineWidth=5;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r+22,0,TAU);ctx.stroke();}
+  if(open){
+    ctx.strokeStyle=`rgba(255,201,92,${0.5+Math.sin(performance.now()*0.02)*0.4})`;ctx.lineWidth=4;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r+26,0,TAU);ctx.stroke();}
+}
+
+/* =================================================================
+   GALAXY 3 FINALE -- THE STILLHEART
+   The thing at the centre of the Stillpoint, where motion stops.
+   · ICE WAVES -- expanding rings with one gap; find the gap or dash.
+   · STILL (phase II+) -- every shot in the air freezes where it is
+     and a cage of held shards forms around you, aimed inward. Get
+     out before the THAW, when everything moves at once -- and the
+     Stillheart's core is exposed for a moment after.
+   · Phase III: it anchors at the centre and spins a three-armed
+     spiral; shots caught by STILL become a frozen lattice.
+   ================================================================= */
+function stillheartFreeze(){
+  const b=boss,p=player;
+  for(const eb of ebullets)eb.frozen=true;
+  const rings=b.phase===3?[180,280]:[190];
+  for(const R of rings){
+    const n=Math.round(R/15),off=rand(0,TAU);
+    for(let k=0;k<n;k++){const aa=off+k/n*TAU;
+      const x=p.x+Math.cos(aa)*R,y=p.y+Math.sin(aa)*R;
+      if(Math.abs(x)>room.w/2-12||Math.abs(y)>room.h/2-12)continue;
+      ebullets.push({x,y,vx:-Math.cos(aa)*260,vy:-Math.sin(aa)*260,dmg:12,r:7,c:[200,235,255],life:3,frozen:true});}
+    ringFX(p.x,p.y,[220,240,255],R,0.4);
+  }
+  b.freeze={t:b.phase===3?1.7:2.0};
+  addShake(8);SFX.charge();
+  dmgNum(b.x,b.y-b.r-20,'STILL','#dff4ff',24);
+}
+function updateStillheart(dt){
+  const b=boss;if(!b)return;
+  const p=player;
+  b.t+=dt;b.hitFlash-=dt;b.invuln-=dt;b.eye-=dt;b.vulnT-=dt;
+  if(b.dying>0){bossDying(dt,[[220,240,255],[150,200,255],[255,255,255]]);return;}
+  const dx=p.x-b.x,dy=p.y-b.y,d=Math.hypot(dx,dy)||1,a=Math.atan2(dy,dx);
+  if(b.freeze){
+    b.freeze.t-=dt;
+    if(b.freeze.t<=0){
+      for(const eb of ebullets)eb.frozen=false;
+      b.freeze=null;b.vulnT=b.phase===3?1.6:2.0;
+      ringFX(b.x,b.y,[255,255,255],b.r+120,0.5);burstFX(b.x,b.y,[220,240,255],26,420);
+      addShake(12);camPunch(0.06);SFX.phase();
+      dmgNum(b.x,b.y-b.r-18,'THAW — CORE EXPOSED','#ffc95c',18);
+    }
+  }
+  // movement
+  if(b.invuln<=0){
+    if(b.phase===3){
+      const ta=angTo(b.x,b.y,0,-40),dd=dist(b.x,b.y,0,-40);
+      const spd=Math.min(160,dd*2);
+      b.vx=lerp(b.vx,Math.cos(ta)*spd,clamp(3*dt,0,1));b.vy=lerp(b.vy,Math.sin(ta)*spd,clamp(3*dt,0,1));
+    }else{
+      const spd=(b.phase===1?85:120)*(b.freeze||b.vulnT>0?0.2:1)*curDiff().speedMult;
+      const dir=d>360?1:d<280?-0.7:0;
+      const tvx=Math.cos(a)*spd*dir+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.5)*70;
+      const tvy=Math.sin(a)*spd*dir+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.5)*70;
+      b.vx=lerp(b.vx,tvx,clamp(2*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2*dt,0,1));
+    }
+  }else{b.vx*=Math.pow(0.05,dt);b.vy*=Math.pow(0.05,dt);}
+  if(b.invuln<=0&&!p.dead){
+    // phase III spiral keeps turning through STILL -- those shots are
+    // born frozen and become the lattice
+    if(b.phase===3&&b.vulnT<=0){
+      b.spiralEm-=dt;
+      if(b.spiralEm<=0){b.spiralEm=0.14;b.spiral+=0.23;
+        for(let k=0;k<3;k++){const aa=b.spiral+k/3*TAU;
+          ebullets.push({x:b.x+Math.cos(aa)*b.r,y:b.y+Math.sin(aa)*b.r,vx:Math.cos(aa)*210,vy:Math.sin(aa)*210,
+            dmg:10,r:6,c:[200,235,255],life:8,frozen:!!b.freeze});}}
+    }
+    if(!b.freeze&&b.vulnT<=0){
+      b.tVolley-=dt;
+      if(b.tVolley<=0){b.tVolley=b.phase===1?2.4:b.phase===2?2.2:2.6;
+        const n=b.phase===1?3:5,sp=(n-1)*0.14;
+        for(let i=0;i<n;i++)bossShot(b.x,b.y,a-lerp(-sp/2,sp/2,i/(n-1)),340,11,7);
+        b.eye=0.3;SFX.bossShot();}
+      b.tWave-=dt;
+      if(b.tWave<=0){b.tWave=b.phase===1?5.2:b.phase===2?4.4:3.6;
+        const gw=b.phase===1?0.9:0.7,c=[190,230,255],spd=b.phase===3?300:250;
+        b.waves.push({x:b.x,y:b.y,r:b.r,spd,max:1700,gapA:a+rand(-0.9,0.9),gapW:gw,dmg:22,c});
+        if(b.phase===3)b.waves.push({x:b.x,y:b.y,r:b.r-170,spd,max:1700,gapA:a+rand(-0.9,0.9),gapW:gw,dmg:22,c});
+        b.eye=0.4;SFX.warn();}
+      if(b.phase>=2){
+        b.tFreeze-=dt;
+        if(b.tFreeze<=0){b.tFreeze=b.phase===2?7.5:6.5;stillheartFreeze();}
+      }
+      b.tSummon-=dt;
+      if(b.tSummon<=0){b.tSummon=b.phase===1?11:b.phase===2?12:10;
+        if(b.phase===3)summonEnemies('hunter',1,3);else summonEnemies('orb',2,3);}
+    }
+  }
+  b.x+=b.vx*dt;b.y+=b.vy*dt;
+  const hw=room.w/2-b.r,hh=room.h/2-b.r;
+  if(b.x<-hw){b.x=-hw;b.vx=Math.abs(b.vx)*0.3;}if(b.x>hw){b.x=hw;b.vx=-Math.abs(b.vx)*0.3;}
+  if(b.y<-hh){b.y=-hh;b.vy=Math.abs(b.vy)*0.3;}if(b.y>hh){b.y=hh;b.vy=-Math.abs(b.vy)*0.3;}
+  if(!p.dead&&d<b.r+p.r+2)hurtPlayer(26,b.x,b.y);
+}
+function drawStillheart(){
+  const b=boss,ph=b.phase;
+  const phC=ph===1?[200,235,255]:ph===2?[150,200,255]:[235,245,255];
+  const open=b.vulnT>0,holding=!!b.freeze;
+  ctx.globalCompositeOperation='lighter';
+  drawGlow(b.x,b.y,open?[255,255,255]:phC,b.r*(open?4.4:3.6));
+  ctx.globalCompositeOperation='source-over';
+  ctx.save();ctx.translate(b.x,b.y);
+  const rot=b.t*(ph===3?0.35:0.15)*(holding?0.1:1);
+  // six-armed crystal
+  ctx.save();ctx.rotate(rot);ctx.lineCap='round';
+  const armL=b.r+(ph===3?72:50);
+  for(let i=0;i<6;i++){
+    ctx.save();ctx.rotate(i/6*TAU);
+    ctx.strokeStyle=rgba(phC,0.9);ctx.lineWidth=5;
+    ctx.beginPath();ctx.moveTo(b.r*0.6,0);ctx.lineTo(armL,0);ctx.stroke();
+    ctx.lineWidth=3;
+    for(const [f,l] of [[0.62,24],[0.84,16]]){const x=b.r*0.6+(armL-b.r*0.6)*f;
+      ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x+l*0.6,-l*0.8);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x+l*0.6,l*0.8);ctx.stroke();}
+    ctx.restore();
+  }
+  ctx.restore();
+  // hexagonal body
+  const g=ctx.createRadialGradient(0,0,6,0,0,b.r);
+  if(open){g.addColorStop(0,'rgba(255,255,255,0.98)');g.addColorStop(0.6,rgb(b.hitFlash>0?[255,255,255]:[180,220,255]));g.addColorStop(1,'rgba(20,30,60,0.9)');}
+  else{g.addColorStop(0,rgb(b.hitFlash>0?[255,255,255]:[30,46,80]));g.addColorStop(1,'rgba(8,12,28,0.96)');}
+  ctx.fillStyle=g;
+  ctx.beginPath();
+  for(let i=0;i<=6;i++){const aa=i/6*TAU+rot*0.5;
+    i?ctx.lineTo(Math.cos(aa)*b.r,Math.sin(aa)*b.r):ctx.moveTo(Math.cos(aa)*b.r,Math.sin(aa)*b.r);}
+  ctx.closePath();ctx.fill();
+  ctx.strokeStyle=rgba(phC,0.95);ctx.lineWidth=4;ctx.stroke();
+  // core
+  if(open){
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(0,0,24+Math.sin(b.t*6)*3,0,TAU);ctx.fill();
+  }else{
+    ctx.fillStyle=rgba(b.eye>0?[255,255,255]:phC,0.9);
+    ctx.beginPath();ctx.moveTo(0,-15);ctx.lineTo(11,0);ctx.lineTo(0,15);ctx.lineTo(-11,0);ctx.closePath();ctx.fill();
+  }
+  if(holding){
+    ctx.save();ctx.rotate(-b.t*0.6);
+    ctx.strokeStyle=rgba([220,240,255],0.7);ctx.lineWidth=2.5;ctx.setLineDash([6,10]);
+    ctx.beginPath();ctx.arc(0,0,b.r+96,0,TAU);ctx.stroke();ctx.setLineDash([]);
+    ctx.restore();
+  }
+  ctx.restore();
+  if(b.invuln>0){
+    ctx.strokeStyle=`rgba(190,130,255,${0.5+Math.sin(performance.now()*0.02)*0.3})`;ctx.lineWidth=5;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r+22,0,TAU);ctx.stroke();}
+  if(open){
+    ctx.strokeStyle=`rgba(255,201,92,${0.5+Math.sin(performance.now()*0.02)*0.4})`;ctx.lineWidth=4;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r+26,0,TAU);ctx.stroke();}
+}
 function updateHazards(dt){
   for(let i=hazards.length-1;i>=0;i--){const hz=hazards[i];
     hz.t-=dt;
     if(hz.t<=0){
-      ringFX(hz.x,hz.y,[216,80,255],hz.r+20,0.35);burstFX(hz.x,hz.y,[216,80,255],12,300);
+      const hc=hz.c||[216,80,255];
+      ringFX(hz.x,hz.y,hc,hz.r+20,0.35);burstFX(hz.x,hz.y,hc,12,300);
+      if(hz.burn)spawnZone(hz.x,hz.y,hz.r*0.75,0.05,2.4,hc,10*run.level.diff);
       addShake(7);SFX.explosion();
       if(player&&!player.dead&&dist(hz.x,hz.y,player.x,player.y)<hz.r+player.r)
         hurtPlayer(14*run.level.diff,hz.x,hz.y);
@@ -6878,6 +7602,7 @@ function damageBoss(dmg,crit){
   const b=boss,meta=BOSSMETA[b.kind];
   if(!b||b.dying>0)return;
   if(b.invuln>0){ringFX(b.x,b.y,[190,130,255],b.r+30,0.3);return;}
+  if(b.shielded){ringFX(b.x,b.y,[255,70,70],b.r+30,0.3);return;}
   if(b.vulnT>0)dmg*=1.5;
   b.hp-=dmg;run.damage+=dmg;b.hitFlash=0.1;
   dmgNum(b.x+rand(-30,30),b.y-b.r,Math.round(dmg),crit?'#ffc95c':'#eafcff',crit?21:15);
@@ -6892,6 +7617,8 @@ function phaseTo(n){
   const b=boss,meta=BOSSMETA[b.kind];
   b.phase=n;b.invuln=1.5;
   b.sweep=null;b.shatter=null;b.slam=null;b.charge=null;b.nova=null;b.tp=null;b.barrage=null;
+  b.flare=null;b.freeze=null;if(b.beams)b.beams.length=0;if(b.waves)b.waves.length=0;
+  if(b.sig){b.sig.chain=0;b.sig.ghosts=[];}
   for(const eb of ebullets)sparks(eb.x,eb.y,eb.c,3,140);
   ebullets.length=0;
   ringFX(b.x,b.y,meta.color,420,0.7);burstFX(b.x,b.y,meta.color,30,450);
@@ -8414,10 +9141,10 @@ function renderWorld(){
   }
   // hazard zones
   for(const hz of hazards){
-    const pr=clamp(1-hz.t/1.15,0,1);
-    ctx.fillStyle=`rgba(216,80,255,${0.07+pr*0.16})`;
+    const pr=clamp(1-hz.t/(hz.t0||1.15),0,1),hc=hz.c||[216,80,255];
+    ctx.fillStyle=rgba(hc,0.07+pr*0.16);
     ctx.beginPath();ctx.arc(hz.x,hz.y,hz.r,0,TAU);ctx.fill();
-    ctx.strokeStyle=`rgba(216,80,255,${0.35+pr*0.5})`;ctx.lineWidth=2.5;
+    ctx.strokeStyle=rgba(hc,0.35+pr*0.5);ctx.lineWidth=2.5;
     ctx.beginPath();ctx.arc(hz.x,hz.y,hz.r,0,TAU);ctx.stroke();
     ctx.beginPath();ctx.arc(hz.x,hz.y,hz.r*pr,0,TAU);ctx.stroke();
   }
@@ -8442,7 +9169,7 @@ function renderWorld(){
       ctx.beginPath();ctx.moveTo(boss.x,boss.y);
       ctx.lineTo(boss.x+Math.cos(c.ang)*1800,boss.y+Math.sin(c.ang)*1800);ctx.stroke();
       ctx.setLineDash([]);}
-    if(boss.kind==='king'&&boss.shatter){const s=boss.shatter,pr=1-s.t/1.35;
+    if((boss.base||boss.kind)==='king'&&boss.shatter){const s=boss.shatter,pr=1-s.t/1.35;
       ctx.fillStyle=`rgba(255,45,85,${0.08+pr*0.15})`;
       ctx.beginPath();ctx.arc(s.x,s.y,300,0,TAU);ctx.fill();
       ctx.strokeStyle=`rgba(255,45,85,${0.35+pr*0.55})`;ctx.lineWidth=3;
@@ -8464,7 +9191,7 @@ function renderWorld(){
       ctx.beginPath();ctx.moveTo(boss.x,boss.y);ctx.lineTo(boss.tp.tx,boss.tp.ty);ctx.stroke();
       ctx.setLineDash([]);}
     // THE DEPTHS — VOID BARRAGE wind-up telegraph
-    if(boss.kind==='depths'&&boss.barrage&&boss.barrage.phase==='wind'){
+    if((boss.base||boss.kind)==='depths'&&boss.barrage&&boss.barrage.phase==='wind'){
       const pr=clamp(1-boss.barrage.t/0.85,0,1);
       ctx.strokeStyle=`rgba(140,170,255,${0.3+pr*0.5})`;ctx.lineWidth=3;
       ctx.beginPath();ctx.arc(boss.x,boss.y,boss.r+24,0,TAU);ctx.stroke();
@@ -8474,16 +9201,21 @@ function renderWorld(){
       ctx.setLineDash([]);
     }
   }
+  if(boss&&!boss.dead&&boss.dying<=0)drawBossFX();
   for(const e of enemies)drawEnemy(e);
   if(bossActive&&boss&&!boss.dead){
-    if(boss.kind==='depths')drawDepths();
-    else if(boss.kind==='warden')drawWarden();
-    else if(boss.kind==='archon')drawArchon();
-    else if(boss.kind==='king')drawKing();
-    else if(boss.kind==='sentinel')drawSentinel();
-    else if(boss.kind==='eclipse')drawEclipse();
-    else if(boss.kind==='origin')drawOrigin();
+    const k=boss.base||boss.kind;
+    if(k==='depths')drawDepths();
+    else if(k==='warden')drawWarden();
+    else if(k==='archon')drawArchon();
+    else if(k==='king')drawKing();
+    else if(k==='sentinel')drawSentinel();
+    else if(k==='eclipse')drawEclipse();
+    else if(k==='origin')drawOrigin();
+    else if(k==='monarch')drawMonarch();
+    else if(k==='stillheart')drawStillheart();
     else drawNullBoss();
+    if(boss.base)drawBossSignature();
   }
   // CO-OP squadmates, drawn before the local player so your own ship
   // always reads on top of theirs in a scrum.
@@ -8516,8 +9248,10 @@ function renderWorld(){
     ctx.globalCompositeOperation='lighter';
     drawGlow(b.x,b.y,b.c,b.r*3.4);
     ctx.globalCompositeOperation='source-over';
-    ctx.fillStyle=rgb(b.c);ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,TAU);ctx.fill();
+    ctx.fillStyle=rgb(b.frozen?[225,245,255]:b.c);ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,TAU);ctx.fill();
     ctx.fillStyle='rgba(255,255,255,0.85)';ctx.beginPath();ctx.arc(b.x,b.y,b.r*0.42,0,TAU);ctx.fill();
+    if(b.frozen){ctx.strokeStyle='rgba(170,225,255,0.8)';ctx.lineWidth=1.5;
+      ctx.beginPath();ctx.arc(b.x,b.y,b.r+3,0,TAU);ctx.stroke();}
   }
   ctx.globalCompositeOperation='lighter';
   for(const p of particles){
@@ -8944,7 +9678,7 @@ function drawEnemy(e){
 }
 function drawNullBoss(){
   const b=boss;
-  const phC=b.phase===1?[0,240,255]:b.phase===2?[190,130,255]:[255,45,85];
+  const phC=b.pal?b.pal[b.phase-1]:b.phase===1?[0,240,255]:b.phase===2?[190,130,255]:[255,45,85];
   ctx.globalCompositeOperation='lighter';
   drawGlow(b.x,b.y,phC,b.r*3.4);
   ctx.globalCompositeOperation='source-over';
@@ -8984,7 +9718,7 @@ function drawNullBoss(){
 }
 function drawKing(){
   const b=boss;
-  const phC=b.phase===1?[200,120,255]:b.phase===2?[255,70,170]:[255,45,85];
+  const phC=b.pal?b.pal[b.phase-1]:b.phase===1?[200,120,255]:b.phase===2?[255,70,170]:[255,45,85];
   ctx.globalCompositeOperation='lighter';
   drawGlow(b.x,b.y,phC,b.r*3.6);
   ctx.globalCompositeOperation='source-over';
@@ -9048,7 +9782,7 @@ function drawKing(){
 }
 function drawArchon(){
   const b=boss;
-  const phC=b.phase===1?[255,110,125]:b.phase===2?[255,70,95]:[255,40,70];
+  const phC=b.pal?b.pal[b.phase-1]:b.phase===1?[255,110,125]:b.phase===2?[255,70,95]:[255,40,70];
   ctx.globalCompositeOperation='lighter';
   drawGlow(b.x,b.y,phC,b.r*3.8);
   ctx.globalCompositeOperation='source-over';
@@ -9113,7 +9847,7 @@ function drawArchon(){
 }
 function drawWarden(){
   const b=boss;
-  const phC=b.phase===1?[90,140,255]:b.phase===2?[150,90,255]:[255,60,110];
+  const phC=b.pal?b.pal[b.phase-1]:b.phase===1?[90,140,255]:b.phase===2?[150,90,255]:[255,60,110];
   ctx.globalCompositeOperation='lighter';
   drawGlow(b.x,b.y,phC,b.r*3.8);
   ctx.globalCompositeOperation='source-over';
@@ -9191,7 +9925,7 @@ function drawWarden(){
    exposed (white-hot) / destabilizes (pulsing containment). */
 function drawDepths(){
   const b=boss;
-  const phC=b.phase===1?[95,125,255]:b.phase===2?[150,105,255]:[255,70,130];
+  const phC=b.pal?b.pal[b.phase-1]:b.phase===1?[95,125,255]:b.phase===2?[150,105,255]:[255,70,130];
   const open=b.coreMode==='open'&&b.vulnT>0;
   const tele=b.coreMode==='tele';
   ctx.globalCompositeOperation='lighter';
@@ -9277,7 +10011,7 @@ function drawDepths(){
    compact, hot-amber core. */
 function drawSentinel(){
   const b=boss;
-  const phC=b.phase===1?[255,170,90]:b.phase===2?[255,120,70]:[255,70,70];
+  const phC=b.pal?b.pal[b.phase-1]:b.phase===1?[255,170,90]:b.phase===2?[255,120,70]:[255,70,70];
   const open=b.vulnT>0;
   ctx.globalCompositeOperation='lighter';
   drawGlow(b.x,b.y,open?[255,255,255]:phC,b.r*(open?4.2:3.7));
@@ -9337,7 +10071,7 @@ function drawSentinel(){
    orbiting shadow fragments. */
 function drawEclipse(){
   const b=boss;
-  const phC=b.phase===1?[150,90,255]:b.phase===2?[120,60,220]:[80,30,180];
+  const phC=b.pal?b.pal[b.phase-1]:b.phase===1?[150,90,255]:b.phase===2?[120,60,220]:[80,30,180];
   const open=b.vulnT>0;
   ctx.globalCompositeOperation='lighter';
   drawGlow(b.x,b.y,open?[255,255,255]:phC,b.r*(open?4.4:3.9));
@@ -9394,7 +10128,7 @@ function drawEclipse(){
 /* THE ORIGIN — biggest guardian: hex frame, shuttered core, spires */
 function drawOrigin(){
   const b=boss;
-  const phC=b.phase===1?[100,140,255]:b.phase===2?[170,110,255]:[255,100,120];
+  const phC=b.pal?b.pal[b.phase-1]:b.phase===1?[100,140,255]:b.phase===2?[170,110,255]:[255,100,120];
   const open=b.coreMode==='open'&&b.vulnT>0;
   const charge=b.coreMode==='charge';
   const tele=b.coreMode==='tele';
