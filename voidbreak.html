@@ -2463,7 +2463,15 @@ addEventListener('keydown',e=>{
     }
   }catch(err){}
 },true);
+// True while focus is in a text field (e.g. the co-op room code box), so
+// typing there isn't swallowed by game hotkeys / movement keys.
+function isTypingTarget(t){
+  if(!t)return false;
+  const tag=t.tagName;
+  return tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||t.isContentEditable;
+}
 addEventListener('keydown',e=>{
+  if(isTypingTarget(e.target))return;
   if(['Space','KeyW','KeyA','KeyS','KeyD','KeyP'].includes(e.code))e.preventDefault();
   if(!e.repeat){pressed[e.code]=true;handleKey(e.code);}
   keys[e.code]=true;initAudio();
