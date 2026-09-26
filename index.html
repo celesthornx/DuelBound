@@ -3029,6 +3029,87 @@
     .dest-ico{ width:26px; height:26px; }
   }
 
+  /* ---------- Top bar must fit the viewport ----------
+     The top bar's items were all flex:0 0 auto, so its min-content
+     width (brand + 7-8 nav items + three currency pills + icons) was
+     ~1540px, ~1620px with the ADMIN tab. #menuMain's grid track sized
+     itself to that, making the WHOLE lobby wider than any screen below
+     ~1700px and cropping the right column and currency pills off the
+     side. Now the grid track is capped at the viewport, and the nav is
+     the part that gives: labels shrink with the window, two-word labels
+     wrap onto two lines, and as a last resort the nav scrolls sideways
+     rather than pushing anything off-screen. */
+  #menuMain.lobby{ grid-template-columns: minmax(0,1fr); }
+  .lobby-top{ min-width: 0; gap: clamp(10px, 1.2vw, 22px); }
+  .lobby-nav{
+    min-width: 0; gap: 0;
+    /* "safe": if the items ever overflow, keep the first one reachable
+       instead of centring them and clipping both ends. */
+    justify-content: safe center;
+    overflow-x: auto; overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .lobby-nav::-webkit-scrollbar{ display:none; }
+  .nav-item{
+    flex: 0 1 auto; min-width: min-content;
+    line-height: 1.2;
+    font-size: clamp(10px, .8vw, 13px);
+    letter-spacing: clamp(.6px, .14vw, 2.4px);
+    padding: 9px clamp(4px, .7vw, 16px);
+  }
+  .nav-item::after{ left: clamp(4px, .7vw, 16px); right: clamp(4px, .7vw, 16px); }
+  @media (max-width: 1680px){
+    .lobby-top-right{ gap: 6px; }
+    .currency-pill{ gap: 6px; padding: 4px 4px 4px 9px; }
+    .currency-pill .cp-val{ font-size: 14px; }
+    .cp-plus{ width: 22px; height: 22px; font-size: 13px; }
+    .icon-btn{ width: 32px; height: 32px; }
+    .icon-btn svg{ width: 16px; height: 16px; }
+    .brand-tag{ display: none; }
+    .brand-text b{ font-size: 20px; letter-spacing: 2px; }
+    .brand-mark{ width: 32px; height: 32px; }
+    /* Mail is a "coming soon" stub (see lobbySoonModal), so it is the
+       first thing to give up its room on smaller screens. */
+    .lobby-top-right .icon-btn[data-act="mail"]{ display: none; }
+  }
+  @media (max-width: 1240px){
+    /* Logo mark only -- the wordmark is the widest thing left. */
+    .brand-text{ display: none; }
+  }
+  /* Bottom bar: same fix. Its stat items used to be squeezed into each
+     other (labels overlapping values) once the lobby stopped being
+     wider than the screen. Items keep their natural width now, and the
+     least important parts drop out as the window narrows -- every
+     number here is repeated in the Discovery Progress panel. */
+  .js-item{ flex: 0 0 auto; }
+  .lobby-bottom .ghost-btn{ white-space: nowrap; flex: 0 0 auto; }
+  @media (max-width: 1450px){
+    .js-bar{ display: none; }
+    .chat-toggle{ min-width: 170px; }
+  }
+  @media (max-width: 1240px){
+    .journey-strip .js-item:nth-child(3){ display: none; }
+    .chat-toggle{ min-width: 0; }
+  }
+  @media (max-width: 1100px){
+    .journey-strip .js-item:nth-child(2){ display: none; }
+  }
+  @media (max-width: 1100px){
+    .nav-item{ letter-spacing: .4px; padding-left: 4px; padding-right: 4px; }
+    .lobby-top{ gap: 8px; }
+    .currency-pill{ padding-left: 7px; gap: 4px; }
+    .currency-pill .cp-val{ font-size: 13px; letter-spacing: .5px; }
+  }
+
+  /* Phones: three currency pills + icons are wider than the screen,
+     so they wrap onto a second row instead of running off the edge. */
+  @media (max-width: 600px){
+    .lobby-top-right{ flex: 1 1 auto; min-width: 0; flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; }
+    .lobby-bottom{ gap: 8px; }
+    .lobby-bottom .version-tag{ display: none; }
+    .lobby-bottom .ghost-btn{ padding-left: 10px; padding-right: 10px; letter-spacing: 1px; }
+  }
+
   /* ---------- Narrow / touch: single scrolling column ---------- */
   @media (max-width: 1000px){
     #menuMain.lobby{ grid-template-rows: auto minmax(0,1fr) auto; }
@@ -3037,8 +3118,11 @@
       grid-template-columns: minmax(0,1fr);
       overflow-y: auto; gap: 14px;
     }
-    .lobby-col{ overflow: visible; }
-    .lobby-center{ order: -1; padding: 6px 0 2px; }
+    .lobby-col{ overflow: visible; min-height: auto; }
+    /* min-height:auto -- in this single scrolling column the centre
+       block could be squeezed shorter than its content, letting the
+       Commander panel below slide over the second row of cards. */
+    .lobby-center{ order: -1; padding: 6px 0 2px; min-height: auto; }
     .mode-cards{ gap: 8px; }
     .mode-card{ width: 132px; }
     .mode-card.selected{ transform: scale(1.06); }
