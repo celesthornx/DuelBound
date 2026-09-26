@@ -14,14 +14,21 @@
 <!-- LOADING SCREEN (see the #vbLoader block at the top of <body>).
      Preload only the one piece of art this viewport will actually use;
      the media queries here mirror the ones in the style block below. -->
-<link rel="preload" as="image" type="image/webp" href="/loading/desktop.webp" media="(min-aspect-ratio: 1501/1000)">
-<link rel="preload" as="image" type="image/webp" href="/loading/tablet.webp" media="(min-aspect-ratio: 1001/1000) and (max-aspect-ratio: 3/2)">
+<link rel="preload" as="image" type="image/webp" href="/loading/desktop.webp" media="(min-aspect-ratio: 1901/1000)">
+<link rel="preload" as="image" type="image/webp" href="/loading/tablet.webp" media="(min-aspect-ratio: 1001/1000) and (max-aspect-ratio: 19/10)">
 <link rel="preload" as="image" type="image/webp" href="/loading/phone.webp" media="(max-aspect-ratio: 1/1)">
 <style id="vbLoaderStyle">
   /* Three crops of the same artwork, one per screen shape (the art was
      painted as a desktop / tablet / phone set). Each crop's logo and
      progress panel positions are percentages of THAT crop, so the live
-     panel lands exactly on the spot the art leaves dark for it. */
+     panel lands exactly on the spot the art leaves dark for it.
+
+     On a computer or tablet the art always fills the full height of the
+     screen and is cropped at the sides if the screen is narrower than
+     it (the logo is kept on screen, the panel is centred anyway). The
+     tablet crop is used up to 19:10, so an ordinary 16:9 / 16:10
+     monitor gets the full scene edge to edge; only an extra-wide
+     screen switches to the panoramic desktop crop. */
   #vbLoader{
     --art:url('/loading/desktop.webp'); --ar:2.9425;
     --logo-l:11.2%; --logo-t:5%; --logo-s:4cqw;
@@ -33,7 +40,7 @@
     opacity:1; transition:opacity .45s ease, visibility 0s linear .45s;
     -webkit-user-select:none; user-select:none;
   }
-  @media (max-aspect-ratio: 3/2){
+  @media (max-aspect-ratio: 19/10){
     #vbLoader{
       --art:url('/loading/tablet.webp'); --ar:1.7882;
       --logo-l:10.7%; --logo-t:2.6%; --logo-s:6.6cqw;
@@ -49,28 +56,39 @@
   }
   #vbLoader.vbl-out{ opacity:0; visibility:hidden; pointer-events:none; }
   /* The same art, blurred, fills whatever the sharp crop doesn't cover
-     (above/below it on a 16:9 monitor, beside it on an ultrawide). */
+     (beside it on a very wide monitor, above/below it on a phone). */
   #vbLoader .vbl-blur{
     position:absolute; inset:-8%; background:var(--art) center/cover no-repeat;
     filter:blur(28px) saturate(1.15) brightness(.5);
   }
   #vbLoader .vbl-stage{
     position:relative; flex:none; container-type:size;
-    width:min(100vw, calc(100vh * var(--ar)));
-    width:min(100vw, calc(100dvh * var(--ar)));
+    height:100vh; height:100dvh;
     aspect-ratio:var(--ar);
+  }
+  /* A phone keeps the whole portrait crop visible instead: filling the
+     height there would cut the ship off at both sides. */
+  @media (max-aspect-ratio: 1/1){
+    #vbLoader .vbl-stage{
+      height:auto;
+      width:min(100vw, calc(100vh * var(--ar)));
+      width:min(100vw, calc(100dvh * var(--ar)));
+    }
+    #vbLoader .vbl-stage .vbl-art{
+      -webkit-mask-image:linear-gradient(to bottom, transparent, #000 7%, #000 93%, transparent);
+      mask-image:linear-gradient(to bottom, transparent, #000 7%, #000 93%, transparent);
+    }
   }
   #vbLoader .vbl-art{
     position:absolute; inset:0; background:var(--art) center/100% 100% no-repeat;
-    -webkit-mask-image:linear-gradient(to bottom, transparent, #000 7%, #000 93%, transparent),
-                       linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
-    -webkit-mask-composite:source-in;
-    mask-image:linear-gradient(to bottom, transparent, #000 7%, #000 93%, transparent),
-               linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
-    mask-composite:intersect;
+    -webkit-mask-image:linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
+    mask-image:linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
   }
   #vbLoader .vbl-logo{
-    position:absolute; left:var(--logo-l); top:var(--logo-t);
+    position:absolute; top:var(--logo-t);
+    /* 100% is the stage, which can be wider than the screen: never let
+       the logo slide off the visible left edge. */
+    left:max(var(--logo-l), calc((100% - 100vw) / 2 + 3vw));
     transform:translateX(var(--logo-x, 0));
     display:grid; grid-template-columns:auto auto; align-items:center;
     column-gap:calc(var(--logo-s) * .18); row-gap:0;
