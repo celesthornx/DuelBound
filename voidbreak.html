@@ -1354,7 +1354,7 @@ input[type=range]{width:180px;accent-color:var(--cy)}
       <button class="btn" id="planetGalaxy">GALAXY MAP</button>
     </div>
   </div>
-  <div class="uni-hint">DRAG TO ROTATE · PINCH OR SCROLL TO ZOOM · TAP A PLOT</div>
+  <div class="uni-hint">DRAG TO ROTATE · PINCH OR SCROLL TO ZOOM · TAP A PLOT · TAP AGAIN TO FOCUS</div>
 </div>
 
 <!-- ---- SHIP BAY (a normal panel -- it is a list, not a place) ---- -->
@@ -1418,7 +1418,8 @@ input[type=range]{width:180px;accent-color:var(--cy)}
   </div>
   <div class="howto-sec" id="howtoPlanet"><h3>YOUR HOME PLANET</h3>
     <div class="tdesc">HOME PLANET is a real place you can turn, zoom and build on.
-    <b>Drag</b> to rotate, <b>scroll or pinch</b> to zoom, <b>tap a plot</b> to select it.</div>
+    <b>Drag</b> to rotate, <b>scroll or pinch</b> to zoom, <b>tap a plot</b> to select it &mdash;
+    and <b>tap it again</b> to swing the camera round for a closer look at what stands there.</div>
     <div class="trow"><span class="tname" style="color:var(--gold)">COINS</span><span class="tdesc">Salvaged from combat alongside Void Shards. Coins build the colony and nothing else — they never compete with the Forge or the Shop.</span></div>
     <div class="trow"><span class="tname" style="color:var(--cy)">TERRITORY</span><span class="tdesc">Every solar system you clear widens your borders. The planet grows because you explored, not because you paid.</span></div>
     <div class="trow"><span class="tname" style="color:var(--pu)">STRUCTURES</span><span class="tdesc">Start with the COMMAND CENTER — it is free, and everything else needs it standing. Pick a structure, then tap a plot.</span></div>
@@ -2964,7 +2965,7 @@ cv.addEventListener('pointerdown',e=>{
   uniPointers.set(e.pointerId,uniPointerPos(e));
   if(uniPointers.size===1){
     uniDrag={active:true,moved:0};
-    if(state==='planet'){pcam.drag=true;pcam.vyaw=0;pcam.vpitch=0;}
+    if(state==='planet'){pcam.drag=true;pcam.vyaw=0;pcam.vpitch=0;pcam.focus=0;}
   }else if(uniPointers.size===2){
     const pts=[...uniPointers.values()];
     uniPinch=dist(pts[0].x,pts[0].y,pts[1].x,pts[1].y);
@@ -2984,7 +2985,10 @@ cv.addEventListener('pointermove',e=>{
     const pts=[...uniPointers.values()];
     const d=dist(pts[0].x,pts[0].y,pts[1].x,pts[1].y);
     if(uniPinch>0&&state==='planet'){
-      pcam.zoom=clamp(pcam.zoom*(d/uniPinch),0.72,1.9);
+      // Writes the TARGET, not the camera: updatePlanetCam eases to it,
+      // so a pinch reads as a move rather than as a jump. A pinch is
+      // continuous enough that the easing is imperceptible as lag.
+      pcam.zoomT=clamp(pcam.zoomT*(d/uniPinch),PLANET_ZOOM_MIN,PLANET_ZOOM_MAX);
     }
     uniPinch=d;
     uniDrag.moved=999; // a pinch is never also a tap
@@ -3033,10 +3037,28 @@ function uniPointerEnd(e){
 cv.addEventListener('pointerup',uniPointerEnd,{passive:true});
 cv.addEventListener('pointercancel',uniPointerEnd,{passive:true});
 
+/* Hover affordance, mouse only. A pointer with no button down over the
+   planet highlights the plot a click would take, which is the one thing
+   a touch screen genuinely cannot offer and a desktop expects. Skipped
+   entirely while dragging, and never armed by a touch pointer, so it
+   costs nothing on an iPad. Throttled to one pick per 60ms: pickPlot is
+   a 122-element scan and a mouse can fire move events far faster than
+   that is worth. */
+let planetHoverT=0;
+cv.addEventListener('pointermove',e=>{
+  if(state!=='planet'||e.pointerType!=='mouse'){return;}
+  if(uniDrag.active||uniPointers.size){planetHoverPlot=-1;return;}
+  const now=performance.now();
+  if(now-planetHoverT<60)return;
+  planetHoverT=now;
+  planetHoverPlot=pickPlot(e.clientX,e.clientY);
+},{passive:true});
+cv.addEventListener('pointerleave',()=>{planetHoverPlot=-1;},{passive:true});
+
 addEventListener('wheel',e=>{
   if(state!=='planet')return;
   e.preventDefault();
-  pcam.zoom=clamp(pcam.zoom*(e.deltaY>0?0.92:1.08),0.72,1.9);
+  pcam.zoomT=clamp(pcam.zoomT*(e.deltaY>0?0.90:1.11),PLANET_ZOOM_MIN,PLANET_ZOOM_MAX);
 },{passive:false});
 
 const rotateGateEl=el('rotateGate');
@@ -4100,19 +4122,19 @@ let pendingSystem=null;
 
    The planet is not a menu with a picture of a planet on it. It is
    actual geometry: PLOT_COUNT hexagonal territory plots distributed
-   evenly over a unit sphere, rotated by the player's drag, projected
-   with perspective, back-face culled at the true horizon, depth-sorted,
-   and drawn with structures standing out along the surface normal. That
-   is what makes it rotate and zoom like a globe instead of sliding like
-   a sprite.
+   evenly over a unit sphere, each raised to its own terrain height,
+   rotated by the player's drag, projected with perspective, culled at
+   the true horizon, depth-sorted, and drawn with structures standing
+   out along the surface normal. That is what makes it rotate and zoom
+   like a globe instead of sliding like a sprite.
 
    WHY NOT WebGL/Three.js. Voidbreak is a 2D canvas game that already
    runs on iPads, and performance on exactly those devices is a stated
    problem to fix rather than add to. A second renderer and a WebGL
    context for a menu screen would have been the single most expensive
    thing in the build. Everything below is arithmetic plus canvas path
-   calls -- about 120 hexagons and a handful of prisms per frame, drawn
-   only while the planet screen is open, and nothing at all during a run.
+   calls, drawn only while the planet screen is open and nothing at all
+   during a run.
 
    WHY FIBONACCI RATHER THAN A HEX GRID. A plane can be tiled with
    hexagons; a sphere cannot (you always need twelve pentagons). A
@@ -4121,6 +4143,36 @@ let pendingSystem=null;
    point's cell as a spherical hexagon reads exactly as the intended hex
    territory -- with the honest property that a few cells near the poles
    are slightly irregular, which is true of any real sphere tiling.
+
+   WHAT THE ART PASS ADDED, AND WHERE THE COST WENT. The planet used to
+   be flat teal hexagons with coloured prisms standing on them, which
+   read as "objects on a sphere" rather than as a world. Four things
+   changed that, each deliberately paid for out of PRECOMPUTATION rather
+   than per-frame work:
+
+     TERRAIN is baked once in buildPlanetPlots(): every plot gets an
+     elevation from fractal value noise, a biome, a colour and a cliff
+     skirt height measured against its own neighbours. Per frame a cell
+     is still one fill, and its colour is a lookup rather than a
+     calculation.
+
+     THE BACKDROP is one cached bitmap, re-rendered only when the
+     viewport changes size. Nebulae, a distant galaxy, eight hundred
+     stars and their diffraction spikes cost nothing per frame; they are
+     three drawImage calls with a parallax offset.
+
+     STRUCTURES are composed from a small kit of projected primitives
+     (prisms, rings, domes, masts, pads) with real per-face lighting, so
+     each building has its own silhouette instead of a tinted prism.
+     They are level-of-detailed on projected size: a building smaller
+     than ~26px draws its masses and skips windows, props and glow.
+
+     CLOUDS, ROADS and TRAFFIC are the only genuinely new per-frame
+     work, and all three are bounded: clouds by a quality-scaled count,
+     roads by the number of buildings that exist (at most seven), and
+     traffic by two motes per road.
+
+   Everything here is gated on state==='planet'.
    ================================================================= */
 
 const PLANET_PLOT_COUNT=UNI_OK?UNI.PLOT_COUNT:122;
@@ -4129,6 +4181,12 @@ const PLANET_PLOT_COUNT=UNI_OK?UNI.PLOT_COUNT:122;
 // (3*sqrt(3)/2)*R^2.
 const PLOT_R=Math.sqrt(8*Math.PI/(3*Math.sqrt(3)*PLANET_PLOT_COUNT));
 const PLANET_CAM_DIST=3.05;      // camera distance in planet radii
+const PLANET_ZOOM_MIN=0.72;
+// Raised from 1.9: "zoom in to inspect your structures" is a stated
+// goal, and the buildings now have detail worth arriving at. The cell
+// culling in drawHomePlanet() means a deeper zoom draws FEWER cells,
+// so this costs nothing.
+const PLANET_ZOOM_MAX=3.2;
 // A fixed tilt baked into the geometry so that plot 0 -- the first plot
 // a player owns, and the point territory expands outward from -- faces
 // the camera at yaw 0, pitch 0.
@@ -4141,22 +4199,118 @@ const PLANET_CAM_DIST=3.05;      // camera distance in planet radii
 // needing the same ordering; tilting the geometry costs one rotation at
 // startup, changes no index, and means the planet screen always opens
 // looking straight at the colony instead of at the empty hemisphere.
-// Chosen so that BASE_TILT + the default camera pitch lands exactly on
-// a quarter turn: plot 0 then projects to the dead centre of the globe
-// when the planet screen opens, which is where the player's own colony
-// should be when they arrive.
 const PLANET_BASE_TILT=Math.PI/2+0.14;
 let PLANET_PLOTS=[];
+
+/* ---- terrain noise ----
+   A 32-bit integer hash plus trilinear value noise. Deliberately not a
+   library and not gradient noise: this runs ONCE for 122 plots at
+   startup, so the only thing that matters is that it is deterministic
+   (the same player sees the same planet on every device and after every
+   reload) and that it produces recognisable continents. */
+function pHash3(i,j,k){
+  let h=(i*374761393+j*668265263+k*1274126177)|0;
+  h=(h^(h>>>13))*1274126177|0;
+  h^=h>>>16;
+  return (h>>>0)/4294967296;
+}
+function pNoise3(x,y,z){
+  const xi=Math.floor(x),yi=Math.floor(y),zi=Math.floor(z);
+  const xf=x-xi,yf=y-yi,zf=z-zi;
+  const u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf),w=zf*zf*(3-2*zf);
+  const c000=pHash3(xi,yi,zi),      c100=pHash3(xi+1,yi,zi);
+  const c010=pHash3(xi,yi+1,zi),    c110=pHash3(xi+1,yi+1,zi);
+  const c001=pHash3(xi,yi,zi+1),    c101=pHash3(xi+1,yi,zi+1);
+  const c011=pHash3(xi,yi+1,zi+1),  c111=pHash3(xi+1,yi+1,zi+1);
+  const x00=c000+(c100-c000)*u, x10=c010+(c110-c010)*u;
+  const x01=c001+(c101-c001)*u, x11=c011+(c111-c011)*u;
+  const y0=x00+(x10-x00)*v, y1=x01+(x11-x01)*v;
+  return y0+(y1-y0)*w;
+}
+function pFbm(x,y,z,oct,gain){
+  let a=1,f=1,sum=0,norm=0;
+  for(let o=0;o<oct;o++){
+    sum+=pNoise3(x*f,y*f,z*f)*a;norm+=a;
+    a*=gain;f*=2.03;              // 2.03 rather than 2 so octaves never phase-lock
+  }
+  return sum/norm;
+}
+// Ridged noise: mountain CHAINS rather than mountain blobs. 1-|2n-1|
+// puts a crease where the underlying noise crosses its midpoint, and
+// squaring sharpens the crease into a ridge line.
+function pRidge(x,y,z){
+  const n=pFbm(x,y,z,3,0.55);
+  const r=1-Math.abs(n*2-1);
+  return r*r;
+}
+
+/* ---- surface palette ----
+   Voidbreak's identity is deep space, blue, cyan, violet and magenta,
+   so the planet is an alien one rather than an Earth one: indigo
+   oceans, teal vegetation, violet-grey rock, pale cyan ice. Every entry
+   is the colour of ground in FULL sunlight -- the shading in
+   drawHomePlanet() only ever darkens it. */
+const BIOME={
+  abyss:   [5,12,36],
+  ocean:   [9,26,68],
+  shelf:   [22,66,120],
+  shore:   [96,134,120],
+  plain:   [44,112,78],
+  meadow:  [74,146,96],
+  upland:  [88,112,92],
+  rock:    [94,82,110],
+  scree:   [104,98,122],
+  peak:    [162,176,204],
+  ice:     [158,192,220],
+  tundra:  [106,128,150]
+};
+
+// Structures stand on ground whose height varies, so a plot's own
+// radius has to be known before anything can be placed on it. Terrain
+// relief is deliberately small in absolute terms -- 6% of the planet's
+// radius from sea floor to the highest peak -- because a globe with
+// honest mountain heights looks perfectly smooth, and one with
+// game-legible mountains looks like a spiked ball. This is the value
+// that reads as "real terrain" at the distance the planet is viewed.
+const PLANET_ELEV=0.021;
+const PLANET_SEA=0.495;
+/* Cells are drawn wider than the spacing they were laid out on.
+   A Fibonacci sphere is not a hex lattice: the spacing between
+   neighbours varies by a few percent and the local orientation drifts,
+   so hexagons cut to the exact mean spacing never quite meet. Add
+   per-cell elevation on top and every near-miss opens into a visible
+   sliver of bare sphere -- which is what made the wilderness read as a
+   field of floating plates rather than as ground.
+
+   Overlapping them closes every seam. The depth sort already decides
+   which of two overlapping cells wins, and because the winner is
+   always the nearer one, an overlap at a height step reads as the
+   higher ground overhanging the lower: a cliff edge, which is what it
+   is. */
+const PLOT_FILL=1.24;
+// A cell has to be this many pixels across before its ground is broken
+// into shaded facets instead of filled flat. See the note at the fill.
+const FACET_PX=62;
+// How much of a plot a structure occupies. Well under 1 on purpose:
+// terrain has to be visible AROUND a building for it to look sited on
+// the planet rather than stamped over a whole tile.
+const SFP=0.78;
+const SUR=PLOT_R*SFP;
 
 function buildPlanetPlots(){
   PLANET_PLOTS=[];
   const n=PLANET_PLOT_COUNT;
   const golden=Math.PI*(3-Math.sqrt(5));
+  const bt=PLANET_BASE_TILT,cb=Math.cos(bt),sb=Math.sin(bt);
+  // Plot 0's normal, needed before the loop: the colony's home
+  // continent is biased upward around it so a new player's first seven
+  // plots are dry land rather than a scatter of islands.
+  const home=[0,cb,sb];
+
   for(let i=0;i<n;i++){
     const y=n>1?1-(i/(n-1))*2:0;
     const rr=Math.sqrt(Math.max(0,1-y*y));
     const th=i*golden;
-    const bt=PLANET_BASE_TILT,cb=Math.cos(bt),sb=Math.sin(bt);
     const ry=y*cb-Math.sin(th)*rr*sb;
     const rz=y*sb+Math.sin(th)*rr*cb;
     const nx=Math.cos(th)*rr,ny=ry,nz=rz;
@@ -4171,42 +4325,686 @@ function buildPlanetPlots(){
     }
     // bitangent = normal x tangent
     const bx=ny*tz-nz*ty, by=nz*tx-nx*tz, bz=nx*ty-ny*tx;
-    // Six spherical-hexagon corners, pushed back onto the sphere so the
-    // cell hugs the curvature instead of cutting a flat chord through it.
+
+    /* ---- terrain ----
+       Three bands of noise sampled on the plot's own normal, so the
+       result is continuous over the sphere with no seam and no pole
+       singularity: continents at low frequency, hills on top of them,
+       and a ridged term that only bites where the land is already high
+       (which is what turns scattered high cells into a range). */
+    /* Frequency is the single most important number on this screen.
+       There are only 122 cells on the whole sphere, so one cell spans
+       about twenty degrees of it; noise with features smaller than
+       that gives every cell an independent biome and the planet reads
+       as a mosaic of coloured hexagons -- the exact checkerboard this
+       whole pass exists to remove. At 1.25 with three octaves the
+       features are two to four cells across, so neighbours agree and
+       the hexagons disappear into continents. */
+    const sx=nx*1.25+11.3, sy=ny*1.25+4.7, sz=nz*1.25+23.1;
+    let e=pFbm(sx,sy,sz,3,0.45);
+    // Centred just below sea level and stretched: the contrast is what
+    // produces real coastlines instead of a uniformly damp surface, and
+    // the offset is what decides how much of the planet is ocean.
+    e=(e-0.50)*1.72+0.489;
+    const detail=pFbm(sx*2.2+60,sy*2.2,sz*2.2,2,0.5);
+    e+=(detail-0.5)*0.09;
+    if(e>PLANET_SEA){
+      const above=(e-PLANET_SEA)/(1-PLANET_SEA);
+      e+=pRidge(sx*1.25+90,sy*1.25,sz*1.25)*above*0.19;
+    }
+    /* Climate. The ice caps are NOT at y=+/-1: plot 0 -- the colony,
+       and the point the camera opens on -- is exactly there, because
+       the Fibonacci distribution has to start at a pole and index order
+       is unlock order. Putting the caps on that axis would mean every
+       player's home was buried under an ice sheet and the planet's
+       default view was a white disc.
+
+       So the world's climate axis is the untilted X axis, a quarter
+       turn away: the colony sits on the temperate equator of its own
+       planet, and the caps are somewhere you have to rotate to find --
+       which is worth having, because it means turning the globe shows
+       you somewhere different. */
+    const lat=Math.abs(Math.cos(th)*rr);
+    if(lat>0.78)e+=(lat-0.78)*0.60;
+
+    /* The home continent, applied LAST and as a blend toward a target
+       height rather than as an addition. Adding to the noise stacked on
+       top of whatever was already there and pushed the colony above the
+       snow line; blending toward 0.585 -- comfortably above sea level,
+       comfortably below the rock line -- lands the player's territory
+       on temperate lowland whatever the noise happened to say there.
+
+       The cube of homeDot keeps the effect local: it is essentially
+       gone by 50 degrees out, so the rest of the visible hemisphere is
+       still whatever the planet is, and turning the globe still finds
+       ocean, ranges and ice. */
+    const homeDot=nx*home[0]+ny*home[1]+nz*home[2];
+    if(homeDot>0){
+      const hw=Math.pow(homeDot,2.6)*0.74;
+      e=e*(1-hw)+0.600*hw;
+    }
+    e=clamp(e,0,1.05);
+
+    const isSea=e<=PLANET_SEA;
+    // `land` is normalised against the tallest ground the generator can
+    // actually produce rather than against 1, so the biome thresholds
+    // below mean the same thing whatever the noise is retuned to.
+    const land=isSea?0:clamp((e-PLANET_SEA)/0.40,0,1);
+    const depth=isSea?(PLANET_SEA-e)/PLANET_SEA:0;
+    const moist=pFbm(sx*1.5+300,sy*1.5+120,sz*1.5+80,2,0.5);
+
+    let biome;
+    if(isSea){
+      biome=depth>0.40?'abyss':depth>0.14?'ocean':'shelf';
+    }else if(lat>0.84){
+      biome='ice';
+    }else if(land>0.78){
+      biome='peak';
+    }else if(land>0.54){
+      biome=lat>0.70?'tundra':'scree';
+    }else if(land>0.30){
+      biome=lat>0.72?'tundra':(moist>0.52?'upland':'rock');
+    }else if(land>0.06){
+      biome=moist>0.46?'meadow':'plain';
+    }else{
+      biome='shore';
+    }
+    let col=BIOME[biome];
+    /* Within a biome, two more coherent variations -- both sampled
+       from the same low-frequency fields the terrain came from, so
+       they vary across CONTINENTS rather than from cell to cell.
+       Without them a landmass is one flat green however good that
+       green is; with them it has drier interiors, lusher coasts and
+       large soft differences in albedo, and stops reading as a
+       single painted shape. */
+    if(!isSea&&biome!=='ice'&&biome!=='peak'){
+      const dry=clamp((0.52-moist)*2.6,0,1);
+      col=[col[0]+dry*52,col[1]+dry*12,col[2]-dry*20];
+    }
+    const alb=0.93+pFbm(sx*0.85+700,sy*0.85+250,sz*0.85+410,2,0.5)*0.15;
+    col=[col[0]*alb,col[1]*alb,col[2]*alb];
+
+    /* The cell's own surface radius. Every sea cell sits at exactly
+       the same height, because water is level: giving deep ocean a
+       lower surface than shallow put steps in the middle of the sea
+       and a cliff face on every one of them. Depth changes the COLOUR
+       and nothing else, and the only step the ocean has is the one at
+       the shore -- which is the step that should be there. */
+    const rad=isSea?(1-0.005):(1+land*PLANET_ELEV);
+
+    // A stable per-plot jitter, so cells of the same biome are not
+    // identically coloured -- surface texture without a texture.
+    const tint=Math.abs((Math.sin(i*12.9898)*43758.5453)%1);
+
+    // Six spherical-hexagon corners at the cell's OWN radius, pushed
+    // back onto that sphere so the cell hugs the curvature instead of
+    // cutting a flat chord through it.
     const corners=[];
     for(let k=0;k<6;k++){
-      const a=k*Math.PI/3+(i%2?0.26:0);
-      const cx=nx+(tx*Math.cos(a)+bx*Math.sin(a))*PLOT_R;
-      const cy=ny+(ty*Math.cos(a)+by*Math.sin(a))*PLOT_R;
-      const cz=nz+(tz*Math.cos(a)+bz*Math.sin(a))*PLOT_R;
+      // No per-cell twist. The tangent basis is already a consistent
+      // east/north frame, so hexagons cut on the same angles very nearly
+      // line up with their neighbours; twisting alternate cells by 15
+      // degrees guaranteed that they never could.
+      const a=k*Math.PI/3;
+      const rC=PLOT_R*PLOT_FILL;
+      const cx=nx+(tx*Math.cos(a)+bx*Math.sin(a))*rC;
+      const cy=ny+(ty*Math.cos(a)+by*Math.sin(a))*rC;
+      const cz=nz+(tz*Math.cos(a)+bz*Math.sin(a))*rC;
       const l=Math.hypot(cx,cy,cz)||1;
-      corners.push([cx/l,cy/l,cz/l]);
+      corners.push([cx/l*rad,cy/l*rad,cz/l*rad]);
     }
+
     PLANET_PLOTS.push({i:i,n:[nx,ny,nz],t:[tx,ty,tz],b:[bx,by,bz],c:corners,
-      // A stable per-plot jitter for terrain colour, so the surface has
-      // texture without a texture.
-      tint:(Math.sin(i*12.9898)*43758.5453)%1});
+      tint:tint,elev:e,land:land,depth:depth,sea:isSea,biome:biome,col:col,colRaw:col,
+      rad:rad,skirt:0,edrop:null,relief:0,nb:null,enb:null,lat:lat});
+  }
+
+  /* ---- adjacency ----
+     Six nearest cells by dot product, computed once. Everything that
+     needs the planet to behave like a MAP rather than a bag of cells
+     reads this: the cliff skirts below, the frontier outline around
+     owned territory, and the road network between buildings. 122^2 dot
+     products at startup is nothing; doing any of it per frame would
+     not be. */
+  const N=PLANET_PLOTS.length;
+  for(let i=0;i<N;i++){
+    const a=PLANET_PLOTS[i],an=a.n;
+    const best=[];
+    for(let j=0;j<N;j++){
+      if(j===i)continue;
+      const bn=PLANET_PLOTS[j].n;
+      const d=an[0]*bn[0]+an[1]*bn[1]+an[2]*bn[2];
+      if(best.length<6){best.push({j:j,d:d});best.sort((p,q)=>p.d-q.d);}
+      else if(d>best[0].d){best[0]={j:j,d:d};best.sort((p,q)=>p.d-q.d);}
+    }
+    // A neighbour further away than ~1.9 cell radii is not a neighbour,
+    // it is the nearest thing in an empty direction. Dropping those is
+    // what stops the road network from taking a shortcut across a cell
+    // it should have walked around.
+    const cut=Math.cos(PLOT_R*2.0);
+    a.nb=best.filter(x=>x.d>=cut).map(x=>x.j);
+  }
+  // Which neighbour lies across each of the six edges. Two things read
+  // this: the frontier outline around owned territory (instead of
+  // ringing every owned cell, which is what made the old planet a
+  // checkerboard), and the per-edge cliff heights below.
+  for(let i=0;i<N;i++){
+    const a=PLANET_PLOTS[i];
+    a.enb=new Array(6);
+    for(let k=0;k<6;k++){
+      const k2=(k+1)%6;
+      // Edge midpoint, back on the sphere, as a direction from centre.
+      let mx=(a.c[k][0]+a.c[k2][0])*0.5-a.n[0]*a.rad;
+      let my=(a.c[k][1]+a.c[k2][1])*0.5-a.n[1]*a.rad;
+      let mz=(a.c[k][2]+a.c[k2][2])*0.5-a.n[2]*a.rad;
+      const ml=Math.hypot(mx,my,mz)||1;mx/=ml;my/=ml;mz/=ml;
+      let bestJ=-1,bestD=-2;
+      for(const j of a.nb){
+        const o=PLANET_PLOTS[j];
+        let dx=o.n[0]-a.n[0],dy=o.n[1]-a.n[1],dz=o.n[2]-a.n[2];
+        const dl=Math.hypot(dx,dy,dz)||1;dx/=dl;dy/=dl;dz/=dl;
+        const dot=dx*mx+dy*my+dz*mz;
+        if(dot>bestD){bestD=dot;bestJ=j;}
+      }
+      a.enb[k]=bestD>0.55?bestJ:-1;
+    }
+  }
+  /* Cliffs, PER EDGE. The first version of this measured one skirt
+     height per cell -- how far it stood above its LOWEST neighbour --
+     and extruded it around the whole hexagon. On real terrain that
+     meant a cell one step above the valley wore a full dark wall on
+     all six sides, including the five where the ground does not step
+     at all, and the surface read as a mosaic of separate plates with
+     black gaps between them.
+
+     Measuring each edge against the neighbour actually across it means
+     a wall appears exactly where the ground steps and nowhere else:
+     coastlines, valley sides and the uphill faces of a range. Flat
+     country has no seams. */
+  for(let i=0;i<N;i++){
+    const a=PLANET_PLOTS[i];
+    a.edrop=new Array(6);
+    let mx=0;
+    for(let k=0;k<6;k++){
+      const j=a.enb[k];
+      const d=j>=0?clamp(a.rad-PLANET_PLOTS[j].rad,0,PLANET_ELEV*0.9):0;
+      a.edrop[k]=d;
+      if(d>mx)mx=d;
+    }
+    a.skirt=mx;
+    /* Relief. How far this cell stands above the AVERAGE of its
+       neighbours, in units of the full elevation range: +1 on a ridge
+       line, -1 in the bottom of a valley. Used as a brightness
+       modulation at draw time, which is what gives the surface the
+       sculpted look a height map has and a colour map does not --
+       ridges catch the light, hollows sit in their own shade. */
+    let sum=0,cnt=0;
+    for(const j of a.nb){sum+=PLANET_PLOTS[j].rad;cnt++;}
+    a.relief=cnt?clamp((a.rad-sum/cnt)/PLANET_ELEV,-1,1):0;
+  }
+  /* Colour smoothing. Each cell keeps most of its own biome but takes
+     a share of its neighbours', which is what turns a patchwork of
+     flat-filled hexagons into continents: coasts pick up the shallows
+     they run into, a range fades into the upland around it, and the
+     seam between two cells of the same biome disappears entirely.
+     Baked, so it costs nothing per frame. */
+  for(let i=0;i<N;i++){
+    const a=PLANET_PLOTS[i];
+    let r=0,g=0,b=0,w=0;
+    for(const j of a.nb){
+      const o=PLANET_PLOTS[j];
+      const c=o.colRaw||o.col;
+      /* A neighbour across the WATERLINE counts for much less. Blending
+         land and sea evenly is what turned every coast into a wide band
+         of the same mid-teal and lost the continents entirely: smoothing
+         is meant to hide the seam between two cells of the same country,
+         not to dissolve the edge between land and ocean -- which is the
+         one edge on the planet that should be sharp. */
+      const wt=(o.sea===a.sea)?1:0.22;
+      r+=c[0]*wt;g+=c[1]*wt;b+=c[2]*wt;w+=wt;
+    }
+    if(!w)continue;
+    const c0=a.col;
+    a.colRaw=c0;
+    a.col=[c0[0]*0.64+(r/w)*0.36, c0[1]*0.64+(g/w)*0.36, c0[2]*0.64+(b/w)*0.36];
   }
 }
 buildPlanetPlots();
 
-// ---- orbital camera ----
-// Pitch starts positive so the camera opens on the NORTH POLE, which is
-// where territory begins (plots are unlocked in index order and the
-// Fibonacci distribution starts at the pole). Without it a new player
-// would open their planet looking at the one hemisphere they own none
-// of, and conclude the screen was empty.
-const pcam={yaw:0,pitch:-0.14,zoom:1,vyaw:0.045,vpitch:0,drag:false};
+/* ---- cloud deck ----
+   Clouds are sprites, not geometry: each puff is one cached radial
+   bitmap drawn at its projected position, faded by its own lighting and
+   by how close it is to the limb. They rotate with the planet plus a
+   small extra drift, which is what sells "atmosphere moving over a
+   world" rather than "decals painted on a ball".
+
+   They are drawn UNDER the structures on purpose. A cloud that can
+   cover the player's Command Center is a cloud that hides the thing the
+   screen exists for, so the deck sits below the buildings and the
+   colony always reads through it. */
+const PLANET_CLOUDS=[];
+function buildPlanetClouds(count){
+  PLANET_CLOUDS.length=0;
+  for(let i=0;i<count;i++){
+    // Latitude biased away from the poles (where the cap ice already
+    // carries the eye) and clustered into bands, so the deck has
+    // weather systems rather than an even sprinkle.
+    const band=(i%5)/5;
+    const latv=(band-0.5)*1.5+ (pHash3(i,7,3)-0.5)*0.42;
+    const lat=clamp(latv,-1.25,1.25);
+    PLANET_CLOUDS.push({
+      lat:lat, sinLat:Math.sin(lat), cosLat:Math.cos(lat),
+      lon:pHash3(i,11,5)*TAU,
+      drift:0.008+pHash3(i,13,9)*0.016,
+      r:0.18+pHash3(i,17,2)*0.34,
+      // pBlob's sprite peaks at half opacity, so these are roughly half
+      // again as strong as they read here. Still restrained: the deck
+      // is weather over a world, not a layer of fog on top of the
+      // player's colony.
+      a:0.34+pHash3(i,19,4)*0.34
+    });
+  }
+}
+
+/* ---- render quality ----
+   One scalar, resolved from the viewport rather than from a user
+   setting, that everything optional is multiplied by. A landscape phone
+   is both the smallest canvas and the slowest GPU in the supported set,
+   so it gets the fewest clouds, the fewest backdrop stars and the
+   earliest level-of-detail cutoff -- and still gets the same planet,
+   the same terrain and the same buildings. */
+let PQ=1;
+function planetQuality(){
+  const px=W*H*Math.min(dpr,2);
+  if(px<420000)return 0.55;
+  if(px<1100000)return 0.78;
+  return 1;
+}
+
+/* =================================================================
+   DEEP SPACE BACKDROP
+
+   The planet used to float on the same two tiled star bitmaps the menu
+   uses, which is why it read as a UI object rather than as a body
+   somewhere inside a galaxy. This draws a real one -- nebula banks, a
+   distant galaxy, eight hundred stars with diffraction spikes on the
+   brightest, dust lanes -- and then never draws it again: it is baked
+   into ONE bitmap that is only rebuilt when the viewport changes size.
+
+   Per frame the whole background is three drawImage calls: the baked
+   sheet at a parallax offset taken from the camera, and two distant
+   worlds on their own smaller offsets. Parallax across three depths is
+   what stops it from reading as a wallpaper.
+   ================================================================= */
+let planetBG=null,planetBGKey='';
+const PLANET_PARALLAX=26;   // px of slack baked into the sheet's margin
+
+function makePlanetBackdrop(){
+  const key=Math.round(W)+'x'+Math.round(H)+'@'+PQ.toFixed(2);
+  if(planetBG&&planetBGKey===key)return planetBG;
+  const M=PLANET_PARALLAX;
+  const w=Math.ceil(W+M*2),h=Math.ceil(H+M*2);
+  const s=Math.min(dpr,2);
+  const c=document.createElement('canvas');
+  c.width=Math.ceil(w*s);c.height=Math.ceil(h*s);
+  const g=c.getContext('2d');
+  g.setTransform(s,0,0,s,0,0);
+  const R=(a,b)=>a+Math.random()*(b-a);
+
+  // Deep black with a cold cast, then a broad diagonal wash so the
+  // frame is never uniformly empty.
+  g.fillStyle='#02030a';g.fillRect(0,0,w,h);
+  const wash=g.createLinearGradient(0,0,w,h);
+  wash.addColorStop(0,'rgba(20,16,54,0.55)');
+  wash.addColorStop(0.45,'rgba(4,8,26,0.25)');
+  wash.addColorStop(1,'rgba(38,10,52,0.45)');
+  g.fillStyle=wash;g.fillRect(0,0,w,h);
+
+  g.globalCompositeOperation='lighter';
+
+  /* ---- nebula banks ----
+     Each bank is a cluster of soft blobs along a drifting line rather
+     than one big radial gradient, because a single gradient reads as a
+     lens flare and a cluster reads as gas. Three banks, colours drawn
+     from the Voidbreak palette and kept dim: the planet has to be the
+     brightest thing on the screen. */
+  const banks=[
+    {x:w*0.16,y:h*0.22,ang:0.5,len:w*0.62,col:[70,60,190],a:0.062,n:Math.round(30*PQ)+10,sp:w*0.10},
+    {x:w*0.82,y:h*0.72,ang:-0.35,len:w*0.55,col:[160,50,180],a:0.050,n:Math.round(26*PQ)+8,sp:w*0.09},
+    {x:w*0.56,y:h*0.12,ang:1.15,len:w*0.40,col:[30,120,190],a:0.042,n:Math.round(20*PQ)+8,sp:w*0.07}
+  ];
+  for(const b of banks){
+    for(let i=0;i<b.n;i++){
+      const f=i/b.n;
+      const px=b.x+Math.cos(b.ang)*(f-0.5)*b.len+R(-b.sp,b.sp);
+      const py=b.y+Math.sin(b.ang)*(f-0.5)*b.len+R(-b.sp*0.7,b.sp*0.7);
+      const rad=R(b.sp*0.55,b.sp*1.5);
+      const gr=g.createRadialGradient(px,py,0,px,py,rad);
+      const a=b.a*R(0.5,1.25);
+      gr.addColorStop(0,'rgba('+b.col[0]+','+b.col[1]+','+b.col[2]+','+a.toFixed(3)+')');
+      gr.addColorStop(0.55,'rgba('+b.col[0]+','+b.col[1]+','+b.col[2]+','+(a*0.35).toFixed(3)+')');
+      gr.addColorStop(1,'rgba('+b.col[0]+','+b.col[1]+','+b.col[2]+',0)');
+      g.fillStyle=gr;g.beginPath();g.arc(px,py,rad,0,TAU);g.fill();
+    }
+    // A brighter core where the bank is densest, so it has a light
+    // source of its own rather than being evenly grey.
+    const gr=g.createRadialGradient(b.x,b.y,0,b.x,b.y,b.sp*1.1);
+    gr.addColorStop(0,'rgba(255,255,255,0.05)');
+    gr.addColorStop(1,'rgba(255,255,255,0)');
+    g.fillStyle=gr;g.beginPath();g.arc(b.x,b.y,b.sp*1.1,0,TAU);g.fill();
+  }
+
+  /* ---- a distant galaxy ----
+     Small, off to one side, and clearly a long way away: it is a scale
+     cue, not a feature. Drawn as a squashed rotated disc with two
+     sweeping arms and a hot core. */
+  (function(){
+    const gx=w*0.855,gy=h*0.205,gr0=Math.min(w,h)*0.085,rot=-0.62;
+    g.save();g.translate(gx,gy);g.rotate(rot);g.scale(1,0.34);
+    const halo=g.createRadialGradient(0,0,0,0,0,gr0);
+    halo.addColorStop(0,'rgba(220,215,255,0.34)');
+    halo.addColorStop(0.28,'rgba(150,150,240,0.16)');
+    halo.addColorStop(1,'rgba(90,80,200,0)');
+    g.fillStyle=halo;g.beginPath();g.arc(0,0,gr0,0,TAU);g.fill();
+    for(let arm=0;arm<2;arm++){
+      g.beginPath();
+      for(let i=0;i<=44;i++){
+        const f=i/44,ang=arm*Math.PI+f*2.5,rr=gr0*0.12+f*gr0*0.92;
+        const px=Math.cos(ang)*rr,py=Math.sin(ang)*rr;
+        if(i===0)g.moveTo(px,py);else g.lineTo(px,py);
+      }
+      g.strokeStyle='rgba(190,200,255,0.16)';g.lineWidth=gr0*0.16;g.stroke();
+      g.strokeStyle='rgba(255,235,255,0.10)';g.lineWidth=gr0*0.06;g.stroke();
+    }
+    g.restore();
+    const core=g.createRadialGradient(gx,gy,0,gx,gy,gr0*0.30);
+    core.addColorStop(0,'rgba(255,250,230,0.72)');
+    core.addColorStop(1,'rgba(255,220,180,0)');
+    g.fillStyle=core;g.beginPath();g.arc(gx,gy,gr0*0.30,0,TAU);g.fill();
+  })();
+
+  g.globalCompositeOperation='source-over';
+
+  /* ---- stars ----
+     Three depths. The faintest layer is the most numerous and is what
+     gives the field its density; the brightest dozen get diffraction
+     spikes, which is the single cheapest trick that makes a star field
+     read as photographic instead of as dots. */
+  const area=(w*h)/(1440*900);
+  const nFar=Math.round(520*area*PQ),nMid=Math.round(200*area*PQ),nNear=Math.round(70*area*PQ);
+  const starCol=()=>{
+    const r=Math.random();
+    return r>0.88?[150,200,255]:r>0.74?[210,190,255]:r>0.62?[255,226,190]:[226,238,255];
+  };
+  for(let i=0;i<nFar;i++){
+    const c2=starCol();
+    g.fillStyle='rgba('+c2[0]+','+c2[1]+','+c2[2]+','+R(0.10,0.34).toFixed(3)+')';
+    g.fillRect(R(0,w),R(0,h),1,1);
+  }
+  for(let i=0;i<nMid;i++){
+    const c2=starCol(),x=R(0,w),y=R(0,h),rad=R(0.55,1.15);
+    g.fillStyle='rgba('+c2[0]+','+c2[1]+','+c2[2]+','+R(0.30,0.70).toFixed(3)+')';
+    g.beginPath();g.arc(x,y,rad,0,TAU);g.fill();
+  }
+  g.globalCompositeOperation='lighter';
+  for(let i=0;i<nNear;i++){
+    const c2=starCol(),x=R(0,w),y=R(0,h),rad=R(0.9,1.8),a=R(0.5,0.95);
+    const gr=g.createRadialGradient(x,y,0,x,y,rad*5);
+    gr.addColorStop(0,'rgba('+c2[0]+','+c2[1]+','+c2[2]+','+a.toFixed(3)+')');
+    gr.addColorStop(0.3,'rgba('+c2[0]+','+c2[1]+','+c2[2]+','+(a*0.20).toFixed(3)+')');
+    gr.addColorStop(1,'rgba('+c2[0]+','+c2[1]+','+c2[2]+',0)');
+    g.fillStyle=gr;g.beginPath();g.arc(x,y,rad*5,0,TAU);g.fill();
+    g.fillStyle='rgba(255,255,255,'+a.toFixed(3)+')';
+    g.beginPath();g.arc(x,y,rad*0.6,0,TAU);g.fill();
+    if(i%5===0){
+      const L=rad*R(5,11);
+      g.strokeStyle='rgba('+c2[0]+','+c2[1]+','+c2[2]+','+(a*0.42).toFixed(3)+')';
+      g.lineWidth=0.7;
+      g.beginPath();g.moveTo(x-L,y);g.lineTo(x+L,y);g.moveTo(x,y-L);g.lineTo(x,y+L);g.stroke();
+    }
+  }
+  // Cosmic dust: a faint speckle band across the frame, which reads as
+  // depth between the star layers rather than as noise.
+  for(let i=0;i<Math.round(260*area*PQ);i++){
+    const f=Math.random();
+    const x=f*w+R(-w*0.05,w*0.05);
+    const y=h*0.62-f*h*0.34+R(-h*0.09,h*0.09);
+    g.fillStyle='rgba(180,195,255,'+R(0.02,0.09).toFixed(3)+')';
+    g.fillRect(x,y,1,1);
+  }
+  g.globalCompositeOperation='source-over';
+
+  planetBG=c;planetBGKey=key;
+  return c;
+}
+
+/* Two distant worlds, on their own parallax layer between the baked
+   sheet and the planet. Cached as small sprites because they never
+   change; drawn per frame because they have to move differently from
+   the sheet for the depth to read. */
+let planetFarWorlds=null;
+function makeFarWorld(size,body,rim,ring){
+  const c=document.createElement('canvas');c.width=c.height=size*2;
+  const g=c.getContext('2d');const r=size*0.72;
+  if(ring){
+    g.save();g.translate(size,size);g.rotate(-0.42);g.scale(1,0.22);
+    g.strokeStyle='rgba('+rim[0]+','+rim[1]+','+rim[2]+',0.30)';g.lineWidth=size*0.10;
+    g.beginPath();g.arc(0,0,r*1.55,0,TAU);g.stroke();
+    g.restore();
+  }
+  const gr=g.createRadialGradient(size-r*0.42,size-r*0.45,r*0.06,size,size,r);
+  gr.addColorStop(0,'rgb('+body[0]+','+body[1]+','+body[2]+')');
+  gr.addColorStop(0.64,'rgb('+Math.round(body[0]*0.45)+','+Math.round(body[1]*0.45)+','+Math.round(body[2]*0.5)+')');
+  gr.addColorStop(1,'rgb('+Math.round(body[0]*0.10)+','+Math.round(body[1]*0.11)+','+Math.round(body[2]*0.16)+')');
+  g.fillStyle=gr;g.beginPath();g.arc(size,size,r,0,TAU);g.fill();
+  // Banding, clipped to the disc: a featureless ball reads as a dot.
+  g.save();g.beginPath();g.arc(size,size,r,0,TAU);g.clip();
+  for(let i=0;i<5;i++){
+    const y=size-r+((i+0.5)/5)*r*2;
+    g.fillStyle='rgba('+rim[0]+','+rim[1]+','+rim[2]+','+(0.05+((i*37)%5)*0.012).toFixed(3)+')';
+    g.fillRect(size-r,y-r*0.07,r*2,r*0.14);
+  }
+  g.restore();
+  g.strokeStyle='rgba('+rim[0]+','+rim[1]+','+rim[2]+',0.5)';g.lineWidth=Math.max(1,size*0.03);
+  g.beginPath();g.arc(size,size,r,0,TAU);g.stroke();
+  return c;
+}
+function farWorlds(){
+  if(planetFarWorlds)return planetFarWorlds;
+  planetFarWorlds=[
+    {img:makeFarWorld(34,[96,116,190],[180,210,255],true), fx:0.13,fy:0.80,par:0.55,scale:1},
+    {img:makeFarWorld(20,[150,96,140],[255,190,220],false),fx:0.90,fy:0.44,par:0.75,scale:1}
+  ];
+  return planetFarWorlds;
+}
+
+/* =================================================================
+   ATMOSPHERE, BAKED
+
+   The atmosphere is five large gradient fills -- an outer halo, a
+   crescent lit from the star's side, the terminator, the inner haze
+   ring and the rim -- and between them they used to cover about three
+   screens' worth of pixels every frame. On a 2x iPad that is where the
+   frame budget went.
+
+   None of them depend on the planet's ROTATION. The key light is fixed
+   in view space, so the whole set is a function of one number: the
+   silhouette radius. So they are rendered once into two sprites and
+   blitted: one additive layer under the globe (halo and crescent), one
+   over it (terminator, inner haze, rim). Quantising the radius to
+   twelve-pixel steps means a pinch-zoom sweeps through a handful of
+   cached bitmaps rather than minting one per frame, and the cache is
+   dropped wholesale if it ever grows past a few entries.
+
+   Baked at 60% resolution and scaled up, because every one of them is
+   a smooth gradient with nothing in it that can alias. */
+const planetSkyCache={};
+let planetSkyCount=0;
+function planetSky(Rs){
+  const q=Math.max(24,Math.round(Rs/16)*16);
+  const key=q+'|'+Math.round(W)+'x'+Math.round(H);
+  const hit=planetSkyCache[key];
+  if(hit)return hit;
+  // Three entries, then the whole cache goes. These are the largest
+  // bitmaps the game keeps, and an unbounded set of them across a
+  // pinch-zoom's worth of radii is exactly how a tab runs out of
+  // memory on an iPad.
+  if(planetSkyCount>=3){for(const k in planetSkyCache)delete planetSkyCache[k];planetSkyCount=0;}
+  // Resolution falls as the sprite grows, so a bitmap's cost is roughly
+  // constant no matter how far the player has zoomed in. Everything in
+  // here is a smooth gradient, so there is nothing an upscale can blur.
+  const sc=clamp(380/Math.max(1,q),0.24,0.6);
+  const R=q;
+  /* The halo's extent is the single most expensive number on this
+     screen: the sprite is blitted with alpha every frame, so its cost
+     is its AREA. An earlier version let the lit crescent reach 2.5
+     radii out and the sprite became 1600px across -- more pixels of
+     blending per frame than the entire rest of the planet. The
+     crescent is now drawn inside the halo's own circle and clipped to
+     it, which loses nothing visible (it had already faded to nothing
+     out there) and cuts the blit to a third of the area. */
+  const atmoR=Math.min(R*1.30,Math.hypot(W,H)*0.55);
+  const UR=atmoR;
+  // Sized so the crescent reaches exactly the halo's own edge and is
+  // already at zero when it gets there -- clipping it while it still
+  // had alpha left a hard circle drawn around the planet.
+  const cresOff=R*0.34, cresR=atmoR-cresOff;
+  const OR=R*1.035;
+
+  const under=document.createElement('canvas');
+  under.width=Math.ceil(UR*2*sc);under.height=Math.ceil(UR*2*sc);
+  const gu=under.getContext('2d');
+  gu.setTransform(sc,0,0,sc,0,0);
+  gu.translate(UR,UR);
+  const atmo=gu.createRadialGradient(0,0,R*0.93,0,0,atmoR);
+  atmo.addColorStop(0,'rgba(64,132,228,0.30)');
+  atmo.addColorStop(0.34,'rgba(70,116,220,0.13)');
+  atmo.addColorStop(1,'rgba(86,70,190,0)');
+  gu.fillStyle=atmo;gu.beginPath();gu.arc(0,0,atmoR,0,TAU);gu.fill();
+  const sx=PLIGHT[0]*cresOff, sy=-PLIGHT[1]*cresOff;
+  gu.save();
+  gu.beginPath();gu.arc(0,0,atmoR,0,TAU);gu.clip();
+  const cres=gu.createRadialGradient(sx,sy,R*0.30,sx,sy,cresR);
+  cres.addColorStop(0,'rgba(154,216,255,0.26)');
+  cres.addColorStop(0.55,'rgba(92,170,255,0.10)');
+  cres.addColorStop(1,'rgba(92,170,255,0)');
+  gu.fillStyle=cres;gu.beginPath();gu.arc(sx,sy,cresR,0,TAU);gu.fill();
+  gu.restore();
+
+  const over=document.createElement('canvas');
+  over.width=Math.ceil(OR*2*sc);over.height=Math.ceil(OR*2*sc);
+  const go=over.getContext('2d');
+  go.setTransform(sc,0,0,sc,0,0);
+  go.translate(OR,OR);
+  go.save();
+  go.beginPath();go.arc(0,0,R,0,TAU);go.clip();
+  /* The terminator. The warm stop near the star and the cold one in
+     shadow are doing two jobs: giving the sphere form, and splitting
+     the palette so the lit hemisphere reads warm and the dark one
+     reads as deep space blue. Equal brightness everywhere is what made
+     the planet look like a printed disc. */
+  const tx=PLIGHT[0]*R*1.20, ty=-PLIGHT[1]*R*1.20;
+  const sh=go.createRadialGradient(tx,ty,R*0.10,0,0,R*1.26);
+  sh.addColorStop(0,'rgba(255,244,206,0.20)');
+  sh.addColorStop(0.40,'rgba(255,238,204,0.03)');
+  sh.addColorStop(0.64,'rgba(6,12,32,0.26)');
+  sh.addColorStop(0.86,'rgba(4,8,24,0.60)');
+  sh.addColorStop(1,'rgba(2,4,14,0.82)');
+  go.fillStyle=sh;go.fillRect(-R,-R,R*2,R*2);
+  // Air seen edge-on from the inside.
+  const inner=go.createRadialGradient(0,0,R*0.80,0,0,R);
+  inner.addColorStop(0,'rgba(70,150,255,0)');
+  inner.addColorStop(1,'rgba(96,180,255,0.30)');
+  go.fillStyle=inner;go.fillRect(-R,-R,R*2,R*2);
+  go.restore();
+  /* The rim. Two strokes: a cool one all the way round, and a hot one
+     on the lit limb only, drawn as an arc centred on the star's screen
+     bearing. That asymmetry is what stops the planet reading as a disc
+     with a ring drawn on it. */
+  go.globalCompositeOperation='lighter';
+  go.beginPath();go.arc(0,0,R,0,TAU);
+  go.strokeStyle='rgba(88,164,255,0.42)';go.lineWidth=Math.max(1.5,R*0.008);go.stroke();
+  const sunAng=Math.atan2(ty,tx);
+  go.beginPath();go.arc(0,0,R*0.998,sunAng-1.5,sunAng+1.5);
+  go.strokeStyle='rgba(190,232,255,0.55)';go.lineWidth=Math.max(1.2,R*0.006);go.stroke();
+  go.beginPath();go.arc(0,0,R*1.006,sunAng-1.1,sunAng+1.1);
+  go.strokeStyle='rgba(225,245,255,0.30)';go.lineWidth=Math.max(1,R*0.012);go.stroke();
+
+  const entry={under:under,over:over,ur:UR,or:OR,r:R};
+  planetSkyCache[key]=entry;planetSkyCount++;
+  return entry;
+}
+
+function drawPlanetBackdrop(){
+  const sheet=makePlanetBackdrop();
+  const M=PLANET_PARALLAX;
+  // Parallax is driven by the camera, not by time: turning the globe
+  // slides the universe behind it, which is the cue that says the
+  // planet is IN something rather than pasted on top of it.
+  const px=Math.sin(pcam.yaw)*M*0.62, py=-pcam.pitch*M*0.55;
+  // No clear first: the sheet is opaque, and the parallax offset is
+  // always smaller than the margin baked into it, so it covers the
+  // viewport on its own. Clearing underneath it was a full-screen fill
+  // per frame that nothing ever saw.
+  const bs=Math.min(dpr,2);
+  ctx.drawImage(sheet,-M+px,-M+py,sheet.width/bs,sheet.height/bs);
+  for(const fw of farWorlds()){
+    const s=fw.img.width;
+    const x=W*fw.fx+Math.sin(pcam.yaw)*M*fw.par*1.7;
+    const y=H*fw.fy-pcam.pitch*M*fw.par*1.5;
+    ctx.drawImage(fw.img,x-s/2,y-s/2);
+  }
+}
+
+/* =================================================================
+   ORBITAL CAMERA AND PROJECTION
+   ================================================================= */
+// The camera opens on plot 0 -- where territory begins, since plots
+// unlock in index order and the Fibonacci distribution starts at a
+// pole. Without that a new player would open their planet looking at
+// the one hemisphere they own none of, and conclude the screen was
+// empty.
+// `zoomT` is the value input writes; `zoom` chases it, so a scroll
+// wheel or a pinch eases in instead of snapping a frame at a time.
+/* The default pitch is what decides whether the player's buildings
+   have SILHOUETTES when the screen opens. At pitch -0.14 plot 0 sat
+   exactly at the sub-camera point, which means looking straight down
+   on the colony: every tower projects onto its own footprint and the
+   Command Center reads as a flat badge. Tilting the opening view puts
+   the colony about half a radius up the disc, where the surface is
+   turned roughly 20 degrees away and the structures stand up out of
+   it. */
+const PLANET_OPEN_PITCH=-0.48;
+/* Where a focused plot is parked: far enough off the sub-camera point
+   to be seen at an angle rather than straight down, near enough the
+   middle of the frame to be comfortable.
+
+   Divided by the zoom, because this is an ANGLE on a sphere and what
+   matters is where it lands on the SCREEN. At a fixed angle the
+   focused plot drifts further up the frame the further you zoom in --
+   by 2.5x it is behind the screen title, and by 3x it is off the top
+   entirely, which is precisely when the player is trying to look at
+   it. Scaling the angle by the zoom keeps the plot at roughly the
+   same place in the frame at every magnification. */
+const PLANET_FOCUS_TILT=0.50;
+const pcam={yaw:0,pitch:PLANET_OPEN_PITCH,zoom:1,zoomT:1,vyaw:0.045,vpitch:0,drag:false,
+  focus:0,tyaw:0,tpitch:0};
 let planetSelPlot=-1;      // plot the player last tapped
+let planetHoverPlot=-1;    // plot under the mouse (desktop affordance)
 let planetBuildSel=null;   // building id armed for placement
 let planetBusy=false;      // one build request in flight at a time
+let planetSelT=0;          // seconds since the selection changed, for the focus animation
 
 // A landscape phone is ~390px tall and the construction dock needs a
 // fixed share of it, so the globe is drawn smaller and higher there
 // rather than being half-hidden behind the dock. Driven by height alone
 // because that is the dimension that actually runs out.
 function planetShort(){ return H<520; }
-function planetScreenRadius(){ return Math.min(W,H)*(planetShort()?0.25:0.30)*pcam.zoom; }
+// Grown from 0.30/0.25. The planet is meant to read as a world you are
+// in orbit around, and the single most effective scale cue is simply
+// letting it fill the frame -- while still leaving a margin of visible
+// space on every side, so it is clearly floating in something.
+function planetScreenRadius(){ return Math.min(W,H)*(planetShort()?0.285:0.345)*pcam.zoom; }
 // The radius the sphere's SILHOUETTE actually occupies on screen. It is
 // not planetScreenRadius(): under perspective the limb is magnified,
 // and a unit sphere seen from D projects its horizon to
@@ -4219,13 +5017,14 @@ function planetSilhouette(){
 }
 // The planet sits a little above centre so it clears the construction
 // dock at the bottom of the screen.
-function planetCenterY(){ return H*(planetShort()?0.36:0.455); }
+function planetCenterY(){ return H*(planetShort()?0.355:0.455); }
 
-// planetRotate() is called roughly 900 times a frame (every plot's
-// centre and six corners, plus twelve points per structure). Computing
-// four trig functions inside it meant ~3,600 sin/cos per frame for a
-// camera orientation that only changes once per frame, so the camera's
-// sines and cosines are cached here and refreshed by syncPlanetTrig().
+// planetRotate() is called several thousand times a frame (every plot's
+// centre and six corners, every cliff skirt, and every vertex of every
+// structure). Computing four trig functions inside it meant tens of
+// thousands of sin/cos per frame for a camera orientation that only
+// changes once per frame, so the camera's sines and cosines are cached
+// here and refreshed by syncPlanetTrig().
 let pcYawC=1,pcYawS=0,pcPitchC=1,pcPitchS=0;
 function syncPlanetTrig(){
   pcYawC=Math.cos(pcam.yaw);pcYawS=Math.sin(pcam.yaw);
@@ -4249,223 +5048,1813 @@ function planetProject(v){
   const k=ppRs*D/(D-v[2]);
   return {x:W/2+v[0]*k, y:ppCy-v[1]*k, z:v[2], vis:v[2]>1/D};
 }
-
-function planetLight(nrot){
-  // One fixed key light from the upper-left-front.
-  const L=[-0.46,0.58,0.67];
-  return clamp(nrot[0]*L[0]+nrot[1]*L[1]+nrot[2]*L[2],0,1);
+// A corner that has fallen behind the horizon projects toward infinity,
+// which is what used to throw spikes off the limb -- so the old code
+// dropped any cell with one, leaving a ragged ring of missing terrain
+// all the way round the planet. Instead, slide the offending corner
+// out to the silhouette along its own screen bearing: the cell then
+// ends exactly ON the horizon, which is where it actually ends.
+function planetProjectClamped(v,silR){
+  const D=PLANET_CAM_DIST;
+  if(v[2]>1/D){
+    const k=ppRs*D/(D-v[2]);
+    return {x:W/2+v[0]*k, y:ppCy-v[1]*k, z:v[2], vis:true};
+  }
+  const l=Math.hypot(v[0],v[1])||1;
+  return {x:W/2+(v[0]/l)*silR, y:ppCy-(v[1]/l)*silR, z:v[2], vis:false};
 }
 
+// The key light. One star, up and to the left and slightly toward the
+// camera, so the lit limb, the terminator and every structure's shading
+// all agree about where the sun is.
+const PLIGHT=[-0.46,0.56,0.69];
+function planetLight(nrot){
+  return clamp(nrot[0]*PLIGHT[0]+nrot[1]*PLIGHT[1]+nrot[2]*PLIGHT[2],0,1);
+}
+// Lighting for an arbitrary WORLD-space direction (a building's wall, a
+// dish, a cliff face). The old code faked wall shading from the camera
+// yaw, which meant a building's lit side did not track the sun as the
+// planet turned. This costs one vector rotation and is correct.
+function dirLight(dx,dy,dz){
+  const z=-dx*pcYawS+dz*pcYawC;
+  const rx=dx*pcYawC+dz*pcYawS;
+  const ry=dy*pcPitchC-z*pcPitchS;
+  const rz=dy*pcPitchS+z*pcPitchC;
+  return clamp(rx*PLIGHT[0]+ry*PLIGHT[1]+rz*PLIGHT[2],0,1);
+}
+
+/* =================================================================
+   STRUCTURE KIT -- projected primitives in a plot's local frame
+
+   Every building on the planet is assembled from the handful of
+   primitives below rather than from one tinted prism, which is what
+   gives each of the seven its own silhouette. They all work in the
+   SAME local frame: u and v are offsets across the plot measured in
+   plot radii, h is height above the plot's own terrain surface
+   measured in planet radii. So a composer can say "a mast at the
+   north-east corner, 0.10 tall" and never touch a matrix.
+   ================================================================= */
+const PL={n:[0,0,1],t:[1,0,0],b:[0,1,0],rad:1,sun:0.5,night:0.5,col:[0,240,255],detail:2,sea:false};
+function plotBegin(plot,sun,detail){
+  PL.n=plot.n;PL.t=plot.t;PL.b=plot.b;PL.rad=plot.rad;
+  PL.sun=sun;PL.night=1-sun;PL.detail=detail;PL.sea=plot.sea;
+}
+// Local (u,v,h) -> world.
+function P3(u,v,h){
+  // SFP shrinks the whole structure -- footprint AND height -- uniformly
+  // inside the plot, so every composer can keep writing in plot radii
+  // and the buildings still leave ground around themselves.
+  // Height gets its own multiplier. Shrinking a building's footprint
+  // into its plot is right; shrinking its height by the same factor is
+  // not, because height is the whole of a silhouette.
+  const s=PL.rad+h*SFP*1.35,uu=u*SUR,vv=v*SUR;
+  return [PL.n[0]*s+PL.t[0]*uu+PL.b[0]*vv,
+          PL.n[1]*s+PL.t[1]*uu+PL.b[1]*vv,
+          PL.n[2]*s+PL.t[2]*uu+PL.b[2]*vv];
+}
+function PP(u,v,h){ return planetProject(planetRotate(P3(u,v,h))); }
+// Shading for a wall whose outward normal points along tangent angle a.
+function wallLight(a){
+  const c=Math.cos(a),s=Math.sin(a);
+  return dirLight(PL.t[0]*c+PL.b[0]*s, PL.t[1]*c+PL.b[1]*s, PL.t[2]*c+PL.b[2]*s);
+}
+const upLight=()=>dirLight(PL.n[0],PL.n[1],PL.n[2]);
+
+function shade(col,k,extra){
+  const m=k*(extra===undefined?1:extra);
+  return 'rgb('+Math.round(Math.min(255,col[0]*m))+','+
+                Math.round(Math.min(255,col[1]*m))+','+
+                Math.round(Math.min(255,col[2]*m))+')';
+}
+function polyFill(pts,fill,stroke,lw){
+  if(pts.length<3)return;
+  ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);
+  for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);
+  ctx.closePath();
+  if(fill){ctx.fillStyle=fill;ctx.fill();}
+  if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw||1;ctx.stroke();}
+}
+// A quad is front-facing if its screen winding is anticlockwise in
+// canvas coordinates. Rejecting the others is both correct and halves
+// the fill cost of every closed solid on the planet.
+function frontFacing(a,b,c){
+  return ((b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x))<0;
+}
+// Emissive windows on a wall quad, placed by bilinear interpolation so
+// they sit in the wall's perspective rather than on top of it. They
+// brighten on the night side, which is what makes the colony read as
+// inhabited when it turns away from the sun.
+function wallWindows(A,B,C,D,cols,rows,col,seed,glow){
+  const w=Math.abs(B.x-A.x)+Math.abs(C.x-D.x);
+  if(w<17)return;
+  const a=(glow===undefined?0.55:glow)*(0.34+PL.night*0.80);
+  ctx.fillStyle='rgba('+col[0]+','+col[1]+','+col[2]+','+Math.min(1,a).toFixed(3)+')';
+  const lerpP=(p,q,f)=>({x:p.x+(q.x-p.x)*f,y:p.y+(q.y-p.y)*f});
+  for(let r=0;r<rows;r++){
+    for(let c2=0;c2<cols;c2++){
+      if(pHash3(seed,r,c2)<0.22)continue;   // a few dark windows: nobody is home everywhere
+      const s0=(c2+0.26)/cols, s1=(c2+0.74)/cols;
+      const t0=(r+0.28)/rows, t1=(r+0.72)/rows;
+      const p00=lerpP(lerpP(A,B,s0),lerpP(D,C,s0),t0);
+      const p10=lerpP(lerpP(A,B,s1),lerpP(D,C,s1),t0);
+      const p11=lerpP(lerpP(A,B,s1),lerpP(D,C,s1),t1);
+      const p01=lerpP(lerpP(A,B,s0),lerpP(D,C,s0),t1);
+      ctx.beginPath();ctx.moveTo(p00.x,p00.y);ctx.lineTo(p10.x,p10.y);
+      ctx.lineTo(p11.x,p11.y);ctx.lineTo(p01.x,p01.y);ctx.closePath();ctx.fill();
+    }
+  }
+}
+
+/* A prism: any number of sides, elliptical footprint, optional taper.
+   This one primitive is the hangar's shell, the foundry's silos, the
+   command tower, every platform and every container on the planet. */
+function pPrism(o){
+  const cx=o.cx||0, cy=o.cy||0, rx=o.rx, ry=(o.ry===undefined?o.rx:o.ry);
+  const sides=o.sides||6, rot=o.rot||0, h0=o.h0||0, h1=o.h1, col=o.col||PL.col;
+  const taper=(o.taper===undefined?1:o.taper);
+  const base=[],top=[];
+  for(let k=0;k<sides;k++){
+    const a=rot+k*TAU/sides, c2=Math.cos(a), s2=Math.sin(a);
+    base.push(PP(cx+c2*rx, cy+s2*ry, h0));
+    top.push(PP(cx+c2*rx*taper, cy+s2*ry*taper, h1));
+  }
+  for(let k=0;k<sides;k++){
+    const k2=(k+1)%sides;
+    if(!frontFacing(base[k],base[k2],top[k]))continue;
+    const am=rot+(k+0.5)*TAU/sides;
+    // 0.13 ambient floor: an unlit wall is physically honest and
+    // completely unreadable, and the player has to see the building.
+    const L=0.18+0.82*wallLight(am);
+    polyFill([base[k],base[k2],top[k2],top[k]],shade(col,L*(o.mat||0.66)));
+    if(o.win&&PL.detail>=3)
+      wallWindows(base[k],base[k2],top[k2],top[k],o.win[0],o.win[1],o.winCol||[190,244,255],(o.seed||0)+k,o.winA);
+    if(o.band&&PL.detail>=2){
+      // A lit seam around the building, at the height fraction given.
+      const f=o.band;
+      const p0={x:base[k].x+(top[k].x-base[k].x)*f, y:base[k].y+(top[k].y-base[k].y)*f};
+      const p1={x:base[k2].x+(top[k2].x-base[k2].x)*f, y:base[k2].y+(top[k2].y-base[k2].y)*f};
+      ctx.strokeStyle='rgba('+(o.bandCol||col)[0]+','+(o.bandCol||col)[1]+','+(o.bandCol||col)[2]+','+
+        (0.42+PL.night*0.45).toFixed(3)+')';
+      ctx.lineWidth=Math.max(1,PL.detail>=3?1.6:1);
+      ctx.beginPath();ctx.moveTo(p0.x,p0.y);ctx.lineTo(p1.x,p1.y);ctx.stroke();
+    }
+  }
+  if(o.cap!==false)
+    polyFill(top,shade(col,(0.20+0.80*upLight())*(o.capMat||1.02)),
+             PL.detail>=2?'rgba('+col[0]+','+col[1]+','+col[2]+',0.55)':null,1);
+  return {base:base,top:top};
+}
+
+/* A ring lying in the plane perpendicular to `axis`, centred at a local
+   (u,v,h). Landing pads, radar dishes, the Command Center's halo and
+   the Galaxy Gate's event horizon are all this. */
+function ringPts(cu,cv,ch,ax,R,segs){
+  // An orthonormal basis perpendicular to the axis.
+  const hx=Math.abs(ax[1])<0.9?0:1, hy=Math.abs(ax[1])<0.9?1:0;
+  let e1=[hy*ax[2]-0*ax[1], 0*ax[0]-hx*ax[2], hx*ax[1]-hy*ax[0]];
+  const l1=Math.hypot(e1[0],e1[1],e1[2])||1;e1=[e1[0]/l1,e1[1]/l1,e1[2]/l1];
+  const e2=[ax[1]*e1[2]-ax[2]*e1[1], ax[2]*e1[0]-ax[0]*e1[2], ax[0]*e1[1]-ax[1]*e1[0]];
+  const c0=P3(cu,cv,ch);
+  const out=[];
+  for(let i=0;i<segs;i++){
+    const a=i*TAU/segs,c2=Math.cos(a)*R,s2=Math.sin(a)*R;
+    out.push(planetProject(planetRotate([
+      c0[0]+e1[0]*c2+e2[0]*s2, c0[1]+e1[1]*c2+e2[1]*s2, c0[2]+e1[2]*c2+e2[2]*s2])));
+  }
+  return out;
+}
+// The local frame's own axes as world vectors, for callers that want to
+// tilt something relative to the ground.
+function localAxis(u,v,up){
+  const x=PL.t[0]*u+PL.b[0]*v+PL.n[0]*up;
+  const y=PL.t[1]*u+PL.b[1]*v+PL.n[1]*up;
+  const z=PL.t[2]*u+PL.b[2]*v+PL.n[2]*up;
+  const l=Math.hypot(x,y,z)||1;
+  return [x/l,y/l,z/l];
+}
+function pDisc(cu,cv,ch,ax,R,col,alpha,segs){
+  const pts=ringPts(cu,cv,ch,ax,R*SUR,segs||14);
+  const L=0.18+0.82*dirLight(ax[0],ax[1],ax[2]);
+  polyFill(pts,'rgba('+Math.round(col[0]*L)+','+Math.round(col[1]*L)+','+Math.round(col[2]*L)+','+
+    (alpha===undefined?1:alpha)+')');
+  return pts;
+}
+function pRingStroke(cu,cv,ch,ax,R,col,alpha,lw,segs){
+  const pts=ringPts(cu,cv,ch,ax,R*SUR,segs||16);
+  polyFill(pts,null,'rgba('+col[0]+','+col[1]+','+col[2]+','+alpha+')',lw||1.2);
+  return pts;
+}
+// A dome, as two latitude bands and an apex. Eight segments is enough
+// at the sizes a building is ever drawn and is a third of the cost of
+// the sixteen it would take to look round in close-up.
+function pDome(cu,cv,h0,R,H,col,segs){
+  segs=segs||(PL.detail>=3?10:7);
+  const lats=[0,0.42,0.76,1];
+  const rings=[];
+  for(const lt of lats){
+    const ang=lt*Math.PI/2, rr=R*Math.cos(ang), hh=h0+H*Math.sin(ang);
+    const ring=[];
+    for(let k=0;k<segs;k++){
+      const a=k*TAU/segs;
+      ring.push({p:PP(cu+Math.cos(a)*rr, cv+Math.sin(a)*rr, hh), a:a, lat:lt});
+    }
+    rings.push(ring);
+  }
+  for(let r=0;r<rings.length-1;r++){
+    const lo=rings[r],hi=rings[r+1];
+    const midLat=(lats[r]+lats[r+1])*0.5*Math.PI/2;
+    for(let k=0;k<segs;k++){
+      const k2=(k+1)%segs;
+      if(!frontFacing(lo[k].p,lo[k2].p,hi[k].p))continue;
+      const am=((k+0.5)/segs)*TAU;
+      const nrm=localAxis(Math.cos(am)*Math.cos(midLat),Math.sin(am)*Math.cos(midLat),Math.sin(midLat));
+      const L=0.14+0.86*dirLight(nrm[0],nrm[1],nrm[2]);
+      polyFill([lo[k].p,lo[k2].p,hi[k2].p,hi[k].p],shade(col,L));
+    }
+  }
+}
+/* A barrel vault: a half-cylinder lying along the plot's v axis, with
+   an arched end that can be opened into a lit doorway. A hangar built
+   out of boxes reads as a warehouse; the thing that says "spacecraft
+   come out of here" is an arch with a hole in the end of it, so the
+   hangar gets its own primitive rather than being faked with a
+   tapered prism. */
+function pVault(cx,cy,rw,rl,hh,h0,col,o){
+  o=o||{};
+  const segs=PL.detail>=3?10:6;
+  const A=[],B=[];
+  for(let k=0;k<=segs;k++){
+    const a=Math.PI*k/segs;
+    const u=Math.cos(a)*rw, h=h0+Math.sin(a)*hh;
+    A.push(PP(cx+u,cy-rl,h));
+    B.push(PP(cx+u,cy+rl,h));
+  }
+  // Which end is further from the camera decides the paint order.
+  const za=planetRotate(P3(cx,cy-rl,h0))[2], zb=planetRotate(P3(cx,cy+rl,h0))[2];
+  const farA=za<zb;
+  const capFar=farA?A:B, capNear=farA?B:A;
+  const farIsMouth=farA?(o.mouth===-1):(o.mouth===1);
+
+  const drawCap=(pts,mouth)=>{
+    if(!mouth){
+      polyFill(pts,shade(col,(0.18+0.82*wallLight(farA?-Math.PI/2:Math.PI/2))*0.86));
+      return;
+    }
+    /* The bay itself. A gradient from the lit floor up into the dark of
+       the roof, so it reads as an opening with depth rather than as a
+       white rectangle painted on the end. */
+    const a=pts[0],b=pts[pts.length-1];
+    const apex=pts[Math.floor(pts.length/2)];
+    const gr=ctx.createLinearGradient(a.x,(a.y+b.y)/2,apex.x,apex.y);
+    gr.addColorStop(0,'rgba('+Math.min(255,col[0]+70)+','+Math.min(255,col[1]+50)+','+
+      Math.min(255,col[2]+50)+','+(0.85+PL.night*0.15).toFixed(3)+')');
+    gr.addColorStop(0.32,'rgba(74,146,152,0.92)');
+    gr.addColorStop(1,'rgba(14,30,38,0.96)');
+    polyFill(pts,gr);
+    ctx.globalCompositeOperation='lighter';
+    pBlob((a.x+b.x)/2,(a.y+b.y)/2,Math.max(5,Math.abs(b.x-a.x)*0.55),col,0.26+PL.night*0.26);
+    ctx.globalCompositeOperation='source-over';
+    // Threshold light strip across the doorway.
+    ctx.strokeStyle='rgba('+col[0]+','+col[1]+','+col[2]+','+(0.60+PL.night*0.30).toFixed(3)+')';
+    ctx.lineWidth=Math.max(1,PL.detail>=3?2:1.2);
+    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+  };
+
+  drawCap(capFar,farIsMouth);
+  for(let k=0;k<segs;k++){
+    const am=Math.PI*(k+0.5)/segs;
+    const nrm=localAxis(Math.cos(am),0,Math.sin(am));
+    const L=0.16+0.84*dirLight(nrm[0],nrm[1],nrm[2]);
+    polyFill([A[k],A[k+1],B[k+1],B[k]],shade(col,L*(o.mat||0.94)));
+  }
+  if(PL.detail>=2){
+    // Structural ribs over the roof: the difference between a shed and
+    // an engineered span.
+    ctx.strokeStyle='rgba('+Math.round(col[0]*1.25)+','+Math.round(col[1]*1.25)+','+
+      Math.round(col[2]*1.25)+',0.42)';
+    ctx.lineWidth=1;
+    ctx.beginPath();
+    for(let k=1;k<segs;k++){ctx.moveTo(A[k].x,A[k].y);ctx.lineTo(B[k].x,B[k].y);}
+    ctx.stroke();
+  }
+  drawCap(capNear,!farIsMouth);
+}
+
+// A mast, cable or antenna: a screen-space line between two local
+// points. Thin things are not worth extruding.
+function pMast(u0,v0,h0,u1,v1,h1,col,lw,alpha){
+  const a=PP(u0,v0,h0),b=PP(u1,v1,h1);
+  ctx.strokeStyle='rgba('+col[0]+','+col[1]+','+col[2]+','+(alpha===undefined?0.9:alpha)+')';
+  ctx.lineWidth=lw||1;
+  ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+  return b;
+}
+// One cached soft sprite per colour, scaled to size. Never calls
+// makeGlow with a varying radius, so the glow cache stays a handful of
+// bitmaps no matter how far the player zooms.
+function pBlob(x,y,rad,col,alpha){
+  if(rad<0.4||alpha<=0.004)return;
+  ctx.globalAlpha=Math.min(1,alpha);
+  ctx.drawImage(makeGlow(col[0],col[1],col[2],64),x-rad,y-rad,rad*2,rad*2);
+  ctx.globalAlpha=1;
+}
+function pLamp(u,v,h,col,rad,alpha){
+  const p=PP(u,v,h);
+  ctx.globalCompositeOperation='lighter';
+  pBlob(p.x,p.y,rad,col,alpha*(0.45+PL.night*0.75));
+  ctx.globalCompositeOperation='source-over';
+  return p;
+}
+
+/* Painter's queue. A structure is assembled out of a dozen separate
+   solids, and which of them is in front of which changes as the planet
+   turns -- so each piece is queued with the view-space depth of its own
+   anchor and the whole building is painted back to front. Flushed once
+   per building, while its plot frame is still current. */
+const _paint=[];
+function pQueue(u,v,h,fn){
+  const w=planetRotate(P3(u,v,h));
+  _paint.push({z:w[2],fn:fn});
+}
+function pFlush(){
+  _paint.sort((a,b)=>a.z-b.z);
+  for(let i=0;i<_paint.length;i++)_paint[i].fn();
+  _paint.length=0;
+}
+let PT=0;   // shared animation clock for the planet screen
+
+// The plate every structure stands on. It is what stops a building from
+// looking like an object resting on a ball: a poured foundation cut
+// into the plot, with a darker apron ring around it that reads as
+// ground worked flat and as the shadow the building casts on it.
+function sitePad(col,r,h){
+  const up=0.20+0.80*upLight();
+  const deck=h===undefined?0.022*PLOT_R:h;
+  /* Territory expands into whatever is there, and some of what is
+     there is water. Rather than refusing those plots -- which would
+     mean changing the placement rules the server already enforces --
+     a structure sited on the sea gets an offshore platform: the same
+     foundation, lifted clear of the waterline on legs, with the wake
+     of the swell under it. The colony stays buildable everywhere and
+     the ocean stays honest. */
+  if(PL.sea){
+    const lift=0.055*PLOT_R;
+    if(PL.detail>=2)
+      for(let k=0;k<6;k++){
+        const a=k*Math.PI/3+0.3;
+        pMast(Math.cos(a)*r*0.78,Math.sin(a)*r*0.78,-0.01*PLOT_R,
+              Math.cos(a)*r*0.78,Math.sin(a)*r*0.78,lift+deck,[58,74,102],1.6,0.85);
+      }
+    pPrism({rx:r,sides:6,rot:0.1,h0:lift,h1:lift+deck,col:[100,122,158],mat:0.92,capMat:0.94});
+    if(PL.detail>=2)
+      pRingStroke(0,0,lift+deck+0.001,PL.n,r*0.97,col,(0.22+PL.night*0.32).toFixed(3),1.1,12);
+    // Everything the composer places above sits on the deck.
+    PL.rad+=lift*SFP;
+    return up;
+  }
+  // The apron is a hint of worked ground, not a black platter under
+  // the building -- it used to be dark enough and wide enough to read
+  // as a hole cut in the terrain.
+  pDisc(0,0,0.002,PL.n,r*1.02,[26,38,58],0.30,PL.detail>=2?12:8);
+  pPrism({rx:r*0.86,sides:6,rot:0.1,h0:0.002,h1:deck,col:[112,134,170],mat:0.95,capMat:1.0});
+  if(PL.detail>=2)
+    pRingStroke(0,0,deck+0.001,PL.n,r*0.84,col,(0.24+PL.night*0.34).toFixed(3),1.1,12);
+  return up;
+}
+// Small crates and cargo pods, used by more than one composer.
+function cargoStack(u,v,n,col,seed){
+  if(PL.detail<3)return;
+  const U=PLOT_R;
+  for(let i=0;i<n;i++){
+    const ox=u+(pHash3(seed,i,1)-0.5)*0.30, oy=v+(pHash3(seed,i,2)-0.5)*0.30;
+    const hh=(0.055+pHash3(seed,i,3)*0.05)*U;
+    const stack=pHash3(seed,i,4)>0.6?2:1;
+    pQueue(ox,oy,hh,()=>{
+      for(let s=0;s<stack;s++)
+        pPrism({cx:ox,cy:oy,rx:0.085,ry:0.065,sides:4,rot:0.5+pHash3(seed,i,5)*1.2,
+          h0:hh*s,h1:hh*(s+1),col:s%2?[168,178,200]:col,mat:0.72});
+    });
+  }
+}
+// A ground-level lamp: a short post with a light on it. Streetlights are
+// the difference between "buildings" and "a place where people live".
+function streetLamp(u,v,col){
+  if(PL.detail<3)return;
+  const U=PLOT_R;
+  pQueue(u,v,0.06*U,()=>{
+    pMast(u,v,0.004,u,v,0.085*U,[120,140,170],1,0.75);
+    pLamp(u,v,0.095*U,col,4.5,0.5);
+  });
+}
+
+/* =================================================================
+   THE SEVEN STRUCTURES
+
+   Each composer builds one building out of the kit above, and each is
+   written so that LEVEL adds COMPONENTS rather than scale: a level 5
+   Command Center is not a bigger box, it is a box that grew pylons, a
+   halo, an outer apron and a crown. That is the only way the planet can
+   answer "has my colony grown?" at a glance.
+
+   `lv` is the building's level, `col` its palette colour from
+   voidbreakUniverse.js (so the data file stays the single source of
+   truth for identity), and PL.detail the level of detail resolved from
+   how large this building currently is on screen.
+   ================================================================= */
+
+// COMMAND CENTER -- the heart of the colony. A stepped ziggurat under a
+// tall faceted spire, with a suspended halo ring: the one silhouette on
+// the planet that has to read as "this is the middle of everything".
+function bCommand(lv,col){
+  const U=PLOT_R;
+  const towerH=(0.62+lv*0.15)*U;
+  sitePad(col,0.95);
+  if(lv>=4){
+    // Outer apron and four corner markers: the seat of government
+    // spreading past its own foundation.
+    for(let k=0;k<4;k++){
+      const a=k*Math.PI/2+0.4,u=Math.cos(a)*0.82,v=Math.sin(a)*0.82;
+      pQueue(u,v,0.10*U,()=>{
+        pPrism({cx:u,cy:v,rx:0.075,sides:6,h0:0.02*U,h1:0.20*U,taper:0.35,col:col,mat:0.6});
+        pLamp(u,v,0.22*U,col,6,0.6);
+      });
+    }
+  }
+  pQueue(0,0,0.10*U,()=>{
+    pPrism({rx:0.66,sides:6,rot:0.1,h0:0.022*U,h1:0.15*U,col:[94,120,160],mat:0.88,
+      band:0.8,bandCol:col,win:[4,1],winCol:[170,238,255],seed:11});
+  });
+  pQueue(0,0,0.32*U,()=>{
+    pPrism({rx:0.40,sides:6,rot:0.62,h0:0.15*U,h1:0.30*U,col:[110,138,180],mat:0.92,
+      band:0.7,bandCol:col,win:[3,1],winCol:[170,238,255],seed:23});
+  });
+  // The spire itself.
+  pQueue(0,0,towerH*0.6,()=>{
+    pPrism({rx:0.24,sides:8,h0:0.30*U,h1:towerH,taper:0.66,col:[138,168,210],mat:1.0,
+      win:[2,Math.min(5,1+lv)],winCol:[186,244,255],seed:31,band:0.5,bandCol:col});
+    // Crown. Kept narrow and METAL rather than a wide disc in the
+    // building's own colour: flared out and tinted cyan it became a
+    // flat badge the moment the camera looked down on it, which is
+    // exactly the view the screen opens in.
+    pPrism({rx:0.17,sides:8,h0:towerH,h1:towerH+0.085*U,taper:1.22,
+      col:[150,178,214],mat:0.92,capMat:1.0});
+    if(PL.detail>=2)
+      pRingStroke(0,0,towerH+0.088*U,PL.n,0.21,col,(0.45+PL.night*0.35).toFixed(3),1.6,10);
+    pMast(0,0,towerH+0.085*U,0,0,towerH+0.30*U,[190,230,255],1.4,0.8);
+    pLamp(0,0,towerH+0.31*U,col,7+lv,0.75+Math.sin(PT*2.2)*0.18);
+  });
+  if(lv>=2){
+    // Two service pylons flanking the spire.
+    for(const s of [-1,1]){
+      const u=s*0.52,v=-0.18;
+      pQueue(u,v,0.24*U,()=>{
+        pPrism({cx:u,cy:v,rx:0.115,sides:6,h0:0.06*U,h1:0.42*U,taper:0.62,col:[118,146,188],mat:0.86,
+          win:[2,2],winCol:[160,230,255],seed:41+s});
+        pMast(u,v,0.42*U,u,v,0.54*U,[150,190,230],1,0.7);
+        pLamp(u,v,0.55*U,col,5,0.55);
+      });
+    }
+  }
+  if(lv>=3&&PL.detail>=2){
+    // The halo: a ring held off the spire, turning slowly. It is the
+    // single clearest "this planet has a capital" cue on the screen.
+    const hh=towerH*0.80;
+    pQueue(0,0,hh,()=>{
+      ctx.globalCompositeOperation='lighter';
+      pRingStroke(0,0,hh,PL.n,0.50,col,(0.42+Math.sin(PT*1.6)*0.14).toFixed(3),2.2,PL.detail>=3?20:12);
+      pRingStroke(0,0,hh,PL.n,0.44,[210,250,255],'0.22',1,PL.detail>=3?18:10);
+      ctx.globalCompositeOperation='source-over';
+      if(PL.detail>=3){
+        for(let k=0;k<3;k++){
+          const a=PT*0.5+k*TAU/3;
+          pLamp(Math.cos(a)*0.50,Math.sin(a)*0.50,hh,col,6,0.7);
+        }
+      }
+    });
+  }
+  if(lv>=5){
+    // A suspended core above the mast, once the colony is finished.
+    pQueue(0,0,towerH+0.42*U,()=>{
+      pDome(0,0,towerH+0.36*U,0.13,0.13*U,[230,252,255],PL.detail>=3?10:7);
+      ctx.globalCompositeOperation='lighter';
+      const p=PP(0,0,towerH+0.42*U);
+      pBlob(p.x,p.y,16,col,0.5+Math.sin(PT*3)*0.12);
+      ctx.globalCompositeOperation='source-over';
+    });
+  }
+  streetLamp(-0.74,0.40,col);
+  streetLamp(0.72,0.48,col);
+}
+
+// SHIP HANGAR -- a barrel-vaulted bay with a lit mouth and an apron in
+// front of it. The whole point of the silhouette is that you can see
+// WHERE THE SHIP COMES OUT.
+function bHangar(lv,col){
+  const U=PLOT_R;
+  sitePad(col,0.95);
+  // Apron: a flat plate in front of the doors with approach lighting.
+  pQueue(0,0.66,0.03*U,()=>{
+    pDisc(0,0.60,0.026*U,PL.n,0.52,[30,42,62],0.92,PL.detail>=2?12:8);
+    if(PL.detail>=2)
+      for(let k=0;k<4;k++){
+        const v=0.40+k*0.18;
+        const pulse=0.32+0.42*Math.max(0,Math.sin(PT*3-k*0.8));
+        pLamp(-0.18,v,0.035*U,[120,255,210],3.6,pulse);
+        pLamp(0.18,v,0.035*U,[120,255,210],3.6,pulse);
+      }
+  });
+  // The vault. Its mouth faces +v, which is where the apron is.
+  pQueue(0,-0.02,0.20*U,()=>{
+    pVault(0,-0.02,0.34,0.42,0.34*U,0.022*U,[136,180,186],{mouth:1,mat:0.96});
+    if(PL.detail>=2){
+      // A lit seam where the roof meets the footing, all the way round.
+      pRingStroke(0,-0.02,0.028*U,PL.n,0.50,col,(0.26+PL.night*0.30).toFixed(3),1.2,12);
+    }
+  });
+  if(lv>=2)
+    // A second, smaller bay, turned across the first.
+    pQueue(0.62,-0.34,0.14*U,()=>{
+      pVault(0.62,-0.34,0.21,0.25,0.20*U,0.022*U,[122,164,170],{mouth:1,mat:0.92});
+    });
+  if(lv>=3)
+    // Gantry crane over the apron: two legs, a beam and a hook that
+    // actually travels along it.
+    pQueue(-0.52,0.34,0.30*U,()=>{
+      pMast(-0.56,0.14,0.02*U,-0.56,0.14,0.40*U,[150,178,196],1.6,0.85);
+      pMast(-0.56,0.60,0.02*U,-0.56,0.60,0.40*U,[150,178,196],1.6,0.85);
+      pMast(-0.56,0.14,0.40*U,-0.56,0.60,0.40*U,[176,206,220],2,0.9);
+      const hook=0.30+Math.sin(PT*0.7)*0.15;
+      pMast(-0.56,hook+0.14,0.40*U,-0.56,hook+0.14,0.20*U,[120,150,170],1,0.6);
+      pLamp(-0.56,0.37,0.42*U,[255,190,110],4,0.5);
+    });
+  if(lv>=4)
+    // The hull the player actually flies, parked on the apron.
+    pQueue(0.30,0.70,0.10*U,()=>{
+      const hull=typeof skinHull==='function'?skinHull():[150,190,220];
+      const glow=typeof skinGlow==='function'?skinGlow():[120,255,210];
+      pPrism({cx:0.30,cy:0.70,rx:0.10,ry:0.22,sides:4,rot:Math.PI/4,h0:0.03*U,h1:0.12*U,
+        taper:0.42,col:hull,mat:1.05,capMat:1.12});
+      pMast(0.17,0.66,0.07*U,0.43,0.66,0.07*U,hull,2.2,0.9);
+      pLamp(0.30,0.54,0.055*U,glow,6,0.7);
+    });
+  if(lv>=5)
+    // Fuel gantry and a beacon on the roof, once the bay is finished.
+    pQueue(0.46,0.24,0.28*U,()=>{
+      pMast(0.46,0.24,0.02*U,0.46,0.24,0.34*U,[140,170,190],1.6,0.85);
+      pMast(0.46,0.24,0.34*U,0.18,0.10,0.30*U,[140,170,190],1.2,0.6);
+      pLamp(0.46,0.24,0.36*U,col,5,0.55+Math.sin(PT*2.6)*0.2);
+    });
+  cargoStack(-0.62,-0.38,lv>=3?4:2,[100,150,150],3);
+  streetLamp(0.70,0.50,[120,255,210]);
+  if(lv>=5)streetLamp(-0.74,0.66,[120,255,210]);
+}
+
+// RESEARCH LAB -- domes, tubes and a vertical energy column with rings
+// climbing it. The silhouette is deliberately ROUND, because every
+// other building on the planet is angular.
+function bLab(lv,col){
+  const U=PLOT_R;
+  sitePad(col,0.92);
+  const domes=[[-0.30,0.12,0.40,0.34],[0.34,-0.30,0.26,0.23],[0.26,0.42,0.21,0.18]];
+  const shown=Math.min(domes.length,lv>=4?3:lv>=2?2:1);
+  // Connector tubes first: they belong under the domes they join.
+  if(PL.detail>=2)
+    for(let i=1;i<shown;i++)
+      pQueue((domes[0][0]+domes[i][0])/2,(domes[0][1]+domes[i][1])/2,0.05*U,()=>{
+        pMast(domes[0][0],domes[0][1],0.055*U,domes[i][0],domes[i][1],0.055*U,[140,160,200],5,0.8);
+        pMast(domes[0][0],domes[0][1],0.055*U,domes[i][0],domes[i][1],0.055*U,[210,180,255],1.4,
+          0.32+PL.night*0.3);
+      });
+  for(let i=0;i<shown;i++){
+    const d=domes[i];
+    pQueue(d[0],d[1],d[3]*U*0.5,()=>{
+      pPrism({cx:d[0],cy:d[1],rx:d[2]*1.04,sides:PL.detail>=3?10:7,h0:0.022*U,h1:0.05*U,
+        col:[100,92,144],mat:0.9});
+      pDome(d[0],d[1],0.05*U,d[2],d[3]*U,[128,116,176],PL.detail>=3?10:7);
+      if(PL.detail>=2){
+        pRingStroke(d[0],d[1],0.05*U+d[3]*U*0.42,PL.n,d[2]*0.86,col,
+          (0.30+PL.night*0.34).toFixed(3),1.2,PL.detail>=3?14:9);
+        pLamp(d[0],d[1],0.05*U+d[3]*U*1.02,col,5+i,0.5);
+      }
+    });
+  }
+  // The energy column: eight-sided, with rings of light climbing it.
+  const colH=(0.46+lv*0.09)*U;
+  pQueue(0.44,0.10,colH*0.5,()=>{
+    pPrism({cx:0.44,cy:0.10,rx:0.095,sides:8,h0:0.022*U,h1:colH,taper:0.84,
+      col:[128,112,180],mat:0.95,capMat:1.1});
+    if(PL.detail>=2){
+      ctx.globalCompositeOperation='lighter';
+      for(let k=0;k<3;k++){
+        const f=((PT*0.35+k/3)%1);
+        pRingStroke(0.44,0.10,0.03*U+f*colH*0.95,PL.n,0.105+f*0.03,col,
+          ((1-f)*0.5).toFixed(3),1.6,PL.detail>=3?14:9);
+      }
+      ctx.globalCompositeOperation='source-over';
+    }
+    pLamp(0.44,0.10,colH+0.02*U,col,8+lv*2,0.6+Math.sin(PT*2.4)*0.14);
+  });
+  if(lv>=3){
+    // A scanning dish, aimed off-vertical and slowly sweeping.
+    pQueue(-0.62,-0.34,0.22*U,()=>{
+      pMast(-0.62,-0.34,0.02*U,-0.62,-0.34,0.24*U,[140,150,190],1.6,0.85);
+      const az=PT*0.22;
+      const ax=localAxis(Math.cos(az)*0.62,Math.sin(az)*0.62,0.78);
+      pDisc(-0.62,-0.34,0.24*U,ax,0.18,[196,180,236],0.95,PL.detail>=3?14:9);
+      pRingStroke(-0.62,-0.34,0.24*U,ax,0.185,col,'0.5',1.2,PL.detail>=3?14:9);
+    });
+  }
+  if(lv>=5&&PL.detail>=2){
+    // An arc between the column and the main dome once the lab is done.
+    pQueue(0.06,0.12,colH*0.7,()=>{
+      const a=PP(0.44,0.10,colH*0.96),b=PP(domes[0][0],domes[0][1],0.05*U+domes[0][3]*U);
+      ctx.globalCompositeOperation='lighter';
+      ctx.strokeStyle='rgba('+col[0]+','+col[1]+','+col[2]+','+(0.30+Math.abs(Math.sin(PT*4))*0.35).toFixed(3)+')';
+      ctx.lineWidth=1.5;
+      ctx.beginPath();ctx.moveTo(a.x,a.y);
+      ctx.quadraticCurveTo((a.x+b.x)/2,Math.min(a.y,b.y)-18,b.x,b.y);ctx.stroke();
+      ctx.globalCompositeOperation='source-over';
+    });
+  }
+  streetLamp(-0.28,-0.68,col);
+}
+
+// RESOURCE FOUNDRY -- industrial, and the only structure on the planet
+// that emits anything: silos, a processing block, and a stack with heat
+// coming off it.
+function bFoundry(lv,col){
+  const U=PLOT_R;
+  sitePad(col,0.95);
+  // Processing block.
+  pQueue(-0.16,0.20,0.14*U,()=>{
+    pPrism({cx:-0.16,cy:0.20,rx:0.42,ry:0.32,sides:4,rot:Math.PI/4,h0:0.022*U,h1:0.24*U,
+      col:[134,106,88],mat:0.92,win:[4,2],winCol:[255,196,130],seed:5,band:0.62,bandCol:col});
+    if(PL.detail>=2)
+      pPrism({cx:-0.16,cy:0.20,rx:0.30,ry:0.20,sides:4,rot:Math.PI/4,h0:0.24*U,h1:0.30*U,
+        col:[158,126,104],mat:1.0});
+  });
+  // Silos: two at level 1, one more per level after.
+  const silos=[[0.44,-0.18,0.155,0.40],[0.30,0.44,0.135,0.31],[0.62,0.24,0.12,0.26],[-0.52,-0.36,0.13,0.29]];
+  const nSilo=Math.min(silos.length,1+lv);
+  for(let i=0;i<nSilo;i++){
+    const s=silos[i];
+    pQueue(s[0],s[1],s[3]*U*0.5,()=>{
+      pPrism({cx:s[0],cy:s[1],rx:s[2],sides:PL.detail>=3?10:7,h0:0.022*U,h1:s[3]*U,
+        col:[182,162,142],mat:0.9,band:0.66,bandCol:col,capMat:1.06});
+      if(PL.detail>=2){
+        pPrism({cx:s[0],cy:s[1],rx:s[2]*0.55,sides:PL.detail>=3?10:7,h0:s[3]*U,h1:s[3]*U+0.035*U,
+          taper:0.7,col:[150,132,118],mat:1.0});
+        pLamp(s[0],s[1],s[3]*U+0.05*U,[255,150,90],4,0.42);
+      }
+    });
+  }
+  // The stack, with heat rising off it.
+  const stackH=(0.56+lv*0.07)*U;
+  pQueue(-0.52,0.06,stackH*0.5,()=>{
+    pPrism({cx:-0.52,cy:0.06,rx:0.085,sides:8,h0:0.022*U,h1:stackH,taper:0.76,
+      col:[144,124,112],mat:0.95,band:0.4,bandCol:[255,140,80]});
+    ctx.globalCompositeOperation='lighter';
+    const tip=PP(-0.52,0.06,stackH);
+    pBlob(tip.x,tip.y,7,[255,150,80],0.55);
+    if(PL.detail>=2)
+      for(let k=0;k<3;k++){
+        const f=((PT*0.4+k/3)%1);
+        const p=PP(-0.52,0.06,stackH+f*0.22*U);
+        pBlob(p.x,p.y,6+f*14,[255,140,90],(1-f)*0.16);
+      }
+    ctx.globalCompositeOperation='source-over';
+  });
+  // Conveyor from the block to the nearest silo.
+  if(PL.detail>=2)
+    pQueue(0.14,0.02,0.10*U,()=>{
+      pMast(0.02,0.14,0.12*U,0.40,-0.14,0.16*U,[120,110,104],4,0.85);
+      const f=(PT*0.5)%1;
+      pLamp(0.02+(0.40-0.02)*f,0.14+(-0.14-0.14)*f,0.17*U,[255,180,110],4,0.5);
+    });
+  if(lv>=3){
+    // A flare stack: the one genuinely flickering light on the planet.
+    pQueue(0.06,-0.52,0.30*U,()=>{
+      pMast(0.06,-0.52,0.02*U,0.06,-0.52,0.34*U,[130,112,100],2,0.9);
+      ctx.globalCompositeOperation='lighter';
+      const p=PP(0.06,-0.52,0.37*U);
+      const fl=0.5+Math.sin(PT*11)*0.12+Math.sin(PT*23)*0.07;
+      pBlob(p.x,p.y,9,[255,170,80],fl);
+      pBlob(p.x,p.y,4,[255,240,200],fl*0.8);
+      ctx.globalCompositeOperation='source-over';
+    });
+  }
+  cargoStack(-0.30,-0.62,lv>=2?4:2,[180,130,90],9);
+  streetLamp(0.66,0.58,[255,180,120]);
+}
+
+// OBSERVATORY -- a tall mast with a big dish on it, pointed at the sky
+// and slowly sweeping. The tallest thin thing on the planet.
+function bObservatory(lv,col){
+  const U=PLOT_R;
+  sitePad(col,0.88);
+  const towerH=(0.66+lv*0.16)*U;
+  if(lv>=2)
+    for(let k=0;k<3;k++){
+      const a=k*TAU/3+0.5,u=Math.cos(a)*0.30,v=Math.sin(a)*0.30;
+      pQueue(u,v,0.12*U,()=>pMast(u,v,0.02*U,0,0,towerH*0.44,[130,120,96],1.5,0.7));
+    }
+  pQueue(0,0,towerH*0.5,()=>{
+    pPrism({rx:0.155,sides:8,h0:0.022*U,h1:towerH,taper:0.62,col:[164,146,116],mat:0.95,
+      win:[1,Math.min(4,1+lv)],winCol:[255,228,160],seed:3,band:0.55,bandCol:col});
+    pPrism({rx:0.10,sides:8,h0:towerH,h1:towerH+0.05*U,taper:1.5,col:[192,172,138],mat:1.0});
+  });
+  // The main dish, on a yoke, aimed up and out and turning.
+  pQueue(0,0,towerH,()=>{
+    const az=PT*0.13;
+    const tilt=0.85;
+    const ax=localAxis(Math.cos(az)*Math.sin(tilt),Math.sin(az)*Math.sin(tilt),Math.cos(tilt));
+    const dh=towerH+0.07*U;
+    // Two rings and a rim: the outer face darker than the inner, which
+    // is enough to read as a parabola rather than as a flat coin.
+    pDisc(0,0,dh,ax,0.34,[150,134,104],1,PL.detail>=3?16:10);
+    pDisc(0,0,dh+0.012*U,ax,0.27,[222,202,158],1,PL.detail>=3?16:10);
+    pRingStroke(0,0,dh,ax,0.345,col,'0.7',1.8,PL.detail>=3?16:10);
+    // Feed horn along the dish axis, and a faint survey beam continuing
+    // past it into space.
+    const c0=P3(0,0,dh);
+    const feed=planetProject(planetRotate([c0[0]+ax[0]*0.09,c0[1]+ax[1]*0.09,c0[2]+ax[2]*0.09]));
+    const base=PP(0,0,dh);
+    ctx.strokeStyle='rgba(200,180,140,0.9)';ctx.lineWidth=1.4;
+    ctx.beginPath();ctx.moveTo(base.x,base.y);ctx.lineTo(feed.x,feed.y);ctx.stroke();
+    if(PL.detail>=2){
+      // Kept short. At 0.85 planet radii the beam left the globe
+      // entirely and drew a straight gold line across the backdrop.
+      const far=planetProject(planetRotate([c0[0]+ax[0]*0.17,c0[1]+ax[1]*0.17,c0[2]+ax[2]*0.17]));
+      ctx.globalCompositeOperation='lighter';
+      const gr=ctx.createLinearGradient(base.x,base.y,far.x,far.y);
+      gr.addColorStop(0,'rgba('+col[0]+','+col[1]+','+col[2]+','+(0.22+Math.sin(PT*1.3)*0.06).toFixed(3)+')');
+      gr.addColorStop(1,'rgba('+col[0]+','+col[1]+','+col[2]+',0)');
+      ctx.strokeStyle=gr;ctx.lineWidth=PL.detail>=3?5:3;
+      ctx.beginPath();ctx.moveTo(base.x,base.y);ctx.lineTo(far.x,far.y);ctx.stroke();
+      ctx.globalCompositeOperation='source-over';
+    }
+    pLamp(0,0,dh,col,7,0.45);
+  });
+  if(lv>=2)
+    pQueue(0.52,-0.34,0.16*U,()=>{
+      pPrism({cx:0.52,cy:-0.34,rx:0.24,sides:PL.detail>=3?10:7,h0:0.022*U,h1:0.05*U,col:[80,74,62],mat:0.9});
+      pDome(0.52,-0.34,0.05*U,0.22,0.17*U,[200,182,146],PL.detail>=3?10:7);
+      if(PL.detail>=2){
+        // The shutter slit, which is what makes a dome an observatory.
+        const a=PP(0.52-0.06,-0.34,0.05*U),b=PP(0.52+0.06,-0.34,0.05*U);
+        const c=PP(0.52+0.04,-0.34,0.05*U+0.17*U);
+        const d=PP(0.52-0.04,-0.34,0.05*U+0.17*U);
+        polyFill([a,b,c,d],'rgba(20,24,34,0.85)');
+        pLamp(0.52,-0.34,0.05*U+0.10*U,[255,232,170],4,0.4);
+      }
+    });
+  if(lv>=3)
+    // An interferometer line: three small dishes all aimed the same way.
+    for(let k=0;k<3;k++){
+      const u=-0.70+k*0.14,v=0.44+k*0.16;
+      pQueue(u,v,0.12*U,()=>{
+        pMast(u,v,0.02*U,u,v,0.11*U,[130,120,96],1.2,0.8);
+        const ax=localAxis(0.34,-0.24,0.9);
+        pDisc(u,v,0.12*U,ax,0.115,[200,182,140],1,9);
+      });
+    }
+  if(lv>=4)
+    pQueue(-0.16,-0.60,0.24*U,()=>{
+      pMast(-0.16,-0.60,0.02*U,-0.16,-0.60,0.22*U,[130,120,96],1.8,0.85);
+      const ax=localAxis(-0.5,-0.36,0.79);
+      pDisc(-0.16,-0.60,0.24*U,ax,0.26,[206,186,142],1,PL.detail>=3?14:9);
+      pRingStroke(-0.16,-0.60,0.24*U,ax,0.265,col,'0.55',1.3,PL.detail>=3?14:9);
+    });
+  streetLamp(0.70,0.46,col);
+}
+
+// SPACEPORT -- flat, wide and busy: pads with chasing rim lights, a
+// control tower, containers and something docked. This is the building
+// that says other people come here.
+function bSpaceport(lv,col){
+  const U=PLOT_R;
+  sitePad(col,0.97);
+  const pads=[[-0.36,-0.26,0.28],[0.34,0.30,0.26],[0.42,-0.36,0.21],[-0.40,0.40,0.20]];
+  const nPad=Math.min(pads.length,1+lv);
+  for(let i=0;i<nPad;i++){
+    const p=pads[i];
+    pQueue(p[0],p[1],0.03*U,()=>{
+      pDisc(p[0],p[1],0.026*U,PL.n,p[2]*1.12,[26,36,54],0.95,PL.detail>=3?14:9);
+      pDisc(p[0],p[1],0.030*U,PL.n,p[2],[82,104,144],1,PL.detail>=3?14:9);
+      if(PL.detail>=2){
+        pRingStroke(p[0],p[1],0.032*U,PL.n,p[2]*0.86,col,
+          (0.35+PL.night*0.35).toFixed(3),1.4,PL.detail>=3?16:10);
+        const n2=PL.detail>=3?8:5;
+        for(let k=0;k<n2;k++){
+          const a=k*TAU/n2;
+          const chase=Math.max(0,Math.sin(PT*2.6-k*0.7+i));
+          pLamp(p[0]+Math.cos(a)*p[2]*0.94,p[1]+Math.sin(a)*p[2]*0.94,0.04*U,col,4,0.25+chase*0.45);
+        }
+      }
+    });
+  }
+  // Control tower with a cab and a rotating beacon.
+  const tH=(0.44+lv*0.10)*U;
+  pQueue(0,0.02,tH*0.5,()=>{
+    pPrism({cx:0,cy:0.02,rx:0.105,sides:6,h0:0.022*U,h1:tH,taper:0.86,col:[120,146,190],mat:0.94,
+      win:[2,2],winCol:[190,226,255],seed:13});
+    pPrism({cx:0,cy:0.02,rx:0.175,sides:6,h0:tH,h1:tH+0.085*U,taper:0.82,col:[146,174,216],mat:1.02,
+      win:[4,1],winCol:[210,238,255],winA:0.85,seed:19,capMat:1.08});
+    pMast(0,0.02,tH+0.085*U,0,0.02,tH+0.19*U,[170,200,230],1.3,0.85);
+    // A beacon that actually sweeps, rather than a light that pulses.
+    const sweep=0.35+0.55*Math.max(0,Math.sin(PT*1.9));
+    pLamp(0,0.02,tH+0.20*U,[255,120,120],6,sweep);
+  });
+  if(lv>=2)
+    // A docked shuttle on the second pad.
+    pQueue(pads[1][0],pads[1][1],0.10*U,()=>{
+      pPrism({cx:pads[1][0],cy:pads[1][1],rx:0.09,ry:0.17,sides:4,rot:0.9,h0:0.04*U,h1:0.12*U,
+        taper:0.5,col:[170,188,212],mat:1.05,capMat:1.1});
+      pMast(pads[1][0]-0.12,pads[1][1]+0.05,0.07*U,pads[1][0]+0.12,pads[1][1]-0.05,0.07*U,[150,170,200],2,0.9);
+      pLamp(pads[1][0],pads[1][1]-0.16,0.06*U,[255,190,120],5,0.6);
+    });
+  if(lv>=3){
+    // A jetway reaching out to the main pad.
+    pQueue(-0.18,-0.14,0.14*U,()=>{
+      pMast(-0.06,-0.04,0.12*U,-0.34,-0.24,0.10*U,[120,140,172],5,0.85);
+      pMast(-0.06,-0.04,0.12*U,-0.34,-0.24,0.10*U,col,1.3,0.3+PL.night*0.3);
+    });
+  }
+  cargoStack(0.66,0.12,lv>=3?5:3,[110,140,190],21);
+  cargoStack(-0.66,0.66,lv>=2?3:2,[110,140,190],27);
+  streetLamp(0.70,-0.60,col);
+  streetLamp(-0.72,-0.58,col);
+}
+
+// GALAXY GATE -- the one structure whose whole job is to be
+// unmistakable. Two leaning pylons holding a standing ring with an
+// event horizon in it, on its own raised platform. Level 1 is its only
+// level, so everything it has, it has at once.
+function bGate(lv,col){
+  const U=PLOT_R;
+  pDisc(0,0,0.002,PL.n,1.0,[10,14,28],0.6,PL.detail>=2?14:9);
+  pPrism({rx:0.86,sides:6,rot:0.1,h0:0.002,h1:0.06*U,col:[78,60,100],mat:0.9,
+    band:0.7,bandCol:col,capMat:0.95});
+  if(PL.detail>=2)
+    pRingStroke(0,0,0.062*U,PL.n,0.80,col,(0.30+PL.night*0.35).toFixed(3),1.6,16);
+  const ringR=0.60, ringH=0.66*U;
+  // Pylons.
+  for(const s of [-1,1])
+    pQueue(s*0.58,0,0.34*U,()=>{
+      pPrism({cx:s*0.58,cy:0,rx:0.135,ry:0.17,sides:6,h0:0.06*U,h1:0.74*U,taper:0.42,
+        col:[152,92,142],mat:0.95,band:0.5,bandCol:col,capMat:1.05});
+      pLamp(s*0.58,0,0.78*U,col,8,0.6+Math.sin(PT*2+s)*0.15);
+    });
+  // The ring and its horizon. The ring's plane contains the surface
+  // normal, so it stands UP out of the ground and turns with the planet
+  // -- the single most important thing about the gate's silhouette.
+  pQueue(0,0,ringH,()=>{
+    /* The ring leans. A gate standing exactly upright is seen edge-on
+       from directly above -- and directly above is precisely where the
+       camera is whenever the player focuses on it -- so it collapsed
+       to a thin ellipse at the one moment it needed to be impressive.
+       Tilted back about thirty degrees it presents a face from
+       overhead and still reads as standing from the side. */
+    const ax=localAxis(0,0.87,-0.49);
+    const pts=ringPts(0,0,ringH,ax,ringR*SUR,PL.detail>=3?30:18);
+    // Event horizon: a screen-space gradient inside the ring polygon.
+    let cx=0,cy=0,rmax=0;
+    for(const p of pts){cx+=p.x;cy+=p.y;}
+    cx/=pts.length;cy/=pts.length;
+    for(const p of pts)rmax=Math.max(rmax,Math.hypot(p.x-cx,p.y-cy));
+    ctx.save();
+    ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);
+    for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);
+    ctx.closePath();ctx.clip();
+    const gr=ctx.createRadialGradient(cx,cy,0,cx,cy,Math.max(2,rmax));
+    const pul=0.5+Math.sin(PT*1.4)*0.08;
+    gr.addColorStop(0,'rgba(255,242,254,'+(0.82*pul+0.30).toFixed(3)+')');
+    gr.addColorStop(0.30,'rgba('+col[0]+','+col[1]+','+col[2]+',0.78)');
+    gr.addColorStop(0.70,'rgba(120,48,190,0.72)');
+    gr.addColorStop(1,'rgba(26,8,56,0.88)');
+    ctx.fillStyle=gr;ctx.fillRect(cx-rmax,cy-rmax,rmax*2,rmax*2);
+    // Swirl: a few arcs turning inside the horizon.
+    if(PL.detail>=2){
+      ctx.globalCompositeOperation='lighter';
+      for(let k=0;k<3;k++){
+        const a0=PT*0.8+k*TAU/3;
+        ctx.strokeStyle='rgba(255,220,255,'+(0.16-k*0.03).toFixed(3)+')';
+        ctx.lineWidth=Math.max(1,rmax*0.10);
+        ctx.beginPath();ctx.arc(cx,cy,rmax*(0.34+k*0.20),a0,a0+2.1);ctx.stroke();
+      }
+      ctx.globalCompositeOperation='source-over';
+    }
+    ctx.restore();
+    // The ring structure itself: a thick dark torus with a lit inner
+    // edge, drawn over the horizon.
+    polyFill(pts,null,'rgba(46,26,58,0.95)',Math.max(2.5,rmax*0.18));
+    polyFill(pts,null,'rgba('+col[0]+','+col[1]+','+col[2]+','+(0.75+Math.sin(PT*1.4)*0.15).toFixed(3)+')',
+      Math.max(1.2,rmax*0.07));
+    ctx.globalCompositeOperation='lighter';
+    pBlob(cx,cy,rmax*1.5,col,0.20+Math.sin(PT*1.4)*0.05);
+    if(PL.detail>=3)
+      for(let k=0;k<4;k++){
+        const a=PT*1.1+k*TAU/4;
+        pBlob(cx+Math.cos(a)*rmax*1.12,cy+Math.sin(a)*rmax*1.12,5,[255,230,255],0.5);
+      }
+    ctx.globalCompositeOperation='source-over';
+    // Tethers from the pylons to the ring.
+    for(const s of [-1,1]){
+      const a=PP(s*0.58,0,0.70*U);
+      const b={x:cx+s*rmax*0.86,y:cy+rmax*0.30};
+      ctx.strokeStyle='rgba('+col[0]+','+col[1]+','+col[2]+',0.5)';ctx.lineWidth=1.4;
+      ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+    }
+  });
+  // Ground wash under the gate.
+  pQueue(0,0,0.01,()=>{
+    ctx.globalCompositeOperation='lighter';
+    const g0=PP(0,0,0.04*U);
+    pBlob(g0.x,g0.y,Math.min(ppRs*PLOT_R*0.85,190),col,0.10+PL.night*0.10);
+    ctx.globalCompositeOperation='source-over';
+  });
+  streetLamp(0,-0.72,col);
+  streetLamp(0,0.72,col);
+}
+
+/* OUTSKIRTS. Seven structures on a hundred and twenty-two plots is a
+   research station, not a civilisation. The ground NEXT TO a building
+   gets a handful of small blocks, a mast and a couple of lights --
+   habitation, sheds, a relay -- seeded off the plot index so it is the
+   same every time the planet is drawn and the same on every device.
+
+   This is the cheapest civilisation on the screen: four prisms and two
+   lamps on a plot that already had to be drawn, only on ground that is
+   already developed, and only while that ground is more than ten
+   pixels across. It is what turns a row of monuments into a colony
+   with somewhere for its people to live. */
+function drawOutskirts(plot,d,seed){
+  if(plot.sea)return;                     // nobody lives on the open water
+  // Not every plot beside a building gets built out. Gating on a hash
+  // of the index leaves gaps in the sprawl -- which is both what a real
+  // colony looks like and a third fewer structures to draw.
+  if(pHash3(seed,77,13)>0.68)return;
+  const U=PLOT_R;
+  const n=d.px>40?4:d.px>20?3:2;
+  // Deliberately close in value to the ground it stands on. The first
+  // version used a bright steel and the outskirts read as white crates
+  // dropped on the planet rather than as buildings standing on it.
+  const g=plot.col;
+  const col=[g[0]*0.55+58,g[1]*0.55+62,g[2]*0.55+76];
+  // A cluster, not a sprinkle: everything sits around one point on the
+  // plot, which is what makes it read as a settlement.
+  const ca=pHash3(seed,3,30)*TAU, cr=0.20+pHash3(seed,4,30)*0.22;
+  const cu=Math.cos(ca)*cr, cv=Math.sin(ca)*cr;
+  for(let i=0;i<n;i++){
+    const a=pHash3(seed,i,31)*TAU;
+    const rr=0.06+pHash3(seed,i,32)*0.20;
+    const u=cu+Math.cos(a)*rr, v=cv+Math.sin(a)*rr;
+    const hh=(0.045+pHash3(seed,i,33)*0.075)*U;
+    pQueue(u,v,hh,()=>{
+      pPrism({cx:u,cy:v,rx:0.055+pHash3(seed,i,34)*0.035,
+        ry:0.046+pHash3(seed,i,35)*0.032,sides:4,rot:ca+a*0.25,
+        h0:0.002,h1:hh,col:col,mat:0.95,capMat:1.04,
+        win:d.px>70?[2,1]:null,winCol:[176,232,255],winA:0.45,seed:seed*7+i});
+    });
+  }
+  if(PL.detail>=2){
+    // A relay mast, so the outskirts have a skyline of their own.
+    pQueue(cu,cv,0.13*U,()=>{
+      pMast(cu-0.14,cv+0.10,0.004,cu-0.14,cv+0.10,0.17*U,[148,166,194],1.2,0.75);
+      pLamp(cu-0.14,cv+0.10,0.18*U,[255,150,150],3.5,0.4+0.28*Math.max(0,Math.sin(PT*2+seed)));
+    });
+  }
+}
+
+const PLANET_BUILDERS={
+  command:bCommand, hangar:bHangar, lab:bLab, foundry:bFoundry,
+  observatory:bObservatory, spaceport:bSpaceport, gate:bGate
+};
+
+/* Decorations are trophies, not infrastructure: found in the field and
+   brought home. Four archetypes, chosen by a hash of the id, so every
+   decoration reads as a recognisable ALIEN OBJECT rather than as a
+   small building -- and so adding one to voidbreakUniverse.js needs no
+   render work at all. */
+function drawDecoration(id,col){
+  const U=PLOT_R;
+  const kind=Math.floor(pHash3(id.length,id.charCodeAt(0)||1,id.charCodeAt(id.length-1)||2)*4);
+  pDisc(0,0,0.002,PL.n,0.52,[14,20,34],0.5,PL.detail>=2?10:7);
+  if(kind===0){
+    // Monolith: a leaning slab with a lit seam.
+    pQueue(0,0,0.18*U,()=>{
+      pPrism({rx:0.10,ry:0.20,sides:4,rot:0.4,h0:0,h1:0.38*U,taper:0.84,col:col,mat:0.52,capMat:0.8});
+      const a=PP(0,0,0.06*U),b=PP(0,0,0.34*U);
+      ctx.globalCompositeOperation='lighter';
+      ctx.strokeStyle='rgba('+col[0]+','+col[1]+','+col[2]+','+(0.55+Math.sin(PT*1.5)*0.2).toFixed(3)+')';
+      ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+      ctx.globalCompositeOperation='source-over';
+    });
+  }else if(kind===1){
+    // Crystal cluster.
+    pQueue(0,0,0.16*U,()=>{
+      const sp=[[0,0,0.34],[0.17,0.10,0.22],[-0.14,0.15,0.18],[0.05,-0.19,0.15]];
+      for(const s of sp)
+        pPrism({cx:s[0],cy:s[1],rx:0.075,sides:5,h0:0,h1:s[2]*U,taper:0.06,col:col,mat:0.7,cap:false});
+      pLamp(0,0,0.20*U,col,9,0.45+Math.sin(PT*1.8)*0.12);
+    });
+  }else if(kind===2){
+    // Coil: stacked rings around a core.
+    pQueue(0,0,0.14*U,()=>{
+      pPrism({rx:0.055,sides:8,h0:0,h1:0.30*U,col:[90,96,120],mat:0.8});
+      ctx.globalCompositeOperation='lighter';
+      for(let k=0;k<3;k++){
+        const hh=(0.07+k*0.09)*U+Math.sin(PT*1.2+k)*0.01*U;
+        pRingStroke(0,0,hh,PL.n,0.20-k*0.03,col,'0.5',1.8,PL.detail>=3?14:9);
+      }
+      ctx.globalCompositeOperation='source-over';
+    });
+  }else{
+    // Lantern: a post carrying a glowing orb.
+    pQueue(0,0,0.16*U,()=>{
+      pPrism({rx:0.06,sides:6,h0:0,h1:0.22*U,taper:0.6,col:[86,92,116],mat:0.85});
+      pDome(0,0,0.22*U,0.11,0.11*U,col,PL.detail>=3?10:7);
+      pLamp(0,0,0.28*U,col,11,0.55+Math.sin(PT*1.1)*0.15);
+    });
+  }
+}
+
+/* =================================================================
+   ROAD NETWORK
+
+   Structures that are not connected to anything read as models placed
+   on a sphere. Connected ones read as a colony. Every building is
+   joined to the Command Center by a route walked over the plot
+   adjacency graph -- so the roads follow the hex structure and the
+   terrain instead of being straight lines drawn over both.
+
+   Dijkstra rather than a straight line because the weights are the
+   point: crossing water is expensive, climbing a cliff is expensive,
+   and walking across flat owned ground is cheap. The result bends
+   around the coastline and the mountains on its own.
+
+   Recomputed only when the set of buildings changes, which is at most
+   once per construction.
+   ================================================================= */
+let roadCache={sig:'',paths:[]};
+function planetRoads(buildings){
+  const keys=Object.keys(buildings);
+  const sig=keys.slice().sort().join(',');
+  if(roadCache.sig===sig)return roadCache.paths;
+  roadCache.sig=sig;roadCache.paths=[];
+  let hub=-1;
+  for(const k of keys)if(buildings[k]&&buildings[k].id==='command')hub=Math.floor(Number(k));
+  if(hub<0||!PLANET_PLOTS[hub]){return roadCache.paths;}
+  const N=PLANET_PLOTS.length;
+  const distArr=new Float32Array(N).fill(Infinity);
+  const prev=new Int16Array(N).fill(-1);
+  distArr[hub]=0;
+  // N is 122; a linear scan for the minimum is faster than building a
+  // heap and runs once per construction, not per frame.
+  const done=new Uint8Array(N);
+  for(let step=0;step<N;step++){
+    let u=-1,bd=Infinity;
+    for(let i=0;i<N;i++)if(!done[i]&&distArr[i]<bd){bd=distArr[i];u=i;}
+    if(u<0)break;
+    done[u]=1;
+    const a=PLANET_PLOTS[u];
+    for(const v of a.nb){
+      const b=PLANET_PLOTS[v];
+      let w=1+Math.abs(a.rad-b.rad)/PLANET_ELEV*5;
+      if(b.sea)w+=7;                       // a causeway is expensive, not impossible
+      if(b.biome==='peak'||b.biome==='ice')w+=3;
+      if(distArr[u]+w<distArr[v]){distArr[v]=distArr[u]+w;prev[v]=u;}
+    }
+  }
+  for(const k of keys){
+    const to=Math.floor(Number(k));
+    if(to===hub||!PLANET_PLOTS[to])continue;
+    const path=[];
+    let cur=to,guard=0;
+    while(cur>=0&&guard++<N){path.push(cur);if(cur===hub)break;cur=prev[cur];}
+    if(path.length>1&&path[path.length-1]===hub)roadCache.paths.push(path.reverse());
+  }
+  return roadCache.paths;
+}
+
+function drawPlanetRoads(paths,owned){
+  if(!paths.length)return;
+  const lift=0.004;
+  // Scaled off a CELL rather than off the planet, and capped: at full
+  // zoom a fraction-of-the-planet width turned the roads into pipes
+  // arcing across the screen.
+  const cw=ppRs*PLOT_R;
+  const wide=clamp(cw*0.075,1.3,7), thin=clamp(cw*0.030,0.7,3);
+  for(const path of paths){
+    const pts=[];
+    let broken=false;
+    for(const idx of path){
+      const p=PLANET_PLOTS[idx];
+      const w=planetRotate([p.n[0]*(p.rad+lift),p.n[1]*(p.rad+lift),p.n[2]*(p.rad+lift)]);
+      if(w[2]<=1/PLANET_CAM_DIST){broken=true;continue;}
+      const s=planetProject(w);
+      pts.push({x:s.x,y:s.y,l:planetLight(w)});
+    }
+    if(pts.length<2)continue;
+    ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);
+    // A quadratic through the midpoints: the route still passes through
+    // every plot centre, but arrives as a curve rather than as a
+    // sequence of straight hops.
+    for(let i=1;i<pts.length-1;i++)
+      ctx.quadraticCurveTo(pts[i].x,pts[i].y,(pts[i].x+pts[i+1].x)/2,(pts[i].y+pts[i+1].y)/2);
+    ctx.lineTo(pts[pts.length-1].x,pts[pts.length-1].y);
+    ctx.lineCap='round';ctx.lineJoin='round';
+    ctx.strokeStyle='rgba(12,26,40,0.55)';ctx.lineWidth=wide*1.7;ctx.stroke();
+    ctx.strokeStyle='rgba(96,178,196,0.45)';ctx.lineWidth=wide;ctx.stroke();
+    ctx.globalCompositeOperation='lighter';
+    ctx.strokeStyle='rgba(0,240,255,0.32)';ctx.lineWidth=thin;ctx.stroke();
+    ctx.globalCompositeOperation='source-over';
+    ctx.lineCap='butt';ctx.lineJoin='miter';
+    // Traffic: two motes per route, which is the cheapest possible way
+    // to say that the colony is running rather than standing still.
+    if(ppRs>170&&pts.length>2){
+      ctx.globalCompositeOperation='lighter';
+      for(let m=0;m<2;m++){
+        const f=((PT*0.16+m*0.5+path[0]*0.17)%1)*(pts.length-1);
+        const i=Math.min(pts.length-2,Math.floor(f)),fr=f-i;
+        pBlob(pts[i].x+(pts[i+1].x-pts[i].x)*fr, pts[i].y+(pts[i+1].y-pts[i].y)*fr,
+          Math.max(2.5,ppRs*0.012),[150,250,255],0.5);
+      }
+      ctx.globalCompositeOperation='source-over';
+    }
+  }
+}
+
+/* =================================================================
+   THE PLANET
+   ================================================================= */
 function drawHomePlanet(){
+  PQ=planetQuality();
+  if(!PLANET_CLOUDS.length)buildPlanetClouds(Math.round(46*PQ));
   syncPlanetTrig();
   const t=performance.now()*0.001;
+  PT=t;
   const owned=plotsOwned();
   const u=uni();
   const buildings=(u.planet&&u.planet.buildings)||{};
   const decorations=(u.planet&&u.planet.decorations)||{};
   const Rs=planetSilhouette();
   const cyp=planetCenterY();
+  const cxp=W/2;
+  const D=PLANET_CAM_DIST;
 
-  // Atmosphere and the body behind the plots, so the gaps between cells
-  // and the ragged edge where cells meet the horizon read as planet
-  // rather than as holes.
-  // Drawn as a gradient rather than through makeGlow: at this size the
-  // cached bitmap would be ~800px square and would be re-minted on every
-  // zoom step. A gradient fill costs nothing to keep.
+  // Outer atmosphere: one blit of a baked sprite (see planetSky).
+  const sky=planetSky(Rs);
+  const skyScale=Rs/sky.r;                 // the sprite is cut to a quantised radius
   ctx.globalCompositeOperation='lighter';
-  // Capped at the screen diagonal: past that the gradient is a
-  // full-screen wash whose extra radius is pure fill cost.
-  const atmoR=Math.min(Rs*1.5,Math.hypot(W,H)*0.6);
-  const atmo=ctx.createRadialGradient(W/2,cyp,Math.min(Rs*0.9,atmoR*0.6),W/2,cyp,atmoR);
-  atmo.addColorStop(0,'rgba(70,140,235,0.22)');
-  atmo.addColorStop(1,'rgba(70,140,235,0)');
-  ctx.fillStyle=atmo;
-  ctx.beginPath();ctx.arc(W/2,cyp,atmoR,0,TAU);ctx.fill();
+  ctx.drawImage(sky.under,cxp-sky.ur*skyScale,cyp-sky.ur*skyScale,
+    sky.ur*2*skyScale,sky.ur*2*skyScale);
   ctx.globalCompositeOperation='source-over';
-  const bg=ctx.createRadialGradient(W/2-Rs*0.32,cyp-Rs*0.38,Rs*0.08,W/2,cyp,Rs);
-  bg.addColorStop(0,'#3d5590');bg.addColorStop(0.62,'#1d2a54');bg.addColorStop(1,'#0b1128');
-  ctx.beginPath();ctx.arc(W/2,cyp,Rs,0,TAU);ctx.fillStyle=bg;ctx.fill();
 
-  // Project once, cull, depth sort. Far cells first so nearer buildings
-  // paint over the ones behind them.
+  /* ---- the body behind the cells ----
+     The cells do not cover the sphere perfectly -- there are hairline
+     gaps between them and a soft edge where they meet the horizon. This
+     is the ocean they sit in, lit from the same direction, so a gap
+     reads as water and never as a hole. */
+  const bg=ctx.createRadialGradient(cxp+PLIGHT[0]*Rs*0.55,cyp-PLIGHT[1]*Rs*0.55,Rs*0.05,cxp,cyp,Rs);
+  bg.addColorStop(0,'#2a5182');bg.addColorStop(0.42,'#17315e');
+  bg.addColorStop(0.80,'#0c1838');bg.addColorStop(1,'#050a1d');
+  ctx.beginPath();ctx.arc(cxp,cyp,Rs,0,TAU);ctx.fillStyle=bg;ctx.fill();
+
+  /* ---- project, cull, depth sort ----
+     One pass builds the draw list; terrain, roads, clouds and
+     structures then read it rather than re-projecting. */
   const draw=[];
+  const cellPx=ppRs*PLOT_R;         // a cell's screen radius at the sub-solar point
   for(const plot of PLANET_PLOTS){
-    const nrot=planetRotate(plot.n);
-    if(nrot[2]<=1/PLANET_CAM_DIST)continue;
+    const nrot=planetRotate([plot.n[0]*plot.rad,plot.n[1]*plot.rad,plot.n[2]*plot.rad]);
+    if(nrot[2]<=1/D-0.02)continue;  // a shade past the horizon, so cells fade out rather than pop
     const c=planetProject(nrot);
-    draw.push({plot:plot,nrot:nrot,cx:c.x,cy:c.y,z:nrot[2],light:planetLight(nrot)});
+    if(c.x<-cellPx*3||c.x>W+cellPx*3||c.y<-cellPx*3||c.y>H+cellPx*3)continue;
+    draw.push({plot:plot,nrot:nrot,cx:c.x,cy:c.y,z:nrot[2],light:planetLight(nrot),
+      // Screen size of THIS cell under perspective -- the input to
+      // every level-of-detail decision below.
+      px:cellPx*D/(D-nrot[2])});
   }
   draw.sort((a,b)=>a.z-b.z);
 
+  // Which plots are "developed": a building, or ground next to one.
+  // Computed per frame because it is at most seven buildings times six
+  // neighbours, and caching it would mean invalidating it.
+  const devSet={};
+  for(const k in buildings){
+    const i=Math.floor(Number(k));
+    if(!PLANET_PLOTS[i])continue;
+    devSet[i]=2;
+    for(const j of PLANET_PLOTS[i].nb)if(devSet[j]===undefined)devSet[j]=1;
+  }
+
+  /* ---- terrain ---- */
   const hexPts=new Array(6);
+  const frontierSegs=[],coastSegs=[];
   for(const d of draw){
     const plot=d.plot;
     const idx=plot.i;
     const isOwned=idx<owned;
-    const b=buildings[String(idx)];
-    const dec=decorations[String(idx)];
-    const sel=planetSelPlot===idx;
-
-    // A cell whose corners straddle the horizon projects to a wildly
-    // distorted polygon (the far corners magnify toward infinity as z
-    // approaches D), which is what produced spikes off the limb. Drop
-    // the whole cell instead: the sphere body drawn underneath shows
-    // through, and the result reads as the surface curving away.
-    let clipped=false;
-    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+    const dev=devSet[idx]||0;
+    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity,anyVis=false;
     for(let k=0;k<6;k++){
-      hexPts[k]=planetProject(planetRotate(plot.c[k]));
-      if(!hexPts[k].vis){clipped=true;break;}
-      if(hexPts[k].x<minX)minX=hexPts[k].x;
-      if(hexPts[k].x>maxX)maxX=hexPts[k].x;
-      if(hexPts[k].y<minY)minY=hexPts[k].y;
-      if(hexPts[k].y>maxY)maxY=hexPts[k].y;
+      const p=planetProjectClamped(planetRotate(plot.c[k]),Rs);
+      hexPts[k]=p;
+      if(p.vis)anyVis=true;
+      if(p.x<minX)minX=p.x;
+      if(p.x>maxX)maxX=p.x;
+      if(p.y<minY)minY=p.y;
+      if(p.y>maxY)maxY=p.y;
     }
-    if(clipped)continue;
-    // Zoomed in, most of the sphere is off-screen. Rejecting those cells
-    // before the fill/stroke is what keeps zooming in from costing more
-    // than looking at the whole planet.
+    if(!anyVis)continue;
     if(maxX<0||minX>W||maxY<0||minY>H)continue;
-    ctx.beginPath();
-    ctx.moveTo(hexPts[0].x,hexPts[0].y);
-    for(let k=1;k<6;k++)ctx.lineTo(hexPts[k].x,hexPts[k].y);
-    ctx.closePath();
+    d.on=true;
 
-    // Ambient floor of 0.42 rather than near-zero: an unlit hemisphere
-    // is physically honest and completely unreadable, and the player
-    // has to be able to see every plot they own in order to build on it.
-    const lit=0.46+d.light*0.60;
+    /* Limb treatment. Ground near the horizon is seen through a long
+       slant of atmosphere, so it loses contrast and turns blue -- the
+       same aerial perspective that makes a distant mountain range look
+       hazy. Without it the cells simply stop at the edge and the planet
+       looks like a cut-out disc. */
+    const rimF=clamp((d.z-1/D)/0.42,0,1);       // 0 at the limb, 1 well inside
+    // A low ambient floor is what lets the night side actually BE
+    // night -- which is the only thing the settlement lights below
+    // have to read against.
+    const lit=0.13+d.light*0.95;
+    const base=plot.col;
+    let r=base[0]*lit,g=base[1]*lit,b=base[2]*lit;
+    // Per-cell jitter, scaled down on water so the ocean stays smooth.
+    const jit=(plot.tint-0.5)*(plot.sea?5:11);
+    r+=jit;g+=jit;b+=jit*1.2;
+    // Relief shading: ridges lift, hollows sink. Costs one multiply.
+    if(!plot.sea){const rl=1+plot.relief*0.12;r*=rl;g*=rl;b*=rl;}
     if(isOwned){
-      // Claimed ground: terraformed teal, brighter under a structure so
-      // developed territory reads at a glance.
-      const base=b?[70,146,166]:[50,116,142];
-      const tintOffset=plot.tint*16;
-      ctx.fillStyle='rgb('+Math.round(Math.min(255,(base[0]+tintOffset)*lit))+','+
-        Math.round(Math.min(255,(base[1]+tintOffset)*lit))+','+
-        Math.round(Math.min(255,(base[2]+tintOffset)*lit))+')';
+      // Terraformed ground: a cyan bias that is stronger where the
+      // colony is actually built up, so "mine" and "developed" are two
+      // separate, readable states rather than one.
+      const k=0.05+dev*0.075;
+      r+=(46-r)*k*0.5;g+=(150-g)*k;b+=(168-b)*k;
+    }
+    // Specular sheen on water: one highlight, on the sun side only.
+    if(plot.sea&&d.light>0.62){
+      // Eased, and much weaker than it was: a hard threshold turned the
+      // cell nearest the sub-solar point into one flat cyan hexagon.
+      const sp=Math.pow((d.light-0.62)/0.38,2);
+      r+=34*sp;g+=52*sp;b+=68*sp;
+    }
+    // Snow line: high ground catches light differently from the rock
+    // under it, which is what makes a mountain range read as one.
+    if(plot.land>0.70){const s=(plot.land-0.70)*2.0;r+=44*s;g+=50*s;b+=60*s;}
+    /* Contrast. Everything above is physically reasonable and lands in
+       a narrow band of mid-tones, which is why the surface read as
+       evenly damp. One expansion about a dark pivot pushes the ocean
+       down and the lit land up, and is the difference between "a
+       coloured sphere" and "a planet with continents on it". */
+    r=(r-26)*1.22+22;g=(g-26)*1.22+22;b=(b-26)*1.18+24;
+    // Water takes a second, stronger pull toward the deep, so the
+    // oceans sit clearly below the land rather than beside it.
+    if(plot.sea){const dk=0.70-plot.depth*0.20;r*=dk;g*=dk;b*=dk*1.12;}
+    // Aerial perspective toward the limb.
+    // Weaker than it was: at 0.62 the limb bleached out, and the pale
+    // biomes near it turned into flat white hexagons.
+    const haze=(1-rimF)*0.40;
+    r+=(58-r)*haze;g+=(96-g)*haze;b+=(150-b)*haze;
+
+    /* One flat fill when the cell is small, six shaded facets when it
+       is not. Ground that is a single flat colour looks like a tile
+       however good the palette is; breaking the cell into triangles
+       around its centre and varying each by a stable hash gives it
+       relief, and reads as rock, dunes or swell depending on the
+       biome underneath.
+
+       This is level of detail working in the right direction: zoomed
+       out there are sixty cells on screen and each costs one fill;
+       zoomed in there are eight and each costs six. The expensive
+       version only ever exists when there is almost nothing to draw --
+       which is why the threshold is well above the size a cell has at
+       the default zoom, and not, as it first was, below it. */
+    if(d.px>FACET_PX){
+      for(let k=0;k<6;k++){
+        const k2=(k+1)%6;
+        // Gentle. At full zoom a cell fills a third of the screen and
+        // each facet is a large area, so a strong variation reads as
+        // six coloured wedges instead of as relief.
+        const f=1+(pHash3(idx,k,7)-0.5)*(plot.sea?0.04:0.085);
+        ctx.beginPath();
+        ctx.moveTo(d.cx,d.cy);
+        ctx.lineTo(hexPts[k].x,hexPts[k].y);
+        ctx.lineTo(hexPts[k2].x,hexPts[k2].y);
+        ctx.closePath();
+        ctx.fillStyle='rgb('+Math.round(clamp(r*f,0,255))+','+
+          Math.round(clamp(g*f,0,255))+','+Math.round(clamp(b*f,0,255))+')';
+        ctx.fill();
+      }
     }else{
-      // Unclaimed ground: bare violet-grey rock, obviously not yours.
-      const g=(58+plot.tint*20)*lit;
-      ctx.fillStyle='rgb('+Math.round(g)+','+Math.round(g*0.94)+','+Math.round(g*1.22)+')';
-    }
-    ctx.fill();
-    ctx.lineWidth=1;
-    ctx.strokeStyle=isOwned?'rgba(120,255,240,'+(0.18+d.light*0.30).toFixed(3)+')'
-                           :'rgba(150,160,195,'+(0.08+d.light*0.14).toFixed(3)+')';
-    ctx.stroke();
-
-    if(sel){
-      ctx.strokeStyle='rgba(255,201,92,'+(0.65+Math.sin(t*6)*0.25).toFixed(3)+')';
-      ctx.lineWidth=2.2;ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(hexPts[0].x,hexPts[0].y);
+      for(let k=1;k<6;k++)ctx.lineTo(hexPts[k].x,hexPts[k].y);
+      ctx.closePath();
+      ctx.fillStyle='rgb('+Math.round(clamp(r,0,255))+','+Math.round(clamp(g,0,255))+','+Math.round(clamp(b,0,255))+')';
+      ctx.fill();
     }
 
-    if(b)drawPlanetStructure(plot,b,d.light,false);
-    else if(dec)drawPlanetStructure(plot,dec,d.light,true);
-    else if(isOwned&&planetBuildSel&&!sel){
-      // A faint marker on every buildable plot while a structure is
-      // armed, so "where can this go" is answered on the planet rather
-      // than in a paragraph.
-      ctx.beginPath();ctx.arc(d.cx,d.cy,2.2,0,TAU);
-      ctx.fillStyle='rgba(0,240,255,'+(0.22+d.light*0.3).toFixed(3)+')';ctx.fill();
+    /* Ground scatter. Rocks on bare ground, tufts on anything that
+       grows: eight specks placed in the cell's own tangent frame, so
+       they lie on the surface and turn with it.
+
+       Gated hard on projected size -- at 96px a cell is a fifth of the
+       screen and there are only a handful of them, so eight extra
+       points each is nothing; at the default zoom there are sixty
+       cells and this does not run at all. It is what stops a close-up
+       of the colony from sitting on flat coloured plates. */
+    if(!plot.sea&&d.px>96&&rimF>0.35){
+      const lush=plot.biome==='meadow'||plot.biome==='plain';
+      const sr=Math.round(clamp(base[0]*lit*0.55,0,255)),
+            sg=Math.round(clamp(base[1]*lit*(lush?0.85:0.55),0,255)),
+            sb=Math.round(clamp(base[2]*lit*0.62,0,255));
+      ctx.fillStyle='rgba('+sr+','+sg+','+sb+',0.75)';
+      const n2=d.px>200?11:7;
+      for(let k=0;k<n2;k++){
+        const a=pHash3(idx,k,41)*TAU;
+        const rr=Math.sqrt(pHash3(idx,k,42))*0.74*PLOT_R;
+        const u=Math.cos(a)*rr, v=Math.sin(a)*rr;
+        const wp=planetRotate([plot.n[0]*plot.rad+plot.t[0]*u+plot.b[0]*v,
+                               plot.n[1]*plot.rad+plot.t[1]*u+plot.b[1]*v,
+                               plot.n[2]*plot.rad+plot.t[2]*u+plot.b[2]*v]);
+        if(wp[2]<=1/D)continue;
+        const sp=planetProject(wp);
+        const sz=Math.min(5,(0.7+pHash3(idx,k,43)*1.5)*(d.px/120));
+        if(lush){
+          ctx.fillRect(sp.x-sz*0.3,sp.y-sz*1.5,sz*0.6,sz*1.5);
+          ctx.fillRect(sp.x-sz*0.9,sp.y-sz*0.9,sz*0.5,sz*0.9);
+        }else{
+          ctx.beginPath();ctx.moveTo(sp.x,sp.y-sz);
+          ctx.lineTo(sp.x+sz,sp.y+sz*0.6);ctx.lineTo(sp.x-sz,sp.y+sz*0.6);
+          ctx.closePath();ctx.fill();
+        }
+      }
+    }
+
+    /* Cliffs. A cell standing above its lowest neighbour gets extruded
+       side faces down to that neighbour's height, lit individually --
+       which is what turns the elevation map into visible cliffs,
+       valley walls and coastal steps rather than a flat mosaic of
+       differently coloured tiles. Only cells with a real step, only
+       when they are big enough on screen to see. */
+    if(plot.skirt>PLANET_ELEV*0.20&&d.px>5&&rimF>0.10){
+      for(let k=0;k<6;k++){
+        const drop=plot.edrop[k];
+        if(drop<PLANET_ELEV*0.20)continue;   // no step across this edge, no wall
+        const k2=(k+1)%6;
+        const c1=plot.c[k],c2=plot.c[k2];
+        const s=(plot.rad-drop)/plot.rad;
+        const b1=planetProjectClamped(planetRotate([c1[0]*s,c1[1]*s,c1[2]*s]),Rs);
+        const b2=planetProjectClamped(planetRotate([c2[0]*s,c2[1]*s,c2[2]*s]),Rs);
+        if(!frontFacing(hexPts[k],hexPts[k2],b1))continue;
+        // Face normal: the outward direction of this edge.
+        let fx=(c1[0]+c2[0])*0.5-plot.n[0]*plot.rad;
+        let fy=(c1[1]+c2[1])*0.5-plot.n[1]*plot.rad;
+        let fz=(c1[2]+c2[2])*0.5-plot.n[2]*plot.rad;
+        const fl=Math.hypot(fx,fy,fz)||1;
+        /* A cliff in shadow still bounces light off the ground and the
+           sky above it, so it is never black -- but it is never as
+           bright as the ground either. Too dark and the surface reads
+           as cracked; too light and every cell wears a pale outline
+           and the terrain reads as a stack of cards. */
+        const fL=0.24+0.76*dirLight(fx/fl,fy/fl,fz/fl);
+        // 0.86 rather than a heavy darkening: a cliff is the SAME ground
+        // seen edge-on, and burying it in shadow is what turned the
+        // surface into a mosaic of separate floating plates.
+        const cr=base[0]*fL*0.70+jit, cg=base[1]*fL*0.70+jit, cb=base[2]*fL*0.78+jit;
+        ctx.beginPath();
+        ctx.moveTo(hexPts[k].x,hexPts[k].y);ctx.lineTo(hexPts[k2].x,hexPts[k2].y);
+        ctx.lineTo(b2.x,b2.y);ctx.lineTo(b1.x,b1.y);ctx.closePath();
+        ctx.fillStyle='rgb('+Math.round(clamp(cr+(30-cr)*haze,0,255))+','+
+          Math.round(clamp(cg+(54-cg)*haze,0,255))+','+
+          Math.round(clamp(cb+(92-cb)*haze,0,255))+')';
+        ctx.fill();
+      }
+    }
+
+    /* ---- territory, drawn as a frontier rather than as a grid ----
+       Ringing every owned cell is what made the old planet a
+       checkerboard. Only the edges where owned ground meets unowned
+       ground get a bright line; interior seams get a whisper, and
+       wilderness gets nothing at all, so unclaimed terrain reads as
+       continuous landscape. */
+    /* Surf. Where land meets water the shore gets a pale line, in one
+       pass with the borders below so it is continuous across cells.
+       It is two pixels of paint and it is the single strongest cue
+       that the blue areas are an OCEAN and the green ones a coast. */
+    /* Border segments are pulled back to the cell's NOMINAL edge.
+       Cells are drawn PLOT_FILL wider than their true size so the
+       surface has no seams, which means a line along a drawn hexagon's
+       edge lands well inside the neighbour -- shorelines and frontiers
+       came out as stray straight lines cutting across other cells
+       instead of running along the boundary. Scaling the projected
+       corner back toward the cell centre puts the line where the
+       boundary actually is; in screen space that is exact enough at
+       any size a cell is ever drawn, and it is free. */
+    const bpx=new Array(6),bpy=new Array(6);
+    let bmade=false;
+    const border=k=>{
+      if(!bmade){
+        for(let j=0;j<6;j++){
+          bpx[j]=d.cx+(hexPts[j].x-d.cx)/PLOT_FILL;
+          bpy[j]=d.cy+(hexPts[j].y-d.cy)/PLOT_FILL;
+        }
+        bmade=true;
+      }
+      return k;
+    };
+    if(!plot.sea&&d.px>5&&rimF>0.14)
+      for(let k=0;k<6;k++){
+        const nbi=plot.enb[k];
+        if(nbi>=0&&PLANET_PLOTS[nbi].sea){
+          const k2=(k+1)%6;border(k);
+          coastSegs.push(bpx[k],bpy[k],bpx[k2],bpy[k2]);
+        }
+      }
+
+    if(isOwned&&rimF>0.05){
+      /* Territory, drawn as a FRONTIER rather than as a grid. Ringing
+         every owned cell is what made the old planet a checkerboard;
+         only the edges where owned ground meets unowned ground carry a
+         line, and interior seams get a whisper.
+
+         Collected here and stroked in one pass after all the terrain,
+         because cells overlap: a border drawn during its own cell gets
+         painted over by the nearer cell next door, which broke the
+         outline exactly where it mattered. */
+      if(d.px>3)
+        for(let k=0;k<6;k++){
+          const nbi=plot.enb[k];
+          const k2=(k+1)%6;
+          if(nbi<0||nbi>=owned){
+            border(k);
+            frontierSegs.push(bpx[k],bpy[k],bpx[k2],bpy[k2]);
+          }
+        }
+        /* And NOTHING on the interior seams. A faint line on every
+           owned edge is, however faint, a hex grid painted over the
+           whole colony -- which is the checkerboard this pass exists
+           to get rid of. Inside the border the ground is just ground;
+           what says it is yours is the frontier around it, the roads
+           across it and the lights on it. */
+      /* Settlement lights on developed ground next to a building. A few
+         emissive specks that brighten as the plot turns into night --
+         the classic "city lights on the dark side" read, and the single
+         cheapest way to make the colony visible when it is not lit. */
+      if(dev&&d.px>7){
+        const night=1-d.light;
+        const a=(0.10+night*0.78)*rimF;
+        if(a>0.03){
+          ctx.globalCompositeOperation='lighter';
+          ctx.fillStyle='rgba(168,244,255,'+a.toFixed(3)+')';
+          const nDot=d.px>16?6:3;
+          for(let k=0;k<nDot;k++){
+            const ax=(pHash3(idx,k,1)-0.5)*1.25, ay=(pHash3(idx,k,2)-0.5)*1.25;
+            const p=hexPts[0];
+            const sx=d.cx+(hexPts[k%6].x-d.cx)*0.55*(0.4+ax), sy=d.cy+(hexPts[k%6].y-d.cy)*0.55*(0.4+ay);
+            ctx.fillRect(sx,sy,1.5,1.5);
+            if(p===undefined)break;
+          }
+          ctx.globalCompositeOperation='source-over';
+        }
+      }
+    }
+
+    // While a structure is armed, every legal plot gets a marker, so
+    // "where can this go" is answered on the planet rather than in a
+    // paragraph.
+    if(isOwned&&planetBuildSel&&!buildings[String(idx)]&&!decorations[String(idx)]&&d.px>4){
+      const pl=0.30+Math.sin(t*3+idx*0.7)*0.16;
+      ctx.beginPath();ctx.arc(d.cx,d.cy,Math.max(1.6,d.px*0.10),0,TAU);
+      ctx.fillStyle='rgba(0,240,255,'+(pl*rimF).toFixed(3)+')';ctx.fill();
     }
   }
 
-  // Terminator shading over the whole globe, drawn last so it unifies
-  // the cells into one body. Kept gentle -- it is here to give the
-  // sphere form, not to hide half of it.
-  ctx.save();
-  ctx.beginPath();ctx.arc(W/2,cyp,Rs,0,TAU);ctx.clip();
-  const sh=ctx.createRadialGradient(W/2-Rs*0.42,cyp-Rs*0.46,Rs*0.12,W/2,cyp,Rs*1.14);
-  sh.addColorStop(0,'rgba(255,248,225,0.16)');
-  sh.addColorStop(0.55,'rgba(0,0,0,0)');
-  sh.addColorStop(1,'rgba(4,7,20,0.42)');
-  ctx.fillStyle=sh;ctx.fillRect(W/2-Rs,cyp-Rs,Rs*2,Rs*2);
-  ctx.restore();
+  if(coastSegs.length){
+    ctx.lineCap='round';
+    ctx.beginPath();
+    for(let i=0;i<coastSegs.length;i+=4){
+      ctx.moveTo(coastSegs[i],coastSegs[i+1]);ctx.lineTo(coastSegs[i+2],coastSegs[i+3]);
+    }
+    ctx.strokeStyle='rgba(168,222,236,0.30)';
+    ctx.lineWidth=clamp(cellPx*0.040,1,4.5);ctx.stroke();
+    ctx.lineCap='butt';
+  }
 
-  // Rim light
-  ctx.beginPath();ctx.arc(W/2,cyp,Rs,0,TAU);
-  ctx.strokeStyle='rgba(140,215,255,0.5)';ctx.lineWidth=1.8;ctx.stroke();
+  // The territory outline, stroked over finished terrain so it reads
+  // as one continuous border: a dark casing, then the light.
+  if(frontierSegs.length){
+    ctx.lineCap='round';
+    ctx.beginPath();
+    for(let i=0;i<frontierSegs.length;i+=4){
+      ctx.moveTo(frontierSegs[i],frontierSegs[i+1]);ctx.lineTo(frontierSegs[i+2],frontierSegs[i+3]);
+    }
+    // Clamped: a border weight that scales with the planet turns into
+    // a twenty-pixel pipe at full zoom, which is where the player is
+    // looking at their buildings, not at their border.
+    ctx.strokeStyle='rgba(16,54,70,0.50)';
+    ctx.lineWidth=clamp(cellPx*0.075,2,7);ctx.stroke();
+    ctx.globalCompositeOperation='lighter';
+    ctx.strokeStyle='rgba(96,238,255,0.40)';
+    ctx.lineWidth=clamp(cellPx*0.032,1,3.2);ctx.stroke();
+    ctx.globalCompositeOperation='source-over';
+    ctx.lineCap='butt';
+  }
 
-  // A moon and the player's own ship in orbit, to sell the scale and to
-  // give the Ship Hangar something to point at.
-  const ma=t*0.13;
-  const mx=W/2+Math.cos(ma)*Rs*1.38,my=cyp+Math.sin(ma)*Rs*0.44;
-  ctx.globalCompositeOperation='lighter';drawGlow(mx,my,[170,190,220],11);
-  ctx.globalCompositeOperation='source-over';
-  ctx.beginPath();ctx.arc(mx,my,Math.max(4,Rs*0.045),0,TAU);
-  ctx.fillStyle='#b8c6de';ctx.fill();
-  if(UNI_OK&&UNI.hasBuilding(uni(),'hangar')){
-    const sa=-t*0.31;
-    const sx=W/2+Math.cos(sa)*Rs*1.16,sy=cyp+Math.sin(sa)*Rs*0.33;
-    ctx.save();ctx.translate(sx,sy);ctx.rotate(sa+Math.PI/2);
-    const hull=skinHull(),glow=skinGlow();
-    ctx.beginPath();ctx.moveTo(0,-8);ctx.lineTo(5.5,6);ctx.lineTo(0,3.5);ctx.lineTo(-5.5,6);ctx.closePath();
-    ctx.fillStyle=rgb(hull);ctx.fill();
-    ctx.strokeStyle=rgba(glow,0.85);ctx.lineWidth=1;ctx.stroke();
+  /* ---- roads, then the cloud deck ----
+     Roads sit on the ground. Clouds sit above the ground and BELOW the
+     structures, so the weather never hides the colony -- a cloud that
+     can cover the Command Center is a cloud that hides the thing this
+     screen exists for. */
+  drawPlanetRoads(planetRoads(buildings),owned);
+
+  if(PLANET_CLOUDS.length){
+    ctx.save();
+    ctx.beginPath();ctx.arc(cxp,cyp,Rs,0,TAU);ctx.clip();
+    ctx.globalCompositeOperation='lighter';
+    const cr=1.014;    // the deck's altitude, in planet radii
+    for(const c of PLANET_CLOUDS){
+      const lon=c.lon+t*c.drift;
+      const x=c.cosLat*Math.cos(lon)*cr, y=c.sinLat*cr, z=c.cosLat*Math.sin(lon)*cr;
+      const w=planetRotate([x,y,z]);
+      if(w[2]<=1/D+0.02)continue;
+      const p=planetProject(w);
+      const lgt=planetLight(w);
+      const rim=clamp((w[2]-1/D)/0.5,0,1);
+      const a=c.a*rim*(0.14+lgt*1.15);
+      if(a<0.012)continue;
+      const rad=c.r*ppRs*D/(D-w[2])*0.5;
+      if(p.x<-rad||p.x>W+rad||p.y<-rad||p.y>H+rad)continue;
+      pBlob(p.x,p.y,rad,[214,236,255],a);
+    }
+    ctx.globalCompositeOperation='source-over';
     ctx.restore();
-    ctx.globalCompositeOperation='lighter';drawGlow(sx,sy,glow,13);
+  }
+
+  /* ---- structures ---- */
+  for(const d of draw){
+    if(!d.on)continue;
+    const idx=d.plot.i;
+    const b=buildings[String(idx)];
+    const dec=decorations[String(idx)];
+    if(b)drawPlanetStructure(d,b,false);
+    else if(dec)drawPlanetStructure(d,dec,true);
+    else if(devSet[idx]===1&&d.px>12){
+      plotBegin(d.plot,d.light,d.px>58?3:2);
+      PL.col=[128,150,182];
+      drawOutskirts(d.plot,d,idx);
+      pFlush();
+    }
+  }
+
+  /* ---- selection and hover ---- */
+  if(planetSelPlot>=0)drawPlotFocus(planetSelPlot,buildings,decorations,Rs,t);
+  if(planetHoverPlot>=0&&planetHoverPlot!==planetSelPlot)drawPlotHover(planetHoverPlot,Rs);
+
+  /* ---- terminator, inner haze and rim, in one baked blit ----
+     Drawn last so it unifies terrain, roads, clouds and buildings into
+     one body. Kept honest but not brutal: the night side is genuinely
+     dark, which is what gives the sphere its form and lets the
+     settlement lights read, but never so dark that a player cannot
+     find a plot on it. */
+  ctx.drawImage(sky.over,cxp-sky.or*skyScale,cyp-sky.or*skyScale,
+    sky.or*2*skyScale,sky.or*2*skyScale);
+
+  drawPlanetOrbit(Rs,cxp,cyp,t);
+}
+
+/* ---- what is in orbit ----
+   A moon with a real phase and craters, a thin ring of survey
+   satellites once the Observatory is up, and the player's own ship
+   once the Hangar is. All three exist for scale: they are the only
+   objects on the screen whose size the player can compare the planet
+   to. */
+function drawPlanetOrbit(Rs,cxp,cyp,t){
+  const ma=t*0.085;
+  const mr=Math.max(5,Rs*0.058);
+  const mx=cxp+Math.cos(ma)*Rs*1.42, my=cyp+Math.sin(ma)*Rs*0.40;
+  const behind=Math.sin(ma)<0&&Math.abs(Math.cos(ma))<0.55;
+  if(!behind){
+    ctx.globalCompositeOperation='lighter';
+    pBlob(mx,my,mr*2.6,[150,175,215],0.16);
+    ctx.globalCompositeOperation='source-over';
+    const mg=ctx.createRadialGradient(mx+PLIGHT[0]*mr*0.7,my-PLIGHT[1]*mr*0.7,mr*0.05,mx,my,mr);
+    mg.addColorStop(0,'#d6dfee');mg.addColorStop(0.55,'#8c98b0');mg.addColorStop(1,'#2c3448');
+    ctx.beginPath();ctx.arc(mx,my,mr,0,TAU);ctx.fillStyle=mg;ctx.fill();
+    ctx.save();ctx.beginPath();ctx.arc(mx,my,mr,0,TAU);ctx.clip();
+    ctx.fillStyle='rgba(60,70,92,0.42)';
+    for(let k=0;k<4;k++){
+      const a=k*1.9+0.6,rr=mr*(0.14+(k%3)*0.07);
+      ctx.beginPath();ctx.arc(mx+Math.cos(a)*mr*0.42,my+Math.sin(a)*mr*0.38,rr,0,TAU);ctx.fill();
+    }
+    ctx.restore();
+  }
+  if(UNI_OK&&UNI.hasBuilding(uni(),'observatory')){
+    // Survey satellites: three motes on a tilted ring.
+    ctx.globalCompositeOperation='lighter';
+    for(let k=0;k<3;k++){
+      const a=t*0.34+k*TAU/3;
+      const sx=cxp+Math.cos(a)*Rs*1.14, sy=cyp+Math.sin(a)*Rs*0.30-Rs*0.16;
+      pBlob(sx,sy,3.5,[255,222,150],0.55+Math.sin(t*3+k)*0.2);
+    }
+    ctx.globalCompositeOperation='source-over';
+  }
+  if(UNI_OK&&UNI.hasBuilding(uni(),'hangar')){
+    const sa=-t*0.24;
+    const sx=cxp+Math.cos(sa)*Rs*1.20, sy=cyp+Math.sin(sa)*Rs*0.34;
+    const hull=skinHull(),glow=skinGlow();
+    const sc=Math.max(0.8,Rs*0.0055);
+    ctx.save();ctx.translate(sx,sy);ctx.rotate(sa+Math.PI/2);ctx.scale(sc,sc);
+    ctx.beginPath();ctx.moveTo(0,-9);ctx.lineTo(6,6.5);ctx.lineTo(0,3.5);ctx.lineTo(-6,6.5);ctx.closePath();
+    ctx.fillStyle=rgb(hull);ctx.fill();
+    ctx.strokeStyle=rgba(glow,0.9);ctx.lineWidth=1;ctx.stroke();
+    ctx.restore();
+    ctx.globalCompositeOperation='lighter';
+    pBlob(sx,sy,14*sc,glow,0.45);
+    // Engine trail, so the ship reads as travelling rather than parked.
+    for(let k=1;k<=3;k++){
+      const a2=sa+k*0.06;
+      pBlob(cxp+Math.cos(a2)*Rs*1.20, cyp+Math.sin(a2)*Rs*0.34, 7*sc/k, glow, 0.20/k);
+    }
     ctx.globalCompositeOperation='source-over';
   }
 }
 
-// A structure standing on its plot: a hexagonal prism raised along the
-// surface normal, with its six side faces lit individually so the
-// silhouette reads as a solid object rather than a decal.
-function drawPlanetStructure(plot,entry,light,isDecoration){
+/* A structure standing on its plot. The dispatcher resolves the
+   building's metadata from voidbreakUniverse.js (so the data file
+   stays the only place a building is defined), sets up the plot's
+   local frame, picks a level of detail from how large the thing
+   currently is on screen, and hands off to the composer.
+
+   LEVEL OF DETAIL. `detail` is 1, 2 or 3 and every composer reads it:
+     3  full -- windows, props, streetlights, animated effects
+     2  massing plus lit bands, rings and lamps
+     1  massing only
+   Zoomed out to the whole planet a building is ~20px across and draws
+   a handful of polygons; zoomed in to inspect it, it draws everything.
+   Which means the expensive version only ever exists for the two or
+   three buildings actually filling the screen. */
+function drawPlanetStructure(d,entry,isDecoration){
+  const plot=d.plot;
   const meta=isDecoration
     ? (UNI_OK?UNI.DECORATION_BY_ID[entry.id]:null)
     : (UNI_OK?UNI.BUILDING_BY_ID[entry.id]:null);
   if(!meta)return;
+  if(d.px<2.2)return;
   const level=Math.max(1,Math.floor(Number(entry.level)||1));
-  // Height grows with level, so a developed colony is visibly taller.
-  const h=(meta.height||0.12)*(isDecoration?1:(0.72+level*0.22));
-  const w=0.64; // footprint as a fraction of the plot's own radius
-
-  const base=[],top=[];
-  for(let k=0;k<6;k++){
-    const a=k*Math.PI/3;
-    const ox=plot.t[0]*Math.cos(a)*PLOT_R*w+plot.b[0]*Math.sin(a)*PLOT_R*w;
-    const oy=plot.t[1]*Math.cos(a)*PLOT_R*w+plot.b[1]*Math.sin(a)*PLOT_R*w;
-    const oz=plot.t[2]*Math.cos(a)*PLOT_R*w+plot.b[2]*Math.sin(a)*PLOT_R*w;
-    base.push(planetProject(planetRotate([plot.n[0]+ox,plot.n[1]+oy,plot.n[2]+oz])));
-    const s=1+h;
-    top.push(planetProject(planetRotate([plot.n[0]*s+ox*0.78,plot.n[1]*s+oy*0.78,plot.n[2]*s+oz*0.78])));
-  }
   const col=meta.color||[0,240,255];
-  const lit=0.5+light*0.55;
-
-  // Side faces, darkest first so the far side never paints over the near.
-  for(let k=0;k<6;k++){
-    const k2=(k+1)%6;
-    // Screen-space winding tells us which faces point away; skipping
-    // them is both correct and half the fill cost.
-    const cross=(base[k2].x-base[k].x)*(top[k].y-base[k].y)-(base[k2].y-base[k].y)*(top[k].x-base[k].x);
-    if(cross>0)continue;
-    const face=0.52+0.48*Math.abs(Math.cos(k*Math.PI/3+pcam.yaw));
-    ctx.beginPath();
-    ctx.moveTo(base[k].x,base[k].y);ctx.lineTo(base[k2].x,base[k2].y);
-    ctx.lineTo(top[k2].x,top[k2].y);ctx.lineTo(top[k].x,top[k].y);ctx.closePath();
-    ctx.fillStyle='rgba('+Math.round(col[0]*lit*face*0.62)+','+
-      Math.round(col[1]*lit*face*0.62)+','+Math.round(col[2]*lit*face*0.62)+',1)';
-    ctx.fill();
+  // Raised from 30. At the default zoom a plot is already ~90px
+  // across, so a threshold of 30 meant every building on the planet
+  // drew its windows, its props and its streetlights at all times --
+  // full close-up detail for structures the size of a thumbnail, which
+  // is where most of this screen's frame time was going.
+  const detail=d.px>58?3:d.px>15?2:1;
+  plotBegin(plot,d.light,detail);
+  PL.col=col;
+  const builder=isDecoration?null:PLANET_BUILDERS[entry.id];
+  if(builder)builder(level,col);
+  else if(isDecoration)drawDecoration(entry.id,col);
+  else{
+    // A building added to voidbreakUniverse.js without a composer here
+    // still stands on the planet: a tapered tower in its own colour,
+    // scaled by its declared height and level. The planet is never
+    // missing a structure the save says exists.
+    const h=(meta.height||0.12)*(0.72+level*0.22);
+    sitePad(col,0.9);
+    pPrism({rx:0.46,sides:6,h0:0.022*PLOT_R,h1:h,taper:0.7,col:col,mat:0.7,
+      band:0.6,bandCol:col,win:[3,2],winCol:[200,240,255],seed:2});
+    pLamp(0,0,h+0.03*PLOT_R,col,8,0.55);
   }
-  // Cap
-  ctx.beginPath();ctx.moveTo(top[0].x,top[0].y);
-  for(let k=1;k<6;k++)ctx.lineTo(top[k].x,top[k].y);
-  ctx.closePath();
-  ctx.fillStyle='rgba('+Math.round(Math.min(255,col[0]*lit))+','+
-    Math.round(Math.min(255,col[1]*lit))+','+Math.round(Math.min(255,col[2]*lit))+',1)';
-  ctx.fill();
-  ctx.strokeStyle=rgba(col,0.85*lit);ctx.lineWidth=1;ctx.stroke();
+  pFlush();
+}
 
-  // A light on top, brightest on the front of the globe.
-  let tcx=0,tcy=0;for(let k=0;k<6;k++){tcx+=top[k].x;tcy+=top[k].y;}
-  tcx/=6;tcy/=6;
+/* ---- selection ----
+   A tapped plot gets a command-system read-out rather than a coloured
+   outline: a holographic hex on the ground, a soft beam standing out of
+   it, corner ticks, and -- when something is built there -- a leader
+   line to a small label with the structure's name and level. Everything
+   here is 2D chrome drawn after the surface, so it never fights the
+   building it is pointing at. */
+function drawPlotFocus(idx,buildings,decorations,Rs,t){
+  const plot=PLANET_PLOTS[idx];
+  if(!plot)return;
+  const D=PLANET_CAM_DIST;
+  const nrot=planetRotate([plot.n[0]*plot.rad,plot.n[1]*plot.rad,plot.n[2]*plot.rad]);
+  if(nrot[2]<=1/D)return;
+  const c=planetProject(nrot);
+  const px=ppRs*PLOT_R*D/(D-nrot[2]);
+  /* The reticle is drawn on the plot's NOMINAL edge, not on the
+     widened hexagon the terrain is filled with -- otherwise the
+     highlight sits a quarter of a cell out into the neighbours. */
+  const pts=[];
+  for(let k=0;k<6;k++){
+    const q=planetProjectClamped(planetRotate(plot.c[k]),Rs);
+    pts.push({x:c.x+(q.x-c.x)/PLOT_FILL, y:c.y+(q.y-c.y)/PLOT_FILL, z:q.z, vis:q.vis});
+  }
+
+  const pulse=0.55+Math.sin(t*4.2)*0.22;
+  const grow=Math.min(1,planetSelT*5.5);       // a short settle-in, not a snap
   ctx.globalCompositeOperation='lighter';
-  ctx.globalAlpha=0.55*lit;
-  uniGlow(tcx,tcy,col,isDecoration?8:8+level*4);
-  ctx.globalAlpha=1;
+  ctx.save();
+  ctx.translate(c.x,c.y);ctx.scale(0.45+0.55*grow,0.45+0.55*grow);ctx.translate(-c.x,-c.y);
+  polyFill(pts,'rgba(0,220,255,'+(0.07*grow).toFixed(3)+')',
+    'rgba(120,244,255,'+(pulse*grow).toFixed(3)+')',clamp(px*0.055,1.4,5));
+  // Corner ticks, which is what makes it read as a targeting reticle
+  // rather than as a highlighted tile.
+  ctx.strokeStyle='rgba(255,214,120,'+(0.75*grow).toFixed(3)+')';
+  ctx.lineWidth=clamp(px*0.045,1.2,6);
+  ctx.beginPath();
+  for(let k=0;k<6;k++){
+    const a=pts[k],b=pts[(k+1)%6];
+    ctx.moveTo(a.x,a.y);ctx.lineTo(a.x+(b.x-a.x)*0.26,a.y+(b.y-a.y)*0.26);
+    ctx.moveTo(b.x,b.y);ctx.lineTo(b.x+(a.x-b.x)*0.26,b.y+(a.y-b.y)*0.26);
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  const b=buildings[String(idx)],dec=decorations[String(idx)];
+  const meta=b?(UNI_OK?UNI.BUILDING_BY_ID[b.id]:null)
+              :dec?(UNI_OK?UNI.DECORATION_BY_ID[dec.id]:null):null;
+
+  // The beam: a tapering column of light out of the plot along its own
+  // surface normal, so it leans with the curvature of the planet.
+  const topW=planetRotate([plot.n[0]*(plot.rad+0.22),plot.n[1]*(plot.rad+0.22),plot.n[2]*(plot.rad+0.22)]);
+  const top=planetProject(topW);
+  const bw=px*0.42*grow;
+  const bg2=ctx.createLinearGradient(c.x,c.y,top.x,top.y);
+  const bc=meta&&meta.color?meta.color:[0,240,255];
+  bg2.addColorStop(0,'rgba('+bc[0]+','+bc[1]+','+bc[2]+','+(0.30*grow).toFixed(3)+')');
+  bg2.addColorStop(1,'rgba('+bc[0]+','+bc[1]+','+bc[2]+',0)');
+  ctx.fillStyle=bg2;
+  ctx.beginPath();
+  ctx.moveTo(c.x-bw,c.y);ctx.lineTo(c.x+bw,c.y);
+  ctx.lineTo(top.x+bw*0.30,top.y);ctx.lineTo(top.x-bw*0.30,top.y);
+  ctx.closePath();ctx.fill();
   ctx.globalCompositeOperation='source-over';
+
+  if(!meta||grow<0.6)return;
+
+  /* The call-out. Name, level, a chip in the structure's own colour
+     and a leader line back to the top of the beam -- the read-out a
+     command system would give you, rather than a tooltip.
+
+     Clamped into the frame on purpose: the anchor is wherever the plot
+     happens to be, so near the limb or the top of the globe an
+     unclamped box lands under the screen title or off the edge. */
+  const name=meta.name||'';
+  const lvTxt=b?('LEVEL '+b.level+(meta.maxLevel?(' / '+meta.maxLevel):'')):'RECOVERED';
+  ctx.font='700 11px Orbitron, sans-serif';
+  const wName=ctx.measureText(name).width;
+  ctx.font='600 10px Rajdhani, sans-serif';
+  const wLv=ctx.measureText(lvTxt).width;
+  const bwid=Math.max(wName,wLv)+26, bhei=34;
+  const side=top.x>W*0.58?-1:1;
+  const ax=top.x+side*16;
+  const rx=clamp(side>0?ax:ax-bwid,10,Math.max(10,W-bwid-10));
+  const by=clamp(top.y-18-bhei,84,Math.max(84,H-bhei-10));
+  const ay=by+bhei*0.5;
+
+  ctx.strokeStyle='rgba('+bc[0]+','+bc[1]+','+bc[2]+',0.55)';ctx.lineWidth=1;
+  ctx.beginPath();
+  ctx.moveTo(top.x,top.y-4);
+  ctx.lineTo(top.x+side*10,ay);
+  ctx.lineTo(side>0?rx:rx+bwid,ay);
+  ctx.stroke();
+  ctx.beginPath();ctx.arc(top.x,top.y-4,2.2,0,TAU);
+  ctx.fillStyle='rgba('+bc[0]+','+bc[1]+','+bc[2]+',0.9)';ctx.fill();
+
+  ctx.fillStyle='rgba(6,10,24,0.88)';
+  ctx.fillRect(rx,by,bwid,bhei);
+  ctx.strokeRect(rx+0.5,by+0.5,bwid-1,bhei-1);
+  ctx.fillStyle='rgba('+bc[0]+','+bc[1]+','+bc[2]+',0.95)';
+  ctx.fillRect(rx+1,by+1,3,bhei-2);
+  ctx.textAlign='left';ctx.textBaseline='alphabetic';
+  ctx.fillStyle='#eafcff';ctx.font='700 11px Orbitron, sans-serif';
+  ctx.fillText(name,rx+12,by+15);
+  ctx.fillStyle='rgba('+bc[0]+','+bc[1]+','+bc[2]+',0.95)';
+  ctx.font='600 10px Rajdhani, sans-serif';
+  ctx.fillText(lvTxt,rx+12,by+28);
+}
+
+// Desktop affordance only: the plot the mouse is over gets a whisper of
+// an outline, so a player can tell what a click would select before
+// making it. Touch never sets planetHoverPlot.
+function drawPlotHover(idx,Rs){
+  const plot=PLANET_PLOTS[idx];
+  if(!plot)return;
+  const nrot=planetRotate([plot.n[0]*plot.rad,plot.n[1]*plot.rad,plot.n[2]*plot.rad]);
+  if(nrot[2]<=1/PLANET_CAM_DIST)return;
+  const nc=planetProject(nrot);
+  const pts=[];
+  for(let k=0;k<6;k++){
+    const q=planetProjectClamped(planetRotate(plot.c[k]),Rs);
+    pts.push({x:nc.x+(q.x-nc.x)/PLOT_FILL, y:nc.y+(q.y-nc.y)/PLOT_FILL});
+  }
+  polyFill(pts,'rgba(190,240,255,0.05)','rgba(200,244,255,0.34)',1.3);
 }
 
 // Nearest visible, owned plot to a screen point. Only the front cap is
@@ -4478,7 +6867,7 @@ function pickPlot(sx,sy){
   const threshold=planetScreenRadius()*PLOT_R*1.25;
   for(const plot of PLANET_PLOTS){
     if(plot.i>=owned)continue;
-    const nrot=planetRotate(plot.n);
+    const nrot=planetRotate([plot.n[0]*plot.rad,plot.n[1]*plot.rad,plot.n[2]*plot.rad]);
     if(nrot[2]<=1/PLANET_CAM_DIST)continue;
     const p=planetProject(nrot);
     const d=dist(sx,sy,p.x,p.y);
@@ -4487,8 +6876,42 @@ function pickPlot(sx,sy){
   return bestD<=threshold?best:-1;
 }
 
+/* Aim the camera at a plot. Solving for the orientation directly --
+   rather than nudging toward it -- is what makes the move land exactly,
+   every time, from any starting angle.
+
+   Yaw is whatever puts the plot on the screen's vertical meridian;
+   pitch is then whatever lifts it PLANET_FOCUS_TILT radians off the
+   sub-camera point, so the focused plot is seen at an angle instead of
+   from directly overhead. Looking straight down at a building is the
+   one view in which it has no silhouette. */
+function planetFocusOn(idx){
+  const plot=PLANET_PLOTS[idx];
+  if(!plot)return;
+  const n=plot.n;
+  let a=Math.atan2(-n[0],n[2]);
+  let z1=-n[0]*Math.sin(a)+n[2]*Math.cos(a);
+  if(z1<0){a+=Math.PI;z1=-z1;}
+  const tilt=PLANET_FOCUS_TILT/Math.max(1,pcam.zoomT);
+  let b=clamp(Math.atan2(n[1],z1)-tilt,-1.15,1.15);
+  // Take the short way round rather than unwinding a full turn.
+  while(a-pcam.yaw>Math.PI)a-=TAU;
+  while(a-pcam.yaw<-Math.PI)a+=TAU;
+  pcam.tyaw=a;pcam.tpitch=b;pcam.focus=1;
+  pcam.vyaw=0;pcam.vpitch=0;
+}
+
 function updatePlanetCam(dt){
-  if(!pcam.drag){
+  if(pcam.focus>0&&!pcam.drag){
+    // Frame-rate independent ease, with a hard finish so the move can
+    // actually end instead of asymptotically creeping.
+    const k=1-Math.pow(0.0004,dt);
+    pcam.yaw+=(pcam.tyaw-pcam.yaw)*k;
+    pcam.pitch+=(pcam.tpitch-pcam.pitch)*k;
+    if(Math.abs(pcam.tyaw-pcam.yaw)<0.004&&Math.abs(pcam.tpitch-pcam.pitch)<0.004){
+      pcam.yaw=pcam.tyaw;pcam.pitch=pcam.tpitch;pcam.focus=0;pcam.vyaw=0;
+    }
+  }else if(!pcam.drag){
     // Inertia, then a slow idle spin once the player stops touching it
     // -- enough to read as alive, slow enough not to fight a reader.
     pcam.yaw+=pcam.vyaw*dt*60*0.016;
@@ -4496,11 +6919,20 @@ function updatePlanetCam(dt){
     pcam.vyaw+=(0.045-pcam.vyaw)*Math.min(1,dt*1.1);
     pcam.vpitch*=Math.pow(0.02,dt);
   }
+  // Zoom is interpolated rather than applied: a wheel notch or a pinch
+  // writes the TARGET and the camera eases to it, which is the
+  // difference between a menu that jumps and a camera that moves.
+  // Frame-rate independent, so a 120Hz iPad and a 30Hz phone travel the
+  // same distance in the same time.
+  pcam.zoomT=clamp(pcam.zoomT,PLANET_ZOOM_MIN,PLANET_ZOOM_MAX);
+  pcam.zoom+=(pcam.zoomT-pcam.zoom)*(1-Math.pow(0.0009,dt));
+  if(Math.abs(pcam.zoomT-pcam.zoom)<0.0006)pcam.zoom=pcam.zoomT;
   // Clamped so the globe can never be flipped past its own poles, which
   // is disorienting and has no upside.
   pcam.pitch=clamp(pcam.pitch,-1.15,1.15);
   if(pcam.yaw>TAU)pcam.yaw-=TAU;
   if(pcam.yaw<0)pcam.yaw+=TAU;
+  planetSelT+=dt;
 }
 
 /* ---- planet chrome ---- */
@@ -4629,7 +7061,10 @@ async function requestBuild(plot,buildingId){
     const lv=UNI.buildingLevel(uni(),buildingId);
     showReveal(lv>1?'STRUCTURE UPGRADED':'STRUCTURE COMPLETE',meta.name,
       meta.effect?meta.effect(lv):'',1700);
+    if(planetSelPlot!==plot)planetSelT=0;
     planetSelPlot=plot;
+    // A structure that was just built or upgraded is worth looking at.
+    planetFocusOn(plot);
     // A structure is a commitment, not a brush -- disarm after placing
     // so a second tap cannot accidentally spend again.
     planetBuildSel=null;
@@ -4660,7 +7095,11 @@ function onPlanetTap(sx,sy){
     requestBuild(hit,planetBuildSel);return;
   }
   SFX.ui();
-  planetSelPlot=hit;
+  // Re-tapping the plot you are already on is how you ask for a closer
+  // look; the first tap only selects, so a mis-tap never swings the
+  // camera out from under you.
+  if(planetSelPlot!==hit){planetSelT=0;planetSelPlot=hit;}
+  else planetFocusOn(hit);
   refreshPlotInfo();
 }
 
@@ -8530,14 +10969,23 @@ function drawStars(img,par){
 let crossPulse=0;
 function render(){
   ctx.setTransform(dpr,0,0,dpr,0,0);
-  ctx.fillStyle='#04050c';ctx.fillRect(0,0,W,H);
-  drawStars(starA,0.22);drawStars(starB,0.45);
-  const env=curEnv();
-  ctx.globalCompositeOperation='lighter';
-  ctx.globalAlpha=0.35;
-  ctx.drawImage(makeGlow(env.neb[0][0],env.neb[0][1],env.neb[0][2],400),(W*0.25-cam.x*0.1)%W-400,(H*0.3-cam.y*0.1)%H-400,800,800);
-  ctx.drawImage(makeGlow(env.neb[1][0],env.neb[1][1],env.neb[1][2],400),(W*0.8-cam.x*0.08)%W-400,(H*0.75-cam.y*0.08)%H-400,800,800);
-  ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+  // The HOME PLANET screen gets its own deep-space backdrop -- baked
+  // nebulae, a distant galaxy, layered stars and two far worlds, all on
+  // camera-driven parallax (see drawPlanetBackdrop). It replaces the
+  // two tiled star bitmaps rather than adding to them, so the richer
+  // background actually costs FEWER draw calls than the old one.
+  if(state==='planet'){
+    drawPlanetBackdrop();
+  }else{
+    ctx.fillStyle='#04050c';ctx.fillRect(0,0,W,H);
+    drawStars(starA,0.22);drawStars(starB,0.45);
+    const env=curEnv();
+    ctx.globalCompositeOperation='lighter';
+    ctx.globalAlpha=0.35;
+    ctx.drawImage(makeGlow(env.neb[0][0],env.neb[0][1],env.neb[0][2],400),(W*0.25-cam.x*0.1)%W-400,(H*0.3-cam.y*0.1)%H-400,800,800);
+    ctx.drawImage(makeGlow(env.neb[1][0],env.neb[1][1],env.neb[1][2],400),(W*0.8-cam.x*0.08)%W-400,(H*0.75-cam.y*0.08)%H-400,800,800);
+    ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+  }
   // Universe screens draw in place of the world. They share the star
   // field and nebula wash already drawn above, which is why they cost
   // one branch rather than a second renderer.
@@ -10115,7 +12563,8 @@ function go(s){
     // Always open facing the colony. The idle spin will carry it away
     // again, which is what a globe should do -- but arriving to a view
     // of your own buildings is not something to leave to chance.
-    pcam.yaw=0;pcam.pitch=-0.14;pcam.vyaw=0.045;pcam.vpitch=0;
+    pcam.yaw=0;pcam.pitch=PLANET_OPEN_PITCH;pcam.vyaw=0.045;pcam.vpitch=0;pcam.focus=0;
+    pcam.zoom=1;pcam.zoomT=1;planetHoverPlot=-1;planetSelT=0;
     refreshPlanetUI();
   }
   else if(s==='ship'){el('ov-ship').classList.add('on');buildShipBay();}
