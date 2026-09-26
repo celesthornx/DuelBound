@@ -1273,6 +1273,9 @@ input[type=range]{width:180px;accent-color:var(--cy)}
    VOIDBREAK — single-file roguelite
    Data-driven architecture:
    · LEVELS[]  — enemy pools, elites, boss, difficulty, env theme
+     (galaxies past the Frontier define the same shape as `levelDef`
+     data in voidbreakUniverse.js; optional bossHpMult, env.snow,
+     env.crackC)
    · CHOICES[] — physical path-choice panels shown at portals
    · BOSSMETA  — guardian metadata; boss logic dispatch on kind
    · gravFields — shared gravity-pull system (leeches, the
@@ -5822,7 +5825,11 @@ function createBoss(kind){
   // Single point for boss HP scaling by difficulty (contact/attack
   // damage is scaled once, centrally, in hurtPlayer() instead -- see
   // its comment -- so this only ever touches HP).
-  const bhp=Math.round(boss.hp*curDiff().hpMult);
+  // A level can also scale its guardian (level.bossHpMult) -- base HP
+  // is per boss KIND and ignores level.diff, so an early guardian
+  // reused deep in the universe needs this to stay a real fight.
+  const lvMult=(run&&run.level&&run.level.bossHpMult)||1;
+  const bhp=Math.round(boss.hp*curDiff().hpMult*lvMult);
   boss.hp=bhp;boss.maxhp=bhp;
 }
 function bossIntro(dt){
@@ -8125,8 +8132,11 @@ function update(dt){
   run.time+=dt;
   if(run.level.env.ambient&&room&&Math.random()<dt*(run.level.env.glitch?16:10)){
     const vw=W/(2*cam.zoom)+40,vh=H/(2*cam.zoom)+40;
+    // env.snow (the Frozen Expanse): the same motes, drifting down and
+    // sideways instead of rising, so the arena reads as falling snow.
+    const snow=run.level.env.snow;
     part({x:cam.x+rand(-vw,vw),y:cam.y+rand(-vh,vh),
-      vx:rand(-8,8),vy:rand(-24,-8),life:rand(2,4),ml:4,size:rand(1.2,2.6),
+      vx:snow?rand(-16,4):rand(-8,8),vy:snow?rand(20,46):rand(-24,-8),life:rand(2,4),ml:4,size:rand(1.2,2.6),
       c:pick(run.level.env.ambient),type:'spark',drag:0});
   }
   if(run.level.env.glitch&&room){
@@ -8323,7 +8333,8 @@ function renderWorld(){
   }
   if(room.cracks){
     const ca=0.10+Math.sin(performance.now()*0.002)*0.05;
-    ctx.strokeStyle=`rgba(216,80,255,${ca})`;ctx.lineWidth=1.5;
+    const cc=env.crackC||[216,80,255];
+    ctx.strokeStyle=rgba(cc,ca);ctx.lineWidth=1.5;
     for(const pts of room.cracks){
       ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
       for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i][0],pts[i][1]);
