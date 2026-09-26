@@ -1921,11 +1921,13 @@
   .cur-row.crystal .v{ color:#d8f2ff; }
   .stat-list.compact{ padding-top: 4px; }
 
-  /* ---------- Destination grid (the six places you can go) ---------- */
+  /* ---------- Destination grid (every place you can go) ---------- */
   .dest-grid{
     display:grid; grid-template-columns: repeat(6, minmax(0,1fr));
     gap: 10px; width:100%;
   }
+  /* Two rows of six, so the second row reads as its own group. */
+  .dest-grid > .dest:nth-child(7){ grid-column-start: 1; }
   .dest{
     position:relative; cursor:pointer;
     display:flex; flex-direction:column; align-items:center; gap:6px;
@@ -2352,6 +2354,12 @@
   .lobby-center{
     position:relative; min-height:0;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
+    /* Two rows of destinations can outgrow a short viewport. `safe`
+       keeps the overflow off the TOP, where plain centring would put it
+       out of reach behind the top bar; browsers without it fall back to
+       the line above and the scroll below still reaches everything. */
+    justify-content: safe center;
+    overflow-y: auto; overflow-x: hidden;
     gap: 18px;
     padding: 4px 0;
   }
@@ -2890,7 +2898,7 @@
   }
   #btnVoidbreakExit:hover{ opacity:1; border-color:#00f0ff; box-shadow:0 0 14px rgba(0,240,255,.35); }
   #btnVoidbreakFs{
-    position:absolute; top:14px; left:146px; z-index:2;
+    position:absolute; top:14px; left:182px; z-index:2;
     width:30px; height:30px; padding:0;
     display:flex; align-items:center; justify-content:center;
     background: rgba(4,5,12,.75); border:1px solid rgba(0,240,255,.4); color:#cfeef5;
@@ -3156,7 +3164,8 @@
     .nav-item{ font-size: 11px; letter-spacing: 1.4px; padding: 8px 8px; }
     .mode-card{ width: 146px; }
     .chat-toggle{ min-width: 0; }
-    .dest-grid{ grid-template-columns: repeat(3, minmax(0,1fr)); }
+    .dest-grid{ grid-template-columns: repeat(4, minmax(0,1fr)); }
+    .dest-grid > .dest:nth-child(7){ grid-column-start: auto; }
     .dest-ico{ width:32px; height:32px; }
     .journey-strip{ gap: 14px; }
   }
@@ -3198,7 +3207,24 @@
       overflow-y: auto; gap: 14px;
     }
     .lobby-col{ overflow: visible; }
-    .lobby-center{ order: -1; padding: 6px 0 2px; }
+    /* On this breakpoint .lobby-main is the ONE scroller and the hub is
+       a single column, so neither the side columns nor the centre may
+       be a scroller of their own -- that would clip their contents into
+       a strip instead of letting the page scroll to them.
+       `min-height:0` is what lets a column be its own scroller in the
+       three-column layout above; here it instead lets the three auto
+       rows collapse FAR below their content (each to about a fifth of
+       its height on a landscape phone) and spill over each other.
+       Restoring the content floor, and stopping the rows stretching to
+       fill a viewport they are meant to scroll past, is what makes the
+       single column actually stack. */
+    .lobby-main{ align-content: start; }
+    .lobby-col, .lobby-center{ min-height: auto; }
+    .lobby-center{
+      order: -1; padding: 6px 0 2px;
+      overflow: visible;
+      justify-content: flex-start;
+    }
     .mode-cards{ gap: 8px; }
     .mode-card{ width: 132px; }
     .mode-card.selected{ transform: scale(1.06); }
@@ -3206,9 +3232,10 @@
     .chat-toggle{ min-width:0; padding:7px 10px; }
     .chat-toggle span:not(.chat-unread){ display:none; }
     .arena-banner{ display:none; }
-    /* The six destinations become two rows of three rather than a
-       six-across strip nobody can read on a phone. */
+    /* The destinations become rows of three rather than a twelve-wide
+       strip nobody can read on a phone. */
     .dest-grid{ grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
+    .dest-grid > .dest:nth-child(7){ grid-column-start: auto; }
     .dest-name{ font-size: 10px; letter-spacing: 1.1px; }
     .dest-sub{ display:none; }
     /* The bottom bar is already tight on a phone; the journey numbers
@@ -4216,13 +4243,23 @@
             <span class="play-sheen"></span>
           </span>
           <span class="play-content">
-            <span class="play-label"><span class="play-glyph" aria-hidden="true">&#9673;</span> START JOURNEY</span>
+            <span class="play-label"><span class="play-glyph" aria-hidden="true">&#9673;</span> <span id="lobbyJourneyLabel">START JOURNEY</span></span>
             <span class="play-sub"><span id="lobbyJourneySub">EXPLORE &middot; DISCOVER &middot; GROW</span><span class="chev">&raquo;</span></span>
           </span>
         </button>
 
-        <!-- Every destination in the game, one tile each. Each one routes
-             to a system that already exists -- nothing here is a stub. -->
+        <!-- EVERY DESTINATION IN THE GAME, ONE TILE EACH.
+             Each one routes to a system that already exists -- nothing
+             here is a stub, and nothing here is a second menu: a tile
+             opens the place it names.
+
+             The second row is what used to be reachable only by going
+             into the campaign and finding Voidbreak's OWN main menu --
+             the loadout, the forge, the shard shop. Those were never a
+             different game; they were destinations behind a door that
+             looked like a second front door. They are doors off this
+             hub now, and that old menu is no longer on the way to
+             anything (see the SHELL block in voidbreak.html). -->
         <div class="dest-grid" id="lobbyDestGrid">
           <button class="dest" data-act="galaxy">
             <span class="dest-ico">
@@ -4246,6 +4283,17 @@
             <span class="dest-name">HOME PLANET</span>
             <span class="dest-sub">BUILD &amp; UPGRADE</span>
           </button>
+          <button class="dest" data-act="ship">
+            <span class="dest-ico">
+              <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
+                <path d="M4 17 L20 8 L30 17 L20 26 Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                <circle cx="21" cy="17" r="3" fill="currentColor"/>
+                <path d="M4 17 H1.5M9 11.5 L7 9M9 22.5 L7 25" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              </svg>
+            </span>
+            <span class="dest-name">SHIP BAY</span>
+            <span class="dest-sub">RECOVERED SYSTEMS</span>
+          </button>
           <button class="dest" data-act="arena">
             <span class="dest-ico">
               <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
@@ -4256,6 +4304,17 @@
             <span class="dest-name">VOIDBREAK ARENA</span>
             <span class="dest-sub">PVP BATTLES</span>
           </button>
+          <button class="dest" data-act="coop">
+            <span class="dest-ico">
+              <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
+                <path d="M4 17 L14 11 L20 17 L14 23 Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                <path d="M18 9 L28 5 L26 14 Z" fill="currentColor" opacity=".75"/>
+                <path d="M18 25 L28 29 L26 20 Z" fill="currentColor" opacity=".55"/>
+              </svg>
+            </span>
+            <span class="dest-name">VOID CO-OP</span>
+            <span class="dest-sub">2&ndash;4 PILOTS</span>
+          </button>
           <button class="dest" data-act="shop">
             <span class="dest-ico">
               <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
@@ -4265,6 +4324,39 @@
             </span>
             <span class="dest-name">VOID MARKET</span>
             <span class="dest-sub">GEAR &amp; RESOURCES</span>
+          </button>
+          <button class="dest" data-act="loadout">
+            <span class="dest-ico">
+              <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
+                <path d="M5 21 L19 7 L24 7 L24 12 L10 26 Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                <path d="M19 7 L27 4 L24 12" fill="currentColor" opacity=".6"/>
+                <circle cx="9" cy="24" r="2.1" fill="currentColor"/>
+              </svg>
+            </span>
+            <span class="dest-name">VOID LOADOUT</span>
+            <span class="dest-sub">WEAPON &middot; SYSTEM &middot; ABILITY</span>
+          </button>
+          <button class="dest" data-act="forge">
+            <span class="dest-ico">
+              <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
+                <path d="M17 3 L23 10 L17 17 L11 10 Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                <path d="M8 20 H26 L23 29 H11 Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                <path d="M13 24 H21" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              </svg>
+            </span>
+            <span class="dest-name">VOID FORGE</span>
+            <span class="dest-sub">UNLOCK &amp; UPGRADE</span>
+          </button>
+          <button class="dest" data-act="shardshop">
+            <span class="dest-ico">
+              <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
+                <path d="M17 3 L27 13 L17 31 L7 13 Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                <path d="M7 13 H27" stroke="currentColor" stroke-width="1.3" opacity=".8"/>
+                <path d="M17 3 L17 31" stroke="currentColor" stroke-width="1.1" opacity=".5"/>
+              </svg>
+            </span>
+            <span class="dest-name">SHARD SHOP</span>
+            <span class="dest-sub">SPEND VOID SHARDS</span>
           </button>
           <button class="dest dest-gold" data-act="battlepass">
             <span class="dest-ico">
@@ -4285,6 +4377,18 @@
             </span>
             <span class="dest-name">PROFILE</span>
             <span class="dest-sub">YOUR PROGRESS</span>
+          </button>
+          <button class="dest" data-act="friends">
+            <span class="dest-ico">
+              <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
+                <circle cx="13" cy="12" r="4.6" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M4 28 a9 9 0 0 1 18 0" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                <path d="M23 8.2 a4.6 4.6 0 0 1 0 8.6" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                <path d="M24.5 19.5 A9 9 0 0 1 30 28" stroke="currentColor" stroke-width="1.5" fill="none"/>
+              </svg>
+            </span>
+            <span class="dest-name">FRIENDS</span>
+            <span class="dest-sub">FLEET &amp; COMMS</span>
           </button>
         </div>
       </section>
@@ -4531,7 +4635,7 @@
         <button class="menu-btn" data-act="pilotgear">PILOT GEAR</button>
       </div>
     </div>
-    <button class="menu-back" id="btnBackVbArena">&larr; back to the void</button>
+    <button class="menu-back" id="btnBackVbArena">&larr; COMMAND CENTER</button>
   </div>
 
   <!-- GAME TYPE MENU (Classic vs Football) -->
@@ -5247,11 +5351,12 @@
      CSS/audio/rAF loop), so it can never collide with or be affected by
      the shell's own arena code, and vice versa. The shell owns identity,
      account, currencies, social and PvP; this owns the campaign.
-     See launchVoidbreak() below, which can deep-link straight to the
-     galaxy map, the Home Planet or the loadout. -->
+     See launchVoidbreak() below: every hub tile opens this frame
+     already ON its destination, and the chip above returns to the
+     Command Center -- as does every "back" inside the frame. -->
 <div id="voidbreakOverlay" class="hidden">
   <iframe id="voidbreakFrame" title="Voidbreak" allow="autoplay; fullscreen"></iframe>
-  <button id="btnVoidbreakExit" type="button" title="Back to the main menu">&larr; MAIN MENU</button>
+  <button id="btnVoidbreakExit" type="button" title="Back to the Command Center">&larr; COMMAND CENTER</button>
   <button id="btnVoidbreakFs" type="button" data-fs-toggle title="Fullscreen (Esc to exit)"><svg class="fs-ico-enter" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M1.5 5.5v-4h4M10.5 1.5h4v4M14.5 10.5v4h-4M5.5 14.5h-4v-4"/></svg><svg class="fs-ico-exit" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5.5 1.5v4h-4M14.5 5.5h-4v-4M10.5 14.5v-4h4M1.5 10.5h4v4"/></svg></button>
 </div>
 
@@ -7073,7 +7178,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
   function launchVoidbreakCoop(typeId){
     mpCloseMenus();
     closeOnlineConnection();   // the room lives in the iframe's own socket
-    voidbreakFrame.src = 'voidbreak.html?t=' + Date.now() + '&coop=' + encodeURIComponent(typeId);
+    voidbreakFrame.src = voidbreakUrl({ coop: typeId });
     voidbreakOverlay.classList.remove('hidden');
     menuMain.classList.add('hidden');
     voidbreakFrame.focus();
@@ -16355,38 +16460,63 @@ if(tutorialActive) tutorialUpdate(dt);
   btnAdminConfirmGive.addEventListener('click', confirmAdminGiveCredits);
 
   // ============================================================
-  // THE JOURNEY -- Voidbreak's galaxy exploration campaign, launched
-  // from START JOURNEY and from the Galaxy Map / Home Planet / Loadout
-  // destinations.
+  // THE JOURNEY -- Voidbreak's galaxy exploration campaign, and every
+  // destination inside it: the galaxy map, the home planet, the ship
+  // bay, the loadout, the forge, the shard shop, co-op.
   //
   // The campaign lives in voidbreak.html, loaded into its own iframe
   // (own document/window/globals/CSS/audio/rAF loop), so nothing in the
   // shell ever touches its code and nothing in it can collide with or
   // interfere with the shell's arena code. ESC/P inside the iframe are
-  // its own pause controls, untouched -- the only way back out is the
-  // MAIN MENU button drawn outside the iframe.
+  // its own pause controls, untouched.
   //
-  // This separation is why the identity change is cheap: the shell owns
-  // account, currencies, social, PvP and the menu; the iframe owns the
-  // campaign. Neither had to learn about the other to be rebranded.
+  // ONE GAME, TWO DOCUMENTS. That iframe boundary is an implementation
+  // detail, and the player should never feel it. What used to give it
+  // away was a second main menu: the hub sent you into the campaign,
+  // and the campaign opened with its own logo and its own PLAY button,
+  // so pressing PLAY felt like launching a different game. It no longer
+  // does. The hub opens the campaign ON the destination that was
+  // chosen, and "back" from any of those destinations comes back here
+  // (see launchVoidbreak below, voidbreak.html's SHELL block, and the
+  // 'voidbreak_hub' message that carries the return).
+  //
+  // The split itself stays exactly where it was, because it is the
+  // right one: the shell owns identity, account, currencies, social,
+  // PvP and the hub; the iframe owns the campaign.
   // ============================================================
   const voidbreakOverlay = document.getElementById('voidbreakOverlay');
   const voidbreakFrame = document.getElementById('voidbreakFrame');
   const btnVoidbreakExit = document.getElementById('btnVoidbreakExit');
 
-  // `screen` deep-links straight to one of Voidbreak's own screens
-  // instead of its menu -- 'galaxy', 'planet' or 'loadout'. It is read
-  // by voidbreak.html's boot (see its ?screen= handling) and is purely a
-  // starting view: every one of those screens is reachable by hand from
-  // the Voidbreak menu exactly as before, so an unknown or omitted value
-  // simply lands on the menu.
+  // The URL every launch of the campaign uses.
+  //
+  // `shell=1` is what tells voidbreak.html it is a destination inside
+  // this Command Center rather than a page standing on its own. That is
+  // the whole of the handshake: with it set, that page's own old main
+  // menu stops being a screen anyone passes through, and every "back to
+  // the menu" in it comes back here instead (see the SHELL block in
+  // voidbreak.html). Without it -- opening voidbreak.html directly --
+  // nothing changes and its menu is still its menu.
+  //
+  // A cache-busted `t` forces a genuinely fresh document/window every
+  // launch -- a brand new rAF loop, WebAudio context, and event
+  // listeners each time, so repeated Play -> Exit -> Play never
+  // accumulates state or duplicate listeners from a previous session.
+  function voidbreakUrl(params){
+    let url = 'voidbreak.html?t=' + Date.now() + '&shell=1';
+    for(const k in params){
+      if(params[k]) url += '&' + k + '=' + encodeURIComponent(params[k]);
+    }
+    return url;
+  }
+
+  // `screen` is the destination the player chose in the hub -- 'resume',
+  // 'galaxy', 'planet', 'ship', 'loadout', 'forge', 'shop', 'mastery',
+  // 'prestige', 'leaderboard', 'coop'. voidbreak.html opens ON it (see
+  // its applyLaunchScreen), so a tile here lands on the place it names
+  // rather than on a menu asking the player to name it again.
   function launchVoidbreak(screen){
-    // A cache-busted src forces a genuinely fresh document/window every
-    // launch -- a brand new rAF loop, WebAudio context, and event
-    // listeners each time, so repeated Play -> Exit -> Play never
-    // accumulates state or duplicate listeners from a previous session.
-    voidbreakFrame.src = 'voidbreak.html?t=' + Date.now()
-      + (screen ? '&screen=' + encodeURIComponent(screen) : '');
+    voidbreakFrame.src = voidbreakUrl({ screen: screen });
     voidbreakOverlay.classList.remove('hidden');
     menuMain.classList.add('hidden');
     closeVbArena({ silent: true });
@@ -16394,7 +16524,28 @@ if(tutorialActive) tutorialUpdate(dt);
     // Friends presence: friends see "ON AN EXPEDITION".
     if(typeof syncActivity === 'function') syncActivity();
   }
+  // THE CORNER CHIP. It and the in-game routes home should cost the
+  // same, and an in-game route home flushes an unsaved save on the way
+  // out (see returnToHub() in voidbreak.html). So the chip asks the
+  // campaign to leave rather than pulling the floor out from under it,
+  // and only tears the iframe down itself if no answer comes back --
+  // a wedged or half-loaded frame can never trap the player inside it.
+  let vbExitFallback = null;
+  function requestVoidbreakExit(){
+    if(vbExitFallback) return;   // already asked; the timer below owns it
+    let asked = false;
+    try{
+      if(voidbreakFrame && voidbreakFrame.contentWindow
+         && voidbreakFrame.src.indexOf('voidbreak.html') !== -1){
+        voidbreakFrame.contentWindow.postMessage({ type: 'duelarena_leave' }, window.location.origin);
+        asked = true;
+      }
+    }catch(e){}
+    if(!asked){ exitVoidbreak(); return; }
+    vbExitFallback = setTimeout(()=>{ vbExitFallback = null; exitVoidbreak(); }, 450);
+  }
   function exitVoidbreak(){
+    if(vbExitFallback){ clearTimeout(vbExitFallback); vbExitFallback = null; }
     voidbreakOverlay.classList.add('hidden');
     // Tearing the iframe's document down (rather than just hiding it)
     // immediately stops its game loop/audio instead of leaving it
@@ -16407,7 +16558,7 @@ if(tutorialActive) tutorialUpdate(dt);
     if(typeof syncVoidbreakProfile === 'function') syncVoidbreakProfile();
     if(typeof syncActivity === 'function') syncActivity();
   }
-  btnVoidbreakExit.addEventListener('click', exitVoidbreak);
+  btnVoidbreakExit.addEventListener('click', requestVoidbreakExit);
 
   // Voidbreak (running in its own iframe, see launchVoidbreak above)
   // posts this the first time a level/guardian is beaten -- see the
@@ -16435,6 +16586,16 @@ if(tutorialActive) tutorialUpdate(dt);
     // account write in this game).
     if(e.data && e.data.type === 'voidbreak_ready'){
       postVoidbreakSession();
+    }
+    // "Back to the Command Center", from inside the campaign. Every BACK
+    // on a Voidbreak screen, QUIT from a pause and MAIN MENU on a
+    // victory/game-over now means this (see go() in voidbreak.html), so
+    // the player is never handed a second main menu on the way out --
+    // they land on the hub they started from, with its numbers
+    // re-synced. Same teardown as the chip in the corner, deliberately:
+    // one way out, one code path.
+    if(e.data && e.data.type === 'voidbreak_hub'){
+      exitVoidbreak();
     }
   });
 
@@ -16998,6 +17159,15 @@ if(tutorialActive) tutorialUpdate(dt);
     loaded: false
   };
 
+  // WHERE THE HERO BUTTON GOES. A pilot who has never left home is
+  // starting a journey and wants the galaxy map -- the choice of where
+  // to go first IS the beginning of the game. A pilot who has been out
+  // there is continuing one, and wants the system they left off in, not
+  // a map asking them to find it again. Resolved from the Voidbreak
+  // save in renderVoidbreakProfile() below; 'resume' is read by
+  // voidbreak.html's resumeIntoJourney().
+  let vbJourneyScreen = 'galaxy';
+
   // The universe content module, if it loaded. Every caller guards on
   // this, so a failed/blocked fetch of voidbreakUniverse.js costs two
   // labels and nothing else.
@@ -17109,11 +17279,23 @@ if(tutorialActive) tutorialUpdate(dt);
     const gf = lobbyEl('footGalaxyFill');
     if(gf) gf.style.width = (VBP.galaxyTotal > 0 ? (VBP.galaxiesCleared / VBP.galaxyTotal) * 100 : 0) + '%';
 
+    // BEGIN vs CONTINUE. Any of these four is a journey already under
+    // way: a system cleared, a site found, a ship component recovered,
+    // or a galaxy drive used. All four come from the save that was just
+    // read, so a returning player on a brand new device gets CONTINUE
+    // as soon as their account's save lands -- nothing here is kept on
+    // the device, and nothing here is a second copy of the save.
+    const started = VBP.loaded && (VBP.cleared > 0 || VBP.discovered > 0
+      || VBP.shipParts > 0 || VBP.galaxyId > 1);
+    vbJourneyScreen = started ? 'resume' : 'galaxy';
+
+    const label = lobbyEl('lobbyJourneyLabel');
+    if(label) label.textContent = started ? 'CONTINUE JOURNEY' : 'BEGIN JOURNEY';
     const sub = lobbyEl('lobbyJourneySub');
     if(sub){
-      sub.textContent = (known && VBP.galaxyName)
-        ? ('CONTINUE IN ' + VBP.galaxyName)
-        : 'EXPLORE \u00b7 DISCOVER \u00b7 GROW';
+      sub.textContent = started
+        ? ((known && VBP.galaxyName) ? ('CONTINUE IN ' + VBP.galaxyName) : 'RESUME YOUR EXPEDITION')
+        : 'CHART YOUR FIRST GALAXY';
     }
   }
 
@@ -17167,10 +17349,23 @@ if(tutorialActive) tutorialUpdate(dt);
   // lobby, the Arena screen and the nav bar, so a destination is wired
   // in exactly one place no matter how many buttons point at it.
   function lobbyRoute(act){
-    if(act === 'journey')            { launchVoidbreak(); }
+    // The journey, and every destination inside it. Each of these opens
+    // Voidbreak ON that screen (see launchVoidbreak / voidbreak.html's
+    // applyLaunchScreen) rather than on a menu, and BACK from any of
+    // them comes straight back to this hub.
+    if(act === 'journey')            { launchVoidbreak(vbJourneyScreen); }
     else if(act === 'galaxy')        { launchVoidbreak('galaxy'); }
     else if(act === 'planet')        { launchVoidbreak('planet'); }
+    else if(act === 'ship')          { launchVoidbreak('ship'); }
     else if(act === 'loadout')       { launchVoidbreak('loadout'); }
+    else if(act === 'forge')         { launchVoidbreak('forge'); }
+    // Voidbreak's OWN shard shop -- the one that spends Void Shards on
+    // its cosmetics, mastery and prestige. A different economy from the
+    // Void Market below, which spends Coins and Crystals; both existed
+    // already, and both now have a door on the hub instead of one of
+    // them being buried behind a menu inside the campaign.
+    else if(act === 'shardshop')     { launchVoidbreak('shop'); }
+    else if(act === 'coop')          { launchVoidbreak('coop'); }
     // The arena's own equip screen: the ability and ship systems a
     // pilot takes into a duel, which live in the Void Market's own
     // tabs. Distinct from the campaign's Void Loadout above -- these
@@ -17226,7 +17421,7 @@ if(tutorialActive) tutorialUpdate(dt);
         btn.addEventListener(evt, release);
       });
     };
-    wireHero('lobbyJourney', ()=> launchVoidbreak());
+    wireHero('lobbyJourney', ()=> lobbyRoute('journey'));
     wireHero('arenaPlay', lobbyStartSelectedMode);
 
     const backArena = lobbyEl('btnBackVbArena');
@@ -17286,7 +17481,7 @@ if(tutorialActive) tutorialUpdate(dt);
         else if(e.key === 'Escape')     { e.preventDefault(); closeVbArena(); }
         return;
       }
-      if(e.key === 'Enter'){ e.preventDefault(); launchVoidbreak(); }
+      if(e.key === 'Enter'){ e.preventDefault(); lobbyRoute('journey'); }
     });
   }
 

@@ -334,7 +334,7 @@ body.ingame #cv{cursor:none}
 h2.ovtitle{font-family:'Orbitron';font-weight:700;font-size:24px;letter-spacing:6px;color:#eafcff;
   text-shadow:0 0 14px rgba(0,240,255,.5);margin-bottom:4px;text-align:center}
 .ovsub{text-align:center;color:#7ea4b5;letter-spacing:4px;font-size:13px;margin-bottom:18px}
-.ovnav{display:flex;gap:12px;justify-content:center;margin-top:24px}
+.ovnav{display:flex;gap:12px;justify-content:center;margin-top:24px;flex-wrap:wrap}
 .howto-sec{margin-bottom:18px}
 .howto-sec h3{font-family:'Orbitron';font-size:13px;letter-spacing:4px;color:var(--cy);margin-bottom:8px}
 .krow{display:flex;gap:10px;align-items:center;margin:5px 0;font-size:15px}
@@ -667,6 +667,26 @@ input[type=range]{width:180px;accent-color:var(--cy)}
 .uni-sub{font-size:12.5px;letter-spacing:4px;color:#7ea4b5;margin-top:4px}
 .uni-back{position:absolute;top:calc(16px + env(safe-area-inset-top,0px));
   left:calc(18px + env(safe-area-inset-left,0px));z-index:2}
+/* ---- inside the Command Center (body.in-shell -- see the SHELL block
+   in the script) ----
+   The shell draws its own COMMAND CENTER chip and fullscreen toggle
+   over the top-left of this iframe, on every screen including mid-run.
+   These floating BACK buttons sit in exactly that spot, so in-shell
+   they go and their jobs move:
+     * On the galaxy map and the home planet, BACK already MEANT the
+       Command Center -- the shell's chip is the same action, drawn
+       once instead of twice with one button covering the other.
+     * The solar system's BACK means something else (up to the galaxy
+       map), so it moves into the dock beside SET COURSE, where the
+       planet screen has always kept its own GALAXY MAP button. That
+       also puts it somewhere the responsive dock already handles,
+       rather than pinned to a corner two documents have to agree
+       about. */
+body.in-shell .uni-back{display:none}
+#sysUpGalaxy{display:none}
+body.in-shell #sysUpGalaxy{display:block}
+/* Difficulty sits between "where am I going" and "SET COURSE". */
+.uni-diff{margin-top:10px}
 .uni-corner{position:absolute;top:calc(16px + env(safe-area-inset-top,0px));
   right:calc(18px + env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:6px;align-items:flex-end;
   pointer-events:none}
@@ -1224,7 +1244,7 @@ input[type=range]{width:180px;accent-color:var(--cy)}
   <div class="eg-featured" id="shopFeatured"></div>
   <div class="eg-grid" id="shopGrid"></div>
   <div class="eg-empty" id="shopLocked"></div>
-  <div class="ovnav"><button class="btn" id="shopBack">BACK</button></div>
+  <div class="ovnav"><button class="btn" id="shopBack">BACK</button><button class="btn" data-go="mastery">MASTERY</button><button class="btn" data-go="prestige">PRESTIGE</button><button class="btn" data-go="leaderboard">LEADERBOARD</button></div>
 </div></div>
 
 <!-- ---- WEAPON MASTERY ---- -->
@@ -1234,7 +1254,7 @@ input[type=range]{width:180px;accent-color:var(--cy)}
   <div class="eg-bar"><div class="eg-bal" id="masterySummary"></div></div>
   <div class="mastery-list" id="masteryList"></div>
   <div class="eg-empty" id="masteryLocked"></div>
-  <div class="ovnav"><button class="btn" id="masteryBack">BACK</button></div>
+  <div class="ovnav"><button class="btn" id="masteryBack">BACK</button><button class="btn" data-go="shop">SHARD SHOP</button><button class="btn" data-go="prestige">PRESTIGE</button><button class="btn" data-go="leaderboard">LEADERBOARD</button></div>
 </div></div>
 
 <!-- ---- VOID PRESTIGE ---- -->
@@ -1259,6 +1279,9 @@ input[type=range]{width:180px;accent-color:var(--cy)}
   <div class="eg-empty" id="prestigeLocked"></div>
   <div class="ovnav">
     <button class="btn" id="prestigeBack">BACK</button>
+    <button class="btn" data-go="shop">SHARD SHOP</button>
+    <button class="btn" data-go="mastery">MASTERY</button>
+    <button class="btn" data-go="leaderboard">LEADERBOARD</button>
     <button class="btn danger" id="prestigeGo" disabled>ACTIVATE PRESTIGE</button>
   </div>
 </div></div>
@@ -1284,7 +1307,7 @@ input[type=range]{width:180px;accent-color:var(--cy)}
   <div class="lb-list" id="lbList"></div>
   <div class="eg-empty" id="lbEmpty"></div>
   <div class="lb-you-row" id="lbYouRow"></div>
-  <div class="ovnav"><button class="btn" id="lbBack">BACK</button></div>
+  <div class="ovnav"><button class="btn" id="lbBack">BACK</button><button class="btn" data-go="shop">SHARD SHOP</button><button class="btn" data-go="mastery">MASTERY</button><button class="btn" data-go="prestige">PRESTIGE</button></div>
 </div></div>
 
 <!-- ============================================================
@@ -1317,7 +1340,7 @@ input[type=range]{width:180px;accent-color:var(--cy)}
 
 <!-- ---- SOLAR SYSTEM MAP ---- -->
 <div class="uni-screen" id="uni-system">
-  <button class="btn uni-back" id="sysBack">BACK</button>
+  <button class="btn uni-back" id="sysBack">◀ GALAXY MAP</button>
   <div class="uni-top">
     <div class="uni-title" id="sysGalaxyName">—</div>
     <div class="uni-sub" id="sysGalaxySub"></div>
@@ -1327,10 +1350,24 @@ input[type=range]{width:180px;accent-color:var(--cy)}
   <div class="uni-dock" id="sysDock">
     <div class="uni-dock-title" id="sysName">—</div>
     <div class="uni-dock-sub" id="sysDesc"></div>
+    <!-- EXPEDITION DIFFICULTY. It used to live on the old Voidbreak
+         menu, which is no longer a screen anybody passes through -- and
+         this is where it belonged anyway: the screen where you choose
+         WHERE you are going is the screen where you choose how hard it
+         will be, right next to SET COURSE. Same markup contract as the
+         copy on #ov-menu (which is still the standalone build's menu):
+         one shared pendingDifficulty, one syncDifficultyUI() that
+         renders every .diff-btn on the page, one delegated handler. -->
+    <div class="diff-row uni-diff" id="sysDiffRow">
+      <button type="button" class="diff-btn" data-diff="normal">NORMAL<span class="diff-mult">1.0×</span></button>
+      <button type="button" class="diff-btn" data-diff="hard">HARD<span class="diff-mult">1.5×</span></button>
+      <button type="button" class="diff-btn" data-diff="extreme">EXTREME<span class="diff-mult">2.0×</span></button>
+    </div>
     <div class="uni-dock-row">
       <button class="btn primary" id="sysLaunch">SET COURSE</button>
       <button class="btn" id="sysPrev">◀ PREV</button>
       <button class="btn" id="sysNext">NEXT ▶</button>
+      <button class="btn" id="sysUpGalaxy">GALAXY MAP</button>
     </div>
   </div>
   <div class="uni-hint">CLICK A SYSTEM · SET COURSE TO DEPLOY</div>
@@ -1759,6 +1796,36 @@ function setLoadout(slot,id){
    the eight-level experience it always had, instead of a blank screen. */
 const UNI=window.VBUniverse||null;
 const UNI_OK=!!(UNI&&UNI.GALAXIES&&UNI.GALAXIES.length);
+
+/* =================================================================
+   RUNNING INSIDE THE COMMAND CENTER
+
+   Voidbreak used to be opened as a page of its own, so it needed a main
+   menu of its own (#ov-menu). It is now one half of a single game: the
+   shell (index.html) owns identity, currencies, social, PvP and the
+   COMMAND CENTER that a player lands on when they open Voidbreak, and
+   this document owns the campaign it sends them into.
+
+   Two main menus in a row is the whole problem that leaves -- open
+   Voidbreak, arrive at a menu, press play, arrive at ANOTHER menu that
+   looks like a second game booting. So when the shell launches this
+   page (it appends ?shell=1 -- see launchVoidbreak() in index.html),
+   #ov-menu stops being a destination: every "back to the menu" in here
+   returns to the Command Center instead, and the shell deep-links
+   straight to the screen the player actually chose.
+
+   The parent check keeps a hand-typed ?shell=1 on a directly-opened tab
+   from claiming a hub that isn't there. And #ov-menu is NOT deleted: it
+   is still the whole menu when this page is opened standalone, and
+   still the correct fallback when voidbreakUniverse.js fails to load
+   (see go(), which only re-routes while there is a universe to route
+   into).
+   ================================================================= */
+const SHELL=(function(){
+  try{ return /[?&]shell=1(&|$)/.test(location.search)&&!!window.parent&&window.parent!==window; }
+  catch(e){ return false; }
+})();
+try{ if(SHELL)document.body.classList.add('in-shell'); }catch(e){}
 function emptyUniverseSave(){
   return {galaxy:1,systems:{},discovered:{},drive:{},ship:{},coins:0,coinsSpent:0,
     planet:{buildings:{},decorations:{}}};
@@ -2164,8 +2231,24 @@ function adoptServerSave(data,updatedAt){
     // The visible numbers just changed under the player's feet, so
     // re-render rather than leaving a stale menu on screen.
     refreshMenuStats();syncSettingsUI();if(actx)applyAudioSettings();
+    refreshLiveUniverseScreen();
   }
   return differs;
+}
+
+// The galaxy map, the system map and the home planet are drawn straight
+// out of `save`, so a save adopted from the server while one of them is
+// open has to redraw it -- otherwise a system another device just
+// cleared stays locked on this one until the screen is reopened. Now
+// that these screens are destinations a player sits on (rather than
+// steps on the way in from a menu), that is a state they can actually
+// be caught in.
+function refreshLiveUniverseScreen(){
+  try{
+    if(state==='galaxy')refreshGalaxyUI();
+    else if(state==='system'){uniGalaxyId=uni().galaxy||uniGalaxyId;refreshSystemUI();}
+    else if(state==='planet')refreshPlanetUI();
+  }catch(e){}
 }
 
 async function flushCloudSave(){
@@ -2178,27 +2261,7 @@ async function flushCloudSave(){
   if(!cloudSavePending)return;
   cloudSavePending=false;
   cloudSaveInFlight=true;
-  // `mastery` is client-reported (see voidbreak.js's DEF_SAVE header
-  // comment) exactly like `shards`/`kills` already were -- it belongs in
-  // every ordinary save payload so the server actually learns about XP
-  // earned this session. Leaving it out here (as this payload once did)
-  // meant the server's own stored mastery could never advance past
-  // whatever it was on the account's very first sync: awardMastery()
-  // grows `save.mastery` locally on every kill, the Mastery screen reads
-  // that same local value and correctly shows CLAIM, but
-  // /voidbreak/mastery/claim checks the STORED (still-zero) server
-  // value and refuses with "requirements not met" -- a claim button that
-  // can never actually be pressed successfully.
-  const payload={shards:save.shards,forge:save.forge,weapons:save.weapons,lastWeapon:save.lastWeapon,
-    loadout:save.loadout,
-    runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten,mastery:save.mastery,
-    // The client-reported half of the universe. `planet`/`coinsSpent`
-    // are deliberately NOT sent -- they are server-owned and the server
-    // discards them anyway (applyClientSave), so sending them would only
-    // be noise on the wire.
-    universe:{galaxy:save.universe.galaxy,systems:save.universe.systems,
-      discovered:save.universe.discovered,drive:save.universe.drive,
-      ship:save.universe.ship,coins:save.universe.coins}};
+  const payload=cloudSavePayload();
   try{
     const res=await fetch('/voidbreak/save',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({sessionToken:cloudSessionToken,data:payload,baseVersion:cloudSaveVersion})});
@@ -2244,27 +2307,7 @@ async function flushCloudSave(){
 async function pushCloudSaveNow(){
   if(!cloudSyncEnabled||!cloudStateKnown)return;
   setSyncStatus('saving');
-  // `mastery` is client-reported (see voidbreak.js's DEF_SAVE header
-  // comment) exactly like `shards`/`kills` already were -- it belongs in
-  // every ordinary save payload so the server actually learns about XP
-  // earned this session. Leaving it out here (as this payload once did)
-  // meant the server's own stored mastery could never advance past
-  // whatever it was on the account's very first sync: awardMastery()
-  // grows `save.mastery` locally on every kill, the Mastery screen reads
-  // that same local value and correctly shows CLAIM, but
-  // /voidbreak/mastery/claim checks the STORED (still-zero) server
-  // value and refuses with "requirements not met" -- a claim button that
-  // can never actually be pressed successfully.
-  const payload={shards:save.shards,forge:save.forge,weapons:save.weapons,lastWeapon:save.lastWeapon,
-    loadout:save.loadout,
-    runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten,mastery:save.mastery,
-    // The client-reported half of the universe. `planet`/`coinsSpent`
-    // are deliberately NOT sent -- they are server-owned and the server
-    // discards them anyway (applyClientSave), so sending them would only
-    // be noise on the wire.
-    universe:{galaxy:save.universe.galaxy,systems:save.universe.systems,
-      discovered:save.universe.discovered,drive:save.universe.drive,
-      ship:save.universe.ship,coins:save.universe.coins}};
+  const payload=cloudSavePayload();
   try{
     const res=await fetch('/voidbreak/save',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({sessionToken:cloudSessionToken,data:payload,baseVersion:cloudSaveVersion})});
@@ -2284,6 +2327,73 @@ async function pushCloudSaveNow(){
   }catch(e){
     setSyncStatus('offline');
   }
+}
+
+// The client-reported half of the save, exactly as both upload paths
+// send it. Extracted verbatim from the two identical copies that used
+// to sit inline in flushCloudSave() and pushCloudSaveNow(), so the
+// teardown beacon added below cannot drift from them: a field added to
+// the save now reaches the server down every path or none.
+//
+// `mastery` is client-reported (see voidbreak.js's DEF_SAVE header
+// comment) exactly like `shards`/`kills` already were -- it belongs in
+// every ordinary save payload so the server actually learns about XP
+// earned this session. Leaving it out (as these payloads once did)
+// meant the server's own stored mastery could never advance past
+// whatever it was on the account's very first sync: awardMastery()
+// grows `save.mastery` locally on every kill, the Mastery screen reads
+// that same local value and correctly shows CLAIM, but
+// /voidbreak/mastery/claim checks the STORED (still-zero) server value
+// and refuses with "requirements not met" -- a claim button that can
+// never actually be pressed successfully.
+function cloudSavePayload(){
+  return {shards:save.shards,forge:save.forge,weapons:save.weapons,lastWeapon:save.lastWeapon,
+    loadout:save.loadout,
+    runs:save.runs,best:save.best,kills:save.kills,beaten:save.beaten,mastery:save.mastery,
+    // The client-reported half of the universe. `planet`/`coinsSpent`
+    // are deliberately NOT sent -- they are server-owned and the server
+    // discards them anyway (applyClientSave), so sending them would only
+    // be noise on the wire.
+    universe:{galaxy:save.universe.galaxy,systems:save.universe.systems,
+      discovered:save.universe.discovered,drive:save.universe.drive,
+      ship:save.universe.ship,coins:save.universe.coins}}
+}
+
+/* =================================================================
+   LEAVING FOR THE COMMAND CENTER
+
+   The shell tears this iframe down when the player goes back to the
+   Command Center (that is what stops the run loop and the audio dead
+   instead of leaving them running behind a hidden overlay). A debounced
+   cloud save that had not fired yet would be torn down with it.
+
+   Nothing is ever LOST when that happens -- saveGameCloud() always
+   writes this account's local cache synchronously first, and the next
+   launch's bootstrapCloudSave() merges a local cache that is ahead of
+   the cloud and heals the record. But "heals on the next launch" is not
+   the same as "saved", so the exit flushes: sendBeacon is the one
+   request shape the browser is required to keep alive across a document
+   going away, which is precisely this case. Its response is discarded
+   (there is no document left to adopt it into); the server arbitrates
+   the upload the same way it arbitrates every other save, and the next
+   launch reads back whatever won.
+   ================================================================= */
+function beaconCloudSave(){
+  if(!cloudSyncEnabled||!cloudStateKnown||!cloudSavePending)return;
+  if(!navigator.sendBeacon)return;
+  try{
+    const blob=new Blob([JSON.stringify({sessionToken:cloudSessionToken,
+      data:cloudSavePayload(),baseVersion:cloudSaveVersion})],{type:'application/json'});
+    if(navigator.sendBeacon('/voidbreak/save',blob))cloudSavePending=false;
+  }catch(e){}
+}
+// Hands the player back to the Command Center. Called by every "back to
+// the menu" in this document while SHELL is on (see go()), so there is
+// exactly one way out and it always saves first.
+function returnToHub(){
+  clearTimeout(cloudSaveTimer);
+  beaconCloudSave();
+  try{ window.parent.postMessage({type:'voidbreak_hub'},location.origin); }catch(e){}
 }
 
 // Handles the ONE handshake reply index.html ever sends (see this
@@ -10088,6 +10198,32 @@ function go(s){
   // the game degrades to exactly the eight-level experience it had
   // before, which is a working game, not a broken one.
   if(!UNI_OK&&(s==='galaxy'||s==='system'||s==='planet'||s==='ship'))s='menu';
+  // THE ONE PLACE THE SECOND MAIN MENU GOES AWAY.
+  //
+  // Launched from the Command Center, this page's own menu is not a
+  // screen the player ever wants: they already chose a destination
+  // there, and "back" from a destination means back to the hub they
+  // chose it in -- not to a second menu wearing the same logo. So every
+  // existing go('menu') in this file (BACK on the maps and the panels,
+  // QUIT from a pause, MAIN MENU on the victory and game-over screens)
+  // keeps meaning exactly what it says and lands where the main menu
+  // now actually is.
+  //
+  // Guarded on UNI_OK because without the universe module there IS no
+  // Command Center destination to hold the campaign's screens, and
+  // #ov-menu is the whole (correct, still working) fallback game.
+  if(s==='menu'&&SHELL&&UNI_OK){
+    // Leave this document in a quiet, consistent state first: the shell
+    // blanks the iframe a moment later, and nothing should be mid-run,
+    // mid-pause or drawing gameplay chrome while that happens.
+    state='menu';paused=false;uiOpen=false;curUI=null;pendingSystem=null;
+    hideAllOverlays();
+    document.body.classList.remove('ingame');
+    if(isTouchDevice)mobileControlsEl.classList.remove('on');
+    el('hud').classList.add('hidden');el('bossBarWrap').classList.add('hidden');
+    returnToHub();
+    return;
+  }
   state=s;paused=false;uiOpen=false;curUI=null;
   if(s==='weapons')launching=false;
   // Backing out of a launch screen disarms the destination, so a stale
@@ -10107,7 +10243,7 @@ function go(s){
     if(!list.length){go('galaxy');return;}
     uniSystemIdx=clamp(uniSystemIdx,0,list.length-1);
     sysPan.x=0;sysPan.y=0;
-    refreshSystemUI();
+    refreshSystemUI();syncDifficultyUI();
   }
   else if(s==='planet'){
     el('uni-planet').classList.add('on');Music.set('menu');
@@ -10939,15 +11075,34 @@ el('planetBack').addEventListener('click',()=>{SFX.ui();go('menu');});
 let shipReturn='menu';
 el('planetShip').addEventListener('click',()=>{SFX.ui();shipReturn='planet';go('ship');});
 el('planetGalaxy').addEventListener('click',()=>{SFX.ui();go('galaxy');});
+// The solar system's route back up to the galaxy map. Shown only
+// in-shell, where the floating .uni-back it replaces is hidden (see the
+// body.in-shell rules in the stylesheet).
+el('sysUpGalaxy').addEventListener('click',()=>{SFX.ui();go('galaxy');});
+// Cross-links between the four endgame screens (shard shop, mastery,
+// prestige, leaderboard). They used to be reachable only as a row of
+// buttons on #ov-menu; now that the Command Center is the menu, they
+// reach each other directly and the hub needs one door into the cluster
+// instead of four. One delegated wiring for all of them -- every BACK
+// in the cluster still goes wherever go('menu') goes.
+document.querySelectorAll('[data-go]').forEach(b=>{
+  b.addEventListener('click',()=>{SFX.ui();go(b.getAttribute('data-go'));});
+});
 el('shipBack').addEventListener('click',()=>{SFX.ui();go(shipReturn);});
 /* ---- difficulty select ---- */
+// The difficulty picker is rendered in two places now -- the solar
+// system dock (where a launch is actually chosen) and #ov-menu (the
+// standalone/no-universe build's menu). Both read and write the one
+// `pendingDifficulty`, so this selects across whichever copies exist
+// rather than one hard-coded container.
 function syncDifficultyUI(){
-  document.querySelectorAll('#diffRow .diff-btn').forEach(b=>{
+  document.querySelectorAll('.diff-btn[data-diff]').forEach(b=>{
     b.classList.toggle('selected',b.dataset.diff===pendingDifficulty);
   });
-  el('diffHint').textContent=DIFFICULTY_MODES[pendingDifficulty].label+' SELECTED';
+  const hint=el('diffHint');
+  if(hint)hint.textContent=DIFFICULTY_MODES[pendingDifficulty].label+' SELECTED';
 }
-document.querySelectorAll('#diffRow .diff-btn').forEach(btn=>{
+document.querySelectorAll('.diff-btn[data-diff]').forEach(btn=>{
   btn.addEventListener('click',()=>{
     const d=btn.dataset.diff;
     if(!DIFFICULTY_MODES[d]||d===pendingDifficulty)return;
@@ -11029,9 +11184,20 @@ el('btnReset').addEventListener('click',()=>{
 
 /* ---------- 19 · BOOT ---------- */
 // The loading screen's last step: hold it until the account's save is
-// settled (cloud, local cache or guest), so the menu it reveals shows
-// real progress rather than placeholder numbers for a moment.
-function loaderSaveReady(){ if(window.VBLoader)window.VBLoader.mark('app'); }
+// settled (cloud, local cache or guest), so what it reveals shows real
+// progress rather than placeholder numbers for a moment.
+//
+// The destination is applied here too, BEFORE the loader lifts -- so
+// what the screen reveals is already the place the player chose in the
+// Command Center, never a menu that flicks over to it a frame later.
+// It also has to be here rather than at the bottom of this script:
+// CONTINUE JOURNEY needs the account's real save to know which galaxy
+// and system to open on, and that save does not exist yet when the
+// script itself finishes. See applyLaunchScreen().
+function loaderSaveReady(){
+  applyLaunchScreen();
+  if(window.VBLoader)window.VBLoader.mark('app');
+}
 // Ask the parent (index.html) who's signed in -- see
 // handleSessionHandshake above and index.html's own 'voidbreak_ready'
 // handler, which replies with 'duelarena_session'. Only a same-origin
@@ -11042,6 +11208,11 @@ window.addEventListener('message',(e)=>{
   if(e.data&&e.data.type==='duelarena_session'){
     handleSessionHandshake(e.data.sessionToken||null,e.data.accountId||null).finally(loaderSaveReady);
   }
+  // The shell's COMMAND CENTER chip, asking this document to leave.
+  // Routed through the same exit as every in-game "back to the menu",
+  // so it costs the same: a save still sitting on the debounce goes out
+  // before the shell tears this iframe down (see returnToHub).
+  if(e.data&&e.data.type==='duelarena_leave')returnToHub();
 });
 // Online co-op buttons + the ?coop=<size> launch flag from the parent's
 // ONLINE hub. Wired before the readiness ping so a co-op launch is
@@ -11057,21 +11228,81 @@ setTimeout(()=>{if(!cloudBootstrapped)handleSessionHandshake(null,null).finally(
 refreshMenuStats();
 syncSettingsUI();
 
-// ?screen=<name> -- the shell's GALAXY MAP / HOME PLANET / LOADOUT
-// destinations open this page directly on that screen instead of making
-// the player walk in through the menu (see index.html's
-// launchVoidbreak). It is only a STARTING VIEW: every one of these is
-// reachable by hand exactly as before, BACK still returns to the menu,
-// and an unknown or missing value simply stays on the menu. A screen
-// that needs the universe module is skipped when that module did not
-// load, for the same reason go() itself redirects those.
-try{
-  const m=/[?&]screen=([a-z]+)(&|$)/.exec(location.search);
-  const want=m?m[1]:null;
-  if(want==='loadout'){loadoutReturn='menu';go('weapons');}
-  else if(want==='galaxy'&&UNI_OK)go('galaxy');
-  else if(want==='planet'&&UNI_OK)go('planet');
-}catch(e){}
+/* =================================================================
+   WHERE A LAUNCH LANDS  --  ?screen=<name>
+
+   The Command Center opens this page ON the destination the player
+   picked, rather than on a menu that asks them to pick it again. Every
+   tile in the hub is one of these names, and BACK from any of them
+   returns to the hub (see go()).
+
+   `resume` is CONTINUE JOURNEY: the galaxy the save says the player is
+   in, positioned on the first system they have not finished. That has
+   to wait for the save -- at boot `save` is still whatever this device
+   last cached, which for a returning player on a new device is nothing
+   at all -- so this runs from loaderSaveReady(), after the account's
+   save has settled and before the loading screen lifts. The player
+   never sees an intermediate screen.
+
+   An unknown or missing name simply stays where it is, which standalone
+   means the menu. A screen that needs the universe module is bounced by
+   go() itself, exactly as before.
+   ================================================================= */
+const LAUNCH_SCREEN=(function(){
+  try{
+    const m=/[?&]screen=([a-z]+)(&|$)/.exec(location.search);
+    if(m)return m[1];
+    // A co-op launch (?coop=<size>) is a destination too -- the room is
+    // already being created by the time this runs (see wireCoop), so
+    // show the lobby it is being created in instead of a menu.
+    if(/[?&]coop=coop[234](&|$)/.test(location.search))return 'coop';
+    // Launched from the hub with nothing named: continuing is the one
+    // thing the hub's own hero button means, so it is the safe default.
+    return SHELL?'resume':null;
+  }catch(e){ return null; }
+})();
+
+// CONTINUE JOURNEY. Opens the solar system map on the galaxy the save
+// is in, cursor on the first system that is still unfinished -- the
+// same "pick up where you left off" rule entering a galaxy by hand
+// already uses (see enterSelectedGalaxy).
+function resumeIntoJourney(){
+  if(!UNI_OK){go('menu');return;}
+  uniGalaxyId=uni().galaxy||1;
+  const list=curGalaxySystems();
+  if(!list.length){go('galaxy');return;}
+  uniSystemIdx=0;
+  for(let i=0;i<list.length;i++){
+    if(!sysCleared(uniGalaxyId,list[i].id)){uniSystemIdx=i;break;}
+    uniSystemIdx=i;
+  }
+  go('system');
+}
+
+let launchScreenApplied=false;
+function applyLaunchScreen(){
+  const want=LAUNCH_SCREEN;
+  if(!want)return;
+  if(launchScreenApplied){
+    // A real session can arrive AFTER the 3s guest fallback already
+    // routed us (see the BOOT handshake below), replacing the save with
+    // the account's actual progress. Re-place the cursor when that
+    // happens -- but only on the journey screens, and never over a run
+    // that has already started.
+    if(!runActive&&state==='system'&&(want==='resume'||want==='system'))resumeIntoJourney();
+    return;
+  }
+  launchScreenApplied=true;
+  try{
+    if(want==='resume'||want==='system')resumeIntoJourney();
+    else if(want==='loadout'){loadoutReturn='menu';go('weapons');}
+    else if(want==='ship'){shipReturn='menu';go('ship');}
+    else if(want==='settings'){settingsReturn='menu';go('settings');syncSettingsUI();}
+    else if(want==='galaxy'||want==='planet'||want==='forge'||want==='shop'
+      ||want==='mastery'||want==='prestige'||want==='leaderboard'
+      ||want==='coop'||want==='howto')go(want);
+  }catch(e){}
+}
 
 cam.x=0;cam.y=0;
 requestAnimationFrame(t=>{last=t;requestAnimationFrame(frame);});
