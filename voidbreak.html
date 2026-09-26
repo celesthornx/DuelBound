@@ -11,6 +11,158 @@
 <meta name="theme-color" content="#04050c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- LOADING SCREEN (see the #vbLoader block at the top of <body>).
+     Preload only the one piece of art this viewport will actually use;
+     the media queries here mirror the ones in the style block below. -->
+<link rel="preload" as="image" type="image/webp" href="/loading/desktop.webp" media="(min-aspect-ratio: 1501/1000)">
+<link rel="preload" as="image" type="image/webp" href="/loading/tablet.webp" media="(min-aspect-ratio: 1001/1000) and (max-aspect-ratio: 3/2)">
+<link rel="preload" as="image" type="image/webp" href="/loading/phone.webp" media="(max-aspect-ratio: 1/1)">
+<style id="vbLoaderStyle">
+  /* Three crops of the same artwork, one per screen shape (the art was
+     painted as a desktop / tablet / phone set). Each crop's logo and
+     progress panel positions are percentages of THAT crop, so the live
+     panel lands exactly on the spot the art leaves dark for it. */
+  #vbLoader{
+    --art:url('/loading/desktop.webp'); --ar:2.9425;
+    --logo-l:11.2%; --logo-t:5%; --logo-s:4cqw;
+    --pn-l:30.27%; --pn-t:77.78%; --pn-w:38.61%; --pn-h:17.82%;
+    position:fixed; inset:0; z-index:2147483000; overflow:hidden;
+    background:#04050c; color:#bff6ff;
+    font-family:'Orbitron','Chakra Petch','Segoe UI',system-ui,sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    opacity:1; transition:opacity .45s ease, visibility 0s linear .45s;
+    -webkit-user-select:none; user-select:none;
+  }
+  @media (max-aspect-ratio: 3/2){
+    #vbLoader{
+      --art:url('/loading/tablet.webp'); --ar:1.7882;
+      --logo-l:10.7%; --logo-t:2.6%; --logo-s:6.6cqw;
+      --pn-l:19%; --pn-t:74.4%; --pn-w:60.6%; --pn-h:19%;
+    }
+  }
+  @media (max-aspect-ratio: 1/1){
+    #vbLoader{
+      --art:url('/loading/phone.webp'); --ar:0.792;
+      --logo-l:50%; --logo-x:-50%; --logo-t:2.6%; --logo-s:9.6cqw;
+      --pn-l:2.8%; --pn-t:75.2%; --pn-w:94.4%; --pn-h:15.7%;
+    }
+  }
+  #vbLoader.vbl-out{ opacity:0; visibility:hidden; pointer-events:none; }
+  /* The same art, blurred, fills whatever the sharp crop doesn't cover
+     (above/below it on a 16:9 monitor, beside it on an ultrawide). */
+  #vbLoader .vbl-blur{
+    position:absolute; inset:-8%; background:var(--art) center/cover no-repeat;
+    filter:blur(28px) saturate(1.15) brightness(.5);
+  }
+  #vbLoader .vbl-stage{
+    position:relative; flex:none; container-type:size;
+    width:min(100vw, calc(100vh * var(--ar)));
+    width:min(100vw, calc(100dvh * var(--ar)));
+    aspect-ratio:var(--ar);
+  }
+  #vbLoader .vbl-art{
+    position:absolute; inset:0; background:var(--art) center/100% 100% no-repeat;
+    -webkit-mask-image:linear-gradient(to bottom, transparent, #000 7%, #000 93%, transparent),
+                       linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
+    -webkit-mask-composite:source-in;
+    mask-image:linear-gradient(to bottom, transparent, #000 7%, #000 93%, transparent),
+               linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
+    mask-composite:intersect;
+  }
+  #vbLoader .vbl-logo{
+    position:absolute; left:var(--logo-l); top:var(--logo-t);
+    transform:translateX(var(--logo-x, 0));
+    display:grid; grid-template-columns:auto auto; align-items:center;
+    column-gap:calc(var(--logo-s) * .18); row-gap:0;
+    opacity:0; transition:opacity .35s ease;
+  }
+  #vbLoader .vbl-logo.vbl-in{ opacity:1; }
+  #vbLoader .vbl-emblem{
+    grid-row:1 / span 2; width:var(--logo-s); height:var(--logo-s);
+    filter:drop-shadow(0 0 calc(var(--logo-s) * .12) rgba(160,92,255,.75));
+  }
+  #vbLoader .vbl-word{
+    font-weight:700; font-size:calc(var(--logo-s) * .78); line-height:1;
+    letter-spacing:.06em; white-space:nowrap;
+    filter:drop-shadow(0 0 calc(var(--logo-s) * .1) rgba(90,220,255,.45));
+  }
+  #vbLoader .vbl-word b{ font-weight:700; }
+  #vbLoader .vbl-void{
+    background:linear-gradient(180deg,#f2feff 0%,#a6f1ff 55%,#62d6ff 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  #vbLoader .vbl-break{
+    background:linear-gradient(180deg,#ff8fc8 0%,#ff4f9d 55%,#ff2d78 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  #vbLoader .vbl-tag{
+    font-weight:500; font-size:max(8px, calc(var(--logo-s) * .2));
+    letter-spacing:.34em; color:#5fe3ff; white-space:nowrap; align-self:start;
+    margin-top:calc(var(--logo-s) * .1);
+    text-shadow:0 0 6px rgba(0,200,255,.55);
+  }
+  /* Centred on the dark spot the art leaves for it, but never narrower
+     than its text needs (a landscape phone shrinks the art a lot). */
+  #vbLoader .vbl-panel{
+    position:absolute; top:var(--pn-t); height:var(--pn-h); container-type:size;
+    left:calc(var(--pn-l) + var(--pn-w) / 2); transform:translateX(-50%);
+    width:min(96vw, max(var(--pn-w), 360px));
+  }
+  #vbLoader .vbl-panel-bg{
+    position:absolute; inset:0;
+    clip-path:polygon(0 50%, 7% 0, 93% 0, 100% 50%, 93% 100%, 7% 100%);
+    background:linear-gradient(180deg, rgba(8,18,44,.82), rgba(6,10,30,.9));
+    -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);
+  }
+  #vbLoader .vbl-panel svg{
+    position:absolute; inset:0; width:100%; height:100%; overflow:visible;
+    filter:drop-shadow(0 0 5px rgba(0,210,255,.7));
+  }
+  #vbLoader .vbl-status{
+    position:absolute; left:0; right:0; top:17%; text-align:center;
+    font-weight:500; font-size:max(10px, 2.6cqw); letter-spacing:.3em; color:#bff6ff;
+    text-shadow:0 0 8px rgba(0,220,255,.6);
+  }
+  #vbLoader .vbl-pct{
+    position:absolute; right:10%; top:17%; font-weight:500;
+    font-size:max(10px, 2.4cqw); letter-spacing:.08em; color:#bff6ff;
+    text-shadow:0 0 8px rgba(0,220,255,.6); font-variant-numeric:tabular-nums;
+  }
+  #vbLoader .vbl-track{
+    position:absolute; left:9.6%; right:9.9%; top:43%; height:max(6px, 11cqh);
+    border-radius:999px; border:1px solid rgba(190,90,255,.85);
+    background:linear-gradient(90deg, rgba(30,40,110,.55), rgba(90,30,140,.55));
+    box-shadow:0 0 8px rgba(170,80,255,.45), inset 0 0 6px rgba(0,0,0,.6);
+    overflow:hidden;
+  }
+  #vbLoader .vbl-fill{
+    position:absolute; left:0; top:0; bottom:0; width:0%; border-radius:inherit;
+    background:linear-gradient(90deg,#1b8dff 0%,#1ad7ff 70%,#9fe6ff 100%);
+    box-shadow:0 0 10px rgba(30,210,255,.9);
+  }
+  #vbLoader .vbl-fill::after{
+    content:''; position:absolute; inset:0;
+    background:linear-gradient(90deg, transparent 0%, rgba(255,255,255,.45) 50%, transparent 100%);
+    background-size:40% 100%; background-repeat:no-repeat;
+    animation:vblShine 1.6s linear infinite;
+  }
+  @keyframes vblShine{ from{ background-position:-60% 0; } to{ background-position:160% 0; } }
+  #vbLoader .vbl-sub{
+    position:absolute; left:0; right:0; top:72%; text-align:center; white-space:nowrap;
+    font-weight:500; font-size:max(7px, 1.55cqw); letter-spacing:.32em; color:#3fd0ff;
+    text-shadow:0 0 6px rgba(0,200,255,.45);
+  }
+  #vbLoader .vbl-dots::after{ content:'...'; display:inline-block; width:1.6em; text-align:left; animation:vblDots 1.2s steps(4,end) infinite; overflow:hidden; vertical-align:bottom; }
+  @keyframes vblDots{ from{ width:0; } to{ width:1.6em; } }
+  @container (max-width: 480px){
+    #vbLoader .vbl-sub{ letter-spacing:.12em; }
+    #vbLoader .vbl-status{ letter-spacing:.2em; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    #vbLoader .vbl-fill::after, #vbLoader .vbl-dots::after{ animation:none; }
+    #vbLoader .vbl-dots::after{ width:1.6em; }
+  }
+</style>
 <style>
 :root{
   --cy:#00f0ff; --pu:#a05cff; --rd:#ff2d55; --gold:#ffc95c; --gn:#38ff9c;
@@ -785,6 +937,138 @@ input[type=range]{width:180px;accent-color:var(--cy)}
 </style>
 </head>
 <body>
+<!-- =====================================================================
+     LOADING SCREEN
+     First thing in <body> so it paints before the rest of this (large)
+     page has even finished downloading. It stays up until the page is
+     actually usable -- DOM parsed, fonts in, every subresource loaded,
+     and the page's own "APP" step (see VBLoader.mark('app') further
+     down) -- then fades out and removes itself. A hard cap means a
+     stalled request can delay play, never block it.
+     ===================================================================== -->
+<div id="vbLoader" role="progressbar" aria-label="Loading VOIDBREAK" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+  <div class="vbl-blur"></div>
+  <div class="vbl-stage">
+    <div class="vbl-art"></div>
+    <div class="vbl-logo" aria-hidden="true">
+      <svg class="vbl-emblem" viewBox="0 0 100 100">
+        <defs>
+          <linearGradient id="vblHex" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#3fe4ff"/><stop offset=".55" stop-color="#6a7bff"/><stop offset="1" stop-color="#c04dff"/>
+          </linearGradient>
+          <linearGradient id="vblGemL" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#ff7ad9"/><stop offset="1" stop-color="#8a3dff"/>
+          </linearGradient>
+          <linearGradient id="vblGemR" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#b457ff"/><stop offset="1" stop-color="#4a2bd8"/>
+          </linearGradient>
+        </defs>
+        <polygon points="50,4 90,27 90,73 50,96 10,73 10,27" fill="rgba(10,8,30,.55)" stroke="url(#vblHex)" stroke-width="5" stroke-linejoin="round"/>
+        <polygon points="50,12 83,31 83,69 50,88 17,69 17,31" fill="none" stroke="url(#vblHex)" stroke-width="1.5" opacity=".55"/>
+        <polygon points="50,18 50,82 30,50" fill="url(#vblGemL)"/>
+        <polygon points="50,18 70,50 50,82" fill="url(#vblGemR)"/>
+        <path d="M50 20 L50 80" stroke="#fff" stroke-width="1.6" opacity=".75"/>
+      </svg>
+      <div class="vbl-word"><b class="vbl-void">VOID</b><b class="vbl-break">BREAK</b></div>
+      <div class="vbl-tag">EXPLORE THE UNKNOWN UNIVERSE</div>
+    </div>
+    <div class="vbl-panel">
+      <div class="vbl-panel-bg"></div>
+      <svg viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="vblFrame" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#23d8ff"/><stop offset=".7" stop-color="#2aa9ff"/><stop offset="1" stop-color="#8a5cff"/>
+          </linearGradient>
+        </defs>
+        <polygon points="0,50 70,0 930,0 1000,50 930,100 70,100" fill="none" stroke="url(#vblFrame)" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+      </svg>
+      <div class="vbl-status">LOADING<span class="vbl-dots"></span></div>
+      <div class="vbl-pct" id="vbLoaderPct">0%</div>
+      <div class="vbl-track"><div class="vbl-fill" id="vbLoaderFill"></div></div>
+      <div class="vbl-sub">NEW WORLDS &middot; NEW DISCOVERIES &middot; YOUR JOURNEY BEGINS</div>
+    </div>
+  </div>
+</div>
+<script>
+// The bar follows real milestones rather than a fake timer: each step
+// below is worth its weight in percent once it has genuinely happened.
+// Between steps it creeps forward slowly (never past 99) so a slow
+// network still reads as "working", not "frozen".
+(function(){
+  var root = document.getElementById('vbLoader');
+  if(!root) return;
+  var fill = document.getElementById('vbLoaderFill');
+  var pctEl = document.getElementById('vbLoaderPct');
+  var logo = root.querySelector('.vbl-logo');
+  var STEPS = { dom:30, fonts:15, load:25, app:30 };
+  var MAX_MS = 12000;           // never hold the player longer than this
+  var reached = 0, marked = {}, shown = 0, lastMarkAt = performance.now();
+  var finishing = false, gone = false;
+
+  function mark(step){
+    if(gone || marked[step] || !(step in STEPS)) return;
+    marked[step] = true;
+    reached += STEPS[step];
+    lastMarkAt = performance.now();
+    if(reached >= 100) finish();
+  }
+  function finish(){
+    if(finishing) return;
+    finishing = true; reached = 100;
+    // A background tab gets no animation frames -- just get out of the way.
+    if(document.hidden) remove();
+  }
+  function remove(){
+    if(gone) return;
+    gone = true;
+    root.setAttribute('aria-valuenow', '100');
+    root.classList.add('vbl-out');
+    setTimeout(function(){ if(root.parentNode) root.parentNode.removeChild(root); }, 600);
+    try{ window.dispatchEvent(new Event('vbloader:done')); }catch(e){}
+  }
+  function frame(now){
+    if(gone) return;
+    var target = reached;
+    if(!finishing){
+      // Ease toward (but never reach) the next milestone while waiting.
+      var headroom = Math.min(99, reached + 29) - reached;
+      target = reached + headroom * (1 - Math.exp(-(now - lastMarkAt) / 3500));
+    }
+    shown += (target - shown) * (finishing ? 0.2 : 0.08);
+    if(finishing && shown > 99.4) shown = 100;
+    var p = Math.floor(shown);
+    fill.style.width = shown.toFixed(2) + '%';
+    pctEl.textContent = p + '%';
+    root.setAttribute('aria-valuenow', String(p));
+    if(shown >= 100){ setTimeout(remove, 220); return; }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // Wordmark waits for its own font (briefly) so it never flashes in a
+  // fallback face; everything else is fine to swap.
+  function showLogo(){ logo.classList.add('vbl-in'); }
+  try{
+    if(document.fonts && document.fonts.load){
+      Promise.race([
+        document.fonts.load('700 40px Orbitron'),
+        new Promise(function(r){ setTimeout(r, 1500); })
+      ]).then(showLogo, showLogo);
+    } else showLogo();
+  }catch(e){ showLogo(); }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    mark('dom');
+    try{ document.fonts.ready.then(function(){ mark('fonts'); }, function(){ mark('fonts'); }); }
+    catch(e){ mark('fonts'); }
+  });
+  window.addEventListener('load', function(){ mark('load'); });
+  document.addEventListener('visibilitychange', function(){ if(finishing && document.hidden) remove(); });
+  setTimeout(finish, MAX_MS);
+
+  window.VBLoader = { mark:mark, finish:finish };
+})();
+</script>
 <canvas id="cv"></canvas>
 <div id="vig"></div><div id="scan"></div><div id="dmgflash"></div><div id="lowhp"></div>
 <div id="whiteflash"></div><div id="fade"></div>
@@ -10744,6 +11028,10 @@ el('btnReset').addEventListener('click',()=>{
 });
 
 /* ---------- 19 · BOOT ---------- */
+// The loading screen's last step: hold it until the account's save is
+// settled (cloud, local cache or guest), so the menu it reveals shows
+// real progress rather than placeholder numbers for a moment.
+function loaderSaveReady(){ if(window.VBLoader)window.VBLoader.mark('app'); }
 // Ask the parent (index.html) who's signed in -- see
 // handleSessionHandshake above and index.html's own 'voidbreak_ready'
 // handler, which replies with 'duelarena_session'. Only a same-origin
@@ -10752,7 +11040,7 @@ el('btnReset').addEventListener('click',()=>{
 window.addEventListener('message',(e)=>{
   if(e.origin!==location.origin||e.source!==window.parent)return;
   if(e.data&&e.data.type==='duelarena_session'){
-    handleSessionHandshake(e.data.sessionToken||null,e.data.accountId||null);
+    handleSessionHandshake(e.data.sessionToken||null,e.data.accountId||null).finally(loaderSaveReady);
   }
 });
 // Online co-op buttons + the ?coop=<size> launch flag from the parent's
@@ -10764,7 +11052,7 @@ try{window.parent.postMessage({type:'voidbreak_ready'},location.origin);}catch(e
 // iframe, or something blocked the message), don't leave the menu
 // stuck on placeholders forever -- fall back to guest/local-only play,
 // which is always correct even if it turns out a reply was just slow.
-setTimeout(()=>{if(!cloudBootstrapped)handleSessionHandshake(null,null);},3000);
+setTimeout(()=>{if(!cloudBootstrapped)handleSessionHandshake(null,null).finally(loaderSaveReady);},3000);
 
 refreshMenuStats();
 syncSettingsUI();
