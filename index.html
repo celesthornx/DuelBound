@@ -20,6 +20,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>VOIDBREAK</title>
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#04050c">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Share+Tech+Mono&display=swap');
@@ -1945,7 +1950,7 @@
     background: linear-gradient(180deg, rgba(6,9,15,.94), rgba(6,9,15,.55));
   }
   .lobby-brand{ display:flex; align-items:center; gap:11px; flex:0 0 auto; }
-  .brand-mark{ width:40px; height:40px; flex:0 0 auto; filter: drop-shadow(0 0 10px rgba(63,208,255,.6)); }
+  .brand-mark{ width:40px; height:40px; flex:0 0 auto; border-radius:9px; filter: drop-shadow(0 0 10px rgba(63,208,255,.6)); }
   .brand-text{ display:flex; flex-direction:column; line-height:1; gap:3px; }
   .brand-word{ display:flex; align-items:baseline; }
   .brand-text b{
@@ -3695,12 +3700,7 @@
     <!-- ---------- TOP BAR ---------- -->
     <header class="lobby-top">
       <div class="lobby-brand">
-        <svg class="brand-mark" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-          <path d="M20 1 L37 11 L37 29 L20 39 L3 29 L3 11 Z" stroke="#3fd0ff" stroke-width="1.3" opacity=".45"/>
-          <path d="M20 5 L32 20 L20 35 L24 20 Z" fill="#a05cff"/>
-          <path d="M20 5 L8 20 L20 35 L16 20 Z" fill="#3fd0ff"/>
-          <path d="M20 12 L25 20 L20 28 L15 20 Z" fill="#eaffff" opacity=".85"/>
-        </svg>
+        <img class="brand-mark" src="/icons/logo-128.png" alt="" aria-hidden="true">
         <div class="brand-text">
           <div class="brand-word"><b>VOID</b><b class="brand-break">BREAK</b></div>
           <span class="brand-tag">EXPLORE &middot; DISCOVER &middot; GROW</span>

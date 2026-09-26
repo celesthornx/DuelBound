@@ -2992,7 +2992,12 @@ const PUBLIC_FILES = new Set([
     "/voidbreak.html",
     "/voidbreakUniverse.js",
     "/bgm.mp3",
-    "/favicon.ico"
+    "/favicon.ico",
+    "/manifest.webmanifest",
+    "/icons/icon-192.png",
+    "/icons/icon-512.png",
+    "/icons/apple-touch-icon.png",
+    "/icons/logo-128.png"
 ]);
 
 async function serveStatic(req, res) {
