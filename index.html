@@ -13,6 +13,12 @@
      devices; user-scalable=no prevents an accidental pinch-zoom from
      breaking the fixed-position HUD/joysticks mid-match. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<!-- iPhone Safari has no element Fullscreen API, so the fullscreen
+     buttons can't hide its browser chrome. Launching from the Home Screen
+     is the only way there; these make that launch open chrome-less. -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>VOIDBREAK</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
@@ -949,6 +955,28 @@
     transition: all .15s ease;
   }
   .mute-btn:hover{ border-color: var(--p1); background: rgba(63,208,255,0.08); }
+
+  /* ---- Fullscreen toggles (see FULLSCREEN in the script). Three
+     copies of one control: lobby footer, in-match next to mute, and in
+     the Voidbreak overlay next to MAIN MENU. Esc leaves fullscreen. ---- */
+  .fs-btn{
+    display:flex; align-items:center; justify-content:center; padding:0;
+    right: calc(46px + env(safe-area-inset-right, 0px));
+  }
+  [data-fs-toggle] svg{ width:14px; height:14px; display:block; }
+  .fs-toggle{ display:inline-flex; align-items:center; justify-content:center; padding: 9px 12px; }
+  [data-fs-toggle] .fs-ico-exit{ display:none; }
+  html.is-fullscreen [data-fs-toggle] .fs-ico-enter{ display:none; }
+  html.is-fullscreen [data-fs-toggle] .fs-ico-exit{ display:block; }
+  #fsToast{
+    position:fixed; left:50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%); z-index:10001;
+    max-width: min(92vw, 420px); padding:9px 14px; border-radius:3px;
+    background: rgba(8,12,20,.92); border:1px solid rgba(63,208,255,.4); color: var(--ink);
+    font-family:'Share Tech Mono', monospace; font-size:11px; letter-spacing:1.2px; text-align:center;
+    pointer-events:none; opacity:0; transition: opacity .2s ease;
+  }
+  #fsToast.show{ opacity:1; }
 
   /* ---- Football Mode scoreboard ---- */
   .football-score{
@@ -2666,6 +2694,14 @@
     opacity:.55; transition: all .15s ease;
   }
   #btnVoidbreakExit:hover{ opacity:1; border-color:#00f0ff; box-shadow:0 0 14px rgba(0,240,255,.35); }
+  #btnVoidbreakFs{
+    position:absolute; top:14px; left:146px; z-index:2;
+    width:30px; height:30px; padding:0;
+    display:flex; align-items:center; justify-content:center;
+    background: rgba(4,5,12,.75); border:1px solid rgba(0,240,255,.4); color:#cfeef5;
+    border-radius:3px; cursor:pointer; opacity:.55; transition: all .15s ease;
+  }
+  #btnVoidbreakFs:hover{ opacity:1; border-color:#00f0ff; box-shadow:0 0 14px rgba(0,240,255,.35); }
 
   /* ---------- BOTTOM BAR ---------- */
   .lobby-bottom{
@@ -4064,6 +4100,7 @@
         </div>
       </div>
       <div class="spacer"></div>
+      <button class="ghost-btn fs-toggle" type="button" data-fs-toggle title="Fullscreen (Esc to exit)"><svg class="fs-ico-enter" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M1.5 5.5v-4h4M10.5 1.5h4v4M14.5 10.5v4h-4M5.5 14.5h-4v-4"/></svg><svg class="fs-ico-exit" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5.5 1.5v4h-4M14.5 5.5h-4v-4M10.5 14.5v-4h4M1.5 10.5h4v4"/></svg></button>
       <button class="ghost-btn" data-act="controls">CONTROLS</button>
       <button class="ghost-btn" data-act="patch">PATCH NOTES</button>
       <span class="version-tag" id="lobbyVersion">VOIDBREAK v1.0.0</span>
@@ -4767,6 +4804,7 @@
        the same restart path as the R key. -->
   <button class="restart-btn hidden" id="restartBtn" title="Restart match (R)">RESTART</button>
   <button class="mute-btn" id="muteBtn" title="Mute / unmute sound">&#128266;</button>
+  <button class="mute-btn fs-btn" type="button" data-fs-toggle title="Fullscreen (Esc to exit)"><svg class="fs-ico-enter" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M1.5 5.5v-4h4M10.5 1.5h4v4M14.5 10.5v4h-4M5.5 14.5h-4v-4"/></svg><svg class="fs-ico-exit" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5.5 1.5v4h-4M14.5 5.5h-4v-4M10.5 14.5v-4h4M1.5 10.5h4v4"/></svg></button>
 
   <div class="mobile-controls hidden" id="mobileControls">
     <div class="joy-zone joy-move" id="joyMoveZone">
@@ -4861,8 +4899,9 @@
      See launchVoidbreak() below, which can deep-link straight to the
      galaxy map, the Home Planet or the loadout. -->
 <div id="voidbreakOverlay" class="hidden">
-  <iframe id="voidbreakFrame" title="Voidbreak" allow="autoplay"></iframe>
+  <iframe id="voidbreakFrame" title="Voidbreak" allow="autoplay; fullscreen"></iframe>
   <button id="btnVoidbreakExit" type="button" title="Back to the main menu">&larr; MAIN MENU</button>
+  <button id="btnVoidbreakFs" type="button" data-fs-toggle title="Fullscreen (Esc to exit)"><svg class="fs-ico-enter" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M1.5 5.5v-4h4M10.5 1.5h4v4M14.5 10.5v4h-4M5.5 14.5h-4v-4"/></svg><svg class="fs-ico-exit" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5.5 1.5v4h-4M14.5 5.5h-4v-4M10.5 14.5v-4h4M1.5 10.5h4v4"/></svg></button>
 </div>
 
 <!-- The universe content layer (galaxies, systems, discoveries, ship
@@ -15501,6 +15540,79 @@ if(tutorialActive) tutorialUpdate(dt);
   restartBtn.addEventListener('click', restartMatch);
   const muteBtn = document.getElementById('muteBtn');
   if(muteBtn) muteBtn.addEventListener('click', toggleMute);
+
+  // ---- FULLSCREEN ----
+  // Every [data-fs-toggle] button flips the whole page (documentElement,
+  // so the Voidbreak iframe comes along) in and out of fullscreen. The
+  // browser itself leaves fullscreen on Esc; the capture-phase listener
+  // below also covers browsers that do pass that Esc through to the page,
+  // swallowing it so the same press doesn't also quit the match.
+  // iPhone Safari has no element Fullscreen API at all -- there the
+  // buttons explain the Home Screen route instead of silently failing.
+  const fsDoc = document;
+  function fsElement(){ return fsDoc.fullscreenElement || fsDoc.webkitFullscreenElement || null; }
+  function fsToast(msg){
+    let t = document.getElementById('fsToast');
+    if(!t){ t = document.createElement('div'); t.id = 'fsToast'; document.body.appendChild(t); }
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(()=>{ t.classList.remove('show'); }, 3200);
+  }
+  function enterFullscreen(){
+    const el = fsDoc.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if(!req){
+      const standalone = window.navigator.standalone ||
+        (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+      fsToast(standalone ? 'ALREADY RUNNING FULLSCREEN'
+                         : 'FULLSCREEN: TAP SHARE → ADD TO HOME SCREEN, THEN LAUNCH FROM THERE');
+      return;
+    }
+    let p;
+    try{ p = req.call(el, { navigationUI: 'hide' }); }catch(err){ p = null; }
+    Promise.resolve(p).then(()=>{
+      // Phones: prefer landscape once fullscreen (only allowed while
+      // fullscreen, and unsupported on many browsers -- best effort).
+      if(window.matchMedia && window.matchMedia('(pointer: coarse)').matches &&
+         screen.orientation && screen.orientation.lock){
+        screen.orientation.lock('landscape').catch(()=>{});
+      }
+    }).catch(()=>{ fsToast('FULLSCREEN WAS BLOCKED BY THE BROWSER'); });
+  }
+  function exitFullscreen(){
+    const exit = fsDoc.exitFullscreen || fsDoc.webkitExitFullscreen;
+    if(exit && fsElement()){
+      try{ Promise.resolve(exit.call(fsDoc)).catch(()=>{}); }catch(err){}
+    }
+  }
+  function toggleFullscreen(){ if(fsElement()) exitFullscreen(); else enterFullscreen(); }
+  function syncFullscreenUI(){
+    const on = !!fsElement();
+    document.documentElement.classList.toggle('is-fullscreen', on);
+    document.querySelectorAll('[data-fs-toggle]').forEach(b=>{
+      b.title = on ? 'Exit fullscreen (Esc)' : 'Fullscreen (Esc to exit)';
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    if(!on && screen.orientation && screen.orientation.unlock){
+      try{ screen.orientation.unlock(); }catch(err){}
+    }
+  }
+  document.querySelectorAll('[data-fs-toggle]').forEach(b=>{
+    b.addEventListener('click', (e)=>{ e.preventDefault(); b.blur(); toggleFullscreen(); });
+  });
+  fsDoc.addEventListener('fullscreenchange', syncFullscreenUI);
+  fsDoc.addEventListener('webkitfullscreenchange', syncFullscreenUI);
+  window.addEventListener('keydown', (e)=>{
+    if(e.key === 'Escape' && fsElement()){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      exitFullscreen();
+    }
+  }, true);
+  // voidbreak.html (same origin) calls this from its own Esc handler.
+  window.duelboundExitFullscreen = ()=>{ if(!fsElement()) return false; exitFullscreen(); return true; };
+  syncFullscreenUI();
   window.addEventListener('keydown', (e)=>{
     if(e.key.toLowerCase()==='escape' && started) exitToMenu();
   });
