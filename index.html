@@ -2657,7 +2657,13 @@
      every existing z-index (max elsewhere is 25). ---------- */
   #voidbreakOverlay{ position:fixed; inset:0; z-index:9999; background:#04050c; }
   #voidbreakOverlay.hidden{ display:none; }
-  #voidbreakFrame{ position:absolute; inset:0; width:100%; height:100%; border:none; display:block; }
+  /* width/height:1px + min-*:100% is the standard guard against iOS
+     Safari sizing an iframe to its CONTENT instead of to the box it was
+     given. Without it an iPhone could render Voidbreak larger than the
+     screen and shifted off to one side. Every other browser resolves this
+     to exactly 100% x 100%. */
+  #voidbreakFrame{ position:absolute; inset:0; width:1px; min-width:100%; height:1px; min-height:100%;
+    border:none; display:block; }
   #btnVoidbreakExit{
     position:absolute; top:14px; left:14px; z-index:2;
     font-family:'Share Tech Mono', monospace; font-size:10px; letter-spacing:2px;
@@ -4861,7 +4867,7 @@
      See launchVoidbreak() below, which can deep-link straight to the
      galaxy map, the Home Planet or the loadout. -->
 <div id="voidbreakOverlay" class="hidden">
-  <iframe id="voidbreakFrame" title="Voidbreak" allow="autoplay"></iframe>
+  <iframe id="voidbreakFrame" title="Voidbreak" allow="autoplay" scrolling="no"></iframe>
   <button id="btnVoidbreakExit" type="button" title="Back to the main menu">&larr; MAIN MENU</button>
 </div>
 
@@ -16074,6 +16080,54 @@ if(tutorialActive) tutorialUpdate(dt);
   // number. Categories: NEW / IMPROVEMENTS / BALANCE / BUG FIXES --
   // include only the ones an entry actually has.
   const PATCH_NOTES = [
+    { version: 'v0.23', title: 'Mobile Layout Pass',
+      IMPROVEMENTS: [
+        'Landscape phones: the galaxy and solar-system maps now use the full height of the screen — their info panel moved to a column on the right, with your Galaxy Drive, Coins, Shards and the discovery log inside it.',
+        'Landscape phones: the main menu is laid out in two columns, so every button fits on screen at once instead of stopping at ONLINE CO-OP.',
+        'Galaxy and system maps now arrange themselves to fit your screen, so galaxy and system names no longer pile on top of each other. If a map is bigger than the screen, drag to see the rest.',
+        'Portrait phones: map titles have their own row, clear of the stat readouts beside the BACK button.',
+        'In a run on a touch screen, your health, energy, gear and weapon now sit at the top of the screen instead of underneath your thumbsticks, and the boss health bar sits just below them.',
+        'Keyboard hints (DASH [SPACE], Q, E) are hidden on touch screens, where there are no keys to press.',
+        'Void Forge upgrades are readable on narrow screens — the description wraps under the name instead of one word per line.'
+      ],
+      'BUG FIXES': [
+        'Fixed Voidbreak sometimes rendering larger than the screen and shifted to one side on iPhone/iPad.',
+        'Fixed the DASH and gear buttons rising into the top of the screen on very short landscape phones.',
+        'Fixed the run header reading “L0 · SECTOR” in every system outside the Frontier.'
+      ] },
+    { version: 'v0.22', title: 'The Machine Galaxy',
+      NEW: [
+        'Galaxy 04, the MACHINE GALAXY, is open — four new systems of factories that outlived their builders, reached by finishing the Frozen Expanse.',
+        'FORGEHOLD — THE FORGEMASTER: the floor becomes a conveyor that carries you toward a wall of stamping presses.',
+        'CIRCUIT VASH — THE ARBITER: lasers are ruled across the whole arena; in its final phase they cross into a grid.',
+        'THE HIVEWORKS — THE HIVE FOUNDRY: swarms of missiles launched wide that curve in on you, then commit to a straight line.',
+        'THE PRIME ENGINE (finale) — THE ARCHITECT: switches between CANNON, SAW and LANCE modes, rebuilding itself in between. Every rebuild exposes its core — that is your window. In OVERCLOCK the modes come faster.',
+        'Two new Home Planet relics: The First Hammer and The Prime Gear.'
+      ],
+      BALANCE: [
+        'Machine Galaxy difficulty runs 2.95 → 3.3, with new ship parts (Fusion Cell, Phase Lattice, Servo Drive, Prime Cannon) and 3,000–4,000 Coins per system.'
+      ] },
+    { version: 'v0.21', title: 'A Guardian for Every System',
+      NEW: [
+        'Every system beyond the Frontier now has its own guardian instead of a returning Frontier boss — each with its own look, escorts and signature attack.',
+        'Crimson Reach: THE CINDER SENTINEL (marching meteor strikes that leave burning ground) and THE BINARY ARCHON (two companion stars that fire their own volleys).',
+        'Crimson Reach finale: THE CRIMSON MONARCH — sweeping solar-flare beams, ember rain, and Throne Pylons that make it untouchable until you destroy them. In its last phase the arena closes in.',
+        'Frozen Expanse: THE RIME WARDEN (frost shards that shatter into rings), THE PRISM KING (telegraphed light lances), THE DRIFT MAW (back-to-back charges that leave ice spikes), THE SUNDERED GIANT (three-way gravity wells; sheds ice as it breaks) and THE WAKING SLEEPER (every blink leaves an afterimage that bursts a moment later).',
+        'Frozen Expanse finale: THE STILLHEART — gapped ice waves to slip through, and STILL: every shot in the air freezes, a cage of ice forms around you, and it all moves at once on the thaw.'
+      ],
+      BALANCE: [
+        'Guardian health now rises through each galaxy: 13,200 → 17,500 in Crimson Reach, 14,000 → 19,500 in the Frozen Expanse.'
+      ] },
+    { version: 'v0.20', title: 'The Frozen Expanse',
+      NEW: [
+        'Galaxy 03, the FROZEN EXPANSE, is open — six new systems reached by finishing Crimson Reach: RIME, GLACIS SPIRES, HOARFROST DRIFT, THE CALVING, CRYOVAULT and THE STILLPOINT.',
+        'Each system plays differently: tanks and turrets in Rime, snipers among ice spires in Glacis, fast melee packs in Hoarfrost, gravity and pressure in the Calving, ambushes in the Cryovault, and everything at once at the Stillpoint.',
+        'Snow falls in every Frozen Expanse arena.',
+        'Three new Home Planet relics: the Rime Lattice, the Calving Heart and the Last Ember.'
+      ],
+      BALANCE: [
+        'Frozen Expanse difficulty runs 2.3 → 2.8, continuing from Crimson Reach, with a drive piece, a ship part and 1,650–2,800 Coins per system.'
+      ] },
     { version: 'v0.19', title: 'Coins, and the first Crystals',
       NEW: [
         'A second currency has arrived: CRYSTALS \u2014 a premium currency for a future Crystal Shop, separate from your everyday Coins and never earned by playing.',

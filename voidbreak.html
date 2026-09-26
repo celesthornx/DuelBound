@@ -744,6 +744,120 @@ input[type=range]{width:180px;accent-color:var(--cy)}
   .disc{width:132px;padding:5px 8px}
   .uni-dock-sub{font-size:11px}
 }
+/* =================================================================
+   PHONE LAYOUT PASS
+   Everything below is layered on the breakpoints above rather than
+   replacing them, and each block is scoped to the shape it fixes.
+   ================================================================= */
+
+/* ---- in-run HUD on touch devices ----
+   The vitals and weapon card used to sit at the bottom corners, which
+   is exactly where the two thumbsticks live -- the HP bar was drawn on
+   top of the move stick and the weapon card on top of the fire stick.
+   On touch the whole bottom HUD moves to the top edge, the boss bar
+   drops beneath it, and the keyboard hints ([SPACE], Q, E) are hidden
+   because a touch player has no keys to press. */
+body.touch #hudBottom{bottom:auto;top:calc(8px + env(safe-area-inset-top,0px));align-items:flex-start;
+  left:calc(10px + env(safe-area-inset-left,0px));right:calc(10px + env(safe-area-inset-right,0px))}
+body.touch .barwrap.hp{width:150px;height:14px}
+body.touch .barwrap.en{width:120px;height:6px}
+body.touch #vitals{gap:4px}
+body.touch #dashUI{display:none}
+body.touch #buildInfo{display:none}
+body.touch .gear-chip>b{display:none}
+body.touch #gearUI{margin-top:3px}
+body.touch #weaponUI{margin-top:24px;padding:4px 9px 4px 7px;gap:6px}
+body.touch #weaponIcon{width:20px;height:20px}
+body.touch #weaponName{font-size:9.5px;letter-spacing:1px}
+body.touch #weaponStats{display:none}
+body.touch #bossBarWrap{top:calc(66px + env(safe-area-inset-top,0px));width:min(70vw,560px);min-width:0}
+body.touch #bossName{font-size:11px;letter-spacing:3px}
+body.touch #bossPhaseLabel{font-size:9.5px;margin:1px 0 3px}
+body.touch #bossBar{height:9px}
+body.touch #upList{left:50%;top:calc(112px + env(safe-area-inset-top,0px));transform:translateX(-50%);
+  flex-direction:row;flex-wrap:wrap;justify-content:center;max-width:min(94vw,520px);max-height:none}
+body.touch #bannerMain{font-size:min(26px,6.4vw);letter-spacing:4px}
+body.touch #bannerSub{font-size:11px;letter-spacing:2px}
+
+/* Narrow touch screens: the sector readout moves right of the vitals
+   (between them and the shard counter) instead of centring under them. */
+@media (max-width:600px){
+  body.touch #hudTop{justify-content:flex-end;left:auto;right:calc(46px + env(safe-area-inset-right,0px));
+    text-align:right;max-width:calc(100vw - 220px)}
+  body.touch #hudTop #nodeStrip{justify-content:flex-end;flex-wrap:wrap}
+  body.touch #sectorWrap{text-align:right}
+  body.touch #weaponUI{margin-top:30px}
+}
+/* Very short landscape phones (~290-340px tall): the dash/gear buttons
+   were anchored for taller screens and rose into the top HUD. */
+@media (max-height:420px){
+  .mobile-controls{--joy-anchor-y:80px;--dash-anchor-y:142px}
+}
+@media (max-height:340px) and (min-aspect-ratio:4/3){
+  #ov-menu .tagline{display:none}
+  #ov-menu .panel{padding:8px 14px}
+  #ov-menu .logo{font-size:20px;margin-bottom:6px}
+  #ov-menu .menu-btns{gap:5px}
+  #ov-menu .menu-btns .btn{padding:7px 6px}
+  #ov-menu .menu-stats{display:none}
+  #ov-menu .diff-hint{display:none}
+  /* seven half-width buttons: pair HOW TO PLAY with VOID FORGE and let
+     SETTINGS close the grid, so nothing is left below the fold */
+  #ov-menu .endgame-row{order:1}
+  #ov-menu #btnSettings{order:2;grid-column:1/-1}
+}
+/* ---- phones in portrait: universe headers ----
+   The centred title and the corner readouts shared one row, so on a
+   390px-wide screen "THE KNOWN UNIVERSE" ran straight through
+   "GALAXIES 0 / 10". Portrait gives the readouts their own row beside
+   BACK and drops the title beneath it. */
+@media (max-width:600px) and (min-height:521px){
+  .uni-corner{flex-direction:row;flex-wrap:wrap;justify-content:flex-end;gap:5px;
+    left:calc(104px + env(safe-area-inset-left,0px))}
+  .uni-stat{font-size:9.5px;letter-spacing:1px;padding:5px 7px}
+  .uni-top{top:calc(84px + env(safe-area-inset-top,0px));width:94vw}
+  .disc-list,.plot-info{top:calc(140px + env(safe-area-inset-top,0px))}
+  .frow{flex-wrap:wrap;gap:6px 10px}
+  .frow .fn{min-width:0;flex:1 1 auto}
+  .frow .fd{flex:1 1 100%;order:3;font-size:12.5px}
+}
+
+/* ---- phones in landscape: side dock ----
+   A landscape phone is ~300-400px tall. With the dock across the
+   bottom it took half of that, and the galaxy/system maps were
+   squeezed into a strip where every label landed on its neighbour.
+   Here the dock becomes a column down the right edge -- with the
+   corner readouts and the discovery log moved into it (see
+   placeUniChrome()) -- and the map gets the full height on the left. */
+@media (max-height:520px) and (min-aspect-ratio:4/3){
+  #galDock,#sysDock{left:auto;transform:none;right:calc(8px + env(safe-area-inset-right,0px));
+    top:calc(8px + env(safe-area-inset-top,0px));bottom:calc(8px + env(safe-area-inset-bottom,0px));
+    width:min(330px,42vw);display:flex;flex-direction:column;overflow-y:auto;padding:10px 12px}
+  #galDock .uni-dock-row,#sysDock .uni-dock-row{margin-top:auto;padding-top:8px}
+  #sysDock .uni-dock-row .btn{min-width:0;flex:1 1 30%;padding:9px 4px;font-size:9px;letter-spacing:1px}
+  #galDock .uni-corner,#sysDock .uni-corner{position:static;flex-direction:row;flex-wrap:wrap;gap:4px;
+    justify-content:flex-start;align-items:flex-start;margin-bottom:8px}
+  #galDock .uni-stat,#sysDock .uni-stat{font-size:9px;letter-spacing:1px;padding:4px 6px}
+  #sysDock .disc-list{position:static;transform:none;width:auto;max-height:none;margin-top:8px;
+    flex-direction:row;overflow-x:auto;overflow-y:hidden;flex:none}
+  #sysDock .disc{width:120px;padding:5px 7px}
+  #uni-galaxy .uni-top,#uni-system .uni-top{left:calc(104px + env(safe-area-inset-left,0px));
+    right:calc(min(330px,42vw) + 16px + env(safe-area-inset-right,0px));width:auto;transform:none}
+  .uni-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* Main menu: two columns of buttons, so the whole menu fits on one
+     screen instead of stopping at ONLINE CO-OP. */
+  #ov-menu .panel{padding:12px 16px}
+  #ov-menu .logo{font-size:26px;letter-spacing:4px}
+  #ov-menu .tagline{margin:6px 0 10px;font-size:10px}
+  #ov-menu .menu-btns{display:grid;grid-template-columns:1fr 1fr;gap:7px;width:min(560px,90vw)}
+  #ov-menu .menu-btns .btn{padding:9px 6px;font-size:10.5px;letter-spacing:2px}
+  #ov-menu .diff-row,#ov-menu .diff-hint,#ov-menu .endgame-row{grid-column:1/-1}
+  #ov-menu .diff-hint{margin:0}
+  #ov-menu .menu-stats{margin-top:10px;font-size:10.5px;gap:2px}
+  .frow{padding:7px 9px;gap:8px}
+  .frow .fn{min-width:120px;font-size:11px}
+  .frow .fd{font-size:12px}
+}
 /* ---- ONLINE CO-OP lobby + in-run squad HUD ----
    Uses Voidbreak's own overlay/panel/button language; nothing here
    introduces a second visual system. Sized so a four-player roster fits
@@ -2482,6 +2596,8 @@ const hasTouch=('ontouchstart' in window)||touchPoints>0;
 const isTabletUA=/iPad/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&hasTouch&&touchPoints>1)||
   (/Android/.test(navigator.userAgent)&&!/Mobile/.test(navigator.userAgent));
 const isTouchDevice=hasTouch;
+// Lets the stylesheet lay the HUD out for thumbs (see PHONE LAYOUT PASS).
+if(isTouchDevice)document.body.classList.add('touch');
 
 let touchMoveX=0,touchMoveY=0;
 let touchAiming=false,touchAimAngle=0;
@@ -2700,10 +2816,12 @@ cv.addEventListener('pointermove',e=>{
     pcam.pitch=clamp(pcam.pitch,-1.15,1.15);
   }else if(state==='galaxy'){
     galPan.x=clamp(galPan.x+dx,-W*0.22,W*0.22);
-    galPan.y=clamp(galPan.y+dy,-H*0.18,H*0.18);
+    const gy=Math.max(H*0.18,mapOverflow.gal);
+    galPan.y=clamp(galPan.y+dy,-gy,gy);
   }else if(state==='system'){
     sysPan.x=clamp(sysPan.x+dx,-W*0.6,W*0.6);
-    sysPan.y=clamp(sysPan.y+dy,-H*0.3,H*0.3);
+    const sy=Math.max(H*0.3,mapOverflow.sys);
+    sysPan.y=clamp(sysPan.y+dy,-sy,sy);
   }
 },{passive:true});
 
@@ -3274,6 +3392,32 @@ function uniGlow(x,y,c,rad){
   drawGlow(x,y,c,q);
 }
 
+/* On a landscape phone the stylesheet turns the galaxy/system docks into
+   a right-hand column. The corner readouts and the discovery log are
+   siblings of the dock, not children, so CSS alone cannot put them in
+   that column -- this moves the same elements (ids, listeners and all)
+   into the dock and back out again when the shape changes. */
+const SIDE_DOCK_MQ=window.matchMedia?matchMedia('(max-height:520px) and (min-aspect-ratio:4/3)'):null;
+function placeUniChrome(){
+  const side=!!(SIDE_DOCK_MQ&&SIDE_DOCK_MQ.matches);
+  const move=(childId,screenId,dockId)=>{
+    const c=el(childId),scr=el(screenId),dock=el(dockId);if(!c||!scr||!dock)return;
+    if(side){
+      if(c.parentElement!==dock){
+        if(childId==='sysDisc')dock.insertBefore(c,dock.querySelector('.uni-dock-row'));
+        else dock.insertBefore(c,dock.firstChild);
+      }
+    }else if(c.parentElement!==scr)scr.insertBefore(c,dock);
+  };
+  move('galCorner','uni-galaxy','galDock');
+  move('sysCorner','uni-system','sysDock');
+  move('sysDisc','uni-system','sysDock');
+}
+if(SIDE_DOCK_MQ){
+  if(SIDE_DOCK_MQ.addEventListener)SIDE_DOCK_MQ.addEventListener('change',placeUniChrome);
+  else if(SIDE_DOCK_MQ.addListener)SIDE_DOCK_MQ.addListener(placeUniChrome);
+}
+placeUniChrome();
 function curGalaxy(){ return UNI_OK?UNI.galaxyById(uniGalaxyId):null; }
 function curGalaxySystems(){ const g=curGalaxy(); return g?g.systems:[]; }
 function curSystem(){ const list=curGalaxySystems(); return list[clamp(uniSystemIdx,0,list.length-1)]||null; }
@@ -3427,27 +3571,76 @@ function awardSystemClear(galaxyId,systemId){
 // the band between the title and the dock at any viewport, and still
 // reads as a path through space because of the curved corridors drawn
 // between the nodes.
+/* The rectangle a map may draw nodes in: below whatever chrome sits at
+   the top of the screen, clear of the dock wherever the stylesheet put
+   it (bottom strip, or a right-hand column on a landscape phone), and
+   above anything anchored to the bottom. Measured from the live DOM, so
+   it is right at every size, orientation and safe-area inset instead of
+   being a guess in fractions of the screen. */
+function uniBand(screenId){
+  const band={l:8,t:8,r:W-8,b:H-8};
+  const scr=el(screenId);if(!scr)return band;
+  const dock=scr.querySelector('.uni-dock');
+  if(dock){const d=dock.getBoundingClientRect();
+    if(d.height>0){
+      if(d.left>W*0.4&&d.top<H*0.35)band.r=d.left-10;   // side column
+      else band.b=Math.min(band.b,d.top-10);             // bottom strip
+    }}
+  for(const e of scr.children){
+    if(e===dock||e.classList.contains('uni-hint'))continue;
+    const bb=e.getBoundingClientRect();
+    if(bb.height===0||bb.width===0||bb.left>=band.r)continue;
+    if(bb.top<H*0.45)band.t=Math.max(band.t,bb.bottom+8);
+    else band.b=Math.min(band.b,bb.top-8);
+  }
+  if(band.b-band.t<60)band.b=band.t+60;
+  return band;
+}
+// How far a map's nodes spill past its band -- the drag-to-pan limits
+// grow by this much so every node can still be reached.
+const mapOverflow={gal:0,sys:0};
+// Nodes laid out as a serpentine grid inside the band: as many per row
+// as the width allows at `minCol` spacing, rows `minPitch` apart.
+function serpentineLayout(band,n,minCol,minPitch,maxPerRow){
+  const bw=band.r-band.l,bh=band.b-band.t;
+  const perRow=clamp(Math.floor(bw/minCol),2,Math.min(maxPerRow,n));
+  const rows=Math.ceil(n/perRow);
+  const pitch=Math.max(minPitch,bh/rows);
+  const colW=bw/perRow;
+  const cells=[];
+  for(let i=0;i<n;i++){
+    const row=Math.floor(i/perRow),col=i%perRow;
+    // odd rows run backwards so the route snakes instead of jumping
+    const c=(row%2===0)?col:(perRow-1-col);
+    cells.push({row,c,x:band.l+colW*(c+0.5),y:band.t+pitch*(row+0.5)});
+  }
+  return {cells,pitch,colW,overflow:Math.max(0,rows*pitch-bh)};
+}
+// A serpentine route rather than a spiral. A spiral looks more like a
+// galaxy cluster, but ten nodes on one meant labels overlapping each
+// other and the last galaxies sitting behind the dock -- and a map you
+// cannot read is not atmospheric, it is broken. The serpentine gives
+// every node the same generous spacing, keeps the whole route inside
+// the band between the title and the dock at any viewport, and still
+// reads as a path through space because of the curved corridors drawn
+// between the nodes.
 function galaxyLayout(){
   const out=[];
   if(!UNI_OK)return out;
   const s=Math.min(W,H);
   const n=UNI.GALAXIES.length;
-  const perRow=Math.min(5,n);
-  const rows=Math.ceil(n/perRow);
-  // The safe band: below the title block, above the dock.
-  const top=Math.max(120,H*0.22),bottom=Math.min(H-210,H*0.70);
-  const rowGap=rows>1?(bottom-top)/(rows-1):0;
+  const band=uniBand('uni-galaxy');
+  const L=serpentineLayout(band,n,104,84,5);
+  mapOverflow.gal=L.overflow;
+  // node + two label lines must fit one row pitch
+  const r=clamp(Math.min(s*0.032,(L.pitch-38)/3.2),10,26);
+  const wig=Math.min(s*0.045,L.pitch*0.1);
   for(let i=0;i<n;i++){
-    const g=UNI.GALAXIES[i];
-    const row=Math.floor(i/perRow),col=i%perRow;
-    // Odd rows run backwards so the route snakes instead of jumping
-    // back to the left edge between rows.
-    const c=(row%2===0)?col:(perRow-1-col);
-    const t=perRow>1?c/(perRow-1):0.5;
+    const g=UNI.GALAXIES[i],cell=L.cells[i];
     out.push({g:g,id:g.id,
-      x:W*0.13+W*0.74*t+galPan.x,
-      y:top+row*rowGap+Math.sin(c*1.25+row*1.7)*s*0.045+galPan.y,
-      r:Math.max(16,s*0.032)});
+      x:cell.x+galPan.x,
+      y:cell.y-r*0.8+Math.sin(cell.c*1.25+cell.row*1.7)*wig+galPan.y,
+      r:r});
   }
   return out;
 }
@@ -3601,16 +3794,27 @@ function systemLayout(){
   const list=curGalaxySystems();
   if(!list.length)return out;
   const s=Math.min(W,H);
-  // On a wide viewport the discovery log sits against the left edge, so
-  // the chain starts to the right of it; on a phone the log is a strip
-  // under the title instead (see the stylesheet) and the chain gets the
-  // full width back.
   const narrow=W<=760||H<=520;
-  const left=narrow?W*0.06:Math.min(W*0.34,336);
+  if(narrow){
+    // Phones: a serpentine grid inside the measured band. One long
+    // row of eight systems across a 390px screen put them ~45px apart,
+    // and every label and orbiting site landed on its neighbour.
+    const band=uniBand('uni-system');
+    const L=serpentineLayout(band,list.length,112,96,5);
+    mapOverflow.sys=L.overflow;
+    const r=clamp(Math.min(s*0.026,(L.pitch-60)/2.6),9,16);
+    for(let i=0;i<list.length;i++){const cell=L.cells[i];
+      out.push({sys:list[i],idx:i,x:cell.x+sysPan.x,y:cell.y-24+sysPan.y,r:r});}
+    return out;
+  }
+  // On a wide viewport the discovery log sits against the left edge, so
+  // the chain starts to the right of it.
+  mapOverflow.sys=0;
+  const left=Math.min(W*0.34,336);
   const right=W*0.94;
   const span=Math.min(right-left,list.length*Math.max(104,s*0.15));
   const x0=left+((right-left)-span)/2+sysPan.x;
-  const cy=(narrow?H*0.52:H*0.46)+sysPan.y;
+  const cy=H*0.46+sysPan.y;
   for(let i=0;i<list.length;i++){
     const t=list.length>1?i/(list.length-1):0.5;
     out.push({sys:list[i],idx:i,
@@ -10718,7 +10922,7 @@ function updateHUD(force){
   if(player.dashCd<=0)el('dashUI').classList.add('ready');
   updateGearHUD();
   setTxt('shardCount',run.shards);
-  setTxt('sectorLabel','L'+run.level.id+' · SECTOR '+run.depth+' / '+run.totalDepth);
+  setTxt('sectorLabel',(run.galaxyId?'':'L'+run.level.id+' · ')+'SECTOR '+run.depth+' / '+run.totalDepth);
 }
 
 // The two loadout chips. Called from updateHUD (so cooldowns tick on
