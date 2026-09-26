@@ -220,7 +220,10 @@
         { id: "dec_eclipse",   name: "HOLLOW SHARD",       glyph: "◆", color: [140, 80, 255],  height: 0.055, from: "g1s7_shard" },
         { id: "dec_origin",    name: "ORIGIN SEAL",        glyph: "⬡", color: [255, 255, 255], height: 0.055, from: "g1s8_seal" },
         { id: "dec_emberglass",name: "EMBERGLASS BLOOM",   glyph: "❀", color: [255, 120, 60],  height: 0.055, from: "g2s1_bloom" },
-        { id: "dec_crown",     name: "CRIMSON CROWN",      glyph: "♛", color: [255, 70, 70],   height: 0.055, from: "g2s3_crown" }
+        { id: "dec_crown",     name: "CRIMSON CROWN",      glyph: "♛", color: [255, 70, 70],   height: 0.055, from: "g2s3_crown" },
+        { id: "dec_lattice",   name: "RIME LATTICE",       glyph: "❄", color: [200, 235, 255], height: 0.055, from: "g3s1_lattice" },
+        { id: "dec_heart",     name: "CALVING HEART",      glyph: "◍", color: [120, 190, 255], height: 0.055, from: "g3s4_heart" },
+        { id: "dec_ember",     name: "THE LAST EMBER",     glyph: "✧", color: [255, 200, 140], height: 0.055, from: "g3s6_ember" }
     ];
     var DECORATION_BY_ID = {};
     DECORATIONS.forEach(function (d) { DECORATION_BY_ID[d.id] = d; });
@@ -547,7 +550,234 @@
         },
 
         // -------------------------------------------------------------
-        // GALAXIES 3-10 -- named, themed, and deliberately EMPTY.
+        // GALAXY 3 -- THE FROZEN EXPANSE. Six systems, authored as data.
+        //
+        // Crimson Reach was about heat and pressure; the Expanse is about
+        // what cold does to a fight. Each system has ONE identity that
+        // its wave table, combos, elites and arena all serve, so no two
+        // play alike:
+        //
+        //   RIME             the slow crush -- tanks, turrets and orbs
+        //   GLACIS SPIRES    the shooting gallery -- ranged enemies in a
+        //                    forest of ice spires
+        //   HOARFROST DRIFT  the stampede -- fast melee through drifting ice
+        //   THE CALVING      pulled apart -- gravity, leeches, pressure
+        //   CRYOVAULT        the sleepers wake -- ambush and teleporters
+        //   THE STILLPOINT   absolute zero -- everything, all at once
+        //
+        // `env.snow` turns the ambient motes into falling snow and
+        // `env.crackC` tints the floor cracks ice-blue -- the only two
+        // visuals this galaxy adds to the engine.
+        //
+        // `bossHpMult` exists because boss HP is fixed per boss KIND, not
+        // scaled by `diff` (see createBoss in voidbreak.html). The Null
+        // and the Fractured King were tuned as Frontier openers; pulled
+        // this deep, un-scaled, they would fall in seconds. The multiplier
+        // puts every guardian here between ~14k and ~19k HP, above
+        // Crimson Reach and rising toward the finale.
+        //
+        // Same honest limitation as Galaxy 2: these are returning
+        // guardians in new arenas with new escorts, not new boss kinds.
+        // -------------------------------------------------------------
+        {
+            id: 3,
+            name: "FROZEN EXPANSE",
+            subtitle: "GALAXY 03",
+            theme: "Ice older than starlight. Whatever moves out here has been moving very slowly for a very long time.",
+            color: [150, 220, 255],
+            accent: [90, 160, 255],
+            systems: [
+                {
+                    id: 1, name: "RIME", coins: 1650,
+                    star: "RIME, a white dwarf gone cold",
+                    brief: "The first light in the Expanse is barely light at all. Everything here is heavy, slow, and in no hurry to let you leave.",
+                    drivePiece: "FROST HOUSING",
+                    part: { system: "engine", name: "CRYO INJECTOR" },
+                    discoveries: [
+                        d("g3s1_star", "star", "Rime", "Cooling faster than physics allows. Something is drinking the heat."),
+                        d("g3s1_tessa", "planet", "Tessa", "A world wrapped in a single unbroken sheet of ice."),
+                        d("g3s1_haul", "derelict", "The Long Haul", "A convoy frozen solid mid-burn. The engines are still lit."),
+                        d("g3s1_lattice", "ruin", "The Rime Lattice", "Frost that grows in the same pattern every time it is scraped away.", true)
+                    ],
+                    levelDef: {
+                        name: "RIME", diff: 2.3, depth: 10, boss: "warden", bossHpMult: 1.45, completionBonus: 1700,
+                        waveOpts: [["brute", 7, 1, 1], ["orb", 3, 2, 1], ["drone", 2, 2, 1], ["sniper", 3, 2, 1],
+                            ["core", 4, 2, 2], ["leech", 4, 1, 2], ["swarm", 5, 2, 2]],
+                        combos: [[["brute", 2], ["orb", 2]], [["core", 2], ["sniper", 2]],
+                            [["leech", 1], ["brute", 1], ["drone", 2]], [["orb", 3], ["swarm", 4]],
+                            [["guardian", 1], ["drone", 2]], [["core", 3], ["orb", 1]]],
+                        elitePool: [["brute", 1], ["guardian", 1], ["ravager", 2], ["guardian", 3]],
+                        eliteSupport: "orb",
+                        secondElite: ["guardian", "ravager", "brute"],
+                        secondSupport: "core", secondSupportCount: 2,
+                        env: {
+                            floor: "rgba(8,14,26,0.84)", grid: "rgba(170,220,255,0.06)", border: [170, 220, 255],
+                            neb: [[120, 190, 255], [200, 230, 255]], ambient: [[220, 240, 255], [160, 210, 255], [255, 255, 255]],
+                            cracks: true, crackC: [170, 225, 255], debris: false, glitch: false, snow: true
+                        }
+                    }
+                },
+                {
+                    id: 2, name: "GLACIS SPIRES", coins: 1800,
+                    star: "GLACIS, a blue supergiant",
+                    brief: "A forest of ice spires kilometres high, every one of them a lens. Something up there has the high ground and has always had it.",
+                    drivePiece: "PRISM GYRO",
+                    part: { system: "scanner", name: "PRISM ARRAY" },
+                    discoveries: [
+                        d("g3s2_star", "star", "Glacis", "Seen through the spires it is a thousand stars."),
+                        d("g3s2_spires", "belt", "The Spire Field", "Ice columns in orbit, all aligned to the same point."),
+                        d("g3s2_post", "station", "Listening Post Ardent", "Every antenna aimed outward. Every log ends mid-sentence."),
+                        d("g3s2_prism", "anomaly", "The Glacis Prism", "Splits light into colours that do not have names.")
+                    ],
+                    levelDef: {
+                        name: "GLACIS SPIRES", diff: 2.38, depth: 10, boss: "king", bossHpMult: 1.9, completionBonus: 1800,
+                        waveOpts: [["sniper", 3, 2, 1], ["orb", 3, 2, 1], ["phantom", 4, 2, 1], ["fdrone", 3, 2, 1],
+                            ["drone", 2, 2, 1], ["core", 4, 2, 2], ["hunter", 4, 2, 2], ["stalker", 4, 1, 3]],
+                        combos: [[["sniper", 3], ["core", 1]], [["phantom", 2], ["orb", 2]],
+                            [["hunter", 2], ["sniper", 2]], [["fdrone", 3], ["phantom", 1]],
+                            [["core", 2], ["stalker", 2]], [["orb", 2], ["hunter", 2]]],
+                        elitePool: [["sniper", 1], ["shattered", 1], ["guardian", 2], ["shattered", 3]],
+                        eliteSupport: "sniper",
+                        secondElite: ["shattered", "guardian", "ravager"],
+                        secondSupport: "phantom", secondSupportCount: 2,
+                        env: {
+                            floor: "rgba(6,12,30,0.85)", grid: "rgba(120,200,255,0.06)", border: [110, 190, 255],
+                            neb: [[80, 150, 255], [150, 220, 255]], ambient: [[140, 210, 255], [90, 160, 255], [230, 245, 255]],
+                            cracks: true, crackC: [170, 225, 255], debris: false, glitch: false,
+                            pillars: true, pillarsN: 11, pillarC: [150, 215, 255], snow: true
+                        }
+                    }
+                },
+                {
+                    id: 3, name: "HOARFROST DRIFT", coins: 1950,
+                    star: "HOARFROST, a rogue star",
+                    brief: "A star that left its galaxy and dragged its own debris field with it. The ice never stops moving, and neither does anything hunting in it.",
+                    drivePiece: "DRIFT KEEL",
+                    part: { system: "shield", name: "HOARFROST WARD" },
+                    discoveries: [
+                        d("g3s3_star", "star", "Hoarfrost", "Travelling at four hundred kilometres a second. Heading nowhere in particular."),
+                        d("g3s3_wake", "belt", "The Wake", "A tail of shattered moons, still sorting itself by size."),
+                        d("g3s3_pack", "signal", "The Pack Call", "Short bursts, many sources, closing."),
+                        d("g3s3_skiff", "derelict", "Skiff Nine", "Holed from the inside. The crew left in a hurry, or did not leave.")
+                    ],
+                    levelDef: {
+                        name: "HOARFROST DRIFT", diff: 2.46, depth: 10, boss: "null", bossHpMult: 2.7, completionBonus: 1900,
+                        waveOpts: [["swarm", 5, 2, 1], ["chaser", 3, 2, 1], ["leaper", 4, 2, 1], ["stalker", 4, 2, 1],
+                            ["fdrone", 3, 2, 1], ["hunter", 4, 2, 2], ["brute", 7, 1, 3]],
+                        combos: [[["chaser", 3], ["leaper", 2]], [["stalker", 2], ["swarm", 4]],
+                            [["leaper", 3], ["hunter", 1]], [["fdrone", 2], ["chaser", 3]],
+                            [["stalker", 2], ["hunter", 2]], [["brute", 1], ["swarm", 4], ["chaser", 2]]],
+                        elitePool: [["chaser", 1], ["ravager", 1], ["shattered", 2], ["ravager", 3]],
+                        eliteSupport: "leaper",
+                        secondElite: ["ravager", "shattered", "chaser"],
+                        secondSupport: "swarm", secondSupportCount: 5,
+                        env: {
+                            floor: "rgba(10,16,28,0.84)", grid: "rgba(200,235,255,0.05)", border: [200, 235, 255],
+                            neb: [[170, 220, 255], [110, 130, 220]], ambient: [[235, 248, 255], [180, 220, 255], [140, 180, 255]],
+                            cracks: true, crackC: [170, 225, 255], debris: true, debrisBig: true, glitch: false, snow: true
+                        }
+                    }
+                },
+                {
+                    id: 4, name: "THE CALVING", coins: 2100,
+                    star: "NARVAL, an ice giant tearing itself apart",
+                    brief: "Narval is shedding its moons one glacier at a time. Gravity here pulls in three directions at once, and the ice screams when it breaks.",
+                    drivePiece: "CALVING ANCHOR",
+                    part: { system: "cargo", name: "GLACIER HAULER" },
+                    discoveries: [
+                        d("g3s4_star", "star", "Narval", "Not a star. An ice giant bright enough to be mistaken for one."),
+                        d("g3s4_berg", "moon", "The Berg", "A moon-sized glacier, freshly broken off. Still falling outward."),
+                        d("g3s4_tide", "anomaly", "The Tidebreak", "Where three pulls cancel out. Nothing drifts into it; everything is placed there."),
+                        d("g3s4_heart", "ruin", "The Calving Heart", "A frozen engine at the centre of the break. It is running in reverse.", true)
+                    ],
+                    levelDef: {
+                        name: "THE CALVING", diff: 2.55, depth: 10, boss: "depths", bossHpMult: 1.35, completionBonus: 2050,
+                        waveOpts: [["leech", 4, 1, 1], ["core", 4, 2, 1], ["orb", 3, 2, 1], ["drone", 2, 2, 1],
+                            ["hunter", 4, 2, 2], ["phantom", 4, 2, 2], ["brute", 7, 1, 2], ["sniper", 3, 2, 2]],
+                        combos: [[["leech", 2], ["sniper", 2]], [["singularity", 1], ["drone", 3]],
+                            [["core", 2], ["leech", 1], ["orb", 1]], [["hunter", 2], ["phantom", 2]],
+                            [["leech", 1], ["brute", 1], ["orb", 2]], [["singularity", 1], ["hunter", 2]]],
+                        elitePool: [["brute", 1], ["singularity", 1], ["guardian", 2], ["singularity", 3]],
+                        eliteSupport: "leech",
+                        secondElite: ["singularity", "guardian", "shattered"],
+                        secondSupport: "core", secondSupportCount: 2,
+                        env: {
+                            floor: "rgba(4,10,22,0.86)", grid: "rgba(100,170,255,0.05)", border: [100, 170, 255],
+                            neb: [[60, 120, 230], [170, 230, 255]], ambient: [[120, 190, 255], [200, 235, 255], [80, 130, 255]],
+                            cracks: true, crackC: [170, 225, 255], debris: true, debrisBig: true, glitch: false,
+                            pillars: true, pillarsN: 5, pillarC: [120, 190, 255], channels: true, pressure: true, snow: true
+                        }
+                    }
+                },
+                {
+                    id: 5, name: "CRYOVAULT", coins: 2300,
+                    star: "SELKE, a brown dwarf",
+                    brief: "A vault built to keep something asleep until the universe was ready for it. The power is failing, and the sleepers are waking early.",
+                    drivePiece: "CRYO MATRIX",
+                    part: { system: "weapon", name: "CRYO LANCE" },
+                    discoveries: [
+                        d("g3s5_star", "star", "Selke", "Too small to burn. Just warm enough to keep a vault running."),
+                        d("g3s5_vault", "station", "The Cryovault", "Ten thousand berths. Most of them are open."),
+                        d("g3s5_roll", "signal", "The Roll Call", "Names read aloud, one per minute. It is nearly at the end."),
+                        d("g3s5_pod", "derelict", "Berth Zero", "The first pod. Sealed from the inside, and empty.")
+                    ],
+                    levelDef: {
+                        name: "CRYOVAULT", diff: 2.65, depth: 10, boss: "eclipse", bossHpMult: 1.15, completionBonus: 2200,
+                        waveOpts: [["phantom", 4, 2, 1], ["stalker", 4, 2, 1], ["hunter", 4, 2, 1], ["core", 4, 2, 1],
+                            ["fdrone", 3, 2, 1], ["drone", 2, 2, 1], ["leaper", 4, 2, 2], ["leech", 4, 1, 3]],
+                        combos: [[["phantom", 2], ["stalker", 2]], [["shattered", 1], ["fdrone", 2]],
+                            [["hunter", 2], ["core", 2]], [["stalker", 3], ["leaper", 1]],
+                            [["ravager", 1], ["phantom", 2]], [["leech", 1], ["hunter", 2], ["drone", 2]]],
+                        elitePool: [["phantom", 1], ["shattered", 1], ["ravager", 2], ["guardian", 2], ["shattered", 3]],
+                        eliteSupport: "stalker",
+                        secondElite: ["shattered", "ravager", "singularity", "guardian"],
+                        secondSupport: "phantom", secondSupportCount: 3,
+                        env: {
+                            floor: "rgba(8,8,24,0.88)", grid: "rgba(160,190,255,0.05)", border: [160, 180, 255],
+                            neb: [[120, 140, 255], [200, 120, 255]], ambient: [[170, 200, 255], [210, 160, 255], [240, 250, 255]],
+                            cracks: true, crackC: [170, 225, 255], debris: true, debrisBig: false, glitch: true,
+                            pillars: true, pillarsN: 8, pillarC: [150, 170, 255], channels: true, pressure: true, snow: true
+                        }
+                    }
+                },
+                {
+                    id: 6, name: "THE STILLPOINT", coins: 2800, finale: true,
+                    star: "THE STILLPOINT, a star at absolute zero",
+                    brief: "The coldest place that has ever existed. Motion stops here. Break what keeps it still, and the Expanse thaws.",
+                    drivePiece: "STILL CORE",
+                    part: { system: "hull", name: "ZERO-POINT PLATING" },
+                    discoveries: [
+                        d("g3s6_star", "star", "The Stillpoint", "Zero kelvin, exactly. Not approximately. Exactly."),
+                        d("g3s6_ring", "belt", "The Halted Ring", "Every rock in it stopped mid-orbit at the same instant."),
+                        d("g3s6_throne", "station", "The Cold Court", "A mirror of the Crimson Court. Someone built both."),
+                        d("g3s6_ember", "anomaly", "The Last Ember", "One point of warmth at the centre of the cold. It is being guarded.", true)
+                    ],
+                    levelDef: {
+                        name: "THE STILLPOINT", diff: 2.8, depth: 10, boss: "origin", bossHpMult: 1.15, completionBonus: 2600,
+                        waveOpts: [["swarm", 5, 2, 1], ["chaser", 3, 2, 1], ["sniper", 3, 2, 1], ["brute", 7, 1, 1],
+                            ["orb", 3, 2, 1], ["leaper", 4, 2, 1], ["stalker", 4, 2, 1], ["hunter", 4, 2, 1],
+                            ["core", 4, 2, 2], ["phantom", 4, 2, 2], ["fdrone", 3, 2, 2], ["leech", 4, 1, 2]],
+                        combos: [[["singularity", 1], ["stalker", 2]], [["guardian", 1], ["sniper", 2], ["orb", 1]],
+                            [["leech", 2], ["hunter", 2]], [["shattered", 1], ["leaper", 2]],
+                            [["ravager", 1], ["chaser", 3]], [["core", 2], ["phantom", 2], ["orb", 1]],
+                            [["singularity", 1], ["leech", 1], ["drone", 2]]],
+                        elitePool: [["ravager", 1], ["shattered", 1], ["guardian", 1], ["singularity", 1], ["singularity", 3]],
+                        eliteSupport: "hunter",
+                        secondElite: ["singularity", "guardian", "shattered", "ravager"],
+                        secondSupport: "stalker", secondSupportCount: 3,
+                        env: {
+                            floor: "rgba(6,10,20,0.9)", grid: "rgba(230,245,255,0.05)", border: [230, 245, 255],
+                            neb: [[180, 220, 255], [90, 110, 200]], ambient: [[255, 255, 255], [190, 225, 255], [140, 170, 255]],
+                            cracks: true, crackC: [170, 225, 255], debris: true, debrisBig: true, glitch: true,
+                            pillars: true, pillarsN: 10, pillarC: [220, 240, 255], channels: true, pressure: true, snow: true
+                        }
+                    }
+                }
+            ]
+        },
+
+        // -------------------------------------------------------------
+        // GALAXIES 4-10 -- named, themed, and deliberately EMPTY.
         //
         // These are not placeholders that lie. A galaxy with no `systems`
         // is rendered as surveyed-but-unreachable ("DEEP SURVEY IN
@@ -557,10 +787,8 @@
         // the universe stays unknown.
         //
         // Filling one in means giving it a `systems` array in the shape
-        // Galaxy 2 uses. That is the whole procedure.
+        // Galaxies 2 and 3 use. That is the whole procedure.
         // -------------------------------------------------------------
-        { id: 3,  name: "FROZEN EXPANSE",  subtitle: "GALAXY 03", color: [150, 220, 255], accent: [90, 160, 255],
-          theme: "Ice older than starlight. Whatever moves out here has been moving very slowly for a very long time.", systems: [] },
         { id: 4,  name: "MACHINE GALAXY",  subtitle: "GALAXY 04", color: [160, 255, 220], accent: [90, 200, 160],
           theme: "Worlds machined into shape. The builders left; the factories did not stop.", systems: [] },
         { id: 5,  name: "THE LIVING REACH",subtitle: "GALAXY 05", color: [140, 255, 140], accent: [200, 255, 120],
