@@ -223,7 +223,9 @@
         { id: "dec_crown",     name: "CRIMSON CROWN",      glyph: "♛", color: [255, 70, 70],   height: 0.055, from: "g2s3_crown" },
         { id: "dec_lattice",   name: "RIME LATTICE",       glyph: "❄", color: [200, 235, 255], height: 0.055, from: "g3s1_lattice" },
         { id: "dec_heart",     name: "CALVING HEART",      glyph: "◍", color: [120, 190, 255], height: 0.055, from: "g3s4_heart" },
-        { id: "dec_ember",     name: "THE LAST EMBER",     glyph: "✧", color: [255, 200, 140], height: 0.055, from: "g3s6_ember" }
+        { id: "dec_ember",     name: "THE LAST EMBER",     glyph: "✧", color: [255, 200, 140], height: 0.055, from: "g3s6_ember" },
+        { id: "dec_hammer",    name: "THE FIRST HAMMER",   glyph: "⚒", color: [255, 190, 90],  height: 0.055, from: "g4s1_hammer" },
+        { id: "dec_gear",      name: "THE PRIME GEAR",     glyph: "⚙", color: [160, 255, 220], height: 0.055, from: "g4s4_gear" }
     ];
     var DECORATION_BY_ID = {};
     DECORATIONS.forEach(function (d) { DECORATION_BY_ID[d.id] = d; });
@@ -772,7 +774,161 @@
         },
 
         // -------------------------------------------------------------
-        // GALAXIES 4-10 -- named, themed, and deliberately EMPTY.
+        // GALAXY 4 -- THE MACHINE GALAXY. Four systems, authored as data.
+        //
+        // A galaxy of factories that outlived their builders. Each system
+        // is one part of the production line:
+        //
+        //   FORGEHOLD         the heavy line -- brutes, turret cores, drones
+        //   CIRCUIT VASH      precision -- snipers, orbs, phantoms, glitching
+        //   THE HIVEWORKS     the swarm -- swarms, drones, fdrones, hunters
+        //   THE PRIME ENGINE  the finale -- everything the line produces
+        //
+        // Guardians (BOSSMETA in voidbreak.html): the Forgemaster (floor
+        // conveyors into stamping presses), the Arbiter (arena-wide laser
+        // grids) and the Hive Foundry (homing missiles) are variants of
+        // Frontier guardians; the Architect, the finale, is built from
+        // scratch and rebuilds itself between attack modes mid-fight.
+        // -------------------------------------------------------------
+        {
+            id: 4,
+            name: "MACHINE GALAXY",
+            subtitle: "GALAXY 04",
+            theme: "Worlds machined into shape. The builders left; the factories did not stop.",
+            color: [160, 255, 220],
+            accent: [90, 200, 160],
+            systems: [
+                {
+                    id: 1, name: "FORGEHOLD", coins: 3000,
+                    star: "FORGEHOLD, a star inside a half-built shell",
+                    brief: "Someone started wrapping this star in machinery and never stopped. The line still runs, and it treats anything that moves as raw material.",
+                    drivePiece: "FORGED HOUSING",
+                    part: { system: "energy", name: "FUSION CELL" },
+                    discoveries: [
+                        d("g4s1_star", "star", "Forgehold", "Two thirds enclosed. The shell grows a kilometre a day."),
+                        d("g4s1_line", "station", "The Line", "An assembly line that circles the star. Every station on it is occupied."),
+                        d("g4s1_slag", "belt", "The Slag Ring", "Offcuts from a million years of production, still warm."),
+                        d("g4s1_hammer", "ruin", "The First Hammer", "The tool the first factory was built with. It is still being used.", true)
+                    ],
+                    levelDef: {
+                        name: "FORGEHOLD", diff: 2.95, depth: 10, boss: "forge", completionBonus: 2750,
+                        waveOpts: [["brute", 7, 1, 1], ["core", 4, 2, 1], ["drone", 2, 2, 1], ["fdrone", 3, 2, 1],
+                            ["orb", 3, 2, 1], ["chaser", 3, 2, 2], ["hunter", 4, 2, 2], ["sniper", 3, 2, 3]],
+                        combos: [[["brute", 2], ["core", 2]], [["core", 3], ["drone", 3]],
+                            [["guardian", 1], ["fdrone", 2]], [["brute", 1], ["hunter", 2], ["drone", 2]],
+                            [["orb", 2], ["core", 2]], [["ravager", 1], ["chaser", 3]]],
+                        elitePool: [["brute", 1], ["guardian", 1], ["ravager", 2], ["guardian", 3]],
+                        eliteSupport: "core",
+                        secondElite: ["guardian", "ravager", "brute"],
+                        secondSupport: "drone", secondSupportCount: 3,
+                        env: {
+                            floor: "rgba(14,16,14,0.86)", grid: "rgba(255,200,110,0.05)", border: [255, 190, 90],
+                            neb: [[255, 170, 80], [90, 200, 160]], ambient: [[255, 200, 110], [255, 150, 70], [160, 255, 220]],
+                            cracks: true, crackC: [255, 190, 90], debris: true, debrisBig: true, glitch: false,
+                            pillars: true, pillarsN: 7, pillarC: [255, 180, 90], channels: true, pressure: false
+                        }
+                    }
+                },
+                {
+                    id: 2, name: "CIRCUIT VASH", coins: 3200,
+                    star: "VASH, a neutron star wired into a processor",
+                    brief: "Every planet in Vash is a circuit board the size of a moon. The system is still computing something, and you are now part of the calculation.",
+                    drivePiece: "LOGIC LATTICE",
+                    part: { system: "shield", name: "PHASE LATTICE" },
+                    discoveries: [
+                        d("g4s2_star", "star", "Vash", "Spinning nine hundred times a second. Every rotation is a clock cycle."),
+                        d("g4s2_board", "planet", "Boardworld", "Continents of copper traces. The weather is heat dissipation."),
+                        d("g4s2_query", "signal", "The Open Query", "A question, broadcast for an age. No one has answered correctly."),
+                        d("g4s2_bus", "anomaly", "The Data Bus", "A lane of pure signal between planets. Ships that cross it arrive changed.")
+                    ],
+                    levelDef: {
+                        name: "CIRCUIT VASH", diff: 3.05, depth: 10, boss: "arbiter", completionBonus: 2900,
+                        waveOpts: [["sniper", 3, 2, 1], ["orb", 3, 2, 1], ["phantom", 4, 2, 1], ["fdrone", 3, 2, 1],
+                            ["drone", 2, 2, 1], ["core", 4, 2, 2], ["stalker", 4, 2, 2], ["hunter", 4, 2, 3]],
+                        combos: [[["sniper", 3], ["orb", 1]], [["phantom", 2], ["core", 2]],
+                            [["stalker", 2], ["sniper", 2]], [["shattered", 1], ["fdrone", 2]],
+                            [["orb", 2], ["phantom", 2]], [["hunter", 2], ["core", 2]]],
+                        elitePool: [["sniper", 1], ["shattered", 1], ["guardian", 2], ["shattered", 3]],
+                        eliteSupport: "orb",
+                        secondElite: ["shattered", "guardian", "singularity"],
+                        secondSupport: "phantom", secondSupportCount: 2,
+                        env: {
+                            floor: "rgba(4,16,14,0.88)", grid: "rgba(120,255,200,0.07)", border: [120, 255, 200],
+                            neb: [[80, 230, 190], [60, 120, 255]], ambient: [[130, 255, 210], [90, 220, 255], [220, 255, 240]],
+                            cracks: true, crackC: [120, 255, 200], debris: false, glitch: true,
+                            pillars: true, pillarsN: 9, pillarC: [110, 255, 200], channels: true, pressure: true
+                        }
+                    }
+                },
+                {
+                    id: 3, name: "THE HIVEWORKS", coins: 3400,
+                    star: "HALLOC, a yellow star farmed for power",
+                    brief: "A factory that makes only one thing: more of itself. The drones here are not guarding the Hiveworks. They are the Hiveworks.",
+                    drivePiece: "HIVE CONTROLLER",
+                    part: { system: "engine", name: "SERVO DRIVE" },
+                    discoveries: [
+                        d("g4s3_star", "star", "Halloc", "Ringed by collectors. Only a sliver of its light escapes."),
+                        d("g4s3_comb", "station", "The Comb", "Hexagonal bays, millions of them, each one building a drone."),
+                        d("g4s3_swarm", "belt", "The Living Belt", "Looks like an asteroid belt. Moves like a flock."),
+                        d("g4s3_queen", "derelict", "The Old Queen", "The first production unit. Shut down, and still being defended.")
+                    ],
+                    levelDef: {
+                        name: "THE HIVEWORKS", diff: 3.15, depth: 10, boss: "hive", completionBonus: 3050,
+                        waveOpts: [["swarm", 5, 2, 1], ["drone", 2, 2, 1], ["fdrone", 3, 2, 1], ["chaser", 3, 2, 1],
+                            ["hunter", 4, 2, 1], ["leaper", 4, 2, 2], ["stalker", 4, 2, 2], ["leech", 4, 1, 3]],
+                        combos: [[["swarm", 4], ["fdrone", 2]], [["drone", 4], ["hunter", 1]],
+                            [["chaser", 3], ["leaper", 2]], [["hunter", 2], ["swarm", 4]],
+                            [["singularity", 1], ["drone", 3]], [["stalker", 2], ["fdrone", 2]]],
+                        elitePool: [["drone", 1], ["ravager", 1], ["singularity", 2], ["shattered", 3]],
+                        eliteSupport: "fdrone",
+                        secondElite: ["ravager", "singularity", "shattered", "guardian"],
+                        secondSupport: "swarm", secondSupportCount: 6,
+                        env: {
+                            floor: "rgba(18,16,8,0.86)", grid: "rgba(255,215,110,0.05)", border: [255, 210, 100],
+                            neb: [[255, 200, 80], [255, 120, 60]], ambient: [[255, 215, 110], [255, 170, 80], [255, 240, 180]],
+                            cracks: true, crackC: [255, 210, 100], debris: true, debrisBig: false, glitch: false,
+                            pillars: true, pillarsN: 6, pillarC: [255, 200, 90], channels: false, pressure: true
+                        }
+                    }
+                },
+                {
+                    id: 4, name: "THE PRIME ENGINE", coins: 4000, finale: true,
+                    star: "THE PRIME ENGINE, a star turned into a machine",
+                    brief: "The first factory, and the factory that builds factories. Its Architect has redesigned itself ten thousand times. Break the last revision and the line stops.",
+                    drivePiece: "PRIME COG",
+                    part: { system: "weapon", name: "PRIME CANNON" },
+                    discoveries: [
+                        d("g4s4_star", "star", "The Prime Engine", "Fusion, harnessed completely. Not one photon wasted."),
+                        d("g4s4_draft", "station", "The Drafting Hall", "Plans for every machine in the galaxy, and for several that are not built yet."),
+                        d("g4s4_scrap", "derelict", "Revision Nine Thousand", "A discarded version of the Architect. It was not finished being discarded."),
+                        d("g4s4_gear", "anomaly", "The Prime Gear", "One gear, turning in empty space. Everything else in the galaxy is geared to it.", true)
+                    ],
+                    levelDef: {
+                        name: "THE PRIME ENGINE", diff: 3.3, depth: 10, boss: "architect", completionBonus: 3500,
+                        waveOpts: [["brute", 7, 1, 1], ["core", 4, 2, 1], ["sniper", 3, 2, 1], ["drone", 2, 2, 1],
+                            ["fdrone", 3, 2, 1], ["hunter", 4, 2, 1], ["orb", 3, 2, 1], ["stalker", 4, 2, 2],
+                            ["phantom", 4, 2, 2], ["leaper", 4, 2, 2], ["swarm", 5, 2, 2], ["leech", 4, 1, 3]],
+                        combos: [[["guardian", 1], ["core", 2]], [["shattered", 1], ["sniper", 2]],
+                            [["singularity", 1], ["drone", 3]], [["ravager", 1], ["hunter", 2]],
+                            [["core", 2], ["phantom", 2], ["orb", 1]], [["brute", 1], ["fdrone", 2], ["swarm", 3]],
+                            [["stalker", 2], ["leaper", 2]]],
+                        elitePool: [["guardian", 1], ["shattered", 1], ["ravager", 1], ["singularity", 1], ["guardian", 3]],
+                        eliteSupport: "core",
+                        secondElite: ["singularity", "guardian", "shattered", "ravager"],
+                        secondSupport: "hunter", secondSupportCount: 3,
+                        env: {
+                            floor: "rgba(8,14,14,0.9)", grid: "rgba(160,255,220,0.06)", border: [160, 255, 220],
+                            neb: [[120, 255, 210], [255, 180, 90]], ambient: [[160, 255, 220], [255, 200, 110], [255, 255, 255]],
+                            cracks: true, crackC: [160, 255, 220], debris: true, debrisBig: true, glitch: true,
+                            pillars: true, pillarsN: 10, pillarC: [150, 255, 215], channels: true, pressure: true
+                        }
+                    }
+                }
+            ]
+        },
+
+        // -------------------------------------------------------------
+        // GALAXIES 5-10 -- named, themed, and deliberately EMPTY.
         //
         // These are not placeholders that lie. A galaxy with no `systems`
         // is rendered as surveyed-but-unreachable ("DEEP SURVEY IN
@@ -782,10 +938,8 @@
         // the universe stays unknown.
         //
         // Filling one in means giving it a `systems` array in the shape
-        // Galaxies 2 and 3 use. That is the whole procedure.
+        // Galaxies 2-4 use. That is the whole procedure.
         // -------------------------------------------------------------
-        { id: 4,  name: "MACHINE GALAXY",  subtitle: "GALAXY 04", color: [160, 255, 220], accent: [90, 200, 160],
-          theme: "Worlds machined into shape. The builders left; the factories did not stop.", systems: [] },
         { id: 5,  name: "THE LIVING REACH",subtitle: "GALAXY 05", color: [140, 255, 140], accent: [200, 255, 120],
           theme: "A galaxy with a pulse. The stations here were grown.", systems: [] },
         { id: 6,  name: "STELLAR GRAVEYARD",subtitle: "GALAXY 06", color: [200, 200, 220], accent: [255, 140, 120],

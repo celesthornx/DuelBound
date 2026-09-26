@@ -1279,7 +1279,7 @@ input[type=range]{width:180px;accent-color:var(--cy)}
    · Every system has its own guardian. Past the Frontier most are
      BOSSMETA variants (`base` = the Frontier guardian they build on,
      plus a signature attack); each galaxy finale (Crimson Monarch,
-     Stillheart) is a boss of its own.
+     Stillheart, Architect) is a boss of its own.
    · CHOICES[] — physical path-choice panels shown at portals
    · BOSSMETA  — guardian metadata; boss logic dispatch on kind
    · gravFields — shared gravity-pull system (leeches, the
@@ -5105,6 +5105,19 @@ function updateEBullets(dt){
           ebullets.push({x:b.x,y:b.y,vx:Math.cos(aa)*sp.spd,vy:Math.sin(aa)*sp.spd,dmg:sp.dmg,r:6,c:b.c,life:4});}
         sparks(b.x,b.y,b.c,8,220);ebullets.splice(i,1);continue;
       }}
+    // `home` (Hive Foundry missiles) steers toward the player for a
+    // while, then flies straight. `bounce` (Architect saws) reflects
+    // off the arena walls a set number of times.
+    if(b.home&&!b.frozen&&b.home.t>0){b.home.t-=dt;
+      if(player&&!player.dead){
+        const cur=Math.atan2(b.vy,b.vx),want=angTo(b.x,b.y,player.x,player.y);
+        const na=cur+clamp(angDiff(cur,want),-b.home.turn*dt,b.home.turn*dt),sp=Math.hypot(b.vx,b.vy);
+        b.vx=Math.cos(na)*sp;b.vy=Math.sin(na)*sp;}}
+    if(b.bounce>0&&room){
+      const hw=room.w/2-b.r,hh=room.h/2-b.r;
+      if((b.x<-hw&&b.vx<0)||(b.x>hw&&b.vx>0)){b.vx*=-1;b.bounce--;sparks(b.x,b.y,b.c,5,160);}
+      if((b.y<-hh&&b.vy<0)||(b.y>hh&&b.vy>0)){b.vy*=-1;b.bounce--;sparks(b.x,b.y,b.c,5,160);}
+    }
     if(b.life<=0||(room&&(b.x<-room.w/2-20||b.x>room.w/2+20||b.y<-room.h/2-20||b.y>room.h/2+20))){
       sparks(b.x,b.y,b.c,3,120);ebullets.splice(i,1);continue;}
     const p=player;
@@ -5837,6 +5850,27 @@ const BOSSMETA={
     thresholds:[0.66,0.33],ph2:'THE LATTICE FORMS',ph3:'ABSOLUTE ZERO',
     on2:()=>{summonEnemies('guardian',1,1);},
     on3:()=>{summonEnemies('hunter',2,3);}},
+  // Galaxy 4 -- the Machine Galaxy
+  forge:{name:'THE FORGEMASTER',introSub:'THE LINE NEVER STOPS',color:[255,190,90],
+    base:'sentinel',hp:16500,shotC:[255,200,110],pal:[[255,200,110],[255,160,70],[255,90,60]],
+    thresholds:[0.65,0.30],ph2:'THE LINE SPEEDS UP',ph3:'OVERTIME',
+    on2:()=>{summonEnemies('core',2,3);},
+    on3:()=>{summonEnemies('brute',1,2);summonEnemies('drone',3,5);}},
+  arbiter:{name:'THE ARBITER',introSub:'EVERY PATH ALREADY DECIDED',color:[120,255,200],
+    base:'archon',hp:17200,shotC:[130,255,210],pal:[[130,255,210],[90,220,255],[255,110,160]],
+    thresholds:[0.65,0.30],ph2:'THE GRID TIGHTENS',ph3:'FINAL RULING',
+    on2:()=>{summonEnemies('sniper',2,4);},
+    on3:()=>{summonEnemies('phantom',2,4);summonEnemies('orb',2,3);}},
+  hive:{name:'THE HIVE FOUNDRY',introSub:'IT BUILDS WHAT HUNTS YOU',color:[255,210,100],
+    base:'warden',hp:17800,shotC:[255,210,110],pal:[[255,215,110],[255,170,80],[255,100,90]],
+    thresholds:[0.65,0.30],ph2:'THE HIVE WAKES',ph3:'FULL PRODUCTION',
+    on2:()=>{summonEnemies('drone',3,5);},
+    on3:()=>{summonEnemies('fdrone',3,5);summonEnemies('hunter',1,3);}},
+  architect:{name:'THE ARCHITECT',introSub:'IT BUILT THIS GALAXY. IT IS STILL BUILDING.',color:[160,255,220],
+    hp:22000,shotC:[170,255,220],
+    thresholds:[0.66,0.33],ph2:'REVISION II',ph3:'OVERCLOCK',
+    on2:()=>{summonEnemies('core',2,3);if(boss)boss.modeT=Math.min(boss.modeT,0.4);},
+    on3:()=>{summonEnemies('brute',1,2);if(boss)boss.modeT=Math.min(boss.modeT,0.4);}},
 };
 function summonEnemies(type,n,cap){
   if(cap!==undefined&&enemies.filter(e=>e.type===type&&!e.dead).length>=cap)return;
@@ -5858,6 +5892,11 @@ function createBoss(kind){
       vx:0,vy:0,dead:false,dying:0,vulnT:0,
       tVolley:2.6,tWave:4.0,tFreeze:7.5,tSummon:10,spiral:0,spiralEm:0,
       freeze:null,waves:[],summonFlags:{}};
+  }else if(kind==='architect'){
+    boss={kind:'architect',x:0,y:-320,r:78,hp:22000,maxhp:22000,phase:1,t:0,invuln:0,hitFlash:0,eye:0,
+      vx:0,vy:0,dead:false,dying:0,vulnT:0,
+      mode:'cannon',modeIdx:0,modeT:7,recon:0,
+      tRadial:3.2,tVolley:2.4,tSkill:1.5,tSummon:10,beams:[],summonFlags:{}};
   }else if(baseKind==='depths'){
     boss={kind:'depths',x:0,y:-340,r:76,hp:11200,maxhp:11200,phase:1,t:0,invuln:0,hitFlash:0,eye:0,
       vx:0,vy:0,dead:false,dying:0,
@@ -5954,6 +5993,7 @@ function updateBoss(dt){
   else if(k==='origin')updateOrigin(dt);
   else if(k==='monarch')updateMonarch(dt);
   else if(k==='stillheart')updateStillheart(dt);
+  else if(k==='architect')updateArchitect(dt);
   else updateNull(dt);
   if(!boss||boss.dead||boss.dying>0)return;
   if(boss.base)updateBossSignature(dt);
@@ -7101,6 +7141,59 @@ function updateBossSignature(dt){
           gravFields.push({src:null,x:q[0],y:q[1],r:240,power:210,t:1.1,warn:1.1,dur:3.2,st:'warn',c:[150,210,255]});}
         b.eye=0.4;SFX.warn();}
       break;}
+    // CONVEYOR -- the floor itself starts moving and carries you toward
+    // a wall of stamping presses. Walk against it or ride it out.
+    case 'forge':{
+      if(s.belt){const bl=s.belt;bl.t-=dt;
+        if(bl.st==='warn'){if(bl.t<=0){bl.st='on';bl.t=bl.dur;SFX.charge();addShake(4);}}
+        else if(bl.t<=0)s.belt=null;
+        else{
+          if(!p.dead){
+            p.x+=Math.cos(bl.ang)*bl.spd*dt;p.y+=Math.sin(bl.ang)*bl.spd*dt;
+            const hw=room.w/2-p.r,hh=room.h/2-p.r;
+            p.x=clamp(p.x,-hw,hw);p.y=clamp(p.y,-hh,hh);
+          }
+          bl.pressT-=dt;
+          if(bl.pressT<=0){bl.pressT=1.2;forgePress(bl.ang);}
+        }
+        break;}
+      if(busy)break;
+      s.tBelt=(s.tBelt==null?5.0:s.tBelt)-dt;
+      if(s.tBelt<=0){s.tBelt=ph===1?9.0:ph===2?8.0:7.0;
+        s.belt={st:'warn',t:1.1,ang:pick([0,Math.PI,Math.PI/2,-Math.PI/2]),
+          spd:ph===1?120:ph===2?145:170,dur:ph===3?4.2:3.6,pressT:0.15};
+        dmgNum(b.x,b.y-b.r-18,'CONVEYOR ENGAGED','#ffd48a',17);b.eye=0.4;SFX.warn();}
+      break;}
+    // LASER GRID -- parallel lasers ruled across the whole arena; in
+    // FINAL RULING both directions at once.
+    case 'arbiter':{
+      if(busy)break;
+      s.tGrid=(s.tGrid==null?4.0:s.tGrid)-dt;
+      if(s.tGrid<=0){s.tGrid=ph===1?5.5:ph===2?4.6:4.0;
+        s.flip=!s.flip;
+        const lc=b.pal[ph-1],n=ph===1?4:5;
+        const rule=(horiz)=>{
+          const span=horiz?room.h:room.w,step=span/(n+1),off=rand(-step*0.3,step*0.3);
+          for(let k=1;k<=n;k++){const v=-span/2+k*step+off;
+            if(horiz)addBeam({x:-room.w/2,y:v,ang:0,len:room.w,w:18,warn:1.15,dur:0.45,dmg:20,c:lc});
+            else addBeam({x:v,y:-room.h/2,ang:Math.PI/2,len:room.h,w:18,warn:1.15,dur:0.45,dmg:20,c:lc});}
+        };
+        if(ph===3){rule(true);rule(false);}else rule(s.flip);
+        b.eye=0.4;SFX.warn();}
+      break;}
+    // SEEKER SWARM -- missiles launched wide that curve in on you,
+    // then commit to a straight line.
+    case 'hive':{
+      if(busy)break;
+      s.tMis=(s.tMis==null?3.0:s.tMis)-dt;
+      if(s.tMis<=0){s.tMis=ph===1?3.6:ph===2?3.0:2.4;
+        const n=ph+1;
+        for(let k=0;k<n;k++){
+          const aa=a+(k%2?1:-1)*(1.0+0.25*Math.floor(k/2));
+          ebullets.push({x:b.x+Math.cos(aa)*b.r,y:b.y+Math.sin(aa)*b.r,vx:Math.cos(aa)*230,vy:Math.sin(aa)*230,
+            dmg:13,r:7,c:[255,200,90],life:6,home:{t:2.0,turn:2.4}});}
+        b.eye=0.35;SFX.bossShot();}
+      break;}
     // AFTERIMAGES -- every blink leaves a frozen sleeper behind that
     // wakes a second later in a ring of shots.
     case 'sleeper':{
@@ -7180,6 +7273,27 @@ function drawBossSignature(){
         ctx.beginPath();ctx.moveTo(-12,-7);ctx.lineTo(10,-10);ctx.lineTo(13,6);ctx.lineTo(-6,11);ctx.closePath();ctx.fill();
         ctx.restore();}
       break;}
+    case 'forge':{
+      ctx.rotate(t*0.5);ctx.fillStyle=rgba(c,0.85);
+      for(let i=0;i<12;i++){ctx.save();ctx.rotate(i/12*TAU);ctx.fillRect(-7,-b.r-26,14,16);ctx.restore();}
+      ctx.strokeStyle=rgba(c,0.6);ctx.lineWidth=4;ctx.beginPath();ctx.arc(0,0,b.r+12,0,TAU);ctx.stroke();
+      break;}
+    case 'arbiter':{
+      ctx.rotate(Math.PI/4+Math.sin(t*0.6)*0.1);
+      const R=b.r+34;
+      ctx.strokeStyle=rgba(c,0.75);ctx.lineWidth=3;ctx.strokeRect(-R,-R,R*2,R*2);
+      for(const [x,y] of [[-R,-R],[R,-R],[R,R],[-R,R]]){
+        ctx.globalCompositeOperation='lighter';drawGlow(x,y,c,18);ctx.globalCompositeOperation='source-over';
+        ctx.fillStyle='#fff';ctx.fillRect(x-4,y-4,8,8);}
+      break;}
+    case 'hive':{
+      for(let i=0;i<6;i++){const aa=t*0.4+i/6*TAU,rr=b.r+40;
+        ctx.save();ctx.translate(Math.cos(aa)*rr,Math.sin(aa)*rr);ctx.rotate(aa);
+        ctx.strokeStyle=rgba(c,0.85);ctx.lineWidth=2.5;ctx.beginPath();
+        for(let k=0;k<=6;k++){const ha=k/6*TAU;k?ctx.lineTo(Math.cos(ha)*13,Math.sin(ha)*13):ctx.moveTo(13,0);}
+        ctx.stroke();ctx.fillStyle=rgba(c,0.25+0.2*Math.sin(t*3+i));ctx.fill();
+        ctx.restore();}
+      break;}
     case 'sleeper':{
       const open=0.25+(b.phase-1)*0.3;
       ctx.strokeStyle=rgba(c,0.85);ctx.lineWidth=5;
@@ -7206,6 +7320,18 @@ function drawBossFX(){
       ctx.strokeStyle=rgba(b.pal[b.phase-1],0.4+pr*0.5);ctx.lineWidth=2;
       ctx.beginPath();ctx.arc(g.x,g.y,b.r*0.9,0,TAU);ctx.stroke();
       ctx.beginPath();ctx.arc(g.x,g.y,b.r*0.9*(1-pr),0,TAU);ctx.stroke();}
+  }
+  if(b.kind==='forge'&&b.sig&&b.sig.belt){
+    const bl=b.sig.belt,on=bl.st==='on',step=120;
+    const cx=Math.cos(bl.ang),cy=Math.sin(bl.ang);
+    const shift=((performance.now()*0.001*(on?bl.spd:25))%step);
+    ctx.strokeStyle=on?'rgba(255,200,110,0.22)':`rgba(255,200,110,${0.1+0.1*Math.sin(performance.now()*0.02)})`;
+    ctx.lineWidth=4;
+    for(let gx=-room.w/2+step/2;gx<room.w/2;gx+=step)for(let gy=-room.h/2+step/2;gy<room.h/2;gy+=step){
+      const x=gx+cx*shift,y=gy+cy*shift;
+      ctx.beginPath();
+      ctx.moveTo(x-cx*14-cy*18,y-cy*14+cx*18);ctx.lineTo(x+cx*10,y+cy*10);ctx.lineTo(x-cx*14+cy*18,y-cy*14-cx*18);
+      ctx.stroke();}
   }
   if(b.waves&&b.waves.length)drawIceWaves();
   if(b.beams&&b.beams.length)drawBossBeams();
@@ -7500,6 +7626,167 @@ function drawStillheart(){
     ctx.strokeStyle=`rgba(255,201,92,${0.5+Math.sin(performance.now()*0.02)*0.4})`;ctx.lineWidth=4;
     ctx.beginPath();ctx.arc(b.x,b.y,b.r+26,0,TAU);ctx.stroke();}
 }
+// The Forgemaster's presses: a row of stamps along whichever wall the
+// conveyor is carrying you toward.
+function forgePress(ang){
+  const cx=Math.cos(ang),cy=Math.sin(ang),c=[255,190,90];
+  if(Math.abs(cx)>0.5){
+    const x=Math.sign(cx)*(room.w/2-75);
+    for(let y=-room.h/2+90;y<room.h/2-60;y+=140)hazards.push({x,y,r:72,t:0.9,t0:0.9,c});
+  }else{
+    const y=Math.sign(cy)*(room.h/2-75);
+    for(let x=-room.w/2+90;x<room.w/2-60;x+=140)hazards.push({x,y,r:72,t:0.9,t0:0.9,c});
+  }
+  SFX.warn();
+}
+
+/* =================================================================
+   GALAXY 4 FINALE -- THE ARCHITECT
+   The machine that machined the galaxy. It fights in MODES and
+   rebuilds itself between them:
+   · CANNON -- heavy shells that burst into shrapnel.
+   · SAW    -- blades that ricochet off the arena walls.
+   · LANCE  -- (phase II+) twin laser arms that sweep as it turns.
+   Every mode change is a RECONFIGURATION: it stops, its core opens,
+   and it takes extra damage -- the fight's rhythm is surviving a mode
+   and punishing the changeover. OVERCLOCK (phase III) shortens every
+   mode and fires shells through the saw mode too.
+   ================================================================= */
+const ARCH_MODES=[['cannon','saw'],['cannon','saw','lance'],['cannon','saw','lance']];
+const ARCH_LABEL={cannon:'CANNON',saw:'SAW',lance:'LANCE'};
+function architectShells(b,a){
+  for(const k of [-0.25,0.25]){const aa=a+k;
+    ebullets.push({x:b.x,y:b.y,vx:Math.cos(aa)*260,vy:Math.sin(aa)*260,dmg:14,r:14,c:[255,190,90],life:5,
+      split:{t:0.8,n:10,spd:250,dmg:10}});}
+  SFX.bossShot();
+}
+function updateArchitect(dt){
+  const b=boss;if(!b)return;
+  const p=player;
+  b.t+=dt;b.hitFlash-=dt;b.invuln-=dt;b.eye-=dt;b.vulnT-=dt;
+  if(b.dying>0){bossDying(dt,[[160,255,220],[255,190,90],[255,255,255]]);return;}
+  const dx=p.x-b.x,dy=p.y-b.y,d=Math.hypot(dx,dy)||1,a=Math.atan2(dy,dx);
+  const dur=b.phase===3?5.0:7.0;
+  // mode clock -> reconfiguration -> next mode
+  if(b.recon>0){
+    b.recon-=dt;
+    if(b.recon<=0){
+      const list=ARCH_MODES[b.phase-1];
+      b.modeIdx=(b.modeIdx+1)%list.length;b.mode=list[b.modeIdx];b.modeT=dur;b.tSkill=0.6;
+      if(b.mode==='lance'){const dir=pick([-1,1]);
+        for(const off of [0,Math.PI])addBeam({x:b.x,y:b.y,follow:true,ang:a+Math.PI/2+off,rot:dir*0.85,
+          len:2200,start:b.r+10,w:24,warn:0.9,dur:dur-1.2,dmg:22,c:[160,255,220]});}
+      ringFX(b.x,b.y,[160,255,220],b.r+70,0.4);SFX.phase();
+      dmgNum(b.x,b.y-b.r-18,'MODE: '+ARCH_LABEL[b.mode],'#a0ffdc',18);
+    }
+  }else if(b.invuln<=0){
+    b.modeT-=dt;
+    if(b.modeT<=0){
+      b.recon=b.phase===3?1.3:1.6;b.vulnT=b.recon;
+      if(b.beams)b.beams.length=0;
+      burstFX(b.x,b.y,[255,255,255],20,380);addShake(8);SFX.block();
+      dmgNum(b.x,b.y-b.r-18,'RECONFIGURING — CORE EXPOSED','#ffc95c',18);
+    }
+  }
+  // movement
+  if(b.invuln<=0&&b.recon<=0){
+    if(b.phase===1){
+      const tx=Math.cos(b.t*0.3)*300,ty=Math.sin(b.t*0.22)*180;
+      const ta=angTo(b.x,b.y,tx,ty),spd=b.mode==='lance'?55:95;
+      b.vx=lerp(b.vx,Math.cos(ta)*spd,clamp(2*dt,0,1));b.vy=lerp(b.vy,Math.sin(ta)*spd,clamp(2*dt,0,1));
+    }else{
+      const spd=(b.mode==='lance'?60:b.phase===2?140:175)*curDiff().speedMult;
+      const tvx=Math.cos(a)*spd*(d>260?1:-0.4)+Math.cos(a+Math.PI/2)*Math.sin(b.t*0.6)*70;
+      const tvy=Math.sin(a)*spd*(d>260?1:-0.4)+Math.sin(a+Math.PI/2)*Math.sin(b.t*0.6)*70;
+      b.vx=lerp(b.vx,tvx,clamp(2.2*dt,0,1));b.vy=lerp(b.vy,tvy,clamp(2.2*dt,0,1));
+    }
+  }else{b.vx*=Math.pow(0.05,dt);b.vy*=Math.pow(0.05,dt);}
+  if(b.invuln<=0&&b.recon<=0&&!p.dead){
+    b.tRadial-=dt;
+    if(b.tRadial<=0){b.tRadial=b.phase===1?3.4:b.phase===2?3.0:2.6;
+      const n=b.phase===1?14:b.phase===2?18:22;
+      for(let i=0;i<n;i++)bossShot(b.x,b.y,i/n*TAU+b.t*0.5,220+b.phase*16,10);
+      b.eye=0.3;SFX.bossShot();}
+    b.tSkill-=dt;
+    if(b.mode==='cannon'&&b.tSkill<=0){b.tSkill=b.phase===3?1.4:1.8;architectShells(b,a);b.eye=0.3;}
+    else if(b.mode==='saw'&&b.tSkill<=0){
+      b.tSkill=b.phase===3?2.0:2.6;
+      const n=b.phase===1?2:3;
+      for(let k=0;k<n;k++){const aa=a+rand(-0.8,0.8);
+        ebullets.push({x:b.x+Math.cos(aa)*b.r,y:b.y+Math.sin(aa)*b.r,vx:Math.cos(aa)*330,vy:Math.sin(aa)*330,
+          dmg:18,r:17,c:[200,255,230],life:8,saw:true,bounce:3});}
+      b.eye=0.35;SFX.charge();
+      if(b.phase===3){b.tOver=(b.tOver||0)+1;if(b.tOver%2===0)architectShells(b,a);}
+    }else if(b.mode==='lance'&&b.tSkill<=0){
+      b.tSkill=2.0;
+      const n=5,sp=(n-1)*0.15;
+      for(let i=0;i<n;i++)bossShot(b.x,b.y,a-lerp(-sp/2,sp/2,i/(n-1)),360,12);
+      b.eye=0.3;SFX.bossShot();
+    }
+    b.tSummon-=dt;
+    if(b.tSummon<=0){b.tSummon=b.phase===1?11:b.phase===2?10:9;
+      if(b.phase===1)summonEnemies('drone',3,5);
+      else if(b.phase===2)summonEnemies('core',1,3);
+      else summonEnemies('hunter',2,3);}
+  }
+  b.x+=b.vx*dt;b.y+=b.vy*dt;
+  const hw=room.w/2-b.r,hh=room.h/2-b.r;
+  if(b.x<-hw){b.x=-hw;b.vx=Math.abs(b.vx)*0.3;}if(b.x>hw){b.x=hw;b.vx=-Math.abs(b.vx)*0.3;}
+  if(b.y<-hh){b.y=-hh;b.vy=Math.abs(b.vy)*0.3;}if(b.y>hh){b.y=hh;b.vy=-Math.abs(b.vy)*0.3;}
+  if(!p.dead&&d<b.r+p.r+2)hurtPlayer(28,b.x,b.y);
+}
+function drawArchitect(){
+  const b=boss,ph=b.phase;
+  const phC=ph===1?[160,255,220]:ph===2?[110,220,255]:[255,120,110];
+  const open=b.recon>0;
+  const aim=angTo(b.x,b.y,player.x,player.y);
+  ctx.globalCompositeOperation='lighter';
+  drawGlow(b.x,b.y,open?[255,255,255]:phC,b.r*(open?4.4:3.6));
+  ctx.globalCompositeOperation='source-over';
+  ctx.save();ctx.translate(b.x,b.y);
+  // outer gear ring
+  ctx.save();ctx.rotate(b.t*(ph===3?0.9:0.4));
+  ctx.fillStyle=rgba(phC,0.8);
+  for(let i=0;i<18;i++){ctx.save();ctx.rotate(i/18*TAU);ctx.fillRect(-6,-b.r-30,12,14);ctx.restore();}
+  ctx.strokeStyle=rgba(phC,0.7);ctx.lineWidth=6;ctx.beginPath();ctx.arc(0,0,b.r+16,0,TAU);ctx.stroke();
+  ctx.restore();
+  // four armatures, shaped by the current mode
+  const spread=open?0.9:0;
+  for(let i=0;i<4;i++){
+    const aa=(b.mode==='lance'?b.t*0.85:aim)+i/4*TAU+Math.PI/4;
+    ctx.save();ctx.rotate(aa);ctx.translate(b.r+4+spread*20,0);
+    ctx.fillStyle=rgba([30,44,48],0.95);ctx.strokeStyle=rgba(phC,0.9);ctx.lineWidth=2.5;
+    if(b.mode==='cannon'){ctx.fillRect(0,-9,34,18);ctx.strokeRect(0,-9,34,18);}
+    else if(b.mode==='saw'){
+      ctx.rotate(b.t*9);ctx.beginPath();
+      for(let k=0;k<12;k++){const ta=k/12*TAU,rr=k%2?20:14;k?ctx.lineTo(Math.cos(ta)*rr+16,Math.sin(ta)*rr):ctx.moveTo(Math.cos(ta)*rr+16,Math.sin(ta)*rr);}
+      ctx.closePath();ctx.fill();ctx.stroke();
+    }else{ctx.beginPath();ctx.moveTo(0,-12);ctx.lineTo(30,-3);ctx.lineTo(30,3);ctx.lineTo(0,12);ctx.closePath();ctx.fill();ctx.stroke();}
+    ctx.restore();
+  }
+  // octagonal hull
+  const g=ctx.createRadialGradient(0,0,6,0,0,b.r);
+  if(open){g.addColorStop(0,'rgba(255,255,255,0.98)');g.addColorStop(0.55,rgb(b.hitFlash>0?[255,255,255]:[170,255,225]));g.addColorStop(1,'rgba(14,30,28,0.92)');}
+  else{g.addColorStop(0,rgb(b.hitFlash>0?[255,255,255]:[26,46,44]));g.addColorStop(1,'rgba(8,16,16,0.96)');}
+  ctx.fillStyle=g;ctx.beginPath();
+  for(let i=0;i<=8;i++){const aa=i/8*TAU+Math.PI/8;
+    i?ctx.lineTo(Math.cos(aa)*b.r,Math.sin(aa)*b.r):ctx.moveTo(Math.cos(aa)*b.r,Math.sin(aa)*b.r);}
+  ctx.closePath();ctx.fill();
+  ctx.strokeStyle=rgba(phC,0.95);ctx.lineWidth=4.5;ctx.stroke();
+  ctx.strokeStyle=rgba(phC,0.35);ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(-b.r*0.7,0);ctx.lineTo(b.r*0.7,0);ctx.moveTo(0,-b.r*0.7);ctx.lineTo(0,b.r*0.7);ctx.stroke();
+  // lens
+  const eyeC=b.eye>0||open?[255,255,255]:phC;
+  ctx.fillStyle=rgb(eyeC);ctx.beginPath();ctx.arc(0,0,open?24+Math.sin(b.t*8)*3:15,0,TAU);ctx.fill();
+  ctx.globalCompositeOperation='lighter';drawGlow(0,0,eyeC,50);ctx.globalCompositeOperation='source-over';
+  ctx.restore();
+  if(b.invuln>0){
+    ctx.strokeStyle=`rgba(190,130,255,${0.5+Math.sin(performance.now()*0.02)*0.3})`;ctx.lineWidth=5;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r+22,0,TAU);ctx.stroke();}
+  if(b.vulnT>0){
+    ctx.strokeStyle=`rgba(255,201,92,${0.5+Math.sin(performance.now()*0.02)*0.4})`;ctx.lineWidth=4;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r+26,0,TAU);ctx.stroke();}
+}
 function updateHazards(dt){
   for(let i=hazards.length-1;i>=0;i--){const hz=hazards[i];
     hz.t-=dt;
@@ -7618,7 +7905,7 @@ function phaseTo(n){
   b.phase=n;b.invuln=1.5;
   b.sweep=null;b.shatter=null;b.slam=null;b.charge=null;b.nova=null;b.tp=null;b.barrage=null;
   b.flare=null;b.freeze=null;if(b.beams)b.beams.length=0;if(b.waves)b.waves.length=0;
-  if(b.sig){b.sig.chain=0;b.sig.ghosts=[];}
+  if(b.sig){b.sig.chain=0;b.sig.ghosts=[];b.sig.belt=null;}
   for(const eb of ebullets)sparks(eb.x,eb.y,eb.c,3,140);
   ebullets.length=0;
   ringFX(b.x,b.y,meta.color,420,0.7);burstFX(b.x,b.y,meta.color,30,450);
@@ -9214,6 +9501,7 @@ function renderWorld(){
     else if(k==='origin')drawOrigin();
     else if(k==='monarch')drawMonarch();
     else if(k==='stillheart')drawStillheart();
+    else if(k==='architect')drawArchitect();
     else drawNullBoss();
     if(boss.base)drawBossSignature();
   }
@@ -9252,6 +9540,20 @@ function renderWorld(){
     ctx.fillStyle='rgba(255,255,255,0.85)';ctx.beginPath();ctx.arc(b.x,b.y,b.r*0.42,0,TAU);ctx.fill();
     if(b.frozen){ctx.strokeStyle='rgba(170,225,255,0.8)';ctx.lineWidth=1.5;
       ctx.beginPath();ctx.arc(b.x,b.y,b.r+3,0,TAU);ctx.stroke();}
+    if(b.saw){ // spinning teeth
+      const rot=performance.now()*0.014;ctx.fillStyle=rgb(b.c);
+      ctx.beginPath();
+      for(let k=0;k<16;k++){const aa=rot+k/16*TAU,rr=k%2?b.r+7:b.r;
+        k?ctx.lineTo(b.x+Math.cos(aa)*rr,b.y+Math.sin(aa)*rr):ctx.moveTo(b.x+Math.cos(aa)*rr,b.y+Math.sin(aa)*rr);}
+      ctx.closePath();ctx.fill();
+      ctx.fillStyle='rgba(20,30,30,0.9)';ctx.beginPath();ctx.arc(b.x,b.y,b.r*0.35,0,TAU);ctx.fill();
+    }
+    if(b.home){ // missile fins along the heading
+      const ha=Math.atan2(b.vy,b.vx);ctx.fillStyle=rgb(b.c);
+      ctx.beginPath();ctx.moveTo(b.x+Math.cos(ha)*(b.r+8),b.y+Math.sin(ha)*(b.r+8));
+      ctx.lineTo(b.x+Math.cos(ha+2.5)*(b.r+5),b.y+Math.sin(ha+2.5)*(b.r+5));
+      ctx.lineTo(b.x+Math.cos(ha-2.5)*(b.r+5),b.y+Math.sin(ha-2.5)*(b.r+5));ctx.closePath();ctx.fill();
+    }
   }
   ctx.globalCompositeOperation='lighter';
   for(const p of particles){
