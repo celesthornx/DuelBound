@@ -1203,6 +1203,9 @@ function universeView(save) {
         coinsSpent: Math.max(0, Math.floor(Number(u.coinsSpent) || 0)),
         spendableCoins: Universe.spendableCoins(u),
         coinMultiplier: Universe.coinMultiplier(u),
+        // The colony's combat perks, resolved by the same function the
+        // client folds into the ship -- one source for both.
+        colony: Universe.colonyBonuses(u),
         plotsUnlocked: Universe.plotsUnlockedFor(u),
         plotCount: Universe.PLOT_COUNT,
         buildings: buildings,

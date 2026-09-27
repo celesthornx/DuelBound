@@ -139,5 +139,25 @@ t('client cannot zero shardsSpent', applied.shardsSpent === 200, applied.shardsS
 t('client cannot grant itself cosmetics', applied.shopOwned.join() === 'title_breaker', applied.shopOwned);
 t('client CAN change its own loadout', applied.loadout.secondary === 'barrier', applied.loadout);
 
+console.log('\n8. Home Planet buildings -- every structure grants its (small) perk');
+const U = require('../voidbreakUniverse.js');
+const fullColony = { planet: { buildings: {
+  0: { id: 'command', level: 5 }, 1: { id: 'hangar', level: 5 }, 2: { id: 'observatory', level: 4 },
+  3: { id: 'spaceport', level: 3 }, 4: { id: 'gate', level: 1 }, 5: { id: 'lab', level: 5 } } } };
+const cb = U.colonyBonuses(fullColony);
+t('no colony, no perk', JSON.stringify(U.colonyBonuses({})) === JSON.stringify({ maxHp: 0, maxEnergy: 0, gearCdMult: 1, dashCdMult: 1, dmgMult: 1 }));
+t('command: +2 energy/level', cb.maxEnergy === 10, cb);
+t('hangar: +3 health/level', cb.maxHp === 15, cb);
+t('observatory: -1.5% gear cooldown/level', cb.gearCdMult === 0.94, cb);
+t('spaceport: -2% dash cooldown/level', cb.dashCdMult === 0.94, cb);
+t('gate: +2% damage, once', cb.dmgMult === 1.02, cb);
+t('a maxed line is below one Forge level (vit +20, core +15, drive -8%, pow +10%)',
+  cb.maxHp < 20 && cb.maxEnergy < 15 && cb.dashCdMult > 0.92 && cb.dmgMult < 1.10, cb);
+t('every building has a mechanical effect', U.BUILDINGS.every(b =>
+  b.coinBonusPerLevel || b.hpBonusPerLevel || b.energyBonusPerLevel || b.gearCdPerLevel || b.dashCdPerLevel || b.dmgBonusPerLevel));
+t('coin multiplier unchanged by the new perks', Math.abs(U.coinMultiplier(fullColony) - 1.15) < 1e-9, U.coinMultiplier(fullColony));
+t('server universe view carries the same resolved perks',
+  JSON.stringify(V.universeView({ universe: Object.assign(U.emptyUniverse(), fullColony) }).colony) === JSON.stringify(cb));
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

@@ -7520,17 +7520,22 @@ function shipEnergyMax(){ return shipLv('energy')*6; }
 function shipSpeedMult(){ return 1+shipLv('engine')*0.015; }
 function shipDmgMult(){ return 1+shipLv('weapon')*0.025; }
 function shipDashInvuln(){ return 1+shipLv('shield')*0.03; }
+// The Home Planet's combat perks (see colonyBonuses() and the balance
+// note above BUILDINGS in voidbreakUniverse.js) -- the numbers live
+// there, not here. Folded in beside the ship parts, one layer smaller.
+const COLONY_NONE={maxHp:0,maxEnergy:0,gearCdMult:1,dashCdMult:1,dmgMult:1};
+function colony(){ return (UNI_OK&&UNI.colonyBonuses)?UNI.colonyBonuses(uni()):COLONY_NONE; }
 
 function newPlayer(weapon){
-  const f=save.forge;
+  const f=save.forge,col=colony();
   return {
     x:0,y:0,r:15,vx:0,vy:0,kx:0,ky:0,faceAng:0,
     weapon,fireTimer:0,muzzle:0,
-    hp:100+20*f.vit+shipHullHp(),maxhp:100+20*f.vit+shipHullHp(),
-    energy:100+15*f.core+shipEnergyMax(),maxenergy:100+15*f.core+shipEnergyMax(),energyRegen:22,
+    hp:100+20*f.vit+shipHullHp()+col.maxHp,maxhp:100+20*f.vit+shipHullHp()+col.maxHp,
+    energy:100+15*f.core+shipEnergyMax()+col.maxEnergy,maxenergy:100+15*f.core+shipEnergyMax()+col.maxEnergy,energyRegen:22,
     speed:280*(1+0.06*f.swift)*shipSpeedMult(),
-    dmgMult:(1+0.10*f.pow)*shipDmgMult(),fireRateMult:1,projAdd:0,pierceAdd:0,crit:0.05+0.04*f.edge,
-    bSpd:1,dashCD:1.1*(1-0.08*f.drive),dashPow:1,
+    dmgMult:(1+0.10*f.pow)*shipDmgMult()*col.dmgMult,fireRateMult:1,projAdd:0,pierceAdd:0,crit:0.05+0.04*f.edge,
+    bSpd:1,dashCD:1.1*(1-0.08*f.drive)*col.dashCdMult,dashPow:1,
     burnS:0,explodeS:0,lifestealS:0,dashshieldS:0,homingS:0,resonanceS:0,stasisS:0,anchorS:0,
     dashT:0,dashCd:0,dashDur:0.17,dashDir:0,invuln:0,shield:0,dashHits:null,
     dead:false,thrustT:0,ghostT:0,
@@ -7540,20 +7545,20 @@ function newPlayer(weapon){
   };
 }
 function recomputeStats(){
-  const p=player,f=save.forge;
-  p.dmgMult=(1+0.25*u('dmg'))*(1+0.10*f.pow)*shipDmgMult();
+  const p=player,f=save.forge,col=colony();
+  p.dmgMult=(1+0.25*u('dmg'))*(1+0.10*f.pow)*shipDmgMult()*col.dmgMult;
   p.speed=280*(1+0.12*u('speed'))*(1+0.06*f.swift)*(1+0.08*u('anchor'))*shipSpeedMult();
   p.fireRateMult=1+0.18*u('firerate');
   p.projAdd=u('multishot');p.pierceAdd=u('pierce');
   p.crit=0.05+0.10*u('crit')+0.04*f.edge;
   p.bSpd=1+0.25*u('bulletspeed');
   p.energyRegen=22*(1+0.6*u('energy'));
-  p.maxenergy=100+15*f.core+shipEnergyMax();
+  p.maxenergy=100+15*f.core+shipEnergyMax()+col.maxEnergy;
   if(p.energy>p.maxenergy)p.energy=p.maxenergy;
-  const newMax=100+20*f.vit+25*u('maxhp')+shipHullHp();
+  const newMax=100+20*f.vit+25*u('maxhp')+shipHullHp()+col.maxHp;
   if(newMax>p.maxhp){p.hp+=newMax-p.maxhp;}
   p.maxhp=newMax;
-  p.dashCD=1.1*(1-0.08*f.drive)*(1-0.04*u('dash'));
+  p.dashCD=1.1*(1-0.08*f.drive)*(1-0.04*u('dash'))*col.dashCdMult;
   p.dashPow=1+0.35*u('dash');
   p.burnS=u('burn');p.explodeS=u('explode');p.lifestealS=u('lifesteal');
   p.dashshieldS=u('dashshield');p.homingS=u('homing');p.resonanceS=u('resonance');p.stasisS=u('stasis');
@@ -7816,7 +7821,7 @@ function gearReady(p,cdKey,def){
 function useSecondary(){
   const p=player,def=activeSecondary();
   if(!gearReady(p,'secCd',def))return;
-  p.energy-=def.energy;p.secCd=def.cd;
+  p.energy-=def.energy;p.secCd=def.cd*colony().gearCdMult;
   if(def.id==='missile'){
     // Three missiles fanned off the nose, each seeking independently.
     // They carry the weapon's own damage scaling so the pod stays
@@ -7851,7 +7856,7 @@ function useSecondary(){
 function useAbility(){
   const p=player,def=activeAbility();
   if(!gearReady(p,'abCd',def))return;
-  p.energy-=def.energy;p.abCd=def.cd;
+  p.energy-=def.energy;p.abCd=def.cd*colony().gearCdMult;
   if(def.id==='overdrive'){
     p.odT=6;
     ringFX(p.x,p.y,[255,210,120],60,0.35);SFX.dashReady();addShake(3);
