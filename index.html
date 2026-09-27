@@ -3852,6 +3852,27 @@
   #menuMain.lobby, #menuMain.lobby *{
     font-family:'Comic Sans MS','Comic Neue',cursive !important;
   }
+  /* The VOIDBREAK wordmark keeps its original look -- higher specificity
+     than the blanket rule above, so it wins without touching that rule. */
+  #menuMain.lobby .lobby-brand, #menuMain.lobby .lobby-brand *{
+    font-family:'Chakra Petch',sans-serif !important;
+  }
+  #menuMain.lobby .brand-tag{ font-family:'Share Tech Mono',monospace !important; }
+  /* Comic Neue only ships regular/bold (no black weight), so button-ish
+     labels are pinned to bold explicitly -- Comic Sans MS's own default
+     weight reads noticeably thinner than the sci-fi font it replaced. */
+  #menuMain.lobby .dest-name,
+  #menuMain.lobby .drawer-tile span,
+  #menuMain.lobby .profile-full-btn,
+  #menuMain.lobby .chip-name,
+  #menuMain.lobby .hub-planet-name,
+  #menuMain.lobby #lobbyJourney .play-label,
+  #menuMain.lobby #lobbyJourney .play-sub{
+    font-weight:700 !important;
+  }
+  #menuMain.lobby #lobbyJourney .play-label{
+    -webkit-text-stroke: 2px #6b3a00;
+  }
 </style>
 </head>
 <body>
