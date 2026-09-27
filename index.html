@@ -182,7 +182,7 @@
 </style>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Share+Tech+Mono&family=Comic+Neue:wght@400;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Share+Tech+Mono&display=swap');
 
   :root{
     --void: #05070f;
@@ -3658,54 +3658,78 @@
      columns instead of stacking to one at the same breakpoint. */
   .lobby-center{ order:0; }
 
-  /* ---------- colored glossy icon badges, matching the approved mockup
-     (the flat single-color .dest-ico this codebase already used read
-     too uniform once tiles got bigger -- a badge per destination reads
-     faster, the way a home-screen app icon does). Applied by adding one
-     ic-* class to a tile's existing .dest-ico span; the icon itself
-     stays the same currentColor svg, just recolored white-on-badge. ---------- */
+  /* ---------- icon badges: dark glass + a neon glow ring, the same
+     holo-panel language the rest of VOIDBREAK already uses (see
+     .lp.holo's double-glow border), instead of a flat solid-color app
+     icon. Each destination still gets its own accent hue for fast
+     scanning, but every hue is drawn from the game's own neon palette
+     (cyan/violet/magenta/gold) rather than a generic rainbow. Applied
+     via one ic-* class already sitting on each tile's .dest-ico span --
+     the icon itself stays the same currentColor svg, now lit up in its
+     badge's accent color against the glass instead of solid white. ---------- */
   .lobby-left .dest-ico, .lobby-right .dest-ico, .rail-pop .dest-ico, #hubDrawer .dest-ico{
-    border-radius:24%; padding:9px; box-sizing:border-box; color:#fff;
-    box-shadow: 0 3px 0 rgba(0,0,0,.35), 0 8px 16px rgba(0,0,0,.4), inset 0 2px 0 rgba(255,255,255,.22), inset 0 -10px 16px rgba(0,0,0,.22);
-    filter:none;
+    border-radius:22%; padding:9px; box-sizing:border-box;
+    background:
+      radial-gradient(120% 130% at 30% 15%, rgba(255,255,255,.10), transparent 55%),
+      linear-gradient(180deg, rgba(22,34,58,.9), rgba(6,10,20,.95));
+    border: 1px solid var(--ic-c, rgba(63,208,255,.55));
+    box-shadow:
+      0 0 14px var(--ic-glow, rgba(63,208,255,.4)),
+      inset 0 1px 0 rgba(255,255,255,.10),
+      inset 0 0 18px var(--ic-glow-in, rgba(63,208,255,.14));
+    color: var(--ic-c, var(--vb-cyan));
+    filter: drop-shadow(0 3px 6px rgba(0,0,0,.4));
   }
-  .ic-teal{ background: linear-gradient(180deg,#3fe8c8,#0f8f78); }
-  .ic-gold{ background: linear-gradient(180deg,#ffd96b,#c8860a); }
-  .ic-purple{ background: linear-gradient(180deg,#b98bff,#6a2fd6); }
-  .ic-blue{ background: linear-gradient(180deg,#5fb8ff,#1f5fc4); }
-  .ic-red{ background: linear-gradient(180deg,#ff8a9a,#d6304f); }
-  .ic-cyan{ background: linear-gradient(180deg,#7fe9ff,#1291b0); }
-  .ic-orange{ background: linear-gradient(180deg,#ffab6b,#c85a12); }
+  .ic-teal{ --ic-c:#3fd0ff; --ic-glow:rgba(63,208,255,.45); --ic-glow-in:rgba(63,208,255,.16); }
+  .ic-cyan{ --ic-c:#00f0ff; --ic-glow:rgba(0,240,255,.5); --ic-glow-in:rgba(0,240,255,.18); }
+  .ic-gold{ --ic-c:#ffce54; --ic-glow:rgba(255,206,84,.45); --ic-glow-in:rgba(255,206,84,.16); }
+  .ic-orange{ --ic-c:#ff9a4d; --ic-glow:rgba(255,154,77,.42); --ic-glow-in:rgba(255,154,77,.15); }
+  .ic-purple{ --ic-c:#a05cff; --ic-glow:rgba(160,92,255,.48); --ic-glow-in:rgba(160,92,255,.17); }
+  .ic-blue{ --ic-c:#5fa8ff; --ic-glow:rgba(95,168,255,.42); --ic-glow-in:rgba(95,168,255,.15); }
+  .ic-red{ --ic-c:#ff5f8a; --ic-glow:rgba(255,95,138,.45); --ic-glow-in:rgba(255,95,138,.16); }
 
   /* ---------- the PLAY button, scoped to the hub's own hero button so
      the Arena screen's identical-markup DEPLOY button (#arenaPlay,
-     same .play-btn structure) is untouched. Same layered
-     shape/edge/fill/sheen mechanism as the base .play-btn, just
-     reskinned from the cyan/magenta hexagon to the approved mockup's
-     solid gold glossy pill. ---------- */
+     same .play-btn structure) is untouched. Keeps the base .play-btn's
+     dark glass fill and layered edge/fill/sheen mechanism -- the same
+     panel language as every other holo card in the hub -- just with a
+     gold neon edge and gold glow text instead of the base cyan/magenta,
+     so it still reads as THE primary action. ---------- */
   #lobbyJourney .play-edge{
-    clip-path:none; border-radius:22px;
-    background: linear-gradient(180deg,#fff0a6 0%,#ffd33d 38%,#ffab12 100%);
-    filter: drop-shadow(0 6px 0 rgba(154,90,6,.9)) drop-shadow(0 10px 24px rgba(255,170,30,.4));
-    animation:none;
+    background: linear-gradient(90deg, #ffce54 0%, #fff3c4 46%, #ff9a3c 100%);
+    filter: drop-shadow(0 0 16px rgba(255,206,84,.5)) drop-shadow(0 0 26px rgba(255,154,60,.35));
   }
-  #lobbyJourney.play-btn:hover .play-edge, #lobbyJourney:hover .play-edge{
-    filter: drop-shadow(0 6px 0 rgba(154,90,6,.9)) drop-shadow(0 10px 30px rgba(255,170,30,.6));
+  #lobbyJourney:hover .play-edge{
+    filter: drop-shadow(0 0 26px rgba(255,206,84,.8)) drop-shadow(0 0 38px rgba(255,154,60,.55));
   }
-  #lobbyJourney .play-edge::after{
-    content:''; position:absolute; left:5%; right:5%; top:3px; height:38%; border-radius:16px;
-    background: linear-gradient(180deg, rgba(255,255,255,.6), rgba(255,255,255,0));
-    pointer-events:none;
+  #lobbyJourney .play-fill{
+    background:
+      radial-gradient(130% 170% at 4% 50%,  rgba(255,206,84,.22), transparent 58%),
+      radial-gradient(130% 170% at 96% 50%, rgba(255,154,60,.20), transparent 58%),
+      linear-gradient(180deg, rgba(19,25,38,.96) 0%, rgba(8,11,18,.97) 100%);
   }
-  #lobbyJourney .play-fill, #lobbyJourney .play-sheen{ clip-path:none; border-radius:20px; }
-  #lobbyJourney .play-fill{ background:transparent; box-shadow:none; }
+  #lobbyJourney:hover .play-fill{
+    background:
+      radial-gradient(130% 170% at 4% 50%,  rgba(255,206,84,.32), transparent 58%),
+      radial-gradient(130% 170% at 96% 50%, rgba(255,154,60,.28), transparent 58%),
+      linear-gradient(180deg, rgba(24,31,47,.96) 0%, rgba(10,13,21,.97) 100%);
+  }
   #lobbyJourney .play-label{
-    color:#fff; -webkit-text-stroke: 1.5px #6b3a00; paint-order: stroke fill;
-    text-shadow: 0 3px 0 #6b3a00;
+    text-shadow:
+      0 0 4px rgba(255,255,255,.7),
+      0 0 22px rgba(255,206,84,.85),
+      0 0 42px rgba(255,154,60,.5),
+      0 4px 18px rgba(0,0,0,.8);
   }
-  #lobbyJourney .play-sub{ color:#6b3a00; }
-  #lobbyJourney .play-sub .chev{ color:#6b3a00; }
-  #lobbyJourney .play-glyph{ display:none; }
+  #lobbyJourney:hover .play-label{
+    text-shadow:
+      0 0 6px rgba(255,255,255,.9),
+      0 0 30px rgba(255,206,84,1),
+      0 0 54px rgba(255,154,60,.65),
+      0 4px 18px rgba(0,0,0,.8);
+  }
+  #lobbyJourney .play-sub{ color: rgba(255,224,160,.9); }
+  #lobbyJourney .play-sub .chev{ color:#ffce54; }
 
   /* ---------- rail tiles: bigger touch targets, icon-over-label ---------- */
   .lobby-left, .lobby-right{ gap:14px; overflow:visible; }
@@ -3841,38 +3865,6 @@
     .chip-name{ font-size:13px; }
   }
 
-  /* Comic Sans, per request -- scoped to the hub (#menuMain.lobby) only,
-     so the rest of the game (Arena screen, Voidbreak itself) keeps its
-     own typography. `!important` is the only way to win over the many
-     explicit font-family declarations already set on individual hub
-     elements (Orbitron/Chakra Petch/Share Tech Mono) without rewriting
-     every one of them. Real Comic Sans MS first for anyone who actually
-     has it installed (Windows/Mac); Comic Neue -- the open, webfont-
-     licensable redraw of it -- as the fallback everyone else gets. */
-  #menuMain.lobby, #menuMain.lobby *{
-    font-family:'Comic Sans MS','Comic Neue',cursive !important;
-  }
-  /* The VOIDBREAK wordmark keeps its original look -- higher specificity
-     than the blanket rule above, so it wins without touching that rule. */
-  #menuMain.lobby .lobby-brand, #menuMain.lobby .lobby-brand *{
-    font-family:'Chakra Petch',sans-serif !important;
-  }
-  #menuMain.lobby .brand-tag{ font-family:'Share Tech Mono',monospace !important; }
-  /* Comic Neue only ships regular/bold (no black weight), so button-ish
-     labels are pinned to bold explicitly -- Comic Sans MS's own default
-     weight reads noticeably thinner than the sci-fi font it replaced. */
-  #menuMain.lobby .dest-name,
-  #menuMain.lobby .drawer-tile span,
-  #menuMain.lobby .profile-full-btn,
-  #menuMain.lobby .chip-name,
-  #menuMain.lobby .hub-planet-name,
-  #menuMain.lobby #lobbyJourney .play-label,
-  #menuMain.lobby #lobbyJourney .play-sub{
-    font-weight:700 !important;
-  }
-  #menuMain.lobby #lobbyJourney .play-label{
-    -webkit-text-stroke: 2px #6b3a00;
-  }
 </style>
 </head>
 <body>
