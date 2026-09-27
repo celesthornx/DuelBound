@@ -62,6 +62,10 @@ const Voidbreak = require("./voidbreak");
 const Party = require("./party");
 const Lobby = require("./lobby");
 const VoidbreakCoop = require("./voidbreakCoop");
+// First-login journey state (intro / new-or-veteran / training). See
+// onboarding.js for why a missing record means "already onboarded".
+const Onboarding = require("./onboarding");
+const ONBOARDING_LOCKED = "Finish training to unlock";
 
 const accounts = {}; // sub -> account record (populated in startServer())
 
@@ -156,7 +160,21 @@ function defaultAccount(name, email) {
         deviceMode: "auto",
         xp: 0,
         level: 1,
-        tutorialComplete: false,
+        // ONBOARDING -- a brand-new account starts with every flag
+        // false, which is what sends it through Voidbreak's story intro
+        // and training sector. Accounts created before this field
+        // existed have no record at all and read as fully onboarded
+        // (see onboarding.js), so no existing player is affected.
+        onboarding: Onboarding.defaultOnboarding(),
+        // IDLE INCOME -- when the Home Planet's salvage was last
+        // collected (server clock, ms). 0 = the clock has not started;
+        // the first collect starts it without paying (voidbreak.js's
+        // collectIdle), so no account is ever paid for time before it.
+        lastCollectedAt: 0,
+        // DAILY REWARD -- 7-day login streak (onboarding.js). Missing on
+        // an older account reads as "never claimed", which changes
+        // nothing about anything it can already do.
+        dailyReward: Onboarding.defaultDailyReward(),
         dailyChallenges: defaultDailyChallenges(),
         ranked: Ranked.defaultRankedRecord(),
         // Friend lists hold stable account ids (Google "sub"), never emails.
@@ -340,6 +358,10 @@ function publicAccount(account) {
         if (key === "email") continue;        // not needed by the client, and admin checks key off it
         out[key] = account[key];
     }
+    // Always the RESOLVED onboarding state (a missing record reads as
+    // fully onboarded -- see onboarding.js), so no client ever has to
+    // re-implement that migration rule to render a lobby.
+    out.onboarding = Onboarding.onboardingOf(account);
     return out;
 }
 
@@ -2991,6 +3013,10 @@ const PUBLIC_FILES = new Set([
     "/index.html",
     "/voidbreak.html",
     "/voidbreakUniverse.js",
+    // Same reasoning as voidbreakUniverse.js: pure rules shared with the
+    // hub so a guest's local onboarding mirror follows the server's own
+    // logic. No data, no secrets; the server re-applies it on every write.
+    "/onboarding.js",
     "/bgm.mp3",
     "/favicon.ico",
     "/manifest.webmanifest",
@@ -3535,16 +3561,6 @@ const httpServer = http.createServer(async (req, res) => {
             // if it changed anything, so it's not folded into `dirty`.
             ensureAccountXP(sub);
             ensureAccountBattlePass(sub);
-            // Same lazy migration for a pre-tutorial-feature account --
-            // an EXISTING player who predates this field must never be
-            // treated as "not yet completed" by omission (that would
-            // just re-offer them a tutorial they never needed); explicit
-            // false is only ever set once, here, and only if the field
-            // is genuinely missing.
-            if (typeof accounts[sub].tutorialComplete !== "boolean") {
-                accounts[sub].tutorialComplete = true;
-                dirty = true;
-            }
             // Records how this account can be signed into. Purely
             // descriptive -- nothing grants access off it -- but it is
             // what a future "add a password to my Google account" flow
@@ -3654,6 +3670,12 @@ const httpServer = http.createServer(async (req, res) => {
             const target = accounts[sub];
             if (!target) {
                 sendJson(res, 409, { error: "Account not loaded -- sign in again" });
+                return;
+            }
+            // The Void Market opens on finishing Voidbreak's training --
+            // enforced here, not just by the hub hiding its door.
+            if (!Onboarding.isOnboarded(target)) {
+                sendJson(res, 403, { error: ONBOARDING_LOCKED });
                 return;
             }
 
@@ -3840,10 +3862,6 @@ const httpServer = http.createServer(async (req, res) => {
                 usernameLower: existing.usernameLower,
                 passwordHash: existing.passwordHash,
                 recoveryHash: existing.recoveryHash,
-                // Non-sensitive UX state (no coins/crystals/XP/rank riding on
-                // it), same trust tier as aimMode/matchSize/deviceMode
-                // above -- client-reported is fine here, unlike xp/level.
-                tutorialComplete: typeof body.tutorialComplete === "boolean" ? body.tutorialComplete : (existing.tutorialComplete || false),
                 dailyChallenges: newDailyChallenges,
                 // RANKED IS DELIBERATELY NOT READ FROM `body`.
                 //
@@ -3916,8 +3934,20 @@ const httpServer = http.createServer(async (req, res) => {
                 // changes inside /voidbreak/save.
                 voidbreak: existing.voidbreak || null,
                 // Server-measured; never read from the request body.
-                playtime: existing.playtime || defaultPlaytime(false)
+                playtime: existing.playtime || defaultPlaytime(false),
+                // ONBOARDING IS DELIBERATELY NOT READ FROM `body` -- it
+                // gates Home Planet and the shops, so it only ever moves
+                // through POST /onboarding. Carried as-is, INCLUDING
+                // being absent: a pre-feature account has no record and
+                // must keep reading as fully onboarded (onboarding.js),
+                // which defaulting it here would silently undo.
+                onboarding: existing.onboarding,
+                // Server clock only -- never read from the request.
+                lastCollectedAt: existing.lastCollectedAt || 0,
+                // Server-owned; only /daily/claim changes it.
+                dailyReward: existing.dailyReward || Onboarding.defaultDailyReward()
             };
+            if (accounts[sub].onboarding === undefined) delete accounts[sub].onboarding;
             try {
                 await persistAccount(sub);
             } catch (e) {
@@ -3929,6 +3959,101 @@ const httpServer = http.createServer(async (req, res) => {
                 return;
             }
             sendJson(res, 200, { ok: true });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // ---- POST /onboarding ---- body: { sessionToken, step, path } ----
+    // Records one step of the first-login journey (see onboarding.js).
+    // Session-authenticated like every account write; the body names a
+    // step and, for "choice", a path -- nothing else is read. Flags only
+    // ever move false -> true, so replaying a request (refresh, a second
+    // tab, a flaky network retry) is a no-op rather than a regression.
+    // The response is the resolved record, so every client converges on
+    // what the server actually holds.
+    if (req.method === "POST" && req.url === "/onboarding") {
+        try {
+            const body = await readJsonBody(req);
+            const sub = sessions[body.sessionToken];
+            if (!sub) { sendJson(res, 401, { error: "Not signed in" }); return; }
+            const account = accounts[sub];
+            if (!account) { sendJson(res, 409, { error: "Account not loaded -- sign in again" }); return; }
+
+            const current = Onboarding.onboardingOf(account);
+            const result = Onboarding.applyStep(current, String(body.step || ""), String(body.path || ""));
+            if (result.error) { sendJson(res, 400, { error: result.error }); return; }
+
+            const previous = account.onboarding;
+            const unchanged = previous && JSON.stringify(Onboarding.onboardingOf(account)) === JSON.stringify(result.record);
+            if (!unchanged) {
+                account.onboarding = result.record;
+                try {
+                    await persistAccount(sub);
+                } catch (e) {
+                    if (previous === undefined) delete account.onboarding; else account.onboarding = previous;
+                    sendJson(res, 503, { error: "Could not save -- try again" });
+                    return;
+                }
+            }
+            sendJson(res, 200, { ok: true, onboarding: Onboarding.onboardingOf(account) });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // ---- GET /daily/state?sessionToken=... ----
+    // ---- POST /daily/claim ---- body: { sessionToken } ----
+    // The 7-day login streak (rules in onboarding.js). The day is the
+    // SERVER's UTC date (todayUTC), the streak and last claim are the
+    // STORED record, and the reward is the stored table -- the body
+    // carries a session and nothing else. One claim per UTC day, checked
+    // against the stored lastClaimDate, so refresh/replay/multi-tab all
+    // fail closed. Pays account Coins, the same balance /challenges/claim
+    // pays, with the same copy-then-commit rollback. Opens with the rest
+    // of the game's rewards, on finishing training.
+    if (req.method === "GET" && req.url.startsWith("/daily/state")) {
+        const urlObj = new URL(req.url, "http://x");
+        const account = getAccountForSession(urlObj.searchParams.get("sessionToken") || "");
+        if (!account) { sendJson(res, 401, { error: "Not signed in" }); return; }
+        if (!Onboarding.isOnboarded(account)) { sendJson(res, 403, { error: ONBOARDING_LOCKED }); return; }
+        sendJson(res, 200, { ok: true, daily: Onboarding.dailyState(account.dailyReward, todayUTC()) });
+        return;
+    }
+    if (req.method === "POST" && req.url === "/daily/claim") {
+        try {
+            const body = await readJsonBody(req);
+            const sub = sessions[body.sessionToken];
+            if (!sub) { sendJson(res, 401, { error: "Not signed in" }); return; }
+            const account = accounts[sub];
+            if (!account) { sendJson(res, 409, { error: "Account not loaded -- sign in again" }); return; }
+            if (!Onboarding.isOnboarded(account)) { sendJson(res, 403, { error: ONBOARDING_LOCKED }); return; }
+
+            const today = todayUTC();
+            const result = Onboarding.claimDaily(account.dailyReward, today);
+            if (result.error) {
+                sendJson(res, 409, { error: result.error, daily: Onboarding.dailyState(account.dailyReward, today) });
+                return;
+            }
+            const previousDaily = account.dailyReward;
+            const previousCoins = account.coins;
+            account.dailyReward = result.record;
+            account.coins = (account.coins || 0) + result.reward;
+            try {
+                await persistAccount(sub);
+            } catch (e) {
+                account.dailyReward = previousDaily;
+                account.coins = previousCoins;
+                sendJson(res, 503, { error: "Could not save -- try again" });
+                return;
+            }
+            sendJson(res, 200, {
+                ok: true, reward: result.reward, cycleDay: result.cycleDay,
+                newBalance: account.coins,
+                daily: Onboarding.dailyState(account.dailyReward, today)
+            });
         } catch (e) {
             sendJson(res, 400, { error: "Bad request" });
         }
@@ -4485,7 +4610,12 @@ const httpServer = http.createServer(async (req, res) => {
             // server-side, from the stored save. The client renders it
             // and never computes a price, an ownership flag or an
             // eligibility check of its own.
-            endgame: Voidbreak.endgameView(vb ? vb.data : null)
+            endgame: Voidbreak.endgameView(vb ? vb.data : null),
+            // Home Planet idle income waiting to be collected, computed
+            // here from the server clock. Null while the planet is still
+            // locked behind training.
+            idle: Onboarding.isOnboarded(account)
+                ? Voidbreak.idleView(vb ? vb.data : null, account.lastCollectedAt, Date.now()) : null
         });
         return;
     }
@@ -4652,6 +4782,17 @@ const httpServer = http.createServer(async (req, res) => {
         if (!target) return { error: 409, message: "Account not loaded -- sign in again" };
         return { sub: sub, account: target };
     }
+    // Home Planet and the Void Shard Shop open on finishing Voidbreak's
+    // training (onboarding.js). The same server-side shape as
+    // buildOnPlanet's own `requires` gate: a client that hides the
+    // button is presentation; this is the rule. Every pre-feature
+    // account reads as onboarded, so nothing existing is ever locked.
+    function voidbreakUnlockAuth(body) {
+        const auth = voidbreakEndgameAuth(body);
+        if (auth.error) return auth;
+        if (!Onboarding.isOnboarded(auth.account)) return { error: 403, message: ONBOARDING_LOCKED };
+        return auth;
+    }
 
     // commitVoidbreakSave now lives at module scope (see the VOIDBREAK
     // SAVE COMMIT section further up) so the co-op match rooms in the
@@ -4662,7 +4803,7 @@ const httpServer = http.createServer(async (req, res) => {
     if (req.method === "POST" && req.url === "/voidbreak/shop/buy") {
         try {
             const body = await readJsonBody(req);
-            const auth = voidbreakEndgameAuth(body);
+            const auth = voidbreakUnlockAuth(body);
             if (auth.error) { sendJson(res, auth.error, { error: auth.message }); return; }
 
             const current = auth.account.voidbreak ? auth.account.voidbreak.data : Voidbreak.defaultSaveData();
@@ -4727,7 +4868,7 @@ const httpServer = http.createServer(async (req, res) => {
     if (req.method === "POST" && req.url === "/voidbreak/planet/build") {
         try {
             const body = await readJsonBody(req);
-            const auth = voidbreakEndgameAuth(body);
+            const auth = voidbreakUnlockAuth(body);
             if (auth.error) { sendJson(res, auth.error, { error: auth.message }); return; }
 
             const current = auth.account.voidbreak ? auth.account.voidbreak.data : Voidbreak.defaultSaveData();
@@ -4754,6 +4895,53 @@ const httpServer = http.createServer(async (req, res) => {
         return;
     }
 
+    // ---- POST /voidbreak/planet/collect ---- body: { sessionToken } ----
+    // Collects the colony's idle income. Everything that decides the
+    // amount is server-side: the elapsed time is the SERVER's clock
+    // against the account's stored lastCollectedAt, and the rate is the
+    // STORED colony (voidbreak.js's collectIdle). The body carries a
+    // session and nothing else -- there is no amount or duration a
+    // client can send. Called by the hub on return and by the Home
+    // Planet's COLLECT button; either way it is naturally idempotent,
+    // since a second call finds the clock already advanced.
+    if (req.method === "POST" && req.url === "/voidbreak/planet/collect") {
+        try {
+            const body = await readJsonBody(req);
+            const auth = voidbreakUnlockAuth(body);
+            if (auth.error) { sendJson(res, auth.error, { error: auth.message }); return; }
+
+            const now = Date.now();
+            const current = auth.account.voidbreak ? auth.account.voidbreak.data : Voidbreak.defaultSaveData();
+            const result = Voidbreak.collectIdle(current, auth.account.lastCollectedAt, now);
+            const previousAt = auth.account.lastCollectedAt;
+            auth.account.lastCollectedAt = result.nextAt;
+            if (result.amount > 0) {
+                // commitVoidbreakSave persists the whole account, so the
+                // advanced clock lands in the same write as the credit.
+                if (!(await commitVoidbreakSave(auth.sub, auth.account, result.save))) {
+                    auth.account.lastCollectedAt = previousAt;
+                    sendJson(res, 503, { error: "Could not collect -- try again" });
+                    return;
+                }
+            } else if (previousAt !== result.nextAt) {
+                try { await persistAccount(auth.sub); }
+                catch (e) { auth.account.lastCollectedAt = previousAt; }
+            }
+            const data = auth.account.voidbreak ? auth.account.voidbreak.data : null;
+            sendJson(res, 200, {
+                ok: true,
+                amount: result.amount,
+                data: data,
+                endgame: Voidbreak.endgameView(data),
+                idle: Voidbreak.idleView(data, auth.account.lastCollectedAt, now),
+                version: auth.account.voidbreak ? auth.account.voidbreak.version : 0
+            });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
     // ---- POST /voidbreak/planet/decorate ----
     // body: { sessionToken, plot, decorationId }   (decorationId null clears)
     //
@@ -4763,7 +4951,7 @@ const httpServer = http.createServer(async (req, res) => {
     if (req.method === "POST" && req.url === "/voidbreak/planet/decorate") {
         try {
             const body = await readJsonBody(req);
-            const auth = voidbreakEndgameAuth(body);
+            const auth = voidbreakUnlockAuth(body);
             if (auth.error) { sendJson(res, auth.error, { error: auth.message }); return; }
 
             const current = auth.account.voidbreak ? auth.account.voidbreak.data : Voidbreak.defaultSaveData();

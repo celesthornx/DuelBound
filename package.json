@@ -4,7 +4,7 @@
   "description": "VOIDBREAK -- a galaxy exploration adventure, with PvP combat as one part of the universe.",
   "main": "index.js",
   "scripts": {
-    "test": "node test/voidbreakSave.test.js",
+    "test": "node test/voidbreakSave.test.js && node test/onboarding.test.js",
     "start": "node server.js"
   },
   "keywords": [],

@@ -141,6 +141,23 @@
     // HOME PLANET section of voidbreak.html), and a building's silhouette
     // comes from these. `requires` is checked SERVER-SIDE in
     // voidbreak.js's buildOnPlanet before any coin is deducted.
+    //
+    // EVERY STRUCTURE DOES SOMETHING. `lab`/`foundry` raise coin salvage
+    // (coinBonusPerLevel, read by coinMultiplier()); the rest each carry
+    // one small, clearly-scoped combat perk, declared as a *PerLevel
+    // field and resolved in exactly one place -- colonyBonuses() below,
+    // which the client's ship stats and the server's universe view both
+    // read, so no number here is ever repeated anywhere else.
+    //
+    // BALANCE: the colony is a FOURTH source of power, after the Forge,
+    // in-run Void Upgrades and ship parts, so it sits below all of them.
+    // A building line maxed out is worth less than ONE Forge level of the
+    // same kind -- Command's +10 max energy against the Energy Core's +15
+    // per level, the Hangar's +15 max health against the Vitality
+    // Matrix's +20, the Spaceport's -6% dash cooldown against the Phase
+    // Drive's -8%, the Gate's +2% damage against Null Energy's +10%.
+    // Felt when you build it; never the reason a fight is won.
+    // (Proposed numbers -- they want playtesting.)
     // =================================================================
     var BUILDINGS = [
         {
@@ -148,14 +165,16 @@
             desc: "Planetary authority. Every other structure needs it standing first.",
             cost: 0, costPerLevel: 400, maxLevel: 5, height: 0.10, color: [0, 240, 255],
             requires: null,
-            effect: function (lv) { return "Planet tier " + lv + " · unlocks further construction"; }
+            effect: function (lv) { return "Planet tier " + lv + " · +" + (lv * 2) + " max energy"; },
+            energyBonusPerLevel: 2
         },
         {
             id: "hangar", name: "SHIP HANGAR", glyph: "▲",
             desc: "Berths your ship between expeditions. Shows the hull you actually fly.",
             cost: 350, costPerLevel: 300, maxLevel: 5, height: 0.075, color: [120, 255, 200],
             requires: { building: "command" },
-            effect: function (lv) { return "Ship bay tier " + lv; }
+            effect: function (lv) { return "+" + (lv * 3) + " max health"; },
+            hpBonusPerLevel: 3
         },
         {
             id: "lab", name: "RESEARCH LAB", glyph: "✲",
@@ -163,9 +182,7 @@
             cost: 500, costPerLevel: 400, maxLevel: 5, height: 0.085, color: [200, 120, 255],
             requires: { building: "command" },
             effect: function (lv) { return "+" + (lv * 3) + "% coin salvage"; },
-            // Read by coinMultiplier() -- the one building with a
-            // mechanical effect, and deliberately on the income side
-            // rather than the combat side.
+            // Read by coinMultiplier() -- the colony's income side.
             coinBonusPerLevel: 0.03
         },
         {
@@ -173,8 +190,11 @@
             desc: "Long-range survey array. Sees further into a system before you arrive.",
             cost: 650, costPerLevel: 450, maxLevel: 4, height: 0.115, color: [255, 212, 120],
             requires: { building: "command" },
-            effect: function (lv) { return "reveals " + lv + " extra site" + (lv === 1 ? "" : "s") + " on arrival"; },
-            surveyPerLevel: 1
+            effect: function (lv) { return "reveals " + lv + " extra site" + (lv === 1 ? "" : "s") + " on arrival · −" + (lv * 1.5).toFixed(1) + "% system & ability cooldown"; },
+            surveyPerLevel: 1,
+            // Targeting data from the array: the Loadout's two gear slots
+            // come back a little sooner.
+            gearCdPerLevel: 0.015
         },
         {
             id: "foundry", name: "RESOURCE FOUNDRY", glyph: "▦",
@@ -189,7 +209,8 @@
             desc: "Docking for everything that isn't yours. Traffic means the colony is real.",
             cost: 1100, costPerLevel: 600, maxLevel: 3, height: 0.06, color: [140, 190, 255],
             requires: { building: "hangar" },
-            effect: function (lv) { return "Colony traffic tier " + lv; }
+            effect: function (lv) { return "−" + (lv * 2) + "% dash cooldown"; },
+            dashCdPerLevel: 0.02
         },
         {
             id: "gate", name: "GALAXY GATE", glyph: "◇",
@@ -198,7 +219,10 @@
             // Gated on having finished a galaxy at least once, so the
             // Gate cannot be standing before the moment it exists for.
             requires: { galaxiesCleared: 1 },
-            effect: function () { return "Galaxy travel online"; }
+            // One level, one permanent perk: the corridor's energy hums
+            // through every weapon you fly.
+            effect: function () { return "Galaxy travel online · +2% weapon damage"; },
+            dmgBonusPerLevel: 0.02
         }
     ];
     var BUILDING_BY_ID = {};
@@ -865,6 +889,7 @@
             ship: {},        // { hull: 2, ... }
             coins: 0,
             coinsSpent: 0,
+            coinsGranted: 0, // SERVER-OWNED: coins the server credited (idle income)
             planet: { buildings: {}, decorations: {} } // plotIndex -> { id, level }
         };
     }
@@ -1064,15 +1089,22 @@
         return "";
     }
 
+    // Earned in play (`coins`, client-reported, MAX-merged) plus credited
+    // by the server (`coinsGranted`, server-owned -- idle income), minus
+    // the server's spend ledger. The grant is its own ledger rather than
+    // an addition to `coins` because `coins` is MAX-merged across
+    // devices: a grant added to it could be silently lost to another
+    // device's save that had earned a little more in a run meanwhile.
     function spendableCoins(u) {
         if (!u) return 0;
-        return Math.max(0, (Math.floor(Number(u.coins) || 0)) - (Math.floor(Number(u.coinsSpent) || 0)));
+        return Math.max(0, (Math.floor(Number(u.coins) || 0)) + (Math.floor(Number(u.coinsGranted) || 0))
+            - (Math.floor(Number(u.coinsSpent) || 0)));
     }
 
     // Coin income multiplier from the colony and the ship's cargo bay.
-    // Deliberately the ONLY mechanical effect the planet has, and it is
-    // on income rather than on combat -- a player who never builds
-    // anything is slower to build, not weaker in a fight.
+    // The colony's income side; its (smaller) combat side is
+    // colonyBonuses() below. A player who never builds is slower to
+    // build and a touch less durable -- never locked out of a fight.
     function coinMultiplier(u) {
         var m = 1;
         for (var i = 0; i < BUILDINGS.length; i++) {
@@ -1083,6 +1115,73 @@
         var cargo = SHIP_SYSTEM_BY_ID.cargo;
         m += shipLevel(u, "cargo") * (cargo ? cargo.per : 0);
         return m;
+    }
+
+    // =================================================================
+    // IDLE INCOME -- the colony keeps salvaging while the pilot is away.
+    //
+    // Rate: IDLE.perLevelPerHour coins for every building level standing,
+    // times the same coinMultiplier() active play uses (so the Lab,
+    // Foundry and cargo bay raise it too), and nothing at all until a
+    // Command Center exists -- no colony, no income. Accrues for at most
+    // IDLE.capHours; a week away pays the same as half a day.
+    //
+    // A full colony (27 levels, x1.15 salvage and more with cargo parts)
+    // makes ~62-75 coins/hour, ~750-900 per 12h -- about one and a half
+    // to two system clears' worth. It helps; it never replaces play.
+    // (Proposed numbers -- they want playtesting.)
+    //
+    // Pure: elapsed time is an input. Only the SERVER ever supplies it,
+    // from its own clock (see voidbreak.js's collectIdle).
+    // =================================================================
+    var IDLE = { perLevelPerHour: 2, capHours: 12 };
+
+    function colonyLevels(u) {
+        if (!u || !u.planet || !u.planet.buildings) return 0;
+        var n = 0, b = u.planet.buildings, keys = Object.keys(b);
+        for (var i = 0; i < keys.length; i++) {
+            var e = b[keys[i]];
+            if (e && BUILDING_BY_ID[e.id]) n += Math.max(0, Math.floor(Number(e.level) || 0));
+        }
+        return n;
+    }
+
+    function idleRatePerHour(u) {
+        if (!hasBuilding(u, "command")) return 0;
+        return colonyLevels(u) * IDLE.perLevelPerHour * coinMultiplier(u);
+    }
+
+    // Whole coins accrued over `elapsedMs`, counted in whole minutes and
+    // capped at IDLE.capHours.
+    function idleCoins(u, elapsedMs) {
+        var minutes = Math.floor(Math.max(0, Number(elapsedMs) || 0) / 60000);
+        minutes = Math.min(minutes, IDLE.capHours * 60);
+        return Math.floor(idleRatePerHour(u) * minutes / 60);
+    }
+
+    // Every combat perk the colony grants, resolved from the building
+    // table's *PerLevel fields -- the one place those numbers are read.
+    // Additive/multiplicative shapes mirror how the ship parts and the
+    // Forge fold into the player (see newPlayer/recomputeStats in
+    // voidbreak.html): flat max HP/energy, and multipliers on dash
+    // cooldown, gear cooldown and weapon damage.
+    function colonyBonuses(u) {
+        var out = { maxHp: 0, maxEnergy: 0, gearCdMult: 1, dashCdMult: 1, dmgMult: 1 };
+        for (var i = 0; i < BUILDINGS.length; i++) {
+            var b = BUILDINGS[i];
+            var lv = buildingLevel(u, b.id);
+            if (!lv) continue;
+            if (b.hpBonusPerLevel) out.maxHp += lv * b.hpBonusPerLevel;
+            if (b.energyBonusPerLevel) out.maxEnergy += lv * b.energyBonusPerLevel;
+            if (b.gearCdPerLevel) out.gearCdMult -= lv * b.gearCdPerLevel;
+            if (b.dashCdPerLevel) out.dashCdMult -= lv * b.dashCdPerLevel;
+            if (b.dmgBonusPerLevel) out.dmgMult += lv * b.dmgBonusPerLevel;
+        }
+        // Rounded so 1 - 3*0.02 reads as 0.94, not 0.9400000000000001.
+        out.gearCdMult = Math.round(out.gearCdMult * 10000) / 10000;
+        out.dashCdMult = Math.round(out.dashCdMult * 10000) / 10000;
+        out.dmgMult = Math.round(out.dmgMult * 10000) / 10000;
+        return out;
     }
 
     return {
@@ -1132,6 +1231,11 @@
         buildingRequirementMet: buildingRequirementMet,
         requirementText: requirementText,
         spendableCoins: spendableCoins,
-        coinMultiplier: coinMultiplier
+        coinMultiplier: coinMultiplier,
+        colonyBonuses: colonyBonuses,
+        IDLE: IDLE,
+        colonyLevels: colonyLevels,
+        idleRatePerHour: idleRatePerHour,
+        idleCoins: idleCoins
     };
 });
