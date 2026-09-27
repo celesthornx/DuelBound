@@ -3690,46 +3690,75 @@
 
   /* ---------- the PLAY button, scoped to the hub's own hero button so
      the Arena screen's identical-markup DEPLOY button (#arenaPlay,
-     same .play-btn structure) is untouched. Keeps the base .play-btn's
-     dark glass fill and layered edge/fill/sheen mechanism -- the same
-     panel language as every other holo card in the hub -- just with a
-     gold neon edge and gold glow text instead of the base cyan/magenta,
-     so it still reads as THE primary action. ---------- */
+     same .play-btn structure) is untouched. Simplified from the base
+     button's pointed hexagon down to a plain rounded pill -- one clean
+     gold glowing shape instead of a clipped, multi-shadow-layered one --
+     with a soft continuous breathing pulse (base .play-edge's own
+     playPulse animation, kept) plus a slow attract-mode sheen that
+     sweeps across it even at rest, so the single most important button
+     on the screen keeps pulling the eye without anyone hovering it. ---------- */
+  #lobbyJourney{ width:min(420px, 100%); }
+  #lobbyJourney .play-edge, #lobbyJourney .play-fill, #lobbyJourney .play-sheen{
+    clip-path:none; border-radius:20px;
+  }
   #lobbyJourney .play-edge{
-    background: linear-gradient(90deg, #ffce54 0%, #fff3c4 46%, #ff9a3c 100%);
-    filter: drop-shadow(0 0 16px rgba(255,206,84,.5)) drop-shadow(0 0 26px rgba(255,154,60,.35));
+    background: linear-gradient(180deg, #ffe9a3 0%, #ffce54 45%, #ff9a3c 100%);
+    filter: drop-shadow(0 0 16px rgba(255,206,84,.5)) drop-shadow(0 0 26px rgba(255,154,60,.32));
   }
   #lobbyJourney:hover .play-edge{
-    filter: drop-shadow(0 0 26px rgba(255,206,84,.8)) drop-shadow(0 0 38px rgba(255,154,60,.55));
+    filter: drop-shadow(0 0 26px rgba(255,206,84,.8)) drop-shadow(0 0 38px rgba(255,154,60,.5));
   }
-  #lobbyJourney .play-fill{
-    background:
-      radial-gradient(130% 170% at 4% 50%,  rgba(255,206,84,.22), transparent 58%),
-      radial-gradient(130% 170% at 96% 50%, rgba(255,154,60,.20), transparent 58%),
-      linear-gradient(180deg, rgba(19,25,38,.96) 0%, rgba(8,11,18,.97) 100%);
+  #lobbyJourney .play-edge::after{
+    content:''; position:absolute; left:4%; right:4%; top:3px; height:42%; border-radius:16px;
+    background: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,0));
+    pointer-events:none;
   }
-  #lobbyJourney:hover .play-fill{
-    background:
-      radial-gradient(130% 170% at 4% 50%,  rgba(255,206,84,.32), transparent 58%),
-      radial-gradient(130% 170% at 96% 50%, rgba(255,154,60,.28), transparent 58%),
-      linear-gradient(180deg, rgba(24,31,47,.96) 0%, rgba(10,13,21,.97) 100%);
-  }
+  #lobbyJourney .play-fill{ inset:2px; background: rgba(10,12,18,.14); box-shadow:none; }
+  #lobbyJourney .play-content{ padding:20px 40px; min-height:96px; }
   #lobbyJourney .play-label{
-    text-shadow:
-      0 0 4px rgba(255,255,255,.7),
-      0 0 22px rgba(255,206,84,.85),
-      0 0 42px rgba(255,154,60,.5),
-      0 4px 18px rgba(0,0,0,.8);
+    color:#3a2000;
+    text-shadow: 0 1px 0 rgba(255,255,255,.4);
   }
-  #lobbyJourney:hover .play-label{
-    text-shadow:
-      0 0 6px rgba(255,255,255,.9),
-      0 0 30px rgba(255,206,84,1),
-      0 0 54px rgba(255,154,60,.65),
-      0 4px 18px rgba(0,0,0,.8);
+  #lobbyJourney .play-sub{ color: rgba(58,32,0,.72); font-weight:600; }
+  #lobbyJourney .play-sub .chev{ color: rgba(58,32,0,.72); }
+  /* A slow light sweep that plays on its own, on a loop, independent of
+     hover -- the "attract mode" glint that makes an idle button read as
+     inviting rather than static. */
+  #lobbyJourney .play-sheen{
+    opacity:1; background-size:220% 100%;
+    animation: playAttract 4.5s ease-in-out infinite;
   }
-  #lobbyJourney .play-sub{ color: rgba(255,224,160,.9); }
-  #lobbyJourney .play-sub .chev{ color:#ffce54; }
+  @keyframes playAttract{
+    0%, 55%{ background-position:-160% 0; }
+    85%, 100%{ background-position:160% 0; }
+  }
+
+  /* ---------- DAILY MISSIONS teaser: sits left of PLAY, one pip per
+     mission (ready = gold glow, claimed = dim check, in progress =
+     outline only). Same holo-card language as the rest of the hub. ---------- */
+  .play-row{ display:flex; align-items:stretch; justify-content:center; gap:12px; width:100%; }
+  .play-missions{
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+    padding:10px 14px; border-radius:16px; cursor:pointer; flex:0 0 auto;
+    border:1px solid rgba(90,180,255,.3);
+    background: linear-gradient(180deg, rgba(20,44,84,.55), rgba(8,16,34,.72));
+    transition: border-color .15s ease, transform .15s ease;
+  }
+  .play-missions:hover{ border-color: rgba(120,220,255,.6); transform: translateY(-2px); }
+  .play-missions.has-ready{ border-color: rgba(255,206,84,.6); box-shadow:0 0 16px rgba(255,206,84,.25); }
+  .pm-label{
+    font-family:'Chakra Petch', sans-serif; font-weight:700; font-size:9px; line-height:1.25;
+    letter-spacing:1.2px; text-align:center; color: rgba(206,220,238,.8); white-space:nowrap;
+  }
+  .play-missions.has-ready .pm-label{ color:#ffce54; }
+  .pm-pips{ display:flex; gap:5px; }
+  .pm-pips i{
+    display:block; width:9px; height:9px; border-radius:50%;
+    border:1.5px solid rgba(122,158,200,.45); background:transparent;
+  }
+  .pm-pips i.ready{ background:#ffce54; border-color:#ffce54; box-shadow:0 0 8px rgba(255,206,84,.85); animation: pmPulse 1.6s ease-in-out infinite; }
+  .pm-pips i.claimed{ background: rgba(122,158,200,.35); border-color: rgba(122,158,200,.35); }
+  @keyframes pmPulse{ 0%,100%{ opacity:1; } 50%{ opacity:.45; } }
 
   /* ---------- rail tiles: bigger touch targets, icon-over-label ---------- */
   .lobby-left, .lobby-right{ gap:14px; overflow:visible; }
@@ -3876,6 +3905,41 @@
     .play-edge{ clip-path: polygon(26px 0, calc(100% - 26px) 0, 100% 50%, calc(100% - 26px) 100%, 26px 100%, 0 50%); }
     .play-fill, .play-sheen{ clip-path: polygon(24px 0, calc(100% - 24px) 0, 100% 50%, calc(100% - 24px) 100%, 24px 100%, 0 50%); }
     .play-sub{ font-size:10.5px; letter-spacing:1.6px; gap:5px; margin-top:6px; }
+  }
+
+  /* Stacking the missions teaser above PLAY (rather than beside it) is a
+     WIDTH fix -- .lobby-center is only ~240px on a narrow phone, and CSS
+     grid lets a child overflow sideways into the next cell rather than
+     wrapping, so the two side by side were bleeding into the rail tiles.
+     Needs min-height too: a narrow phone normally means PORTRAIT, where
+     height is plentiful for an extra stacked row -- but a narrow phone
+     turned sideways (short AND narrow at once) does not have that
+     height to spend, so that combination is handled separately below
+     instead of stacking into a height it doesn't have. */
+  @media (max-width: 760px) and (min-height: 521px){
+    .play-row{ flex-direction:column; gap:8px; }
+    .play-missions{
+      flex-direction:row; width:100%; padding:8px 14px; gap:10px; border-radius:12px;
+    }
+    .pm-label{ white-space:normal; text-align:left; }
+    #lobbyJourney{ width:100%; }
+  }
+  /* Short on vertical room (a landscape phone, mainly) -- shrink the
+     still-side-by-side teaser and button rather than stacking them. */
+  @media (max-height: 520px){
+    .play-content{ padding:10px 26px; min-height:auto; }
+    .play-missions{ padding:6px 10px; gap:6px; }
+    .pm-label{ font-size:8px; }
+    .pm-pips{ gap:4px; }
+    .pm-pips i{ width:7px; height:7px; }
+  }
+  /* Short AND narrow at once (a smaller phone turned sideways) -- neither
+     of the above has room to spare, so the teaser's text label goes,
+     leaving just its icon-sized pips next to a tightly padded PLAY. */
+  @media (max-width: 760px) and (max-height: 520px){
+    .pm-label{ display:none; }
+    .play-missions{ padding:6px 8px; }
+    .play-content{ padding:8px 18px; }
   }
 
 </style>
@@ -4454,17 +4518,30 @@
           <canvas id="hubPlanetCanvas"></canvas>
         </div>
 
-        <button class="play-btn" id="lobbyJourney">
-          <span class="play-shape" aria-hidden="true">
-            <span class="play-edge"></span>
-            <span class="play-fill"></span>
-            <span class="play-sheen"></span>
-          </span>
-          <span class="play-content">
-            <span class="play-label"><span class="play-glyph" aria-hidden="true">&#9673;</span> <span id="lobbyJourneyLabel">START JOURNEY</span></span>
-            <span class="play-sub"><span id="lobbyJourneySub">EXPLORE &middot; DISCOVER &middot; GROW</span><span class="chev">&raquo;</span></span>
-          </span>
-        </button>
+        <div class="play-row">
+          <!-- Today's missions, one tap from the button you're about to
+               press -- reflects the SAME dailyChallengeDefs/dailyProgress/
+               dailyClaimed the drawer's own Daily Missions card reads (see
+               renderPlayMissionsTeaser(), called from renderDailyChallenges()
+               so the two never disagree). Hidden until that data has
+               actually loaded rather than showing empty/fake pips. -->
+          <button class="play-missions hidden" id="playMissionsTeaser" type="button" title="Daily Missions">
+            <span class="pm-label">DAILY<br>MISSIONS</span>
+            <span class="pm-pips" id="pmPips"></span>
+          </button>
+
+          <button class="play-btn" id="lobbyJourney">
+            <span class="play-shape" aria-hidden="true">
+              <span class="play-edge"></span>
+              <span class="play-fill"></span>
+              <span class="play-sheen"></span>
+            </span>
+            <span class="play-content">
+              <span class="play-label"><span id="lobbyJourneyLabel">START JOURNEY</span></span>
+              <span class="play-sub"><span id="lobbyJourneySub">EXPLORE &middot; DISCOVER &middot; GROW</span><span class="chev">&raquo;</span></span>
+            </span>
+          </button>
+        </div>
       </section>
 
       <!-- ===== RIGHT RAIL: quick glances. Everything else (the full
@@ -4618,7 +4695,7 @@
              everything else; rewards are granted by the server, not the
              client -- see fetchDailyChallenges()/renderDailyChallenges()/
              claimDailyChallenge() below. -->
-        <div class="lp holo">
+        <div class="lp holo" id="drawerDailyMissions">
           <div class="lp-head">
             <span class="lp-title">DAILY MISSIONS</span>
             <span class="micro">RESETS DAILY</span>
@@ -8051,6 +8128,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
 
   function renderDailyChallenges(){
     const list = document.getElementById('dcList');
+    renderPlayMissionsTeaser();
     if(!list) return;
     if(!dailyChallengesReady || !dailyChallengeDefs.length){
       list.innerHTML = '<div class="dc-status">SYNCING&hellip;</div>';
@@ -8080,6 +8158,36 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     list.querySelectorAll('.dc-claim').forEach(btn=>{
       btn.addEventListener('click', ()=> claimDailyChallenge(btn.dataset.id));
     });
+  }
+
+  // The compact "DAILY MISSIONS" teaser that sits next to the PLAY
+  // button (see the play-row markup) -- a pip per mission, reading the
+  // exact same dailyChallengeDefs/dailyProgress/dailyClaimed the
+  // drawer's own list just rendered from, so the two can never disagree.
+  // Stays hidden until that data has actually loaded.
+  function renderPlayMissionsTeaser(){
+    const btn = lobbyEl('playMissionsTeaser');
+    const pips = lobbyEl('pmPips');
+    if(!btn || !pips) return;
+    if(!dailyChallengesReady || !dailyChallengeDefs.length){
+      btn.classList.add('hidden');
+      return;
+    }
+    btn.classList.remove('hidden');
+    let readyCount = 0, claimedCount = 0;
+    pips.innerHTML = dailyChallengeDefs.map(c => {
+      const have = Math.min(c.target, (dailyProgress[c.category] || 0));
+      const claimed = !!dailyClaimed[c.id];
+      const ready = !claimed && have >= c.target;
+      if(claimed) claimedCount++;
+      if(ready) readyCount++;
+      const cls = claimed ? 'claimed' : (ready ? 'ready' : '');
+      return '<i class="' + cls + '"></i>';
+    }).join('');
+    btn.classList.toggle('has-ready', readyCount > 0);
+    btn.title = readyCount > 0
+      ? (readyCount + ' mission' + (readyCount === 1 ? '' : 's') + ' ready to claim')
+      : (claimedCount === dailyChallengeDefs.length ? 'All missions claimed' : 'Daily missions');
   }
 
   async function claimDailyChallenge(challengeId){
@@ -17661,6 +17769,26 @@ updatePortalAnchors(dt);
     registerHubPanel(lobbyEl('railShopsBtn'), lobbyEl('railShopsPop'));
     registerHubPanel(lobbyEl('railHangarBtn'), lobbyEl('railHangarPop'));
     registerHubPanel(lobbyEl('drawerToggle'), lobbyEl('hubDrawer'), { scrim: lobbyEl('drawerScrim') });
+
+    // The DAILY MISSIONS teaser next to PLAY opens the SAME drawer (via
+    // the same toggle the registerHubPanel() call above already wired,
+    // so it never fights that open/close state) and scrolls straight to
+    // the missions card living inside it, rather than duplicating that
+    // card's content next to the button.
+    const missionsTeaser = lobbyEl('playMissionsTeaser');
+    if(missionsTeaser) missionsTeaser.addEventListener('click', (e)=>{
+      // Without this, the click that opens the drawer (via the synthetic
+      // drawerToggle.click() below) keeps bubbling to the document-level
+      // "click outside a panel closes it" listener above -- which sees
+      // e.target is neither the drawer nor its trigger and immediately
+      // closes the drawer this same click just opened.
+      e.stopPropagation();
+      const drawer = lobbyEl('hubDrawer');
+      const card = lobbyEl('drawerDailyMissions');
+      if(drawer && drawer.classList.contains('hidden')) lobbyEl('drawerToggle').click();
+      if(card) card.scrollIntoView({ behavior:'smooth', block:'start' });
+    });
+
     const closeHubPanel = lobbyEl('drawerClose');
     if(closeHubPanel) closeHubPanel.addEventListener('click', ()=>{
       const d = hubPanels.find(o=>o.panel===lobbyEl('hubDrawer'));
