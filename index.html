@@ -3658,6 +3658,55 @@
      columns instead of stacking to one at the same breakpoint. */
   .lobby-center{ order:0; }
 
+  /* ---------- colored glossy icon badges, matching the approved mockup
+     (the flat single-color .dest-ico this codebase already used read
+     too uniform once tiles got bigger -- a badge per destination reads
+     faster, the way a home-screen app icon does). Applied by adding one
+     ic-* class to a tile's existing .dest-ico span; the icon itself
+     stays the same currentColor svg, just recolored white-on-badge. ---------- */
+  .lobby-left .dest-ico, .lobby-right .dest-ico, .rail-pop .dest-ico, #hubDrawer .dest-ico{
+    border-radius:24%; padding:9px; box-sizing:border-box; color:#fff;
+    box-shadow: 0 3px 0 rgba(0,0,0,.35), 0 8px 16px rgba(0,0,0,.4), inset 0 2px 0 rgba(255,255,255,.22), inset 0 -10px 16px rgba(0,0,0,.22);
+    filter:none;
+  }
+  .ic-teal{ background: linear-gradient(180deg,#3fe8c8,#0f8f78); }
+  .ic-gold{ background: linear-gradient(180deg,#ffd96b,#c8860a); }
+  .ic-purple{ background: linear-gradient(180deg,#b98bff,#6a2fd6); }
+  .ic-blue{ background: linear-gradient(180deg,#5fb8ff,#1f5fc4); }
+  .ic-red{ background: linear-gradient(180deg,#ff8a9a,#d6304f); }
+  .ic-cyan{ background: linear-gradient(180deg,#7fe9ff,#1291b0); }
+  .ic-orange{ background: linear-gradient(180deg,#ffab6b,#c85a12); }
+
+  /* ---------- the PLAY button, scoped to the hub's own hero button so
+     the Arena screen's identical-markup DEPLOY button (#arenaPlay,
+     same .play-btn structure) is untouched. Same layered
+     shape/edge/fill/sheen mechanism as the base .play-btn, just
+     reskinned from the cyan/magenta hexagon to the approved mockup's
+     solid gold glossy pill. ---------- */
+  #lobbyJourney .play-edge{
+    clip-path:none; border-radius:22px;
+    background: linear-gradient(180deg,#fff0a6 0%,#ffd33d 38%,#ffab12 100%);
+    filter: drop-shadow(0 6px 0 rgba(154,90,6,.9)) drop-shadow(0 10px 24px rgba(255,170,30,.4));
+    animation:none;
+  }
+  #lobbyJourney.play-btn:hover .play-edge, #lobbyJourney:hover .play-edge{
+    filter: drop-shadow(0 6px 0 rgba(154,90,6,.9)) drop-shadow(0 10px 30px rgba(255,170,30,.6));
+  }
+  #lobbyJourney .play-edge::after{
+    content:''; position:absolute; left:5%; right:5%; top:3px; height:38%; border-radius:16px;
+    background: linear-gradient(180deg, rgba(255,255,255,.6), rgba(255,255,255,0));
+    pointer-events:none;
+  }
+  #lobbyJourney .play-fill, #lobbyJourney .play-sheen{ clip-path:none; border-radius:20px; }
+  #lobbyJourney .play-fill{ background:transparent; box-shadow:none; }
+  #lobbyJourney .play-label{
+    color:#fff; -webkit-text-stroke: 1.5px #6b3a00; paint-order: stroke fill;
+    text-shadow: 0 3px 0 #6b3a00;
+  }
+  #lobbyJourney .play-sub{ color:#6b3a00; }
+  #lobbyJourney .play-sub .chev{ color:#6b3a00; }
+  #lobbyJourney .play-glyph{ display:none; }
+
   /* ---------- rail tiles: bigger touch targets, icon-over-label ---------- */
   .lobby-left, .lobby-right{ gap:14px; overflow:visible; }
   .lobby-left .dest, .lobby-right .dest{
@@ -4244,7 +4293,7 @@
            into a flyout instead of getting its own top-level tile. -->
       <aside class="lobby-col lobby-left" id="hubRailLeft">
         <button class="dest" data-act="planet">
-          <span class="dest-ico">
+          <span class="dest-ico ic-teal">
             <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
               <circle cx="17" cy="17" r="9" stroke="currentColor" stroke-width="1.5"/>
               <ellipse cx="17" cy="17" rx="15" ry="4.6" stroke="currentColor" stroke-width="1.3" opacity=".65" transform="rotate(-22 17 17)"/>
@@ -4257,7 +4306,7 @@
 
         <div class="rail-group" id="railShopsWrap">
           <button class="dest rail-group-btn" type="button" id="railShopsBtn" aria-haspopup="true" aria-expanded="false">
-            <span class="dest-ico">
+            <span class="dest-ico ic-gold">
               <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
                 <path d="M11 4 L17 14 L11 24 L5 14 Z" fill="currentColor" opacity=".55"/>
                 <path d="M23 10 L29 19 L23 28 L17 19 Z" fill="currentColor" opacity=".8"/>
@@ -4268,7 +4317,7 @@
           </button>
           <div class="rail-pop hidden" id="railShopsPop">
             <button class="dest" data-act="shop">
-              <span class="dest-ico">
+              <span class="dest-ico ic-gold">
                 <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
                   <path d="M11 4 L17 14 L11 24 L5 14 Z" fill="currentColor" opacity=".55"/>
                   <path d="M23 10 L29 19 L23 28 L17 19 Z" fill="currentColor" opacity=".8"/>
@@ -4278,7 +4327,7 @@
               <span class="dest-sub">GEAR &amp; RESOURCES</span>
             </button>
             <button class="dest" data-act="forge">
-              <span class="dest-ico">
+              <span class="dest-ico ic-orange">
                 <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
                   <path d="M17 3 L23 10 L17 17 L11 10 Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
                   <path d="M8 20 H26 L23 29 H11 Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
@@ -4289,7 +4338,7 @@
               <span class="dest-sub">UNLOCK &amp; UPGRADE</span>
             </button>
             <button class="dest" data-act="shardshop">
-              <span class="dest-ico">
+              <span class="dest-ico ic-purple">
                 <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
                   <path d="M17 3 L27 13 L17 31 L7 13 Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
                   <path d="M7 13 H27" stroke="currentColor" stroke-width="1.3" opacity=".8"/>
@@ -4303,7 +4352,7 @@
         </div>
 
         <button class="dest" data-act="galaxy">
-          <span class="dest-ico">
+          <span class="dest-ico ic-purple">
             <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
               <ellipse cx="17" cy="17" rx="15" ry="6.5" stroke="currentColor" stroke-width="1.4" opacity=".55" transform="rotate(-20 17 17)"/>
               <ellipse cx="17" cy="17" rx="9" ry="3.6" stroke="currentColor" stroke-width="1.4" transform="rotate(-20 17 17)"/>
@@ -4316,7 +4365,7 @@
 
         <div class="rail-group" id="railHangarWrap">
           <button class="dest rail-group-btn" type="button" id="railHangarBtn" aria-haspopup="true" aria-expanded="false">
-            <span class="dest-ico">
+            <span class="dest-ico ic-blue">
               <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
                 <path d="M4 17 L20 8 L30 17 L20 26 Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
                 <circle cx="21" cy="17" r="3" fill="currentColor"/>
@@ -4328,7 +4377,7 @@
           </button>
           <div class="rail-pop hidden" id="railHangarPop">
             <button class="dest" data-act="ship">
-              <span class="dest-ico">
+              <span class="dest-ico ic-blue">
                 <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
                   <path d="M4 17 L20 8 L30 17 L20 26 Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
                   <circle cx="21" cy="17" r="3" fill="currentColor"/>
@@ -4339,7 +4388,7 @@
               <span class="dest-sub">RECOVERED SYSTEMS</span>
             </button>
             <button class="dest" data-act="loadout">
-              <span class="dest-ico">
+              <span class="dest-ico ic-cyan">
                 <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
                   <path d="M5 21 L19 7 L24 7 L24 12 L10 26 Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
                   <path d="M19 7 L27 4 L24 12" fill="currentColor" opacity=".6"/>
@@ -4386,7 +4435,7 @@
            drawer, opened by the menu button up in the top bar. ===== -->
       <aside class="lobby-col lobby-right" id="hubRailRight">
         <button class="dest dest-gold dest-sm" data-act="battlepass">
-          <span class="dest-ico">
+          <span class="dest-ico ic-gold">
             <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
               <path d="M17 3 L29 9 L29 19 C29 25 23 29 17 31 C11 29 5 25 5 19 L5 9 Z" stroke="currentColor" stroke-width="1.6" fill="none"/>
               <path d="M17 10 L19.2 15 L24.5 15.4 L20.4 18.7 L21.8 24 L17 21 L12.2 24 L13.6 18.7 L9.5 15.4 L14.8 15 Z" fill="currentColor"/>
@@ -4396,7 +4445,7 @@
           <span class="dest-sub">SEASON REWARDS</span>
         </button>
         <button class="dest dest-sm" data-act="arena">
-          <span class="dest-ico">
+          <span class="dest-ico ic-red">
             <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
               <path d="M6 6 L22 22 M10 6 L6 10 M22 22 L28 28" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
               <path d="M28 6 L12 22 M24 6 L28 10 M12 22 L6 28" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -4406,7 +4455,7 @@
           <span class="dest-sub">PVP BATTLES</span>
         </button>
         <button class="dest dest-sm" data-act="coop">
-          <span class="dest-ico">
+          <span class="dest-ico ic-cyan">
             <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
               <path d="M4 17 L14 11 L20 17 L14 23 Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
               <path d="M18 9 L28 5 L26 14 Z" fill="currentColor" opacity=".75"/>
@@ -4417,7 +4466,7 @@
           <span class="dest-sub">2&ndash;4 PILOTS</span>
         </button>
         <button class="dest dest-sm" data-act="friends">
-          <span class="dest-ico">
+          <span class="dest-ico ic-blue">
             <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
               <circle cx="13" cy="12" r="4.6" stroke="currentColor" stroke-width="1.5"/>
               <path d="M4 28 a9 9 0 0 1 18 0" stroke="currentColor" stroke-width="1.5" fill="none"/>
@@ -4443,7 +4492,7 @@
       <div class="drawer-scroll">
         <div class="drawer-sec">LEADERBOARDS</div>
         <button class="dest dest-sm drawer-wide" data-act="leaderboards">
-          <span class="dest-ico">
+          <span class="dest-ico ic-cyan">
             <svg viewBox="0 0 34 34" fill="none" aria-hidden="true">
               <rect x="4" y="17" width="7" height="13" rx="1.5" fill="currentColor" opacity=".6"/>
               <rect x="13.5" y="8" width="7" height="22" rx="1.5" fill="currentColor"/>
