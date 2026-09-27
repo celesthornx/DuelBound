@@ -2790,7 +2790,11 @@ function resize(){
   cv.width=W*dpr;cv.height=H*dpr;cv.style.width=W+'px';cv.style.height=H+'px';
 }
 addEventListener('resize',resize);resize();
-const cam={x:0,y:0,zoom:1,baseZoom:1,punchV:0,sx:0,sy:0,shake:0};
+// pathZoom: a separate multiplier (never touches baseZoom, which the
+// boss/anomaly code owns) used to pull the camera back on short
+// screens while the path portals are up, so every choice fits on
+// screen at once. Reset to 1 by buildRoom().
+const cam={x:0,y:0,zoom:1,baseZoom:1,pathZoom:1,punchV:0,sx:0,sy:0,shake:0};
 function addShake(n){if(save.settings.shake)cam.shake=Math.min(34,cam.shake+n);}
 function camPunch(n){cam.punchV=Math.max(cam.punchV,n);}
 function updateCamera(dt){
@@ -2800,7 +2804,7 @@ function updateCamera(dt){
   const k=1-Math.pow(0.0001,dt);
   cam.x=lerp(cam.x,tx,k);cam.y=lerp(cam.y,ty,k);
   cam.punchV*=Math.exp(-5*dt);
-  const tz=cam.baseZoom+cam.punchV;
+  const tz=cam.baseZoom*cam.pathZoom+cam.punchV;
   cam.zoom=lerp(cam.zoom,tz,1-Math.pow(0.001,dt));
   if(room){
     const vw=W/(2*cam.zoom),vh=H/(2*cam.zoom);
@@ -2885,7 +2889,14 @@ addEventListener('keyup',e=>keys[e.code]=false);
 // device, aiming/shooting/movement is driven exclusively by the two
 // dedicated stick zones below instead, so a stray tap on open canvas
 // (e.g. the HUD-only strip above the sticks) can't also snap-aim.
-addEventListener('pointerdown',e=>{if(e.target===cv&&e.pointerType!=='touch'){mouse.down=e.button===0;}initAudio();});
+addEventListener('pointerdown',e=>{
+  if(e.target===cv&&e.pointerType!=='touch'){
+    // Clicking a path portal picks it (instead of firing).
+    const po=e.button===0&&portalAtScreen(e.clientX,e.clientY);
+    if(po)choosePath(po);else mouse.down=e.button===0;
+  }
+  initAudio();
+});
 addEventListener('pointerup',e=>{if(e.pointerType!=='touch')mouse.down=false;});
 addEventListener('pointermove',e=>{if(e.pointerType!=='touch'){mouse.x=e.clientX;mouse.y=e.clientY;}});
 addEventListener('contextmenu',e=>e.preventDefault());
@@ -3008,6 +3019,34 @@ function endAimTouch(e){
 }
 joyAimZone.addEventListener('touchend',endAimTouch);
 joyAimZone.addEventListener('touchcancel',endAimTouch);
+
+// Tap a path portal to pick it. The stick zones cover most of the
+// screen, so this watches every touch (capture phase, passive -- the
+// sticks still get the exact same events) and only acts on a quick,
+// nearly-still tap that both starts and ends on a portal. A real stick
+// drag is never a tap, so steering past a portal can't pick it.
+const pathTaps=new Map();
+function pathTapTargetOk(t){
+  return t===cv||(t&&t.closest&&!!t.closest('.joy-zone')&&!t.closest('.joy-base'));
+}
+addEventListener('touchstart',e=>{
+  if(!portals.length)return;
+  for(const t of e.changedTouches){
+    if(pathTapTargetOk(e.target)&&portalAtScreen(t.clientX,t.clientY))
+      pathTaps.set(t.identifier,{x:t.clientX,y:t.clientY,at:performance.now()});
+  }
+},{passive:true,capture:true});
+addEventListener('touchend',e=>{
+  for(const t of e.changedTouches){
+    const s=pathTaps.get(t.identifier);
+    if(!s)continue;
+    pathTaps.delete(t.identifier);
+    if(Math.hypot(t.clientX-s.x,t.clientY-s.y)>TOUCH_TAP_MAX_DRAG||performance.now()-s.at>450)continue;
+    const po=portalAtScreen(t.clientX,t.clientY);
+    if(po)choosePath(po);
+  }
+},{passive:true,capture:true});
+addEventListener('touchcancel',e=>{for(const t of e.changedTouches)pathTaps.delete(t.identifier);},{passive:true,capture:true});
 
 // Pause button: routes through the exact same handleKey('Escape') path
 // ESC/P already use, so pause/resume, the ov-upgrade/ov-swap guards and
@@ -7800,6 +7839,7 @@ function updateBullets(dt){
       const sp=Math.hypot(b.vx,b.vy);b.vx=Math.cos(na)*sp;b.vy=Math.sin(na)*sp;
     }
     b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;
+    if(portals.length&&!transition&&bulletHitsPortal(b)){bullets.splice(i,1);continue;}
     // Projectile trail cosmetic -- a short-lived spark dropped behind
     // the bullet, only emitted when a trail is actually equipped, so it
     // costs nothing for players who own none. Rarity (b.trailTier)
@@ -9907,7 +9947,7 @@ function makeWaves(){
 function buildRoom(type){
   const m=ROOMMETA[type],env=run.level.env;
   enemies=[];bullets=[];ebullets=[];pickups=[];portals=[];spawnQueue=[];props=[];swings=[];hazards=[];zones=[];gravFields=[];drones=[];
-  boss=null;bossActive=false;
+  boss=null;bossActive=false;cam.pathZoom=1;
   room={type,w:m.size[0],h:m.size[1],tw:m.size[0],th:m.size[1],
     waves:[],wi:0,waveDelay:0.7,
     cleared:!(type==='combat'||type==='elite'||type==='coin'||type==='boss'),
@@ -9998,20 +10038,92 @@ function roomCleared(){
   room.cleared=true;run.roomsCleared++;
   addCoins(12+run.depth*3);
   SFX.portal();
-  showBanner('ROOM CLEAR','CHOOSE YOUR PATH');
+  showBanner('ROOM CLEAR',pathHintText());
   if(room.type==='combat'&&Math.random()<0.7)room.pendingUpgrade=true;
+}
+// How to pick a path, worded for the input the player actually has.
+function pathHintText(){return (isTouchDevice?'TAP':'CLICK')+', SHOOT OR WALK INTO A PATH';}
+// Where the path portals go: a row right next to the player, fitted to
+// what the camera will actually show, so a player never has to go
+// looking for the way on (on a phone the old spot -- the room's top
+// wall -- was entirely off screen). ps scales a portal and its info
+// panel down when the row has to squeeze onto a narrow screen.
+function pathLayout(n){
+  const z=cam.baseZoom*cam.pathZoom;
+  const vw=W/(2*z),vh=H/(2*z);
+  // Where the follow camera settles (player, clamped to the room
+  // exactly as updateCamera() clamps it).
+  const cx=room.w>2*vw?clamp(player.x,-room.w/2+vw,room.w/2-vw):0;
+  const cy=room.h>2*vh?clamp(player.y,-room.h/2+vh,room.h/2-vh):0;
+  // Visible rect minus the HUD strip along the top, inside the walls.
+  const l=Math.max(cx-vw+16/z,-room.w/2+40),r=Math.min(cx+vw-16/z,room.w/2-40);
+  const t=Math.max(cy-vh+72/z,-room.h/2+20),b=Math.min(cy+vh-24/z,room.h/2-40);
+  const sp=Math.min(250,(r-l)/n);
+  const ps=clamp((sp-12)/196,0.6,1);
+  const up=118*ps,down=62*ps;   // panel top / hint text bottom, from the portal centre
+  // Row above the player; if that runs into the top of the screen, the
+  // row goes below the player instead. Either way it stays well outside
+  // the 48px walk-in radius so it can't be entered by accident.
+  let y=clamp(player.y-100,t+up,b-down);
+  if(player.y-y<80)y=clamp(player.y+up+40,t+up,b-down);
+  const half=(n-1)*sp/2+98*ps;
+  const x=l+half<=r-half?clamp(player.x,l+half,r-half):(l+r)/2;
+  return {x0:x-(n-1)*sp/2,sp,y,ps};
 }
 function spawnPortals(){
   if(room.portalsSpawned||room.type==='boss')return;
   room.portalsSpawned=true;
   const opts=roomOptions();
   const n=opts.length;
-  const startX=-(n-1)*130;
+  // Short (phone landscape) screens: ease the camera back a little so
+  // the whole row and its info panels are readable at once.
+  cam.pathZoom=H<600?clamp(H/620,0.68,1):1;
+  const L=pathLayout(n);
   opts.forEach((o,i)=>{
-    portals.push({x:startX+i*260,y:-room.h/2+95,type:o.type,t:rand(0,9)});
-    ringFX(startX+i*260,-room.h/2+95,ROOMMETA[o.type].color,70,0.5);
+    const x=L.x0+i*L.sp;
+    portals.push({x,y:L.y,type:o.type,t:rand(0,9),ps:L.ps,charge:0,hitT:0,armT:0.45});
+    ringFX(x,L.y,ROOMMETA[o.type].color,70,0.5);
   });
+  // Rooms that start cleared never showed the ROOM CLEAR banner, so
+  // they get the how-to-choose hint here instead.
+  if(room.type!=='combat'&&room.type!=='elite'&&room.type!=='coin')showBanner('CHOOSE YOUR PATH',pathHintText());
   SFX.portal();
+}
+// Every way of picking a path (walking in, shooting, clicking/tapping)
+// ends here.
+function choosePath(po){
+  if(transition||!room||!room.cleared||!player||player.dead)return;
+  const c=ROOMMETA[po.type].color;
+  burstFX(po.x,po.y,c,18,300);ringFX(po.x,po.y,c,90,0.4);
+  startTransition(po.type);
+}
+// Shooting a portal charges it; enough hits enter it. The short arm
+// delay and the multi-hit charge stop a stream of leftover fire from
+// picking a path the player never meant to take.
+const PATH_SHOT_CHARGE=0.34;
+function bulletHitsPortal(b){
+  for(const po of portals){
+    if(po.armT>0)continue;
+    if(dist(b.x,b.y,po.x,po.y)>30*po.ps+(b.size||3))continue;
+    po.charge=Math.min(1,po.charge+PATH_SHOT_CHARGE);po.hitT=0;
+    sparks(b.x,b.y,ROOMMETA[po.type].color,5,160);SFX.targetHit();
+    if(po.charge>=1)choosePath(po);
+    return true;
+  }
+  return false;
+}
+function screenToWorld(sx,sy){
+  return {x:(sx-W/2)/cam.zoom+cam.x-cam.sx,y:(sy-H/2)/cam.zoom+cam.y-cam.sy};
+}
+// The portal (its ring or its info panel) under a screen point, if any.
+function portalAtScreen(sx,sy){
+  if(state!=='playing'||paused||uiOpen||transition||!portals.length)return null;
+  const w=screenToWorld(sx,sy);
+  for(const po of portals){
+    const lx=(w.x-po.x)/po.ps,ly=(w.y-po.y)/po.ps;
+    if(Math.hypot(lx,ly)<46||(lx>=-98&&lx<=98&&ly>=-118&&ly<=-42))return po;
+  }
+  return null;
 }
 function startTransition(type){
   if(transition)return;
@@ -10184,10 +10296,17 @@ function updateRoom(dt){
     openUpgradeSelect(false);
     return;
   }
-  if(!room.portalsSpawned&&room.clearT>=1.05)spawnPortals();
+  // Shrine / sanctum / vault: the paths only open once the room's
+  // reward is taken (with a fallback so nobody gets stuck), so the new
+  // near-the-player portals can't be walked into on the way to it.
+  const featureLeft=props.some(pr=>((pr.type==='shrine'||pr.type==='fountain')&&!pr.used)||(pr.type==='chest'&&!pr.opened));
+  if(!room.portalsSpawned&&room.clearT>=1.05&&(!featureLeft||room.clearT>=20))spawnPortals();
   for(const po of portals){
     po.t+=dt;
-    if(alive&&dist(po.x,po.y,player.x,player.y)<48){startTransition(po.type);break;}
+    if(po.armT>0)po.armT-=dt;
+    po.hitT+=dt;
+    if(po.hitT>0.9)po.charge=Math.max(0,po.charge-dt*0.8);
+    if(alive&&dist(po.x,po.y,player.x,player.y)<48){choosePath(po);break;}
   }
 }
 function updateVictoryFX(rdt){
@@ -12453,16 +12572,25 @@ function drawPortal(po){
   const m=ROOMMETA[po.type];
   const ch=CHOICES[po.type];
   const t=po.t;
+  const ps=po.ps||1;
   const near=player&&!player.dead&&dist(po.x,po.y,player.x,player.y)<150;
   const scale=near?1.15+Math.sin(performance.now()*0.01)*0.05:1;
   ctx.globalCompositeOperation='lighter';
-  drawGlow(po.x,po.y,m.color,44*scale);
+  drawGlow(po.x,po.y,m.color,44*scale*ps);
   ctx.globalCompositeOperation='source-over';
-  ctx.save();ctx.translate(po.x,po.y);ctx.scale(scale,scale);
+  // Everything below is drawn in the portal's own space, scaled by ps
+  // (smaller on narrow screens -- see pathLayout()).
+  ctx.save();ctx.translate(po.x,po.y);ctx.scale(ps,ps);
+  ctx.save();ctx.scale(scale,scale);
   ctx.strokeStyle=rgba(m.color,0.9);ctx.lineWidth=3;
   ctx.beginPath();ctx.arc(0,0,26,t*2,t*2+TAU*0.7);ctx.stroke();
   ctx.strokeStyle=rgba(m.color,0.5);ctx.lineWidth=2;
   ctx.beginPath();ctx.arc(0,0,34,-t*1.3,-t*1.3+TAU*0.5);ctx.stroke();
+  // Shot charge: fills as the portal is hit, enters it when full.
+  if(po.charge>0){
+    ctx.strokeStyle='rgba(255,255,255,0.95)';ctx.lineWidth=4;
+    ctx.beginPath();ctx.arc(0,0,40,-Math.PI/2,-Math.PI/2+TAU*po.charge);ctx.stroke();
+  }
   ctx.strokeStyle=rgba(m.color,1);ctx.lineWidth=2.2;ctx.lineCap='round';
   ctx.beginPath();
   if(po.type==='combat'){ctx.moveTo(-8,-8);ctx.lineTo(8,8);ctx.moveTo(8,-8);ctx.lineTo(-8,8);}
@@ -12476,7 +12604,7 @@ function drawPortal(po){
   ctx.restore();
   // ---- info panel ----
   const pw=196,phh=76;
-  const px=po.x-pw/2,py=po.y-118;
+  const px=-pw/2,py=-118;
   ctx.fillStyle=near?'rgba(5,9,20,0.93)':'rgba(5,9,20,0.78)';
   ctx.strokeStyle=rgba(m.color,near?0.95:0.55);ctx.lineWidth=1.5;
   ctx.beginPath();
@@ -12490,24 +12618,25 @@ function drawPortal(po){
   ctx.textAlign='center';
   ctx.font='700 15px Rajdhani';
   ctx.fillStyle=near?'#ffffff':rgba(m.color,0.95);
-  ctx.fillText(po.type==='boss'?BOSSMETA[run.level.boss].name:(ch?ch.label:m.label),po.x,py+18);
+  ctx.fillText(po.type==='boss'?BOSSMETA[run.level.boss].name:(ch?ch.label:m.label),0,py+18);
   ctx.font='600 10.5px Rajdhani';
   ctx.fillStyle=rgba(m.color,0.9);
-  ctx.fillText(ch?ch.risk:'',po.x,py+33);
+  ctx.fillText(ch?ch.risk:'',0,py+33);
   ctx.font='500 11px Rajdhani';
   ctx.fillStyle='rgba(180,200,215,0.85)';
   const desc=(po.type==='combat'&&run&&run.level.env.pressure)?
     'Waves · VOID PRESSURE · upgrade chance':(ch?ch.desc:'');
-  ctx.fillText(desc,po.x,py+47);
+  ctx.fillText(desc,0,py+47);
   ctx.font='700 12px Rajdhani';
   const stars=ch?'★'.repeat(ch.stars)+'☆'.repeat(5-ch.stars):'';
   ctx.fillStyle='rgba(255,201,92,0.9)';
-  ctx.fillText(stars,po.x,py+64);
-  if(near){
-    ctx.font='700 10px Rajdhani';
-    ctx.fillStyle='#ffffff';
-    ctx.fillText('▼ STEP IN TO ENTER ▼',po.x,po.y-40);
-  }
+  ctx.fillText(stars,0,py+64);
+  // How to enter, always shown (brighter when close) so a new player
+  // knows what these rings are for.
+  ctx.font='700 10px Rajdhani';
+  ctx.fillStyle=near?'#ffffff':'rgba(220,230,240,0.7)';
+  ctx.fillText(isTouchDevice?'TAP · SHOOT · STEP IN':'CLICK · SHOOT · STEP IN',0,54);
+  ctx.restore();
 }
 function renderScreenFX(){
   crossPulse=Math.max(0,crossPulse-0.08);
