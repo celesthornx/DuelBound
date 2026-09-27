@@ -813,6 +813,70 @@ body.in-shell #sysUpGalaxy{display:block}
 .onb-choice:hover{background:rgba(0,240,255,.12);box-shadow:0 0 22px rgba(0,240,255,.2);transform:translateY(-1px)}
 .onb-choice.primary{border-color:var(--cy);background:rgba(0,240,255,.1)}
 
+/* ---- TRAINING COACH -- the guided first sector's prompt layer. The
+   duel tutorial's bubble / pips / key-caps / pulse language, re-pointed
+   at this file's palette; rings mark the real control or thing in the
+   world the step is about. ---- */
+.tut-coach{position:fixed;inset:0;z-index:56;pointer-events:none;display:none}
+.tut-coach.on{display:block}
+.tut-coach .tut-skip-btn{top:calc(54px + env(safe-area-inset-top,0px))}
+/* On touch the right edge belongs to the DASH/SYS/ABL buttons. */
+.tut-coach.touch .tut-skip-btn{right:auto;left:calc(16px + env(safe-area-inset-left,0px));top:calc(60px + env(safe-area-inset-top,0px))}
+.tut-coach.hold .tut-bubble,.tut-coach.hold .tut-rings{opacity:0}
+.tut-bubble{position:absolute;top:calc(96px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);
+  text-align:center;padding:10px 24px 12px;min-width:230px;max-width:min(92vw,580px);
+  background:linear-gradient(180deg,rgba(13,18,40,.93),rgba(7,9,20,.9));border:1px solid rgba(0,240,255,.3);
+  clip-path:polygon(12px 0,calc(100% - 12px) 0,100% 10px,100% calc(100% - 10px),calc(100% - 12px) 100%,12px 100%,0 calc(100% - 10px),0 10px);
+  box-shadow:0 12px 34px rgba(0,0,0,.5);opacity:0;transition:opacity .2s,border-color .2s}
+.tut-bubble.on{opacity:1;animation:tutPop .32s cubic-bezier(.34,1.5,.5,1)}
+.tut-bubble.low{top:auto;bottom:calc(64px + env(safe-area-inset-bottom,0px))}
+/* Beside a menu panel (Loadout, Forge): compact, bottom-left, so the
+   panel's own buttons -- the ones being pointed at -- stay clear. */
+.tut-bubble.side{top:auto;bottom:calc(10px + env(safe-area-inset-bottom,0px));left:calc(12px + env(safe-area-inset-left,0px));
+  transform:none;max-width:min(330px,56vw);text-align:left;padding:9px 16px 10px}
+.tut-bubble.side.on{animation:tutPopSide .32s cubic-bezier(.34,1.5,.5,1)}
+.tut-bubble.side .tut-progress{justify-content:flex-start}
+.tut-bubble.side .tut-verb{font-size:17px;letter-spacing:4px}
+.tut-bubble.side .tut-sub{font-size:12px}
+@keyframes tutPopSide{from{transform:scale(.9)}to{transform:scale(1)}}
+.tut-bubble.ok{border-color:var(--gn);box-shadow:0 0 26px rgba(56,255,156,.35)}
+@keyframes tutPop{from{transform:translateX(-50%) scale(.86)}to{transform:translateX(-50%) scale(1)}}
+.tut-progress{display:flex;gap:7px;justify-content:center;margin-bottom:8px}
+.tut-ppip{width:8px;height:8px;border:1px solid #5f7f90;transform:rotate(45deg);transition:background .2s,border-color .2s,box-shadow .2s}
+.tut-ppip.done{background:var(--cy);border-color:var(--cy);box-shadow:0 0 8px var(--cy)}
+.tut-ppip.cur{border-color:var(--gold);box-shadow:0 0 8px rgba(255,201,92,.6);animation:tutPipCur 1.2s ease-in-out infinite}
+@keyframes tutPipCur{0%,100%{transform:rotate(45deg) scale(1)}50%{transform:rotate(45deg) scale(1.35)}}
+.tut-verb{font-family:'Orbitron';font-weight:700;font-size:clamp(17px,3.2vw,24px);letter-spacing:5px;color:#fff;text-shadow:0 0 18px rgba(0,240,255,.5)}
+.tut-sub{margin-top:5px;font-size:13px;letter-spacing:1.5px;color:#8fb0c0;line-height:1.4}
+.tut-count{display:none;margin-top:6px;font-family:'Orbitron';font-size:11px;letter-spacing:3px;color:var(--gold)}
+.tut-count.on{display:block}
+.tut-keys{display:none;flex-direction:column;align-items:center;gap:6px;margin-top:10px}
+.tut-keys.on{display:flex}
+.tut-krow{display:flex;gap:6px}
+.tut-key{min-width:38px;height:38px;padding:0 8px;display:flex;align-items:center;justify-content:center;
+  font-family:'Orbitron';font-size:12px;color:#eafcff;border-radius:5px;
+  background:linear-gradient(180deg,rgba(30,40,58,.95),rgba(16,22,34,.95));border:1px solid rgba(0,240,255,.4);
+  box-shadow:0 3px 0 rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.07);animation:tutKeyTap 1.9s ease-in-out infinite}
+.tut-key.blank{visibility:hidden;animation:none}
+.tut-key-wide{min-width:132px}
+@keyframes tutKeyTap{0%,100%{transform:translateY(0)}12%{transform:translateY(2px);box-shadow:0 1px 0 rgba(0,0,0,.4),0 0 14px rgba(0,240,255,.5)}24%{transform:translateY(0)}}
+.tut-list{display:none;flex-direction:column;gap:5px;margin-top:10px;text-align:left}
+.tut-list.on{display:flex}
+.tut-li{display:flex;gap:10px;align-items:baseline;font-size:13px;color:#8fb0c0}
+.tut-li b{font-family:'Orbitron';font-size:11px;letter-spacing:2px;min-width:92px}
+.tut-rings{position:absolute;inset:0;transition:opacity .2s}
+.tut-ring{position:absolute;border:2px solid rgba(255,201,92,.9);border-radius:6px;
+  box-shadow:0 0 18px rgba(255,201,92,.45),inset 0 0 12px rgba(255,201,92,.2);animation:tutRing 1.4s ease-in-out infinite}
+.tut-ring.round{border-radius:50%}
+@keyframes tutRing{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:1;transform:scale(1.06)}}
+@media (max-width:760px), (max-height:520px){
+  .tut-bubble{top:calc(62px + env(safe-area-inset-top,0px));padding:8px 14px 10px}
+  .tut-sub{font-size:11px;letter-spacing:1px}
+  .tut-key{min-width:30px;height:30px;font-size:11px}
+  .tut-key-wide{min-width:104px}
+  .tut-bubble.low{top:calc(62px + env(safe-area-inset-top,0px));bottom:auto}
+}
+
 @media (max-width:760px), (max-height:520px){
   .logo{font-size:38px;letter-spacing:5px}
   .tagline{font-size:11px;letter-spacing:3px;margin:10px 0 18px}
@@ -1168,7 +1232,7 @@ body.in-shell #sysUpGalaxy{display:block}
       <div id="buildInfo"></div>
       <div class="barwrap hp"><div id="hpFill"></div><div id="hpText">100 / 100</div></div>
       <div class="barwrap en"><div id="enFill"></div></div>
-      <div id="dashUI"><div id="dashBar"><div id="dashFill"></div></div><span id="dashLabel">DASH [SPACE]</span></div>
+      <div id="dashUI"><div id="dashBar"><div id="dashFill"></div></div><span id="dashLabel">DASH [<span data-bind="dash">SPACE</span>]</span></div>
       <!-- Void Loadout: the equipped secondary and ability, with their
            live cooldowns. Hidden entirely when a slot is empty, so a
            player running nothing there sees no dead UI. -->
@@ -1458,6 +1522,29 @@ body.in-shell #sysUpGalaxy{display:block}
   <div class="rt" id="introTitle"></div>
   <div class="rs" id="introSub"></div>
 </div>
+<!-- ---- TRAINING COACH ---- see the TRAINING script section. -->
+<div class="tut-coach" id="tutCoach">
+  <div class="tut-rings" id="tutRings"></div>
+  <div class="tut-bubble" id="tutBubble">
+    <div class="tut-progress" id="tutPips"></div>
+    <div class="tut-verb" id="tutVerb"></div>
+    <div class="tut-sub" id="tutSub"></div>
+    <div class="tut-keys" id="tutKeys"></div>
+    <div class="tut-list" id="tutList"></div>
+    <div class="tut-count" id="tutCount"></div>
+  </div>
+  <button type="button" class="tut-skip-btn" id="tutSkip">SKIP TRAINING</button>
+</div>
+<div class="tut-confirm" id="tutConfirm">
+  <div class="tut-confirm-card">
+    <div class="tut-confirm-title">SKIP TRAINING?</div>
+    <div class="tut-confirm-sub">You can replay it any time from Settings.</div>
+    <div class="tut-confirm-row">
+      <button type="button" class="btn danger" id="tutConfirmSkip">SKIP</button>
+      <button type="button" class="btn primary" id="tutConfirmCancel">KEEP TRAINING</button>
+    </div>
+  </div>
+</div>
 <div class="overlay" id="ov-onboard"><div class="panel" style="width:600px">
   <h2 class="ovtitle">WELCOME, PILOT</h2><div class="ovsub">BEFORE YOUR FIRST LAUNCH</div>
   <div class="onb-choices">
@@ -1477,11 +1564,11 @@ body.in-shell #sysUpGalaxy{display:block}
 <div class="overlay" id="ov-howto"><div class="panel" style="width:660px">
   <h2 class="ovtitle">HOW TO PLAY</h2><div class="ovsub">SURVIVE THE COLLAPSE</div>
   <div class="howto-sec"><h3>CONTROLS</h3>
-    <div class="krow"><span class="key">W A S D</span>Move</div>
+    <div class="krow"><span class="key" data-bind="move">W A S D</span>Move</div>
     <div class="krow"><span class="key">MOUSE</span>Aim · <b>LEFT CLICK / HOLD</b> to fire</div>
-    <div class="krow"><span class="key">SPACE</span>Dash (costs energy, brief invulnerability)</div>
-    <div class="krow"><span class="key">Q</span>Secondary system (costs energy)</div>
-    <div class="krow"><span class="key">E</span>Ability (costs energy)</div>
+    <div class="krow"><span class="key" data-bind="dash">SPACE</span>Dash (costs energy, brief invulnerability)</div>
+    <div class="krow"><span class="key" data-bind="secondary">Q</span>Secondary system (costs energy)</div>
+    <div class="krow"><span class="key" data-bind="ability">E</span>Ability (costs energy)</div>
     <div class="krow"><span class="key">ESC / P</span>Pause</div>
   </div>
   <div class="howto-sec"><h3>YOUR VOID LOADOUT</h3>
@@ -1489,8 +1576,8 @@ body.in-shell #sysUpGalaxy{display:block}
     every expedition until you change them. You are never asked to pick a weapon again on the way
     into a run.</div>
     <div class="trow"><span class="tname" style="color:var(--cy)">PRIMARY</span><span class="tdesc">Your weapon. Unlocked in the VOID FORGE or dropped by guardians. Mastery levels show on the card.</span></div>
-    <div class="trow"><span class="tname" style="color:var(--pu)">SECONDARY</span><span class="tdesc">A system on <b>Q</b> — missiles, a combat drone, or a barrier. Earned by clearing solar systems.</span></div>
-    <div class="trow"><span class="tname" style="color:var(--gold)">ABILITY</span><span class="tdesc">A power on <b>E</b> — overdrive, a hunter's mark, or a phase blink. Also earned by exploring.</span></div>
+    <div class="trow"><span class="tname" style="color:var(--pu)">SECONDARY</span><span class="tdesc">A system on <b data-bind="secondary">Q</b> — missiles, a combat drone, or a barrier. Earned by clearing solar systems.</span></div>
+    <div class="trow"><span class="tname" style="color:var(--gold)">ABILITY</span><span class="tdesc">A power on <b data-bind="ability">E</b> — overdrive, a hunter's mark, or a phase blink. Also earned by exploring.</span></div>
     <div class="tdesc">Both slots spend the same energy the dash spends, so a fight is a choice between
     getting out and hitting back.</div>
   </div>
@@ -1824,10 +1911,13 @@ function activePrimary(){
   return 'pulse';
 }
 function activeSecondary(){
+  // Training teaches the slot with the one system every pilot has.
+  if(TUT.active&&runActive)return SECONDARIES.missile;
   const d=SECONDARIES[loadoutOf().secondary];
   return (d&&gearUnlocked(d))?d:SECONDARIES.missile;
 }
 function activeAbility(){
+  if(TUT.active&&runActive)return VB_ABILITIES.overdrive;
   const d=VB_ABILITIES[loadoutOf().ability];
   return (d&&gearUnlocked(d))?d:VB_ABILITIES.overdrive;
 }
@@ -2900,6 +2990,36 @@ function pillarGradient(pc,hh){
 }
 
 /* ---------- 05 · INPUT ---------- */
+/* The one key table. Gameplay reads its bindings from here, and so does
+   every on-screen prompt that names a key (the training coach, the HUD
+   dash label, How to Play), which is what keeps a prompt from ever
+   naming a key the game is not listening to. Codes are PHYSICAL keys
+   (KeyboardEvent.code), so their LABELS come from the browser's own
+   layout map where it offers one: an AZERTY keyboard is told Z Q S D,
+   which is where those physical keys actually are for that player. */
+const VB_BINDS={up:'KeyW',left:'KeyA',down:'KeyS',right:'KeyD',dash:'Space',secondary:'KeyQ',ability:'KeyE',pause:'KeyP'};
+let vbLayout=null;
+function keyLabel(code){
+  if(code==='Space')return 'SPACE';
+  try{const m=vbLayout&&vbLayout.get(code);if(m)return String(m).toUpperCase();}catch(e){}
+  if(/^Key[A-Z]$/.test(code))return code.slice(3);
+  if(/^Digit[0-9]$/.test(code))return code.slice(5);
+  return code.toUpperCase();
+}
+function refreshKeyLabels(){
+  document.querySelectorAll('[data-bind]').forEach(n=>{
+    const b=n.dataset.bind;
+    n.textContent=b==='move'?['up','left','down','right'].map(k=>keyLabel(VB_BINDS[k])).join(' '):keyLabel(VB_BINDS[b]||'');
+  });
+}
+refreshKeyLabels();
+try{
+  if(navigator.keyboard&&navigator.keyboard.getLayoutMap)navigator.keyboard.getLayoutMap()
+    .then(m=>{vbLayout=m;refreshKeyLabels();if(TUT.active)renderCoach();}).catch(()=>{});
+}catch(e){}
+// Training (see the TRAINING section) -- declared this early because
+// gameplay code that can run from boot checks it.
+const TUT={active:false,replay:false,i:-1,locked:false};
 const keys={},pressed={};
 const mouse={x:W/2,y:H/2,down:false};
 // Esc while the shell page is fullscreen leaves fullscreen first (the
@@ -2922,7 +3042,7 @@ function isTypingTarget(t){
 }
 addEventListener('keydown',e=>{
   if(isTypingTarget(e.target))return;
-  if(['Space','KeyW','KeyA','KeyS','KeyD','KeyP'].includes(e.code))e.preventDefault();
+  if([VB_BINDS.dash,VB_BINDS.up,VB_BINDS.left,VB_BINDS.down,VB_BINDS.right,VB_BINDS.pause].includes(e.code))e.preventDefault();
   if(!e.repeat){pressed[e.code]=true;handleKey(e.code);}
   keys[e.code]=true;initAudio();
 });
@@ -3060,7 +3180,7 @@ joyAimZone.addEventListener('touchcancel',endAimTouch);
 // so it flows through updatePlayer()'s existing dash logic (cooldown,
 // energy cost, invulnerability window) completely unchanged.
 touchDashBtn.addEventListener('touchstart',e=>{
-  pressed['Space']=true;
+  pressed[VB_BINDS.dash]=true;
   touchDashBtn.classList.add('pressed');
   initAudio();
   e.preventDefault();
@@ -3076,8 +3196,8 @@ function wireTouchGear(btn,code){
   btn.addEventListener('touchend',e=>{btn.classList.remove('pressed');e.preventDefault();},{passive:false});
   btn.addEventListener('touchcancel',()=>btn.classList.remove('pressed'));
 }
-wireTouchGear(touchSecBtn,'KeyQ');
-wireTouchGear(touchAbBtn,'KeyE');
+wireTouchGear(touchSecBtn,VB_BINDS.secondary);
+wireTouchGear(touchAbBtn,VB_BINDS.ability);
 function updateTouchGearButtons(){
   if(!isTouchDevice||!player)return;
   const paint=(btn,def,cd)=>{
@@ -3258,7 +3378,9 @@ function handleKey(code){
   // choice panel has no "back" -- it is answered, not dismissed.
   if(state==='intro'){if(code==='Escape'||code==='Enter'||code==='Space')endIntro();return;}
   if(state==='onboard')return;
-  if(code==='Escape'||code==='KeyP'){
+  // The Loadout/Forge walkthrough is answered by its own buttons.
+  if(TUT.active&&(state==='weapons'||state==='forge')&&code!=='Enter')return;
+  if(code==='Escape'||code===VB_BINDS.pause){
     if(state==='playing'){
       if(uiOpen&&curUI==='ov-upgrade')return;
       if(uiOpen&&curUI==='ov-swap'){closeUI();return;}
@@ -7448,8 +7570,8 @@ function updatePlayer(dt){
     if(!targetAlive(p.markTarget))p.markT=0;
     if(p.markT<=0)p.markTarget=null;
   }
-  if(pressed['KeyQ'])useSecondary();
-  if(pressed['KeyE'])useAbility();
+  if(pressed[VB_BINDS.secondary])useSecondary();
+  if(pressed[VB_BINDS.ability])useAbility();
   p.energy=Math.min(p.maxenergy,p.energy+p.energyRegen*dt);
   // Touch aim (the right stick) drives facing directly from its drag
   // angle when active; otherwise this is the original mouse-relative-
@@ -7460,10 +7582,10 @@ function updatePlayer(dt){
     const wx=cam.x+(mouse.x-W/2)/cam.zoom,wy=cam.y+(mouse.y-H/2)/cam.zoom;
     p.faceAng=angTo(p.x,p.y,wx,wy);
   }
-  if(pressed['Space']&&p.dashCd<=0&&p.dashDur<=0&&transition===null){
+  if(pressed[VB_BINDS.dash]&&p.dashCd<=0&&p.dashDur<=0&&transition===null){
     if(p.energy>=32){
       p.energy-=32;p.dashDur=0.17;p.dashCd=p.dashCD;
-      let ax=(keys['KeyD']?1:0)-(keys['KeyA']?1:0)+touchMoveX,ay=(keys['KeyS']?1:0)-(keys['KeyW']?1:0)+touchMoveY;
+      let ax=(keys[VB_BINDS.right]?1:0)-(keys[VB_BINDS.left]?1:0)+touchMoveX,ay=(keys[VB_BINDS.down]?1:0)-(keys[VB_BINDS.up]?1:0)+touchMoveY;
       p.dashDir=(ax||ay)?Math.atan2(ay,ax):p.faceAng;
       // The Shield Emitter extends the dash's own i-frames rather than
     // adding a new defensive layer, so it improves a skill the player
@@ -7473,9 +7595,10 @@ function updatePlayer(dt){
       if(p.dashshieldS>0)p.shield=0.8+0.35*p.dashshieldS;
       SFX.dash();addShake(2);el('dashUI').classList.remove('ready');
       ringFX(p.x,p.y,[0,240,255],46,0.3);
+      if(TUT.active)tutNotify('dash');
     }else{SFX.error();flashEnergyBar();}
   }
-  let ax=(keys['KeyD']?1:0)-(keys['KeyA']?1:0)+touchMoveX,ay=(keys['KeyS']?1:0)-(keys['KeyW']?1:0)+touchMoveY;
+  let ax=(keys[VB_BINDS.right]?1:0)-(keys[VB_BINDS.left]?1:0)+touchMoveX,ay=(keys[VB_BINDS.down]?1:0)-(keys[VB_BINDS.up]?1:0)+touchMoveY;
   const len=Math.hypot(ax,ay);if(len>0){ax/=len;ay/=len;}
   if(p.dashDur>0){
     p.dashDur-=dt;
@@ -7543,6 +7666,7 @@ function updatePlayer(dt){
 }
 function fireWeapon(){
   const p=player,w=WEAPONS[p.weapon];
+  if(TUT.active)tutNotify('fire');
   // OVERDRIVE (ability slot) is applied here and nowhere else, as two
   // multipliers on the numbers this function was already computing --
   // so it can never drift out of sync with a weapon's real stats.
@@ -7617,6 +7741,8 @@ function hurtPlayer(dmg,sx,sy){
   // applied a second time at any of those call sites.
   dmg*=curDiff().dmgMult;
   p.hp-=dmg;p.invuln=0.7;hurtFlash=1;
+  // Training has pressure but no fail state: the hull holds at 1.
+  if(TUT.active&&p.hp<1)p.hp=1;
   addShake(9);SFX.hurt();
   dmgNum(p.x,p.y,'-'+Math.round(dmg),'#ff4d6d',17);
   const a=angTo(sx,sy,p.x,p.y);
@@ -7713,6 +7839,7 @@ function useSecondary(){
     ringFX(p.x,p.y,[120,200,255],64,0.4);
     SFX.block();addShake(2);
   }
+  if(TUT.active)tutNotify('secondary');
   updateGearHUD();
 }
 
@@ -7749,6 +7876,7 @@ function useAbility(){
     p.invuln=Math.max(p.invuln,0.35);
     ringFX(p.x,p.y,[190,120,255],44,0.28);SFX.dash();addShake(3);
   }
+  if(TUT.active&&p.abCd>0)tutNotify('ability');
   updateGearHUD();
 }
 
@@ -8173,7 +8301,7 @@ function processSpawnQueue(dt){
   }
 }
 function updateWaves(dt){
-  if(room.cleared||room.type==='boss'||room.type==='coin')return;
+  if(room.cleared||room.type==='boss'||room.type==='coin'||room.tutHold)return;
   if(spawnQueue.length===0&&enemies.length===0){
     if(room.wi<room.waves.length){
       room.waveDelay-=dt;
@@ -9857,7 +9985,9 @@ function newRun(levelIdx,dest){
   // everywhere without threading a difficulty parameter through every
   // enemy/boss/room function.
   run={level:lv,levelIdx,depth:1,totalDepth:lv.depth,shards:0,coins:0,kills:0,roomsCleared:0,damage:0,time:0,
-    difficulty:pendingDifficulty,
+    // The training sector always flies on Normal, whatever is selected.
+    tutorial:!!(dest&&dest.tutorial),
+    difficulty:(dest&&dest.tutorial)?'normal':pendingDifficulty,
     // Where in the universe this run is happening. Both are 0 for a run
     // started through the legacy level list or by a co-op lobby, and
     // every consumer checks for that -- so the universe payout simply
@@ -9888,10 +10018,12 @@ function startRun(weapon,levelIdx,dest){
   go('playing');
   Music.set('game');
   renderChips();renderNodeStrip();
-  showBanner(run.galaxyId?run.level.name:('LEVEL '+run.level.id+' — '+run.level.name),
+  // In training the coach names every room; a banner would sit on it.
+  if(!run.tutorial)showBanner(run.galaxyId?run.level.name:('LEVEL '+run.level.id+' — '+run.level.name),
     run.galaxyId?'ENTERING THE SYSTEM':'THE DESCENT BEGINS');
 }
 function roomOptions(){
+  if(run.tutorial)return TRAINING_PATHS.map(t=>({type:t}));
   if(run.depth>=run.level.depth-1)return[{type:'boss'}];
   const tc=run.typeCounts;
   const hpFrac=player?player.hp/player.maxhp:1;
@@ -9991,6 +10123,9 @@ function buildRoom(type){
     // "certain combat rooms" — ~70% of the Descent's combat rooms
     // carry unstable Void Pressure
     if(env.pressure&&Math.random()<0.7){room.pressure=true;room.prT=rand(6,9);}
+    // Training's first room holds its waves until the coach releases
+    // them (the FIGHT step) -- the controls are learned in a quiet room.
+    if(run.tutorial&&run.depth===1){room.waves=[];room.tutHold=true;room.pressure=false;}
   }
   else if(type==='coin'){
     room.coin={dur:30,t:30,targets:[],spawnT:0.8,combo:0,comboT:0,bestCombo:0,coins:0,shots:0,hits:0,ended:false};
@@ -10025,7 +10160,7 @@ function buildRoom(type){
     spawnShards(rand(-120,120),-80,5);spawnShards(rand(-120,120),80,5);}
   else if(type==='boss'){createBoss(run.level.boss);Music.set(null);}
   if(type!=='boss')Music.set('game');
-  showBanner(type==='boss'?'GUARDIAN AHEAD':m.label,m.sub);
+  if(!run.tutorial)showBanner(type==='boss'?'GUARDIAN AHEAD':m.label,m.sub);
   el('roomType').textContent=m.label;
   el('roomType').style.color=rgb(m.color);
   el('waveLabel').textContent=type==='coin'?'SHOOT THE TARGETS':((type==='combat'||type==='elite')?'':'—');
@@ -10040,6 +10175,7 @@ function roomCleared(){
   SFX.portal();
   showBanner('ROOM CLEAR','CHOOSE YOUR PATH');
   if(room.type==='combat'&&Math.random()<0.7)room.pendingUpgrade=true;
+  if(run.tutorial){room.pendingUpgrade=false;tutNotify('cleared');}
 }
 function spawnPortals(){
   if(room.portalsSpawned||room.type==='boss')return;
@@ -10055,6 +10191,7 @@ function spawnPortals(){
 }
 function startTransition(type){
   if(transition)return;
+  if(run&&run.tutorial)tutNotify('portal',type);
   transition={t:0,dur:0.85,type,mid:false};
   SFX.portal();
 }
@@ -11067,6 +11204,7 @@ function update(dt){
   // input only -- see coopUpdate.
   coopUpdate(dt);
   updateRoom(dt);
+  if(TUT.active)tutUpdate(dt);
   if(room.type==='boss'&&bossActive&&boss&&!boss.dead)updateBoss(dt);
   updateEnemies(dt);
   updateBullets(dt);
@@ -11114,6 +11252,7 @@ function frame(now){
   el('dmgflash').style.opacity=hurtFlash;
   if(state==='playing'&&player&&!player.dead)el('lowhp').style.opacity=player.hp<player.maxhp*0.3?(0.35+Math.sin(now*0.006)*0.2):0;
   render();
+  if(TUT.active){el('tutCoach').classList.toggle('hold',paused);updateCoachRings();}
   if(state==='playing'){updateHUD();if(isTouchDevice)updateTouchDashButton();}
   for(const k in pressed)pressed[k]=false;
   frameCount++;
@@ -12610,7 +12749,7 @@ function updateHUD(force){
   if(player.dashCd<=0)el('dashUI').classList.add('ready');
   updateGearHUD();
   setTxt('shardCount',run.shards);
-  setTxt('sectorLabel','L'+run.level.id+' · SECTOR '+run.depth+' / '+run.totalDepth);
+  setTxt('sectorLabel',(run.tutorial?'TRAINING':'L'+run.level.id)+' · SECTOR '+run.depth+' / '+run.totalDepth);
 }
 
 // The two loadout chips. Called from updateHUD (so cooldowns tick on
@@ -13034,6 +13173,7 @@ function buildForge(){
       save.shards-=cost;save.forge[f.id]++;saveGameCloud();SFX.buy();
       toast(f.name+' · LEVEL '+save.forge[f.id]);
       buildForge();
+      tutForgeBought();
     });
     up.appendChild(row);
   });
@@ -13054,6 +13194,7 @@ function buildForge(){
       if(spendableShards()<cost){SFX.error();toast('NOT ENOUGH VOID SHARDS');return;}
       save.shards-=cost;save.weapons[k]=true;saveGameCloud();SFX.buy();
       toast('UNLOCKED · '+w.name);buildForge();
+      tutForgeBought();
     });
     else if(gated)card.addEventListener('click',()=>{
       SFX.error();toast('DEFEAT '+gateBoss+' TO UNLOCK');
@@ -13517,6 +13658,7 @@ function updateWsInfo(){
 // same thing LAUNCH EXPEDITION does.
 function launchRun(){
   if(launching||state!=='weapons')return;
+  if(tutConfirmLoadout())return;
   launching=true;
   SFX.portal();
   el('wsStart').textContent='LAUNCHING…';
@@ -13645,13 +13787,15 @@ el('lvlBack').addEventListener('click',()=>{SFX.ui();go('menu');});
 el('howtoBack').addEventListener('click',()=>{SFX.ui();go('menu');});
 el('setBack').addEventListener('click',()=>{SFX.ui();
   if(settingsReturn==='pause'){go('playing');setPause(true);}else go('menu');});
-el('forgeBack').addEventListener('click',()=>{SFX.ui();go('menu');refreshMenuStats();});
+el('forgeBack').addEventListener('click',()=>{SFX.ui();if(TUT.active){endTraining(true);return;}go('menu');refreshMenuStats();});
 el('wsBack').addEventListener('click',()=>{SFX.ui();go(loadoutReturn);});
 el('wsStart').addEventListener('click',()=>{SFX.ui();launchRun();});
 el('pauseResume').addEventListener('click',()=>{SFX.ui();setPause(false);});
 el('pauseSettings').addEventListener('click',()=>{SFX.ui();settingsReturn='pause';setPause(false);go('settings');syncSettingsUI();});
 el('pauseQuit').addEventListener('click',()=>{
   SFX.ui();
+  // In training, leaving is SKIP -- same confirm, same outcome.
+  if(TUT.active){el('tutConfirm').classList.add('on');return;}
   save.shards+=run.shards;save.runs++;save.best=Math.max(save.best,run.roomsCleared);
   uni().coins=Math.max(0,Math.floor(Number(uni().coins)||0))+Math.max(0,Math.floor(run.coins||0));
   saveGameCloud();
@@ -13974,9 +14118,288 @@ el('onbVet').addEventListener('click',()=>{
   go('menu');
 });
 
-// Placeholder until the TRAINING section lands: "new" pilots resume
-// training on their next launch (their path is already recorded).
-function startTraining(replay){ go('menu'); }
+/* =================================================================
+   TRAINING  --  the guided first sector. The game's one interactive
+   onboarding (it used to be a duel-arena tutorial; it lives here now).
+
+   It is a REAL run, not a sandbox: TUTORIAL_LEVEL is an entry in the
+   exact shape of LEVELS[] and goes through startRun() the same way
+   Galaxy 2's data-defined systems do, so the room, the waves, the
+   enemies, the path markers, the chests and shrines, the HUD, the
+   touch sticks, the Loadout and the Forge are all the ordinary code.
+   It is deliberately NOT pushed into LEVELS itself -- several readers
+   treat that array's positions as level numbers (weapon gates, "next
+   level", the level chain, the victory titles, the server's level
+   count), and the training sector is none of those.
+
+   What this section adds is only the teaching: a coach layer (prompt,
+   the literal key or touch control to use, a ring around the thing to
+   look at, progress pips, SKIP) and a step machine. Every step advances
+   on the player actually doing the thing -- tutNotify() is called from
+   fireWeapon, the dash, useSecondary/useAbility, roomCleared and
+   startTransition; distance and "used the prop" are read from game
+   state -- never on a timer.
+   ================================================================= */
+const TUTORIAL_LEVEL={id:0,name:'TRAINING SECTOR',diff:0.85,depth:2,boss:'null',completionBonus:0,training:true,
+  waveOpts:[['swarm',5,2,1],['drone',2,2,1]],
+  elitePool:[['drone',1]],eliteSupport:'drone',
+  env:{floor:'rgba(9,13,32,0.72)',grid:'rgba(0,240,255,0.05)',border:[0,240,255],
+    neb:[[0,180,255],[150,60,255]],ambient:null,cracks:false,debris:false,glitch:false}};
+// The first fight: Level 1's two lightest hostiles, three bodies total.
+const TRAINING_WAVE=[{type:'drone',count:1,elite:false},{type:'swarm',count:2,elite:false}];
+// The three no-risk rooms. A first path choice should teach the markers,
+// not punish a guess.
+const TRAINING_PATHS=['treasure','upgrade','heal'];
+// Enough banked shards for the Forge's cheapest first upgrade.
+const TRAINING_FORGE_FLOOR=70;
+
+// Which control scheme to show: whatever the player last actually used,
+// starting from the device's own.
+let tutInput=isTouchDevice?'touch':'kbm';
+addEventListener('keydown',()=>{if(tutInput!=='kbm'){tutInput='kbm';if(TUT.active)renderCoach();}},true);
+addEventListener('pointerdown',e=>{const k=e.pointerType==='touch'?'touch':'kbm';if(k!==tutInput){tutInput=k;if(TUT.active)renderCoach();}},true);
+
+function capKeys(names){return names.map(n=>({t:keyLabel(VB_BINDS[n]),wide:VB_BINDS[n]==='Space'}));}
+const TRAIN_STEPS=[
+  {id:'move',verb:'MOVE',sub:'FLY AROUND THE SECTOR',
+    keys:()=>[[{t:''},capKeys(['up'])[0],{t:''}],capKeys(['left','down','right'])],
+    touch:['joyMoveBase'],touchSub:'DRAG THE LEFT STICK',
+    enter(){TUT.moved=0;TUT.lx=player.x;TUT.ly=player.y;}},
+  {id:'shoot',verb:'AIM & FIRE',sub:'AIM WITH THE MOUSE · CLICK OR HOLD TO FIRE',
+    keys:()=>[[{t:'LEFT CLICK / HOLD',wide:true}]],
+    touch:['joyAimBase'],touchSub:'DRAG THE RIGHT STICK TO AIM · HOLD IT TO KEEP FIRING',
+    on:ev=>ev==='fire'},
+  {id:'dash',verb:'DASH',sub:'COSTS ENERGY · GIVES A BRIEF WINDOW OF INVULNERABILITY',
+    keys:()=>[capKeys(['dash'])],touch:['touchDashBtn'],touchSub:'TAP DASH',
+    enter(){refillGear();},on:ev=>ev==='dash'},
+  {id:'secondary',verb:'SECONDARY SYSTEM',sub:'MISSILE POD · PICKED ON THE VOID LOADOUT · SPENDS THE SAME ENERGY AS DASH AND ABILITY',
+    keys:()=>[capKeys(['secondary'])],touch:['touchSecBtn'],touchSub:'TAP THE SYSTEM BUTTON',
+    enter(){refillGear();},on:ev=>ev==='secondary'},
+  {id:'ability',verb:'ABILITY',sub:'OVERDRIVE · ALSO FROM YOUR LOADOUT · SAME ENERGY POOL — SPEND IT WISELY',
+    keys:()=>[capKeys(['ability'])],touch:['touchAbBtn'],touchSub:'TAP THE ABILITY BUTTON',
+    enter(){refillGear();},on:ev=>ev==='ability'},
+  {id:'fight',verb:'HOSTILES INBOUND',sub:'PUT IT ALL TOGETHER · MOVE, AIM, FIRE — DASH THROUGH THEIR SHOTS',
+    enter(){refillGear();room.tutHold=false;room.waves=[TRAINING_WAVE.map(g=>Object.assign({},g))];room.wi=0;room.waveDelay=0.6;},
+    on:ev=>ev==='cleared'},
+  {id:'path',verb:'CHOOSE YOUR PATH',sub:'',low:true,   // low: the markers spawn at the top of the room
+    world:()=>portals,
+    list:()=>TRAINING_PATHS.map(t=>({c:ROOMMETA[t].color,n:CHOICES[t].label,d:CHOICES[t].risk+' — '+CHOICES[t].desc})),
+    subFn:()=>'WALK INTO A MARKER. EVERY CLEARED SECTOR OFFERS A CHOICE LIKE THIS — COMBAT, COIN RUN, ELITE, TREASURE, SHRINE OR SANCTUM.',
+    on:ev=>ev==='portal'},
+  {id:'room',verb:'CLAIM IT',sub:'',
+    world:()=>props.filter(p=>!(p.opened||p.used)),
+    subFn:()=>room&&room.type==='treasure'?'FLY INTO A CACHE TO OPEN IT':room&&room.type==='upgrade'?'TOUCH THE SHRINE AND PICK AN UPGRADE':'STEP INTO THE FOUNTAIN TO RESTORE YOUR HULL',
+    verbFn:()=>room?CHOICES[room.type].label:'CLAIM IT'},
+  {id:'loadout',verb:'VOID LOADOUT',sub:'WEAPON · SYSTEM · ABILITY — CHOSEN ONCE, KEPT FOR EVERY EXPEDITION. CHANGE ANYTHING, THEN CONFIRM.',
+    ui:['loSlotLine','wsStart'],side:true},
+  {id:'forge',verb:'VOID FORGE',sub:'',ui:()=>{const b=document.querySelector('#forgeUpgrades .fbuy:not([disabled])');return b?[b]:[];},side:true,
+    subFn:()=>TUT.replay?'SHARDS YOU BRING HOME BUY PERMANENT UPGRADES HERE.':'SHARDS YOU BRING HOME BUY PERMANENT UPGRADES. BUY ONE NOW.'}
+];
+function refillGear(){if(!player)return;player.energy=player.maxenergy;player.secCd=0;player.abCd=0;player.dashCd=0;}
+
+function startTraining(replay){
+  TUT.active=true;TUT.replay=!!replay;TUT.i=-1;TUT.locked=false;TUT.bought=false;TUT.roomDoneT=0;
+  hideAllOverlays();
+  selectedLevel=0;pendingSystem=null;
+  startRun(activePrimary(),0,{level:TUTORIAL_LEVEL,tutorial:true});
+  el('tutCoach').classList.add('on');
+  el('tutCoach').classList.toggle('touch',isTouchDevice);
+  el('tutSkip').textContent=TUT.replay?'END PRACTICE':'SKIP TRAINING';
+  buildCoachPips();
+  tutGoto(0);
+}
+function tutStep(){return TRAIN_STEPS[TUT.i]||null;}
+function tutGoto(i){
+  TUT.i=i;TUT.locked=false;
+  const st=tutStep();
+  if(st&&st.enter){try{st.enter();}catch(e){}}
+  renderCoach();
+}
+function tutAdvance(){
+  if(!TUT.active||TUT.locked)return;
+  TUT.locked=true;
+  SFX.upgrade();
+  el('tutBubble').classList.add('ok');
+  setTimeout(()=>{if(!TUT.active)return;el('tutBubble').classList.remove('ok');tutGoto(TUT.i+1);},520);
+}
+// Game events. Anything not relevant to the current step is ignored.
+function tutNotify(ev,data){
+  if(!TUT.active||TUT.locked)return;
+  const st=tutStep();if(!st)return;
+  if(st.on&&st.on(ev,data))tutAdvance();
+}
+// Per-frame game-state checks (called from update() while playing).
+function tutUpdate(dt){
+  if(!TUT.active||TUT.locked||!player)return;
+  const st=tutStep();if(!st)return;
+  if(st.id==='move'){
+    if(player.dashDur<=0)TUT.moved+=Math.hypot(player.x-TUT.lx,player.y-TUT.ly);
+    TUT.lx=player.x;TUT.ly=player.y;
+    setCoachCount(Math.min(100,Math.round(TUT.moved/1.5))+'%');
+    if(TUT.moved>=150)tutAdvance();
+  }else if(st.id==='fight'){
+    const left=enemies.filter(e=>!e.dead).length+spawnQueue.length;
+    setCoachCount(left?left+' HOSTILE'+(left===1?'':'S')+' LEFT':'');
+  }else if(st.id==='room'){
+    // The chosen room's prop has been used (a chest opened, the shrine
+    // touched, the fountain drunk) and any card it opened is closed.
+    if(props.some(p=>p.opened||p.used)&&!uiOpen){
+      TUT.roomDoneT+=dt;
+      if(TUT.roomDoneT>0.7){TUT.locked=true;finishTrainingSector();}
+    }
+  }
+}
+// The sector is done: bank it (not on a replay), then walk the pilot
+// through the two screens they will use between every run.
+function finishTrainingSector(){
+  runActive=false;
+  if(!TUT.replay){
+    // Banked exactly like any run (see finalizeRun), minus the lifetime
+    // run stats -- a training sector is not a run worth counting -- and
+    // topped up so the Forge step can always actually buy something.
+    save.shards+=run.shards;
+    uni().coins=Math.max(0,Math.floor(Number(uni().coins)||0))+Math.max(0,Math.floor(run.coins||0));
+    const need=TRAINING_FORGE_FLOOR-spendableShards();
+    if(need>0)save.shards+=need;
+    saveGameCloud();
+  }
+  showReveal('SECTOR SECURED','TRAINING SECTOR CLEAR','NEXT: YOUR LOADOUT AND THE FORGE',1900);
+  setTimeout(()=>{
+    if(!TUT.active)return;
+    loadoutReturn='menu';
+    go('weapons');
+    el('wsSub').textContent='EQUIPPED FOR EVERY EXPEDITION UNTIL YOU CHANGE IT';
+    el('wsStart').textContent='CONFIRM LOADOUT';
+    el('wsBack').style.visibility='hidden';
+    tutGoto(TRAIN_STEPS.findIndex(s=>s.id==='loadout'));
+  },2000);
+}
+// LAUNCH on the Loadout screen, during training, confirms instead.
+function tutConfirmLoadout(){
+  if(!TUT.active||tutStep().id!=='loadout')return false;
+  SFX.ui();
+  el('wsStart').textContent='LAUNCH';el('wsBack').style.visibility='';
+  TUT.locked=true;
+  go('forge');
+  el('forgeBack').textContent=TUT.replay?'CONTINUE':'BACK';
+  el('forgeBack').disabled=!TUT.replay;
+  tutGoto(TRAIN_STEPS.findIndex(s=>s.id==='forge'));
+  return true;
+}
+// A Forge purchase landed (see buildForge).
+function tutForgeBought(){
+  if(!TUT.active||tutStep().id!=='forge'||TUT.locked)return;
+  TUT.locked=true;
+  setTimeout(()=>endTraining(true),650);
+}
+// Finishing and skipping end the same way: onboarding recorded (never on
+// a replay), coach down, and home to the Command Center -- where Home
+// Planet and the shops are now open.
+function endTraining(completed){
+  const wasReplay=TUT.replay;
+  TUT.active=false;TUT.locked=false;
+  el('tutCoach').classList.remove('on');el('tutConfirm').classList.remove('on');
+  el('wsStart').textContent='LAUNCH';el('wsBack').style.visibility='';
+  el('forgeBack').textContent='BACK';el('forgeBack').disabled=false;
+  runActive=false;
+  if(!wasReplay)postOnboarding('tutorial');
+  if(completed){
+    SFX.victory();
+    showReveal('TRAINING COMPLETE','WELCOME TO THE FRONTIER',
+      wasReplay?'PRACTICE OVER':'HOME PLANET · VOID MARKET · SHARD SHOP UNLOCKED',2600);
+    setTimeout(()=>{Music.set('menu');go('menu');refreshMenuStats();},2700);
+  }else{
+    Music.set('menu');go('menu');refreshMenuStats();
+  }
+}
+
+// ---- the coach layer ----
+function buildCoachPips(){
+  const box=el('tutPips');box.innerHTML='';
+  TRAIN_STEPS.forEach(()=>{const d=document.createElement('div');d.className='tut-ppip';box.appendChild(d);});
+}
+function setCoachCount(txt){const c=el('tutCount');if(c.textContent!==txt)c.textContent=txt;c.classList.toggle('on',!!txt);}
+function renderCoach(){
+  const st=tutStep();if(!st)return;
+  const touch=tutInput==='touch'&&isTouchDevice&&!!st.touch;
+  el('tutVerb').textContent=st.verbFn?st.verbFn():st.verb;
+  el('tutSub').textContent=touch&&st.touchSub?st.touchSub:(st.subFn?st.subFn():st.sub);
+  setCoachCount('');
+  const keys=el('tutKeys');keys.innerHTML='';
+  if(st.keys&&!touch){
+    for(const row of st.keys()){
+      const r=document.createElement('div');r.className='tut-krow';
+      for(const k of row){
+        const c=document.createElement('div');
+        c.className='tut-key'+(k.wide?' tut-key-wide':'')+(k.t?'':' blank');
+        c.textContent=k.t;r.appendChild(c);
+      }
+      keys.appendChild(r);
+    }
+  }
+  keys.classList.toggle('on',!!(st.keys&&!touch));
+  const list=el('tutList');list.innerHTML='';
+  if(st.list){
+    for(const it of st.list()){
+      const d=document.createElement('div');d.className='tut-li';
+      d.innerHTML='<b style="color:'+rgb(it.c)+'">'+it.n+'</b><span>'+it.d+'</span>';
+      list.appendChild(d);
+    }
+  }
+  list.classList.toggle('on',!!st.list);
+  el('tutBubble').classList.toggle('low',!!st.low);
+  el('tutBubble').classList.toggle('side',!!st.side);
+  el('tutBubble').classList.remove('on');void el('tutBubble').offsetWidth;el('tutBubble').classList.add('on');
+  const pips=el('tutPips').children;
+  for(let i=0;i<pips.length;i++){pips[i].classList.toggle('done',i<TUT.i);pips[i].classList.toggle('cur',i===TUT.i);}
+}
+// Rings around whatever the step is about: DOM controls (a touch stick,
+// a Loadout slot, a Forge button) or things in the world (the path
+// markers, the chest). Recomputed every frame, since both move.
+function coachRects(){
+  const st=tutStep();if(!st)return[];
+  const out=[];
+  const touch=tutInput==='touch'&&isTouchDevice&&!!st.touch;
+  const ids=touch?st.touch:(typeof st.ui==='function'?st.ui():st.ui);
+  if(ids)for(const idOrEl of ids){
+    const n=typeof idOrEl==='string'?el(idOrEl):idOrEl;
+    if(!n)continue;const r=n.getBoundingClientRect();
+    if(r.width>0&&r.height>0)out.push({x:r.left,y:r.top,w:r.width,h:r.height});
+  }
+  if(st.world&&state==='playing'){
+    for(const o of st.world()){
+      const sx=W/2+cam.zoom*(o.x-cam.x+cam.sx),sy=H/2+cam.zoom*(o.y-cam.y+cam.sy),rr=46*cam.zoom;
+      out.push({x:sx-rr,y:sy-rr,w:rr*2,h:rr*2,round:true});
+    }
+  }
+  return out;
+}
+function updateCoachRings(){
+  const box=el('tutRings');
+  const rects=TUT.active&&!paused?coachRects():[];
+  while(box.children.length<rects.length){const d=document.createElement('div');d.className='tut-ring';box.appendChild(d);}
+  for(let i=0;i<box.children.length;i++){
+    const d=box.children[i],r=rects[i];
+    if(!r){d.style.display='none';continue;}
+    d.style.display='block';
+    d.style.left=(r.x-6)+'px';d.style.top=(r.y-6)+'px';d.style.width=(r.w+12)+'px';d.style.height=(r.h+12)+'px';
+    d.classList.toggle('round',!!r.round);
+  }
+}
+
+// SKIP, with a confirm -- the same two-step pattern the old duel
+// tutorial had, so one misclick never throws training away.
+el('tutSkip').addEventListener('click',()=>{
+  SFX.ui();
+  if(TUT.replay){endTraining(false);return;}
+  if(state==='playing'&&!paused&&!uiOpen)setPause(true);
+  el('tutConfirm').classList.add('on');
+});
+el('tutConfirmCancel').addEventListener('click',()=>{
+  SFX.ui();el('tutConfirm').classList.remove('on');
+  if(state==='playing'&&paused)setPause(false);
+});
+el('tutConfirmSkip').addEventListener('click',()=>{SFX.ui();endTraining(false);});
 
 /* ---------- 19 · BOOT ---------- */
 // The loading screen's last step: hold it until the account's save is
