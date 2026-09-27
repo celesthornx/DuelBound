@@ -182,7 +182,7 @@
 </style>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Share+Tech+Mono&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Share+Tech+Mono&family=Comic+Neue:wght@400;700&display=swap');
 
   :root{
     --void: #05070f;
@@ -3839,6 +3839,18 @@
     .profile-chip .avatar{ width:40px; height:40px; }
     .profile-chip .avatar svg{ width:20px; height:20px; }
     .chip-name{ font-size:13px; }
+  }
+
+  /* Comic Sans, per request -- scoped to the hub (#menuMain.lobby) only,
+     so the rest of the game (Arena screen, Voidbreak itself) keeps its
+     own typography. `!important` is the only way to win over the many
+     explicit font-family declarations already set on individual hub
+     elements (Orbitron/Chakra Petch/Share Tech Mono) without rewriting
+     every one of them. Real Comic Sans MS first for anyone who actually
+     has it installed (Windows/Mac); Comic Neue -- the open, webfont-
+     licensable redraw of it -- as the fallback everyone else gets. */
+  #menuMain.lobby, #menuMain.lobby *{
+    font-family:'Comic Sans MS','Comic Neue',cursive !important;
   }
 </style>
 </head>
