@@ -781,6 +781,38 @@ body.in-shell #sysUpGalaxy{display:block}
   text-shadow:0 0 30px rgba(0,240,255,.7);text-align:center;padding:0 16px}
 .uni-reveal .rs{font-size:14px;letter-spacing:4px;color:#8fb0c0;text-align:center;padding:0 16px}
 
+/* ---- ONBOARDING -- the story intro, the "new / played before" choice
+   and (below) the training coach. The skip button and its confirm
+   dialog are the duel arena's old tutorial chrome (.tut-*), carried
+   over when onboarding moved here -- same plates, same corner cuts --
+   re-pointed at this file's own palette. The intro's captions are the
+   #uniReveal title card itself (see .intro-cap). ---- */
+.intro-layer{position:fixed;inset:0;z-index:53;pointer-events:none;display:none}
+.intro-layer.on{display:block}
+.uni-reveal.intro-cap{inset:auto 0 calc(12% + env(safe-area-inset-bottom,0px)) 0;background:none;gap:8px;z-index:53}
+.tut-skip-btn{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));right:calc(14px + env(safe-area-inset-right,0px));
+  z-index:72;pointer-events:auto;background:rgba(6,9,18,.72);border:1px solid #5f7f90;color:#8fb0c0;
+  font-family:'Orbitron';font-size:10px;letter-spacing:2px;padding:9px 15px;cursor:pointer;min-height:34px;
+  clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,8px 100%,0 calc(100% - 8px));transition:all .15s}
+.tut-skip-btn:hover{border-color:var(--rd);color:var(--rd);background:rgba(255,45,85,.08)}
+.tut-confirm{position:fixed;inset:0;z-index:73;display:none;align-items:center;justify-content:center;
+  background:rgba(2,4,12,.72);backdrop-filter:blur(4px);pointer-events:auto}
+.tut-confirm.on{display:flex}
+.tut-confirm-card{display:flex;flex-direction:column;align-items:center;gap:12px;padding:24px 30px;
+  background:linear-gradient(160deg,rgba(13,18,40,.96),rgba(7,9,20,.98));border:1px solid rgba(255,45,85,.4);
+  clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,16px 100%,0 calc(100% - 16px))}
+.tut-confirm-title{font-family:'Orbitron';font-weight:700;font-size:16px;letter-spacing:4px;color:var(--rd)}
+.tut-confirm-sub{font-size:14px;letter-spacing:1px;color:#8fb0c0;text-align:center}
+.tut-confirm-row{display:flex;gap:10px;margin-top:4px}
+.onb-choices{display:flex;flex-direction:column;gap:12px;margin-top:18px}
+.onb-choice{display:flex;flex-direction:column;gap:6px;text-align:left;padding:16px 20px;cursor:pointer;
+  background:rgba(0,240,255,.04);border:1px solid rgba(0,240,255,.3);color:#cfeef5;transition:all .15s;
+  clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px))}
+.onb-choice b{font-family:'Orbitron';font-size:15px;letter-spacing:4px;color:#eafcff}
+.onb-choice span{font-size:13px;letter-spacing:1px;color:#8fb0c0;line-height:1.45}
+.onb-choice:hover{background:rgba(0,240,255,.12);box-shadow:0 0 22px rgba(0,240,255,.2);transform:translateY(-1px)}
+.onb-choice.primary{border-color:var(--cy);background:rgba(0,240,255,.1)}
+
 @media (max-width:760px), (max-height:520px){
   .logo{font-size:38px;letter-spacing:5px}
   .tagline{font-size:11px;letter-spacing:3px;margin:10px 0 18px}
@@ -1412,6 +1444,29 @@ body.in-shell #sysUpGalaxy{display:block}
   <div class="rt" id="revealTitle"></div>
   <div class="rs" id="revealSub"></div>
 </div>
+
+<!-- ---- ONBOARDING ----
+     The story intro (drawn on the canvas; this layer only carries its
+     SKIP control), its captions -- the #uniReveal card above, reused --
+     and the "new here / played before" choice. See the ONBOARDING
+     script section. -->
+<div class="intro-layer" id="introLayer">
+  <button type="button" class="tut-skip-btn" id="introSkip">SKIP INTRO</button>
+</div>
+<div class="uni-reveal intro-cap" id="introCaption">
+  <div class="rk" id="introKind"></div>
+  <div class="rt" id="introTitle"></div>
+  <div class="rs" id="introSub"></div>
+</div>
+<div class="overlay" id="ov-onboard"><div class="panel" style="width:600px">
+  <h2 class="ovtitle">WELCOME, PILOT</h2><div class="ovsub">BEFORE YOUR FIRST LAUNCH</div>
+  <div class="onb-choices">
+    <button type="button" class="onb-choice primary" id="onbNew"><b>I'M NEW HERE</b>
+      <span>A short guided training sector: move, shoot, dash, your two systems, a first fight, choosing a path &mdash; then your Loadout and the Forge.</span></button>
+    <button type="button" class="onb-choice" id="onbVet"><b>I'VE PLAYED BEFORE</b>
+      <span>Skip training and go straight to the Command Center. You can replay it any time from Settings.</span></button>
+  </div>
+</div></div>
 
 <div class="overlay" id="ov-levels"><div class="panel" style="width:560px">
   <h2 class="ovtitle">SECTOR CHAINS</h2><div class="ovsub">CHOOSE YOUR DESCENT</div>
@@ -3199,6 +3254,10 @@ updateMobileControlsTier();
 updateRotateGate();
 
 function handleKey(code){
+  // The intro: ESC (or Enter/Space) skips it; nothing else applies. The
+  // choice panel has no "back" -- it is answered, not dismissed.
+  if(state==='intro'){if(code==='Escape'||code==='Enter'||code==='Space')endIntro();return;}
+  if(state==='onboard')return;
   if(code==='Escape'||code==='KeyP'){
     if(state==='playing'){
       if(uiOpen&&curUI==='ov-upgrade')return;
@@ -11034,6 +11093,7 @@ function frame(now){
     updateParticles(rdt);
     updateMenuBG(rdt);
     if(state==='victory')updateVictoryFX(rdt);
+    if(state==='intro')updateIntro(rdt);
   }
   if(state==='playing'||state==='victory'||state==='gameover'||(state==='settings'&&runActive))updateCamera(rdt);
   else if(isUniverseState()){
@@ -11079,6 +11139,8 @@ function drawStars(img,par){
 let crossPulse=0;
 function render(){
   ctx.setTransform(dpr,0,0,dpr,0,0);
+  // The story intro is its own full-frame scene (see ONBOARDING).
+  if(state==='intro'){drawIntro();return;}
   // The HOME PLANET screen gets its own deep-space backdrop -- baked
   // nebulae, a distant galaxy, layered stars and two far worlds, all on
   // camera-driven parallax (see drawPlanetBackdrop). It replaces the
@@ -12625,7 +12687,7 @@ function toast(msg){
 }
 
 /* ---------- 18 · UI / MENUS ---------- */
-const OVERLAYS=['ov-menu','ov-coop','ov-howto','ov-settings','ov-forge','ov-weapons','ov-pause','ov-upgrade','ov-swap','ov-gameover','ov-victory','ov-levels','ov-shop','ov-mastery','ov-prestige','ov-prestige-confirm','ov-leaderboard','ov-ship'];
+const OVERLAYS=['ov-menu','ov-coop','ov-howto','ov-settings','ov-forge','ov-weapons','ov-pause','ov-upgrade','ov-swap','ov-gameover','ov-victory','ov-levels','ov-shop','ov-mastery','ov-prestige','ov-prestige-confirm','ov-leaderboard','ov-ship','ov-onboard'];
 // The three canvas-backed universe screens. Kept in their own list
 // because they are chrome over a live view, not panels over a frozen
 // one -- but they hide exactly like overlays do.
@@ -12633,6 +12695,7 @@ const UNI_SCREENS=['uni-galaxy','uni-system','uni-planet'];
 function hideAllOverlays(){
   OVERLAYS.forEach(id=>el(id).classList.remove('on'));
   UNI_SCREENS.forEach(id=>el(id).classList.remove('on'));
+  el('introLayer').classList.remove('on');el('introCaption').classList.remove('on');
 }
 function go(s){
   // The old level list is the fallback for a build where
@@ -12706,6 +12769,7 @@ function go(s){
   else if(s==='ship'){el('ov-ship').classList.add('on');buildShipBay();}
   else if(s==='coop'){el('ov-coop').classList.add('on');Music.set('menu');coopRenderTypes();}
   else if(s==='howto')el('ov-howto').classList.add('on');
+  else if(s==='onboard'){el('ov-onboard').classList.add('on');Music.set('menu');}
   else if(s==='settings')el('ov-settings').classList.add('on');
   else if(s==='forge'){el('ov-forge').classList.add('on');buildForge();}
   else if(s==='shop'){el('ov-shop').classList.add('on');buildShop();}
@@ -13631,6 +13695,289 @@ el('btnReset').addEventListener('click',()=>{
   toast('ALL DATA RESET');
 });
 
+/* =================================================================
+   ONBOARDING  --  the story intro and the "new here / played before"
+   choice. (The guided training sector that follows lives in the
+   TRAINING section below.)
+
+   The Command Center opens this page on ?screen=intro for a genuinely
+   new pilot (see the ONBOARDING section of index.html, which decides
+   WHEN from the account's own onboarding record). Everything here is
+   presentation plus one message per completed step back to the shell,
+   which owns account state and records it server-side -- this document
+   never writes onboarding state itself.
+
+   The intro is drawn on the same canvas and render loop as everything
+   else in Voidbreak (no video, no second renderer), and its captions
+   are the #uniReveal title-card typography in a sibling element, so the
+   story reads in the same visual language as every later "something
+   just happened" beat.
+   ================================================================= */
+// The hub-reported onboarding record (see the 'duelarena_session'
+// handshake). null means "no hub told us" -- standalone play, or a hub
+// without the feature -- and reads as fully onboarded: nothing locked.
+let ONB=null;
+function onbTrainingDone(){ return !ONB||ONB.tutorialComplete!==false; }
+function postOnboarding(step,path){
+  // Mirror locally so this visit reflects the step immediately; the
+  // shell's resolved record replaces it on the next handshake.
+  if(ONB){
+    if(step==='intro')ONB.introComplete=true;
+    if(step==='choice'){ONB.introComplete=true;if(!ONB.path)ONB.path=path;if(ONB.path==='veteran')ONB.tutorialComplete=true;}
+    if(step==='tutorial'){ONB.introComplete=true;ONB.tutorialComplete=true;}
+  }
+  if(!SHELL)return;
+  try{window.parent.postMessage({type:'voidbreak_onboarding',step:step,path:path||''},location.origin);}catch(e){}
+}
+
+// ---- the intro ----
+// Five captioned beats over three drawn scenes: boarding (0-7s), launch
+// (7-12s), and flight away from what is left of Earth (12s-end).
+const INTRO_BEATS=[
+  {t:0.7, end:6.6, kind:'EARTH · FINAL EVACUATION',title:'THE LAST LAUNCH',sub:'ONE SHIP LEFT ON THE PAD. ONE PILOT LEFT TO FLY IT.'},
+  {t:7.4, end:11.8,kind:'IGNITION',title:'EARTH IS LOST',sub:'THE PLANET IS BREAKING APART BENEATH YOU.'},
+  {t:12.8,end:17.0,kind:'SURVIVORS',title:'YOU ARE AMONG THE LAST',sub:'WHAT IS LEFT OF HUMANITY IS SCATTERED ACROSS THE DARK.'},
+  {t:17.6,end:22.0,kind:'BEYOND THE FRONTIER',title:'HOSTILE SPACE',sub:'ITS SECTORS HOLD THE RESOURCES AND TECHNOLOGY WE LOST — AND GUARDIANS HOLD THE SECTORS.'},
+  {t:22.6,end:27.4,kind:'YOUR MISSION',title:'FIGHT · RECLAIM · REBUILD',sub:'BREAK THE GUARDIANS. FOUND A HOME PLANET. RAISE A NEW CIVILIZATION.'}
+];
+const INTRO_LEN=28.2;
+let intro=null;
+function startIntro(){
+  hideAllOverlays();
+  state='intro';paused=false;uiOpen=false;curUI=null;
+  document.body.classList.remove('ingame');
+  if(isTouchDevice)mobileControlsEl.classList.remove('on');
+  el('hud').classList.add('hidden');
+  const stars=[];
+  for(let i=0;i<260;i++)stars.push({x:Math.random(),y:Math.random(),z:rand(0.15,1)});
+  // What is left of Earth: the disc cut into wedges that drift apart.
+  const shards=[];
+  const n=11;
+  for(let i=0;i<n;i++){
+    const a0=i/n*TAU,a1=(i+1)/n*TAU;
+    shards.push({a0,a1,mid:(a0+a1)/2,jag:rand(0.08,0.3),spin:rand(-0.05,0.05),drift:rand(4,10)});
+  }
+  const rocks=[];
+  for(let i=0;i<16;i++)rocks.push({x:Math.random(),y:Math.random(),r:rand(2,7),s:rand(0.4,1.2),rot:rand(0,TAU)});
+  intro={t:0,beat:-1,stars,shards,rocks,smoke:[]};
+  el('introLayer').classList.add('on');
+  el('introCaption').classList.remove('on');
+  Music.set('menu');
+}
+function updateIntro(dt){
+  if(!intro)return;
+  intro.t+=dt;intro.rdt=dt;
+  let b=-1;
+  for(let i=0;i<INTRO_BEATS.length;i++)if(intro.t>=INTRO_BEATS[i].t&&intro.t<INTRO_BEATS[i].end)b=i;
+  if(b!==intro.beat){
+    intro.beat=b;
+    const cap=el('introCaption');
+    if(b<0)cap.classList.remove('on');
+    else{
+      const bt=INTRO_BEATS[b];
+      el('introKind').textContent=bt.kind;el('introTitle').textContent=bt.title;el('introSub').textContent=bt.sub;
+      cap.classList.add('on');
+    }
+  }
+  // Launch smoke, spawned while the ship is leaving the pad.
+  if(intro.t>6.4&&intro.t<10.5&&intro.smoke.length<90&&Math.random()<dt*60){
+    intro.smoke.push({x:W*0.66+rand(-40,40),y:H*0.78,vx:rand(-120,120),vy:rand(-40,-5),r:rand(10,26),life:rand(1.2,2.4),ml:2.4});
+  }
+  for(let i=intro.smoke.length-1;i>=0;i--){const s=intro.smoke[i];
+    s.x+=s.vx*dt;s.y+=s.vy*dt;s.vx*=0.98;s.r+=dt*22;s.life-=dt;if(s.life<=0)intro.smoke.splice(i,1);}
+  if(intro.t>=INTRO_LEN)endIntro();
+}
+// Finished or skipped -- the same outcome either way: the step is
+// recorded and the pilot is asked whether they have flown before.
+function endIntro(){
+  if(!intro)return;
+  intro=null;
+  el('introLayer').classList.remove('on');
+  el('introCaption').classList.remove('on');
+  postOnboarding('intro');
+  go('onboard');
+}
+el('introSkip').addEventListener('click',e=>{e.stopPropagation();SFX.ui();endIntro();});
+// A tap anywhere on the scene skips too (mouse or finger).
+cv.addEventListener('pointerdown',()=>{if(state==='intro')endIntro();});
+
+// The pilot's own hull, in their equipped skin colour -- the same
+// silhouette drawPlayer() flies, just larger.
+function introShip(x,y,ang,sc,flame){
+  const hull=skinHull(),glow=skinGlow();
+  ctx.globalCompositeOperation='lighter';
+  drawGlow(x,y,glow,34*sc);
+  if(flame>0){
+    const fx=x-Math.cos(ang)*9*sc,fy=y-Math.sin(ang)*9*sc;
+    drawGlow(fx,fy,[255,170,80],(10+flame*26)*sc*0.6);
+    drawGlow(fx-Math.cos(ang)*flame*14*sc,fy-Math.sin(ang)*flame*14*sc,[255,110,60],(8+flame*18)*sc*0.5);
+  }
+  ctx.globalCompositeOperation='source-over';
+  ctx.save();ctx.translate(x,y);ctx.rotate(ang);ctx.scale(sc,sc);
+  ctx.fillStyle=rgb([Math.round(hull[0]*0.85),Math.round(hull[1]*0.85),Math.round(hull[2]*0.9)]);
+  ctx.beginPath();ctx.moveTo(18,0);ctx.lineTo(-11,11);ctx.lineTo(-6,0);ctx.lineTo(-11,-11);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#031018';
+  ctx.beginPath();ctx.moveTo(10,0);ctx.lineTo(-4,5);ctx.lineTo(-4,-5);ctx.closePath();ctx.fill();
+  ctx.strokeStyle=rgba([Math.min(255,hull[0]+60),Math.min(255,hull[1]+40),Math.min(255,hull[2]+40)],0.85);ctx.lineWidth=1.2/sc*2;
+  ctx.beginPath();ctx.moveTo(18,0);ctx.lineTo(-11,11);ctx.lineTo(-6,0);ctx.lineTo(-11,-11);ctx.closePath();ctx.stroke();
+  ctx.restore();
+}
+// A suited figure, rim-lit against the burning sky. `walk` is the gait
+// phase; the legs and arms swing opposite each other.
+function introAstronaut(x,y,sc,walk){
+  const sw=Math.sin(walk)*0.5;
+  ctx.save();ctx.translate(x,y);ctx.scale(sc,sc);
+  ctx.fillStyle='#0a0f18';ctx.strokeStyle='rgba(0,240,255,.55)';ctx.lineWidth=1.1;
+  ctx.lineCap='round';
+  // legs
+  ctx.lineWidth=4;ctx.strokeStyle='#0a0f18';
+  ctx.beginPath();ctx.moveTo(0,-12);ctx.lineTo(Math.sin(sw)*7,0);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(0,-12);ctx.lineTo(-Math.sin(sw)*7,0);ctx.stroke();
+  // backpack + torso
+  ctx.fillRect(-7,-27,4,11);
+  ctx.beginPath();ctx.moveTo(-5,-28);ctx.lineTo(5,-28);ctx.lineTo(5,-12);ctx.lineTo(-5,-12);ctx.closePath();ctx.fill();
+  // arms
+  ctx.lineWidth=3;
+  ctx.beginPath();ctx.moveTo(0,-25);ctx.lineTo(-Math.sin(sw)*6,-15);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(0,-25);ctx.lineTo(Math.sin(sw)*6,-15);ctx.stroke();
+  // helmet + visor glint
+  ctx.beginPath();ctx.arc(0,-33,6,0,TAU);ctx.fill();
+  ctx.lineWidth=1.1;ctx.strokeStyle='rgba(0,240,255,.6)';ctx.stroke();
+  ctx.fillStyle='rgba(120,220,255,.85)';ctx.fillRect(1,-35,4,3);
+  ctx.restore();
+}
+function drawIntroStars(vx,vy,streak){
+  const I=intro;
+  const m=Math.hypot(vx,vy)||1,ux=vx/m,uy=vy/m;
+  for(const s of I.stars){
+    s.x=((s.x+vx*s.z)%1+1)%1;s.y=((s.y+vy*s.z)%1+1)%1;
+    const x=s.x*W,y=s.y*H,a=(0.25+s.z*0.7).toFixed(2);
+    if(streak>0.5&&(vx||vy)){
+      ctx.strokeStyle='rgba(200,235,255,'+a+')';ctx.lineWidth=s.z*1.6;
+      ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-ux*streak*s.z,y-uy*streak*s.z);ctx.stroke();
+    }else{
+      ctx.fillStyle='rgba(210,240,255,'+a+')';
+      ctx.fillRect(x,y,s.z*1.8,s.z*1.8);
+    }
+  }
+}
+function drawIntro(){
+  const I=intro;if(!I)return;
+  const rdt=I.rdt||0;
+  const t=I.t;
+  ctx.fillStyle='#02030a';ctx.fillRect(0,0,W,H);
+  const gy=H*0.78;
+  let shx=0,shy=0;
+  if(t>6.2&&t<10.5){const k=Math.min(1,(t-6.2)/1.2)*(t>9?Math.max(0,(10.5-t)/1.5):1);shx=rand(-5,5)*k;shy=rand(-5,5)*k;}
+  ctx.save();ctx.translate(shx,shy);
+  if(t<12){
+    // ---- SCENE 1+2: the pad, the boarding, the launch ----
+    const lift=t>7?Math.pow(t-7,2)*H*0.075:0;          // how far the ship has climbed
+    const fall=t>7?Math.pow(t-7,2)*H*0.03:0;           // the ground dropping away below
+    drawIntroStars(0,t>7?rdt*0.02*(t-7):0,t>9?(t-9)*20:0);
+    // burning horizon
+    const sky=ctx.createLinearGradient(0,gy-H*0.5+fall,0,gy+fall);
+    sky.addColorStop(0,'rgba(255,80,40,0)');sky.addColorStop(1,'rgba(255,90,40,'+(0.34+Math.sin(t*3)*0.04).toFixed(3)+')');
+    ctx.fillStyle=sky;ctx.fillRect(0,gy-H*0.5+fall,W,H*0.5);
+    // distant city, burning
+    for(let i=0;i<24;i++){
+      const bx=(i/24)*W,bw=W/24*0.7,bh=(18+((i*37)%53))*(H/800);
+      ctx.fillStyle='#070a12';ctx.fillRect(bx,gy+fall-bh,bw,bh);
+      if((i*7)%5===0){ctx.globalCompositeOperation='lighter';drawGlow(bx+bw/2,gy+fall-bh,[255,110,50],14+Math.sin(t*6+i)*4);ctx.globalCompositeOperation='source-over';}
+    }
+    // ground, cracking as the ship leaves
+    ctx.fillStyle='#05070d';ctx.fillRect(0,gy+fall,W,H);
+    ctx.strokeStyle='rgba(0,240,255,.35)';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(0,gy+fall);ctx.lineTo(W,gy+fall);ctx.stroke();
+    if(t>7.5){
+      const k=Math.min(1,(t-7.5)/3);
+      ctx.strokeStyle='rgba(255,90,40,'+(0.4+k*0.5).toFixed(2)+')';ctx.lineWidth=2;
+      for(let i=0;i<6;i++){
+        const x0=W*(0.1+i*0.15);ctx.beginPath();ctx.moveTo(x0,gy+fall);
+        ctx.lineTo(x0+30*k,gy+fall+40*k);ctx.lineTo(x0-10*k,gy+fall+90*k);ctx.stroke();
+      }
+    }
+    // the ship, nose up, and its boarding ramp
+    const sc=Math.min(W,H)/140;
+    const sx=W*0.66,sy=gy-11*sc-lift;
+    // the boarding ramp, from the pad up to a hatch low on the hull
+    const doorX=sx-7*sc,doorY=gy-6*sc,rampX=doorX-Math.min(W,H)*0.12;
+    if(t<7){
+      ctx.strokeStyle='rgba(150,190,220,.55)';ctx.lineWidth=3;
+      ctx.beginPath();ctx.moveTo(rampX,gy);ctx.lineTo(doorX,doorY);ctx.stroke();
+    }
+    const flame=t>6.2?Math.min(1,(t-6.2)/1.2):0;
+    introShip(sx,sy,-Math.PI/2,sc,flame);
+    // smoke
+    for(const s of I.smoke){ctx.fillStyle='rgba(120,110,110,'+(0.35*s.life/s.ml).toFixed(3)+')';
+      ctx.beginPath();ctx.arc(s.x,s.y+fall,s.r,0,TAU);ctx.fill();}
+    // the pilot walks to the pad, up the ramp, and inside
+    if(t<6){
+      const walkEnd=4.4,rampEnd=5.8;
+      let ax,ay;
+      if(t<walkEnd){const k=Math.max(0,t-0.6)/(walkEnd-0.6);ax=lerp(W*0.12,rampX,k);ay=gy;}
+      else{const k=Math.min(1,(t-walkEnd)/(rampEnd-walkEnd));ax=lerp(rampX,doorX,k);ay=lerp(gy,doorY,k);}
+      introAstronaut(ax,ay,Math.min(W,H)/520,t*9);
+    }
+    // the hatch flares as it seals behind them
+    if(t>5.8&&t<6.4){ctx.globalCompositeOperation='lighter';drawGlow(doorX,doorY,[0,240,255],30*(1-(t-5.8)/0.6));ctx.globalCompositeOperation='source-over';}
+    if(t>11.2){ctx.fillStyle='rgba(2,3,10,'+Math.min(1,(t-11.2)/0.8).toFixed(3)+')';ctx.fillRect(-10,-10,W+20,H+20);}
+  }else{
+    // ---- SCENE 3: away from what is left of Earth ----
+    const lt=t-12;
+    drawIntroStars(-rdt*0.09,0,26);
+    // what is left of Earth, breaking apart behind the ship
+    const ex=W*0.22,ey=H*0.56,R=Math.min(W,H)*0.2;
+    ctx.globalCompositeOperation='lighter';drawGlow(ex,ey,[255,90,40],R*1.3);ctx.globalCompositeOperation='source-over';
+    for(const sh of I.shards){
+      const off=lt*sh.drift,ang=lt*sh.spin;
+      ctx.save();ctx.translate(ex+Math.cos(sh.mid)*off,ey+Math.sin(sh.mid)*off);ctx.rotate(ang);
+      ctx.beginPath();ctx.moveTo(Math.cos(sh.mid)*R*sh.jag,Math.sin(sh.mid)*R*sh.jag);
+      for(let k=0;k<=6;k++){const a=lerp(sh.a0,sh.a1,k/6);ctx.lineTo(Math.cos(a)*R,Math.sin(a)*R);}
+      ctx.closePath();
+      const g=ctx.createRadialGradient(0,0,R*0.2,0,0,R);
+      g.addColorStop(0,'#5a2a1a');g.addColorStop(0.55,'#1d4f7a');g.addColorStop(1,'#2f8a6a');
+      ctx.fillStyle=g;ctx.fill();
+      ctx.strokeStyle='rgba(255,120,60,.7)';ctx.lineWidth=1.5;ctx.stroke();
+      ctx.restore();
+    }
+    // drifting debris
+    for(const r of I.rocks){
+      r.x=((r.x-rdt*0.05*r.s)%1+1)%1;r.rot+=rdt*r.s;
+      ctx.save();ctx.translate(r.x*W,r.y*H);ctx.rotate(r.rot);
+      ctx.fillStyle='rgba(90,100,120,.8)';ctx.fillRect(-r.r,-r.r*0.7,r.r*2,r.r*1.4);ctx.restore();
+    }
+    // the ship, banking and rolling as it flies
+    const sc=Math.min(W,H)/240;
+    const shipX=lerp(W*0.45,W*0.66,Math.min(1,lt/6))+Math.sin(lt*0.4)*18;
+    const shipY=H*0.44+Math.sin(lt*0.7)*14;
+    introShip(shipX,shipY,Math.sin(lt*0.5)*0.22,sc,0.55+Math.sin(lt*9)*0.1);
+    if(lt<0.8){ctx.fillStyle='rgba(2,3,10,'+(1-lt/0.8).toFixed(3)+')';ctx.fillRect(0,0,W,H);}
+    if(t>INTRO_LEN-1.2){ctx.fillStyle='rgba(2,3,10,'+Math.min(1,(t-(INTRO_LEN-1.2))/1.2).toFixed(3)+')';ctx.fillRect(0,0,W,H);}
+  }
+  ctx.restore();
+  // letterbox
+  const bar=Math.round(H*0.085);
+  ctx.fillStyle='#000';ctx.fillRect(0,0,W,bar);ctx.fillRect(0,H-bar,W,bar);
+}
+
+// ---- the choice ----
+el('onbNew').addEventListener('click',()=>{
+  SFX.ui();
+  postOnboarding('choice','new');
+  startTraining(false);
+});
+el('onbVet').addEventListener('click',()=>{
+  SFX.ui();
+  postOnboarding('choice','veteran');
+  // Straight to the Command Center (or, standalone, this page's menu).
+  go('menu');
+});
+
+// Placeholder until the TRAINING section lands: "new" pilots resume
+// training on their next launch (their path is already recorded).
+function startTraining(replay){ go('menu'); }
+
 /* ---------- 19 · BOOT ---------- */
 // The loading screen's last step: hold it until the account's save is
 // settled (cloud, local cache or guest), so what it reveals shows real
@@ -13655,6 +14002,10 @@ function loaderSaveReady(){
 window.addEventListener('message',(e)=>{
   if(e.origin!==location.origin||e.source!==window.parent)return;
   if(e.data&&e.data.type==='duelarena_session'){
+    // Where the pilot is in onboarding (the shell's resolved record) --
+    // read before the launch screen is applied, since it decides what
+    // is unlocked.
+    if(Object.prototype.hasOwnProperty.call(e.data,'onboarding'))ONB=e.data.onboarding||null;
     handleSessionHandshake(e.data.sessionToken||null,e.data.accountId||null).finally(loaderSaveReady);
   }
   // The shell's COMMAND CENTER chip, asking this document to leave.
@@ -13697,6 +14048,9 @@ syncSettingsUI();
    means the menu. A screen that needs the universe module is bounced by
    go() itself, exactly as before.
    ================================================================= */
+// ?replay=1 -- Settings' PLAY TUTORIAL: the training sector as practice,
+// granting nothing and recording nothing (see the TRAINING section).
+const REPLAY=(function(){ try{ return /[?&]replay=1(&|$)/.test(location.search); }catch(e){ return false; } })();
 const LAUNCH_SCREEN=(function(){
   try{
     const m=/[?&]screen=([a-z]+)(&|$)/.exec(location.search);
@@ -13743,7 +14097,10 @@ function applyLaunchScreen(){
   }
   launchScreenApplied=true;
   try{
-    if(want==='resume'||want==='system')resumeIntoJourney();
+    if(want==='intro')startIntro();
+    else if(want==='choice')go('onboard');
+    else if(want==='tutorial')startTraining(REPLAY);
+    else if(want==='resume'||want==='system')resumeIntoJourney();
     else if(want==='loadout'){loadoutReturn='menu';go('weapons');}
     else if(want==='ship'){shipReturn='menu';go('ship');}
     else if(want==='settings'){settingsReturn='menu';go('settings');syncSettingsUI();}

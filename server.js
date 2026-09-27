@@ -62,6 +62,9 @@ const Voidbreak = require("./voidbreak");
 const Party = require("./party");
 const Lobby = require("./lobby");
 const VoidbreakCoop = require("./voidbreakCoop");
+// First-login journey state (intro / new-or-veteran / training). See
+// onboarding.js for why a missing record means "already onboarded".
+const Onboarding = require("./onboarding");
 
 const accounts = {}; // sub -> account record (populated in startServer())
 
@@ -156,6 +159,12 @@ function defaultAccount(name, email) {
         deviceMode: "auto",
         xp: 0,
         level: 1,
+        // ONBOARDING -- a brand-new account starts with every flag
+        // false, which is what sends it through Voidbreak's story intro
+        // and training sector. Accounts created before this field
+        // existed have no record at all and read as fully onboarded
+        // (see onboarding.js), so no existing player is affected.
+        onboarding: Onboarding.defaultOnboarding(),
         dailyChallenges: defaultDailyChallenges(),
         ranked: Ranked.defaultRankedRecord(),
         // Friend lists hold stable account ids (Google "sub"), never emails.
@@ -339,6 +348,10 @@ function publicAccount(account) {
         if (key === "email") continue;        // not needed by the client, and admin checks key off it
         out[key] = account[key];
     }
+    // Always the RESOLVED onboarding state (a missing record reads as
+    // fully onboarded -- see onboarding.js), so no client ever has to
+    // re-implement that migration rule to render a lobby.
+    out.onboarding = Onboarding.onboardingOf(account);
     return out;
 }
 
@@ -2990,6 +3003,10 @@ const PUBLIC_FILES = new Set([
     "/index.html",
     "/voidbreak.html",
     "/voidbreakUniverse.js",
+    // Same reasoning as voidbreakUniverse.js: pure rules shared with the
+    // hub so a guest's local onboarding mirror follows the server's own
+    // logic. No data, no secrets; the server re-applies it on every write.
+    "/onboarding.js",
     "/bgm.mp3",
     "/favicon.ico",
     "/manifest.webmanifest",
@@ -3901,8 +3918,16 @@ const httpServer = http.createServer(async (req, res) => {
                 // changes inside /voidbreak/save.
                 voidbreak: existing.voidbreak || null,
                 // Server-measured; never read from the request body.
-                playtime: existing.playtime || defaultPlaytime(false)
+                playtime: existing.playtime || defaultPlaytime(false),
+                // ONBOARDING IS DELIBERATELY NOT READ FROM `body` -- it
+                // gates Home Planet and the shops, so it only ever moves
+                // through POST /onboarding. Carried as-is, INCLUDING
+                // being absent: a pre-feature account has no record and
+                // must keep reading as fully onboarded (onboarding.js),
+                // which defaulting it here would silently undo.
+                onboarding: existing.onboarding
             };
+            if (accounts[sub].onboarding === undefined) delete accounts[sub].onboarding;
             try {
                 await persistAccount(sub);
             } catch (e) {
@@ -3914,6 +3939,45 @@ const httpServer = http.createServer(async (req, res) => {
                 return;
             }
             sendJson(res, 200, { ok: true });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // ---- POST /onboarding ---- body: { sessionToken, step, path } ----
+    // Records one step of the first-login journey (see onboarding.js).
+    // Session-authenticated like every account write; the body names a
+    // step and, for "choice", a path -- nothing else is read. Flags only
+    // ever move false -> true, so replaying a request (refresh, a second
+    // tab, a flaky network retry) is a no-op rather than a regression.
+    // The response is the resolved record, so every client converges on
+    // what the server actually holds.
+    if (req.method === "POST" && req.url === "/onboarding") {
+        try {
+            const body = await readJsonBody(req);
+            const sub = sessions[body.sessionToken];
+            if (!sub) { sendJson(res, 401, { error: "Not signed in" }); return; }
+            const account = accounts[sub];
+            if (!account) { sendJson(res, 409, { error: "Account not loaded -- sign in again" }); return; }
+
+            const current = Onboarding.onboardingOf(account);
+            const result = Onboarding.applyStep(current, String(body.step || ""), String(body.path || ""));
+            if (result.error) { sendJson(res, 400, { error: result.error }); return; }
+
+            const previous = account.onboarding;
+            const unchanged = previous && JSON.stringify(Onboarding.onboardingOf(account)) === JSON.stringify(result.record);
+            if (!unchanged) {
+                account.onboarding = result.record;
+                try {
+                    await persistAccount(sub);
+                } catch (e) {
+                    if (previous === undefined) delete account.onboarding; else account.onboarding = previous;
+                    sendJson(res, 503, { error: "Could not save -- try again" });
+                    return;
+                }
+            }
+            sendJson(res, 200, { ok: true, onboarding: Onboarding.onboardingOf(account) });
         } catch (e) {
             sendJson(res, 400, { error: "Bad request" });
         }

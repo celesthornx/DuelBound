@@ -5131,6 +5131,9 @@
      at every use site anyway (see vbUni()) so a failed fetch degrades to
      "—" on two labels rather than a broken lobby. -->
 <script src="voidbreakUniverse.js"></script>
+<!-- Onboarding rules (intro / training / unlock state), shared with
+     server.js so a guest's local mirror uses the same logic. -->
+<script src="onboarding.js"></script>
 
 <script>
 (function(){
@@ -7871,6 +7874,9 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       saveDeviceModeLocally();
       if(typeof applyDeviceLayout === 'function') applyDeviceLayout();
     }
+    // Resolved server-side (a pre-feature account arrives fully
+    // onboarded) -- see the ONBOARDING section.
+    if(typeof window.__setAccountOnboarding === 'function') window.__setAccountOnboarding(account.onboarding);
     updateCurrencyDisplay();
   }
 
@@ -7958,6 +7964,14 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     // finished resolving on a refresh), tell it who is signed in now --
     // see postVoidbreakSession for why this re-send is needed.
     if(typeof window.__postVoidbreakSession === 'function') window.__postVoidbreakSession();
+    // First-login journey: carry a guest's finished onboarding over,
+    // re-render what it gates, and open it if this account is new. At
+    // boot the resume's own .finally() does the opening instead.
+    Promise.resolve(typeof window.__carryGuestOnboarding === 'function' ? window.__carryGuestOnboarding() : null)
+      .finally(()=>{
+        if(typeof renderOnboardingGates === 'function') renderOnboardingGates();
+        if(typeof window.__onboardingMaybeStart === 'function') window.__onboardingMaybeStart();
+      });
   }
 
   // ====================================================================
@@ -8345,6 +8359,8 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     // personal (persisted) progress or claimed state attached to it.
     dailyClaimed = {};
     fetchDailyChallenges();
+    if(typeof window.__setAccountOnboarding === 'function') window.__setAccountOnboarding(null);
+    if(typeof renderOnboardingGates === 'function') renderOnboardingGates();
     try{
       if(window.google && google.accounts && google.accounts.id){
         google.accounts.id.disableAutoSelect();
@@ -15822,6 +15838,12 @@ updatePortalAnchors(dt);
     if(e.data && e.data.type === 'voidbreak_hub'){
       exitVoidbreak();
     }
+    // One step of the first-login journey happened inside Voidbreak
+    // (intro watched, new/veteran chosen, training finished). The shell
+    // owns account state, so it is the one that records it.
+    if(e.data && e.data.type === 'voidbreak_onboarding'){
+      recordOnboardingStep(String(e.data.step || ''), String(e.data.path || ''));
+    }
   });
 
   // Hands Voidbreak the CURRENT session. Called on its 'voidbreak_ready'
@@ -15845,13 +15867,128 @@ updatePortalAnchors(dt);
       voidbreakFrame.contentWindow.postMessage({
         type: 'duelarena_session',
         sessionToken: (loggedIn && sessionToken) ? sessionToken : null,
-        accountId: (loggedIn && accountId) ? accountId : null
+        accountId: (loggedIn && accountId) ? accountId : null,
+        // Where this pilot is in the first-login journey (see the
+        // ONBOARDING section below). Voidbreak reads it to lock the
+        // doors that open on finishing training.
+        onboarding: currentOnboarding()
       }, window.location.origin);
     }catch(e){}
   }
   // Exposed so the auth paths below (defined earlier in this file) can
   // reach it without depending on declaration order.
   window.__postVoidbreakSession = postVoidbreakSession;
+
+  // ============================================================
+  // ONBOARDING -- the first-login journey, hub side.
+  //
+  // A genuinely new pilot never sees this lobby first: the moment the
+  // account (or its absence) is known, the shell opens Voidbreak on the
+  // story intro, which hands off to the new/veteran choice and then the
+  // guided training sector -- all of which live in voidbreak.html. This
+  // section only decides WHEN to open it and records the steps it
+  // reports back.
+  //
+  // The rules themselves (what a missing record means, which steps
+  // exist, that flags only ever go up) are onboarding.js, the same file
+  // server.js uses -- loaded here so a GUEST's local mirror follows them
+  // too. A signed-in account's state is whatever the server resolved and
+  // returned; this code never decides it.
+  // ============================================================
+  const VBO = window.VBOnboarding || null;
+  const GUEST_ONBOARDING_KEY = 'vb.onboarding';
+  // Fallback when the rules module failed to load: nothing is gated and
+  // nothing auto-launches -- the game degrades to the unlocked lobby
+  // every existing player already had, never to a locked one.
+  const ONBOARDED = { introComplete: true, tutorialComplete: true, path: 'veteran', unlockSeen: true };
+  let accountOnboarding = null;     // resolved record from the server, while signed in
+  let onboardingBootSettled = false; // the boot-time session resume has resolved
+  let onboardingLaunched = false;    // auto-launched once this visit already
+
+  function guestOnboarding(){
+    if(!VBO) return ONBOARDED;
+    try{
+      const raw = JSON.parse(localStorage.getItem(GUEST_ONBOARDING_KEY) || 'null');
+      if(raw && typeof raw === 'object') return VBO.onboardingOf({ onboarding: raw });
+    } catch(e){}
+    return VBO.defaultOnboarding();
+  }
+  function saveGuestOnboarding(rec){
+    try{ localStorage.setItem(GUEST_ONBOARDING_KEY, JSON.stringify(rec)); } catch(e){}
+  }
+  function currentOnboarding(){
+    if(!VBO) return ONBOARDED;
+    if(loggedIn && accountOnboarding) return accountOnboarding;
+    return guestOnboarding();
+  }
+  window.__currentOnboarding = currentOnboarding;
+
+  // Called from applyAccount() with the server's resolved record.
+  function setAccountOnboarding(rec){
+    accountOnboarding = (rec && typeof rec === 'object') ? (VBO ? VBO.onboardingOf({ onboarding: rec }) : rec) : null;
+  }
+  window.__setAccountOnboarding = setAccountOnboarding;
+
+  // Where the journey resumes. null = nothing to show.
+  function onboardingScreen(ob){
+    if(!ob || ob.tutorialComplete) return null;
+    if(!ob.introComplete) return 'intro';
+    if(ob.path === 'new') return 'tutorial';  // chose "new" last time, left mid-training
+    if(!ob.path) return 'choice';             // watched the intro, never answered
+    return null;
+  }
+
+  // Opens Voidbreak on the next onboarding step if this pilot has one.
+  // Once per visit, never over a match or an already-open Voidbreak.
+  function onboardingMaybeStart(){
+    if(onboardingLaunched || !onboardingBootSettled) return;
+    const screen = onboardingScreen(currentOnboarding());
+    if(!screen) return;
+    if(started) return;
+    if(voidbreakOverlay && !voidbreakOverlay.classList.contains('hidden')) return;
+    onboardingLaunched = true;
+    launchVoidbreak(screen);
+  }
+  window.__onboardingMaybeStart = onboardingMaybeStart;
+
+  // A guest who finished (or skipped) onboarding and then signs in to a
+  // brand-new account has already done it -- carry that over instead of
+  // sending them through it twice. Only ever marks steps DONE (the same
+  // thing SKIP does), so this cannot unlock anything a skip would not.
+  async function carryGuestOnboarding(){
+    if(!VBO || !loggedIn || !accountOnboarding) return;
+    const guest = guestOnboarding();
+    if(guest.tutorialComplete && !accountOnboarding.tutorialComplete){
+      await recordOnboardingStep('tutorial', '');
+    } else if(guest.introComplete && !accountOnboarding.introComplete){
+      await recordOnboardingStep('intro', '');
+    }
+  }
+  window.__carryGuestOnboarding = carryGuestOnboarding;
+
+  // Records one step. Applied locally first (so the rest of this visit
+  // reflects it even if the network is down), then -- signed in -- sent
+  // to the server, whose resolved record replaces the local guess.
+  async function recordOnboardingStep(step, path){
+    if(!VBO) return;
+    const local = VBO.applyStep(currentOnboarding(), step, path);
+    if(local.error) return;
+    if(loggedIn && sessionToken){
+      accountOnboarding = local.record;
+      try{
+        const res = await fetch(ACCOUNT_SERVER_URL + '/onboarding', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionToken: sessionToken, step: step, path: path })
+        });
+        const j = await res.json().catch(()=>({}));
+        if(res.ok && j.onboarding) accountOnboarding = VBO.onboardingOf({ onboarding: j.onboarding });
+      } catch(e){}
+    } else {
+      saveGuestOnboarding(local.record);
+    }
+    if(typeof renderOnboardingGates === 'function') renderOnboardingGates();
+    postVoidbreakSession();
+  }
 
   // ============================================================
   // MAIN MENU LOBBY -- presentation layer only.
@@ -18408,7 +18545,17 @@ updatePortalAnchors(dt);
   // needs to wait on it.
   // The loading screen's last step: a returning player's account is
   // in (or known not to be), so the lobby it reveals is the real one.
-  resumeSession().finally(()=>{ if(window.VBLoader) window.VBLoader.mark('app'); });
+  //
+  // A brand-new pilot's onboarding is opened HERE, before the loader
+  // lifts, so the first thing they ever see is Voidbreak's story intro
+  // rather than a lobby they are about to be pulled out of. It waits on
+  // the resume (not a timer) so a returning player's real account --
+  // never a guess -- decides whether it opens at all.
+  resumeSession().finally(()=>{
+    onboardingBootSettled = true;
+    if(typeof window.__onboardingMaybeStart === 'function') window.__onboardingMaybeStart();
+    if(window.VBLoader) window.VBLoader.mark('app');
+  });
   requestAnimationFrame(loop);
 })();
 </script>
