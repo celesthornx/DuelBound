@@ -3863,6 +3863,19 @@
     .profile-chip .avatar{ width:40px; height:40px; }
     .profile-chip .avatar svg{ width:20px; height:20px; }
     .chip-name{ font-size:13px; }
+
+    /* PLAY button: the hexagon's corner insets are fixed px, so on a
+       narrow phone they were eating most of the button's width and
+       wrapping "CHART YOUR FIRST GALAXY »" across 3-4 lines, stacking
+       the button to an ungainly height with the corners crowding the
+       text. Shrinking the insets gives the text room back; shrinking
+       and tightening .play-sub (which, unlike .play-label, had no
+       narrow-screen size of its own) is what actually gets it back to
+       one line. */
+    .play-content{ padding: 16px 30px; min-height:auto; }
+    .play-edge{ clip-path: polygon(26px 0, calc(100% - 26px) 0, 100% 50%, calc(100% - 26px) 100%, 26px 100%, 0 50%); }
+    .play-fill, .play-sheen{ clip-path: polygon(24px 0, calc(100% - 24px) 0, 100% 50%, calc(100% - 24px) 100%, 24px 100%, 0 50%); }
+    .play-sub{ font-size:10.5px; letter-spacing:1.6px; gap:5px; margin-top:6px; }
   }
 
 </style>
