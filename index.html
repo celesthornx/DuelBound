@@ -1972,6 +1972,16 @@
     text-align:center; line-height:1.2;
   }
   .dest-gold{ color: var(--vb-gold); border-color: rgba(255,206,84,.34); }
+  /* A destination that opens on finishing training (see the ONBOARDING
+     section's renderOnboardingGates). Same dimmed-card idiom as a locked
+     skin/power card; still clickable, so it can say why. */
+  .dest.locked, .nav-item.locked, .cp-plus.locked{ opacity:.45; filter:grayscale(.6); }
+  .dest.locked:hover{ transform:none; box-shadow:none; }
+  .dest .dest-lock{ display:none; position:absolute; top:6px; right:7px; font-size:11px; color:rgba(200,220,240,.8); }
+  .dest.locked .dest-lock{ display:block; }
+  /* ...and the moment it opens: a pulse until first visited. */
+  .dest.new{ border-color: rgba(255,206,84,.85); animation: destNew 1.3s ease-in-out infinite; }
+  @keyframes destNew{ 0%,100%{ box-shadow: 0 0 0 rgba(255,206,84,0); } 50%{ box-shadow: 0 0 24px rgba(255,206,84,.45); } }
   .dest-gold:hover{ border-color: rgba(255,214,110,.8); box-shadow: 0 12px 34px rgba(0,0,0,.55), 0 0 22px rgba(255,206,84,.24); }
 
   .play-glyph{ font-size: 18px; vertical-align:-1px; margin-right:4px; opacity:.9; }
@@ -3138,6 +3148,9 @@
     transition: opacity .22s ease, transform .22s ease;
   }
   .lobby-toast.show{ opacity:1; transform: translate(-50%, 0); }
+  /* The one-time "NEW: ... UNLOCKED" callout and the welcome-back
+     income line: the same toast, in gold, held longer. */
+  .lobby-toast.unlock{ border-color: rgba(255,206,84,.7); color:#fff3c4; box-shadow: 0 0 30px rgba(255,206,84,.3); font-size:12px; }
 
   #legacyControls{ display:none !important; }
 
@@ -7969,7 +7982,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     // boot the resume's own .finally() does the opening instead.
     Promise.resolve(typeof window.__carryGuestOnboarding === 'function' ? window.__carryGuestOnboarding() : null)
       .finally(()=>{
-        if(typeof renderOnboardingGates === 'function') renderOnboardingGates();
+        if(typeof window.__renderOnboardingGates === 'function') window.__renderOnboardingGates();
         if(typeof window.__onboardingMaybeStart === 'function') window.__onboardingMaybeStart();
       });
   }
@@ -8360,7 +8373,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
     dailyClaimed = {};
     fetchDailyChallenges();
     if(typeof window.__setAccountOnboarding === 'function') window.__setAccountOnboarding(null);
-    if(typeof renderOnboardingGates === 'function') renderOnboardingGates();
+    if(typeof window.__renderOnboardingGates === 'function') window.__renderOnboardingGates();
     try{
       if(window.google && google.accounts && google.accounts.id){
         google.accounts.id.disableAutoSelect();
@@ -15798,6 +15811,9 @@ updatePortalAnchors(dt);
     // never showing a stale journey.
     if(typeof syncVoidbreakProfile === 'function') syncVoidbreakProfile();
     if(typeof syncActivity === 'function') syncActivity();
+    // Training may have just finished in there -- open (and announce)
+    // what it unlocks now that the lobby is back on screen.
+    renderOnboardingGates();
   }
   btnVoidbreakExit.addEventListener('click', requestVoidbreakExit);
 
@@ -15969,6 +15985,40 @@ updatePortalAnchors(dt);
   // Records one step. Applied locally first (so the rest of this visit
   // reflects it even if the network is down), then -- signed in -- sent
   // to the server, whose resolved record replaces the local guess.
+  // What finishing training opens. Keys are lobbyRoute acts.
+  const ONBOARDING_GATED = { planet: 'HOME PLANET', shop: 'VOID MARKET', shardshop: 'SHARD SHOP' };
+  // Locks/unlocks those doors, and -- the first time they open -- says
+  // so once, then records that it was said.
+  let unlockCalloutShown = false;
+  function renderOnboardingGates(){
+    const ob = currentOnboarding();
+    const locked = !ob.tutorialComplete;
+    Object.keys(ONBOARDING_GATED).forEach(act => {
+      document.querySelectorAll('#menuMain [data-act="' + act + '"]').forEach(n => {
+        n.classList.toggle('locked', locked);
+        if(n.classList.contains('dest')){
+          if(!n.querySelector('.dest-lock')){
+            const l = document.createElement('span'); l.className = 'dest-lock'; l.textContent = '\u{1F512}';
+            n.appendChild(l);
+          }
+          const sub = n.querySelector('.dest-sub');
+          if(sub){
+            if(sub.dataset.orig === undefined) sub.dataset.orig = sub.textContent;
+            sub.textContent = locked ? 'FINISH TRAINING' : sub.dataset.orig;
+          }
+        }
+      });
+    });
+    const inLobby = voidbreakOverlay && voidbreakOverlay.classList.contains('hidden');
+    if(!locked && !ob.unlockSeen && inLobby && !unlockCalloutShown){
+      unlockCalloutShown = true;
+      document.querySelectorAll('#menuMain .dest[data-act="planet"]').forEach(n => n.classList.add('new'));
+      lobbyToast('NEW: HOME PLANET UNLOCKED \u00b7 VOID MARKET & SHARD SHOP OPEN', { gold: true, ms: 5200 });
+      recordOnboardingStep('unlockSeen', '');
+    }
+  }
+  window.__renderOnboardingGates = renderOnboardingGates;
+
   async function recordOnboardingStep(step, path){
     if(!VBO) return;
     const local = VBO.applyStep(currentOnboarding(), step, path);
@@ -15986,7 +16036,7 @@ updatePortalAnchors(dt);
     } else {
       saveGuestOnboarding(local.record);
     }
-    if(typeof renderOnboardingGates === 'function') renderOnboardingGates();
+    if(typeof window.__renderOnboardingGates === 'function') window.__renderOnboardingGates();
     postVoidbreakSession();
   }
 
@@ -16076,13 +16126,15 @@ updatePortalAnchors(dt);
 
   function lobbyEl(id){ return document.getElementById(id); }
 
-  function lobbyToast(msg){
+  // `opts.ms` holds it longer, `opts.gold` is the unlock/reward variant.
+  function lobbyToast(msg, opts){
     const t = lobbyEl('lobbyToast');
     if(!t) return;
     t.textContent = msg;
+    t.classList.toggle('unlock', !!(opts && opts.gold));
     t.classList.add('show');
     clearTimeout(t._timer);
-    t._timer = setTimeout(()=>{ t.classList.remove('show'); }, 2200);
+    t._timer = setTimeout(()=>{ t.classList.remove('show'); }, (opts && opts.ms) || 2200);
   }
 
   function lobbyOpenModal(title, bodyHTML){
@@ -16711,6 +16763,16 @@ updatePortalAnchors(dt);
   // lobby, the Arena screen and the nav bar, so a destination is wired
   // in exactly one place no matter how many buttons point at it.
   function lobbyRoute(act){
+    // Home Planet and the shops open on finishing training (see the
+    // ONBOARDING section). The server enforces the same gate; this is
+    // only so the button can say why rather than fail.
+    if(ONBOARDING_GATED[act] && !currentOnboarding().tutorialComplete){
+      lobbyToast('COMPLETE TRAINING TO UNLOCK \u2014 ' + ONBOARDING_GATED[act]);
+      return;
+    }
+    if(act === 'planet' || act === 'shop' || act === 'shardshop'){
+      document.querySelectorAll('#menuMain [data-act="' + act + '"]').forEach(n => n.classList.remove('new'));
+    }
     // The journey, and every destination inside it. Each of these opens
     // Voidbreak ON that screen (see launchVoidbreak / voidbreak.html's
     // applyLaunchScreen) rather than on a menu, and BACK from any of
@@ -18553,6 +18615,7 @@ updatePortalAnchors(dt);
   // never a guess -- decides whether it opens at all.
   resumeSession().finally(()=>{
     onboardingBootSettled = true;
+    if(typeof window.__renderOnboardingGates === 'function') window.__renderOnboardingGates();
     if(typeof window.__onboardingMaybeStart === 'function') window.__onboardingMaybeStart();
     if(window.VBLoader) window.VBLoader.mark('app');
   });

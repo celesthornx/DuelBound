@@ -65,6 +65,7 @@ const VoidbreakCoop = require("./voidbreakCoop");
 // First-login journey state (intro / new-or-veteran / training). See
 // onboarding.js for why a missing record means "already onboarded".
 const Onboarding = require("./onboarding");
+const ONBOARDING_LOCKED = "Finish training to unlock";
 
 const accounts = {}; // sub -> account record (populated in startServer())
 
@@ -3662,6 +3663,12 @@ const httpServer = http.createServer(async (req, res) => {
                 sendJson(res, 409, { error: "Account not loaded -- sign in again" });
                 return;
             }
+            // The Void Market opens on finishing Voidbreak's training --
+            // enforced here, not just by the hub hiding its door.
+            if (!Onboarding.isOnboarded(target)) {
+                sendJson(res, 403, { error: ONBOARDING_LOCKED });
+                return;
+            }
 
             const ownedField = Catalog.OWNED_FIELD[body.itemType];
             if (!ownedField) {
@@ -4701,6 +4708,17 @@ const httpServer = http.createServer(async (req, res) => {
         if (!target) return { error: 409, message: "Account not loaded -- sign in again" };
         return { sub: sub, account: target };
     }
+    // Home Planet and the Void Shard Shop open on finishing Voidbreak's
+    // training (onboarding.js). The same server-side shape as
+    // buildOnPlanet's own `requires` gate: a client that hides the
+    // button is presentation; this is the rule. Every pre-feature
+    // account reads as onboarded, so nothing existing is ever locked.
+    function voidbreakUnlockAuth(body) {
+        const auth = voidbreakEndgameAuth(body);
+        if (auth.error) return auth;
+        if (!Onboarding.isOnboarded(auth.account)) return { error: 403, message: ONBOARDING_LOCKED };
+        return auth;
+    }
 
     // commitVoidbreakSave now lives at module scope (see the VOIDBREAK
     // SAVE COMMIT section further up) so the co-op match rooms in the
@@ -4711,7 +4729,7 @@ const httpServer = http.createServer(async (req, res) => {
     if (req.method === "POST" && req.url === "/voidbreak/shop/buy") {
         try {
             const body = await readJsonBody(req);
-            const auth = voidbreakEndgameAuth(body);
+            const auth = voidbreakUnlockAuth(body);
             if (auth.error) { sendJson(res, auth.error, { error: auth.message }); return; }
 
             const current = auth.account.voidbreak ? auth.account.voidbreak.data : Voidbreak.defaultSaveData();
@@ -4776,7 +4794,7 @@ const httpServer = http.createServer(async (req, res) => {
     if (req.method === "POST" && req.url === "/voidbreak/planet/build") {
         try {
             const body = await readJsonBody(req);
-            const auth = voidbreakEndgameAuth(body);
+            const auth = voidbreakUnlockAuth(body);
             if (auth.error) { sendJson(res, auth.error, { error: auth.message }); return; }
 
             const current = auth.account.voidbreak ? auth.account.voidbreak.data : Voidbreak.defaultSaveData();
@@ -4812,7 +4830,7 @@ const httpServer = http.createServer(async (req, res) => {
     if (req.method === "POST" && req.url === "/voidbreak/planet/decorate") {
         try {
             const body = await readJsonBody(req);
-            const auth = voidbreakEndgameAuth(body);
+            const auth = voidbreakUnlockAuth(body);
             if (auth.error) { sendJson(res, auth.error, { error: auth.message }); return; }
 
             const current = auth.account.voidbreak ? auth.account.voidbreak.data : Voidbreak.defaultSaveData();

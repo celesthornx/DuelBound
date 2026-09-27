@@ -3020,6 +3020,11 @@ try{
 // Training (see the TRAINING section) -- declared this early because
 // gameplay code that can run from boot checks it.
 const TUT={active:false,replay:false,i:-1,locked:false};
+// The hub-reported onboarding record (see the ONBOARDING section and the
+// 'duelarena_session' handshake). null means "no hub told us" --
+// standalone play, or a hub without the feature -- and reads as fully
+// onboarded: nothing locked.
+let ONB=null;
 const keys={},pressed={};
 const mouse={x:W/2,y:H/2,down:false};
 // Esc while the shell page is fullscreen leaves fullscreen first (the
@@ -12848,6 +12853,14 @@ function go(s){
   // the game degrades to exactly the eight-level experience it had
   // before, which is a working game, not a broken one.
   if(!UNI_OK&&(s==='galaxy'||s==='system'||s==='planet'||s==='ship'))s='menu';
+  // Home Planet and the Shard Shop open on finishing training. From a
+  // screen, the door just says so; as a launch destination it falls
+  // back to the Command Center. (The server enforces the same gate.)
+  if((s==='planet'||s==='shop')&&!onbTrainingDone()){
+    toast('FINISH TRAINING TO UNLOCK');
+    if(state!=='menu'&&state!=='intro')return;
+    s='menu';
+  }
   // THE ONE PLACE THE SECOND MAIN MENU GOES AWAY.
   //
   // Launched from the Command Center, this page's own menu is not a
@@ -13857,10 +13870,6 @@ el('btnReset').addEventListener('click',()=>{
    story reads in the same visual language as every later "something
    just happened" beat.
    ================================================================= */
-// The hub-reported onboarding record (see the 'duelarena_session'
-// handshake). null means "no hub told us" -- standalone play, or a hub
-// without the feature -- and reads as fully onboarded: nothing locked.
-let ONB=null;
 function onbTrainingDone(){ return !ONB||ONB.tutorialComplete!==false; }
 function postOnboarding(step,path){
   // Mirror locally so this visit reflects the step immediately; the
