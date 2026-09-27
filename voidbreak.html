@@ -636,8 +636,13 @@ input[type=range]{width:180px;accent-color:var(--cy)}
 .touch-gear.hide{display:none}
 .touch-gear.ready{box-shadow:0 0 16px rgba(160,92,255,.55);border-color:rgba(160,92,255,.85)}
 .touch-gear.pressed{background:rgba(160,92,255,.22)}
+/* top offset clears the shell's "COMMAND CENTER" chip + fullscreen
+   toggle, which it draws over this iframe's top-left corner on every
+   screen including mid-run (see #btnVoidbreakExit/#btnVoidbreakFs in
+   index.html) -- stacking below them instead of beside avoids having to
+   track their width. */
 #touchPauseBtn{position:absolute;pointer-events:auto;touch-action:none;z-index:16;
-  top:calc(env(safe-area-inset-top,0px) + 14px);left:calc(env(safe-area-inset-left,0px) + 14px);
+  top:calc(env(safe-area-inset-top,0px) + 58px);left:calc(env(safe-area-inset-left,0px) + 14px);
   width:36px;height:36px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;
   font-family:'Orbitron';font-weight:700;font-size:13px;letter-spacing:1px;color:#cfe3ea;
