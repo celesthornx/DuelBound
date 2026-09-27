@@ -635,6 +635,13 @@ input[type=range]{width:180px;accent-color:var(--cy)}
 .touch-gear.hide{display:none}
 .touch-gear.ready{box-shadow:0 0 16px rgba(160,92,255,.55);border-color:rgba(160,92,255,.85)}
 .touch-gear.pressed{background:rgba(160,92,255,.22)}
+#touchPauseBtn{position:absolute;pointer-events:auto;touch-action:none;z-index:16;
+  top:calc(env(safe-area-inset-top,0px) + 14px);left:calc(env(safe-area-inset-left,0px) + 14px);
+  width:36px;height:36px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Orbitron';font-weight:700;font-size:13px;letter-spacing:1px;color:#cfe3ea;
+  background:rgba(8,12,26,.55);border:2px solid rgba(255,255,255,.35)}
+#touchPauseBtn.pressed{background:rgba(255,255,255,.18)}
 #touchSecBtn{
   right:calc(env(safe-area-inset-right,0px) + var(--dash-anchor-x) + var(--action-size) * .72);
   bottom:calc(env(safe-area-inset-bottom,0px) + var(--dash-anchor-y) - var(--action-size) * .1)}
@@ -1101,6 +1108,7 @@ body.in-shell #sysUpGalaxy{display:block}
 <div class="mobile-controls" id="mobileControls">
   <div class="joy-zone joy-move" id="joyMoveZone"><div class="joy-base" id="joyMoveBase"><div class="joy-knob"></div></div></div>
   <div class="joy-zone joy-aim" id="joyAimZone"><div class="joy-base" id="joyAimBase"><div class="joy-knob"></div></div></div>
+  <button type="button" id="touchPauseBtn" aria-label="Pause">II</button>
   <button type="button" id="touchDashBtn">DASH</button>
   <!-- Void Loadout on touch. Same one-frame `pressed` flag the dash
        button sets, so both slots flow through the exact same
@@ -3001,6 +3009,17 @@ function endAimTouch(e){
 joyAimZone.addEventListener('touchend',endAimTouch);
 joyAimZone.addEventListener('touchcancel',endAimTouch);
 
+// Pause button: routes through the exact same handleKey('Escape') path
+// ESC/P already use, so pause/resume, the ov-upgrade/ov-swap guards and
+// the menu-state Escape behavior all stay in the one place that owns them.
+const touchPauseBtn=el('touchPauseBtn');
+touchPauseBtn.addEventListener('touchstart',e=>{
+  touchPauseBtn.classList.add('pressed');
+  handleKey('Escape');
+  e.preventDefault();
+},{passive:false});
+touchPauseBtn.addEventListener('touchend',e=>{touchPauseBtn.classList.remove('pressed');e.preventDefault();},{passive:false});
+touchPauseBtn.addEventListener('touchcancel',()=>touchPauseBtn.classList.remove('pressed'));
 // Dash button: just sets the same one-frame flag Space already sets,
 // so it flows through updatePlayer()'s existing dash logic (cooldown,
 // energy cost, invulnerability window) completely unchanged.
