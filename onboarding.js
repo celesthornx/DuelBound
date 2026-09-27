@@ -110,7 +110,85 @@ function applyStep(rec, step, path) {
     return { record: next };
 }
 
+// =====================================================================
+// DAILY REWARD -- a 7-day login streak, paid in account Coins.
+//
+// Lives here beside onboarding because it is the same kind of thing:
+// small account state about showing up, with pure rules the server
+// applies to its stored record and the hub only renders.
+//
+// Dates are UTC calendar days ("YYYY-MM-DD") from the SERVER's clock
+// (server.js's todayUTC), never the player's -- a device clock or time
+// zone cannot mint an extra day.
+//
+// THE RULE FOR A MISSED DAY: the streak resets to day 1. Claiming on
+// the day after the last claim continues it; claiming any later starts
+// over. Day 7 pays the big reward, then day 8 is day 1 of a new cycle.
+// One claim per UTC day, enforced against the stored lastClaimDate, so
+// a replay/refresh/second tab cannot claim twice.
+//
+// Coins only, deliberately: Void Shards feed a finished, balanced
+// economy (Forge, Shard Shop, Mastery, Prestige), and account Coins are
+// already what Daily Challenges pay. A week of streak (375) is about
+// two days of Daily Challenges. (Proposed numbers.)
+// =====================================================================
+var DAILY_REWARDS = [20, 25, 30, 40, 50, 60, 150];
+
+function defaultDailyReward() { return { streak: 0, lastClaimDate: "" }; }
+
+function dailyRecord(rec) {
+    var r = (rec && typeof rec === "object") ? rec : {};
+    return {
+        streak: Math.max(0, Math.floor(Number(r.streak) || 0)),
+        lastClaimDate: (typeof r.lastClaimDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.lastClaimDate)) ? r.lastClaimDate : ""
+    };
+}
+
+function previousDay(dateStr) {
+    var d = new Date(dateStr + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10);
+}
+
+// What the pilot sees today: whether they can claim, which day of the
+// 7 the claim is (or was), and the whole table so day 7 is visible.
+function dailyState(rec, today) {
+    var r = dailyRecord(rec);
+    var claimable = r.lastClaimDate !== today;
+    var continuing = r.lastClaimDate !== "" && r.lastClaimDate === previousDay(today);
+    // The streak the next claim produces -- or, already claimed, today's.
+    var streakForDay = claimable ? (continuing ? r.streak + 1 : 1) : Math.max(1, r.streak);
+    var cycleDay = ((streakForDay - 1) % DAILY_REWARDS.length) + 1;
+    return {
+        claimable: claimable,
+        streak: (claimable && !continuing) ? 0 : r.streak,
+        cycleDay: cycleDay,
+        reward: DAILY_REWARDS[cycleDay - 1],
+        rewards: DAILY_REWARDS.slice(),
+        lastClaimDate: r.lastClaimDate,
+        today: today
+    };
+}
+
+// Returns { record, reward, cycleDay } or { error } if today is claimed.
+function claimDaily(rec, today) {
+    var st = dailyState(rec, today);
+    if (!st.claimable) return { error: "Already claimed today" };
+    var r = dailyRecord(rec);
+    var continuing = r.lastClaimDate !== "" && r.lastClaimDate === previousDay(today);
+    return {
+        record: { streak: continuing ? r.streak + 1 : 1, lastClaimDate: today },
+        reward: st.reward,
+        cycleDay: st.cycleDay
+    };
+}
+
 return {
+    DAILY_REWARDS: DAILY_REWARDS,
+    defaultDailyReward: defaultDailyReward,
+    dailyState: dailyState,
+    claimDaily: claimDaily,
+    previousDay: previousDay,
     defaultOnboarding: defaultOnboarding,
     onboardingOf: onboardingOf,
     isOnboarded: isOnboarded,

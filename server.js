@@ -171,6 +171,10 @@ function defaultAccount(name, email) {
         // the first collect starts it without paying (voidbreak.js's
         // collectIdle), so no account is ever paid for time before it.
         lastCollectedAt: 0,
+        // DAILY REWARD -- 7-day login streak (onboarding.js). Missing on
+        // an older account reads as "never claimed", which changes
+        // nothing about anything it can already do.
+        dailyReward: Onboarding.defaultDailyReward(),
         dailyChallenges: defaultDailyChallenges(),
         ranked: Ranked.defaultRankedRecord(),
         // Friend lists hold stable account ids (Google "sub"), never emails.
@@ -3939,7 +3943,9 @@ const httpServer = http.createServer(async (req, res) => {
                 // which defaulting it here would silently undo.
                 onboarding: existing.onboarding,
                 // Server clock only -- never read from the request.
-                lastCollectedAt: existing.lastCollectedAt || 0
+                lastCollectedAt: existing.lastCollectedAt || 0,
+                // Server-owned; only /daily/claim changes it.
+                dailyReward: existing.dailyReward || Onboarding.defaultDailyReward()
             };
             if (accounts[sub].onboarding === undefined) delete accounts[sub].onboarding;
             try {
@@ -3992,6 +3998,62 @@ const httpServer = http.createServer(async (req, res) => {
                 }
             }
             sendJson(res, 200, { ok: true, onboarding: Onboarding.onboardingOf(account) });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // ---- GET /daily/state?sessionToken=... ----
+    // ---- POST /daily/claim ---- body: { sessionToken } ----
+    // The 7-day login streak (rules in onboarding.js). The day is the
+    // SERVER's UTC date (todayUTC), the streak and last claim are the
+    // STORED record, and the reward is the stored table -- the body
+    // carries a session and nothing else. One claim per UTC day, checked
+    // against the stored lastClaimDate, so refresh/replay/multi-tab all
+    // fail closed. Pays account Coins, the same balance /challenges/claim
+    // pays, with the same copy-then-commit rollback. Opens with the rest
+    // of the game's rewards, on finishing training.
+    if (req.method === "GET" && req.url.startsWith("/daily/state")) {
+        const urlObj = new URL(req.url, "http://x");
+        const account = getAccountForSession(urlObj.searchParams.get("sessionToken") || "");
+        if (!account) { sendJson(res, 401, { error: "Not signed in" }); return; }
+        if (!Onboarding.isOnboarded(account)) { sendJson(res, 403, { error: ONBOARDING_LOCKED }); return; }
+        sendJson(res, 200, { ok: true, daily: Onboarding.dailyState(account.dailyReward, todayUTC()) });
+        return;
+    }
+    if (req.method === "POST" && req.url === "/daily/claim") {
+        try {
+            const body = await readJsonBody(req);
+            const sub = sessions[body.sessionToken];
+            if (!sub) { sendJson(res, 401, { error: "Not signed in" }); return; }
+            const account = accounts[sub];
+            if (!account) { sendJson(res, 409, { error: "Account not loaded -- sign in again" }); return; }
+            if (!Onboarding.isOnboarded(account)) { sendJson(res, 403, { error: ONBOARDING_LOCKED }); return; }
+
+            const today = todayUTC();
+            const result = Onboarding.claimDaily(account.dailyReward, today);
+            if (result.error) {
+                sendJson(res, 409, { error: result.error, daily: Onboarding.dailyState(account.dailyReward, today) });
+                return;
+            }
+            const previousDaily = account.dailyReward;
+            const previousCoins = account.coins;
+            account.dailyReward = result.record;
+            account.coins = (account.coins || 0) + result.reward;
+            try {
+                await persistAccount(sub);
+            } catch (e) {
+                account.dailyReward = previousDaily;
+                account.coins = previousCoins;
+                sendJson(res, 503, { error: "Could not save -- try again" });
+                return;
+            }
+            sendJson(res, 200, {
+                ok: true, reward: result.reward, cycleDay: result.cycleDay,
+                newBalance: account.coins,
+                daily: Onboarding.dailyState(account.dailyReward, today)
+            });
         } catch (e) {
             sendJson(res, 400, { error: "Bad request" });
         }

@@ -3080,6 +3080,20 @@
   .lm-card{ width: 420px; max-width: 90vw; max-height: 80vh; overflow:auto; }
   .lm-body{ padding: 18px; }
   .lm-close{ margin-top: 14px; width:100%; }
+  /* DAILY REWARD -- seven day plates; today glows, day 7 is the prize. */
+  .dr-sub{ font-family:'Share Tech Mono', monospace; font-size:11px; letter-spacing:2px; color:#9fb8d8; text-align:center; margin-bottom:12px; }
+  .dr-row{ display:grid; grid-template-columns: repeat(7, 1fr); gap:6px; }
+  .dr-cell{ display:flex; flex-direction:column; align-items:center; gap:4px; padding:10px 2px;
+    border:1px solid rgba(90,180,255,.25); border-radius:4px; background:rgba(8,16,34,.7); }
+  .dr-cell .d{ font-family:'Share Tech Mono', monospace; font-size:9px; letter-spacing:1.5px; color:rgba(150,195,235,.7); }
+  .dr-cell .v{ font-family:'Chakra Petch', sans-serif; font-weight:700; font-size:14px; color:#ffce54; }
+  .dr-cell.done{ opacity:.5; }
+  .dr-cell.done .v::after{ content:' \2713'; color:#5dffa0; }
+  .dr-cell.cur{ border-color:#ffce54; box-shadow:0 0 18px rgba(255,206,84,.35); }
+  .dr-cell.big{ background:linear-gradient(180deg, rgba(80,60,10,.55), rgba(20,14,4,.8)); }
+  .dr-cell.big .v{ font-size:18px; }
+  .dr-claim{ margin-top:14px; width:100%; }
+  @media (max-width:520px){ .dr-row{ grid-template-columns: repeat(4, 1fr); } }
   .lm-keys{ display:flex; flex-direction:column; gap:9px; }
   .lm-keyrow{
     display:flex; align-items:center; gap:10px;
@@ -7985,6 +7999,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
         if(typeof window.__renderOnboardingGates === 'function') window.__renderOnboardingGates();
         if(typeof window.__onboardingMaybeStart === 'function') window.__onboardingMaybeStart();
         if(typeof window.__collectIdleOnReturn === 'function') window.__collectIdleOnReturn();
+        if(typeof window.__dailyRewardMaybeShow === 'function') window.__dailyRewardMaybeShow();
       });
   }
 
@@ -15813,8 +15828,10 @@ updatePortalAnchors(dt);
     if(typeof syncVoidbreakProfile === 'function') syncVoidbreakProfile();
     if(typeof syncActivity === 'function') syncActivity();
     // Training may have just finished in there -- open (and announce)
-    // what it unlocks now that the lobby is back on screen.
+    // what it unlocks now that the lobby is back on screen, and offer the
+    // day's reward if it was waiting behind it.
     renderOnboardingGates();
+    dailyRewardMaybeShow();
   }
   btnVoidbreakExit.addEventListener('click', requestVoidbreakExit);
 
@@ -16042,6 +16059,67 @@ updatePortalAnchors(dt);
   }
   window.__collectIdleOnReturn = collectIdleOnReturn;
 
+  // DAILY REWARD. Offered once per visit when the server says today is
+  // claimable (GET /daily/state); the modal renders exactly what the
+  // server reported and CLAIM is one POST (/daily/claim) that the server
+  // checks against its own date and the stored streak.
+  let dailyRewardShownThisVisit = false;
+  function renderDailyReward(d, claimedNow){
+    let cells = '';
+    for(let i = 1; i <= d.rewards.length; i++){
+      const done = i < d.cycleDay || (!d.claimable && i === d.cycleDay);
+      cells += '<div class="dr-cell' + (done ? ' done' : '') + (i === d.cycleDay ? ' cur' : '')
+        + (i === d.rewards.length ? ' big' : '') + '">'
+        + '<span class="d">DAY ' + i + '</span><span class="v">' + d.rewards[i - 1] + '</span></div>';
+    }
+    const sub = d.claimable
+      ? 'DAY ' + d.cycleDay + ' OF ' + d.rewards.length + ' \u00b7 DAY ' + d.rewards.length + ' PAYS ' + d.rewards[d.rewards.length - 1] + ' COINS \u00b7 MISS A DAY AND THE STREAK RESTARTS'
+      : (claimedNow ? '+' + d.reward + ' COINS \u00b7 ' : '') + 'COME BACK TOMORROW FOR DAY ' + ((d.cycleDay % d.rewards.length) + 1);
+    lobbyOpenModal('DAILY REWARD',
+      '<div class="dr-sub">' + sub + '</div>'
+      + '<div class="dr-row">' + cells + '</div>'
+      + (d.claimable ? '<button class="ghost-btn dr-claim" id="dailyRewardClaim">CLAIM ' + d.reward + ' COINS</button>' : ''));
+    const btn = document.getElementById('dailyRewardClaim');
+    if(btn) btn.addEventListener('click', claimDailyReward);
+  }
+  async function dailyRewardMaybeShow(){
+    if(dailyRewardShownThisVisit || !loggedIn || !sessionToken) return;
+    if(!currentOnboarding().tutorialComplete) return;
+    if(voidbreakOverlay && !voidbreakOverlay.classList.contains('hidden')) return;
+    dailyRewardShownThisVisit = true;
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/daily/state?sessionToken=' + encodeURIComponent(sessionToken));
+      const j = await res.json().catch(()=>({}));
+      if(res.ok && j.daily && j.daily.claimable) renderDailyReward(j.daily, false);
+    } catch(e){ dailyRewardShownThisVisit = false; }
+  }
+  window.__dailyRewardMaybeShow = dailyRewardMaybeShow;
+  async function claimDailyReward(){
+    const btn = document.getElementById('dailyRewardClaim');
+    if(btn){ btn.disabled = true; btn.textContent = 'CLAIMING\u2026'; }
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/daily/claim', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionToken: sessionToken })
+      });
+      const j = await res.json().catch(()=>({}));
+      if(!res.ok){
+        lobbyToast(j.error ? String(j.error).toUpperCase() : 'COULD NOT CLAIM');
+        if(j.daily) renderDailyReward(j.daily, false);
+        return;
+      }
+      // Same as a Daily Challenge claim: the server moved the balance;
+      // mirror it so the lobby never shows a stale number.
+      coins = j.newBalance;
+      updateCurrencyDisplay();
+      lobbyToast('DAILY REWARD \u00b7 DAY ' + j.cycleDay + ' \u00b7 +' + j.reward + ' COINS', { gold: true, ms: 3200 });
+      renderDailyReward(j.daily, true);
+    } catch(e){
+      lobbyToast('COULD NOT REACH THE SERVER');
+      if(btn){ btn.disabled = false; btn.textContent = 'CLAIM'; }
+    }
+  }
+
   async function recordOnboardingStep(step, path){
     if(!VBO) return;
     const local = VBO.applyStep(currentOnboarding(), step, path);
@@ -16214,6 +16292,18 @@ updatePortalAnchors(dt);
   // number. Categories: NEW / IMPROVEMENTS / BALANCE / BUG FIXES --
   // include only the ones an entry actually has.
   const PATCH_NOTES = [
+    { version: 'v0.20', title: 'A New Beginning',
+      NEW: [
+        'New pilots now start with a short story intro, then choose "I\u2019m new here" or "I\u2019ve played before".',
+        'Training has moved into Voidbreak: a guided first sector that teaches moving, aiming, dashing, your system and ability, a first fight, choosing a path, and the Loadout and Forge.',
+        'Every Home Planet structure now gives a small permanent boost \u2014 energy, health, cooldowns, dash and damage.',
+        'Your Home Planet keeps salvaging Coins while you are away (up to 12 hours) \u2014 collect them on the planet or when you return.',
+        'Daily Reward: log in each day for Coins, with a bigger reward on day 7.'
+      ],
+      IMPROVEMENTS: [
+        'The duel arena no longer has a tutorial of its own \u2014 jump straight into a match. PLAY TUTORIAL in Settings replays Voidbreak\u2019s training.',
+        'Home Planet, the Void Market and the Shard Shop open when a new pilot finishes (or skips) training. Existing players keep everything they had.'
+      ] },
     { version: 'v0.19', title: 'Coins, and the first Crystals',
       NEW: [
         'A second currency has arrived: CRYSTALS \u2014 a premium currency for a future Crystal Shop, separate from your everyday Coins and never earned by playing.',
