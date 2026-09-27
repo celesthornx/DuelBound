@@ -156,7 +156,6 @@ function defaultAccount(name, email) {
         deviceMode: "auto",
         xp: 0,
         level: 1,
-        tutorialComplete: false,
         dailyChallenges: defaultDailyChallenges(),
         ranked: Ranked.defaultRankedRecord(),
         // Friend lists hold stable account ids (Google "sub"), never emails.
@@ -3535,16 +3534,6 @@ const httpServer = http.createServer(async (req, res) => {
             // if it changed anything, so it's not folded into `dirty`.
             ensureAccountXP(sub);
             ensureAccountBattlePass(sub);
-            // Same lazy migration for a pre-tutorial-feature account --
-            // an EXISTING player who predates this field must never be
-            // treated as "not yet completed" by omission (that would
-            // just re-offer them a tutorial they never needed); explicit
-            // false is only ever set once, here, and only if the field
-            // is genuinely missing.
-            if (typeof accounts[sub].tutorialComplete !== "boolean") {
-                accounts[sub].tutorialComplete = true;
-                dirty = true;
-            }
             // Records how this account can be signed into. Purely
             // descriptive -- nothing grants access off it -- but it is
             // what a future "add a password to my Google account" flow
@@ -3840,10 +3829,6 @@ const httpServer = http.createServer(async (req, res) => {
                 usernameLower: existing.usernameLower,
                 passwordHash: existing.passwordHash,
                 recoveryHash: existing.recoveryHash,
-                // Non-sensitive UX state (no coins/crystals/XP/rank riding on
-                // it), same trust tier as aimMode/matchSize/deviceMode
-                // above -- client-reported is fine here, unlike xp/level.
-                tutorialComplete: typeof body.tutorialComplete === "boolean" ? body.tutorialComplete : (existing.tutorialComplete || false),
                 dailyChallenges: newDailyChallenges,
                 // RANKED IS DELIBERATELY NOT READ FROM `body`.
                 //
