@@ -3668,7 +3668,8 @@
      the icon itself stays the same currentColor svg, now lit up in its
      badge's accent color against the glass instead of solid white. ---------- */
   .lobby-left .dest-ico, .lobby-right .dest-ico, .rail-pop .dest-ico, #hubDrawer .dest-ico{
-    border-radius:22%; padding:9px; box-sizing:border-box;
+    border-radius:22%; padding:0; box-sizing:border-box;
+    display:grid; place-items:center;
     background:
       radial-gradient(120% 130% at 30% 15%, rgba(255,255,255,.10), transparent 55%),
       linear-gradient(180deg, rgba(22,34,58,.9), rgba(6,10,20,.95));
@@ -3679,6 +3680,12 @@
       inset 0 0 18px var(--ic-glow-in, rgba(63,208,255,.14));
     color: var(--ic-c, var(--vb-cyan));
     filter: drop-shadow(0 3px 6px rgba(0,0,0,.4));
+  }
+  /* The glyph is a fixed share of its badge rather than "badge minus a
+     fixed 9px padding" -- that fixed padding is what shrank the icons
+     to a few px (26px badge - 18px padding = 8px) on phones. */
+  .lobby-left .dest-ico svg, .lobby-right .dest-ico svg, .rail-pop .dest-ico svg, #hubDrawer .dest-ico svg{
+    width:60%; height:60%;
   }
   .ic-teal{ --ic-c:#3fd0ff; --ic-glow:rgba(63,208,255,.45); --ic-glow-in:rgba(63,208,255,.16); }
   .ic-cyan{ --ic-c:#00f0ff; --ic-glow:rgba(0,240,255,.5); --ic-glow-in:rgba(0,240,255,.18); }
@@ -3940,6 +3947,144 @@
     .pm-label{ display:none; }
     .play-missions{ padding:6px 8px; }
     .play-content{ padding:8px 18px; }
+  }
+
+
+  /* The planet stage keeps its old square size as a flex BASIS rather
+     than a fixed width, and may shrink below it: on a short window
+     (a 600px-tall laptop, a landscape phone) the planet gives up height
+     so PLAY and the footer stay on screen instead of the centre column
+     scrolling. The canvas re-lays itself out to whatever box it gets
+     and always draws a round planet centred in it. */
+  .hub-planet-stage{
+    flex:0 1 min(440px, 44vh); min-height:0; width:100%; aspect-ratio:auto;
+  }
+  @media (max-width:1240px){ .hub-planet-stage{ flex-basis:min(360px, 38vh); } }
+  @media (max-width:1000px){ .hub-planet-stage{ flex-basis:min(320px, 34vh); } }
+  /* PLAY's label is sized off the button's own width (container
+     units), so "BEGIN JOURNEY" can never outgrow the button whatever
+     the screen -- it was spilling 8-20px past it on narrow phones and
+     on a 1024px tablet where the missions teaser shares the row. */
+  #lobbyJourney{ min-width:0; container-type:inline-size; }
+  #lobbyJourney .play-label{ font-size:min(clamp(22px, 4.2vw, 46px), 8cqw); }
+  /* Hangar is the last tile in the rail, so its flyout opens UPWARD
+     from its bottom edge; opening downward ran it off a short screen. */
+  @media (min-width:761px) and (min-height:521px){
+    #railHangarPop{ top:auto; bottom:0; }
+  }
+
+  /* ================= PHONE: whole hub fits one screen =================
+     Everything below is scoped to narrow screens. Goals: (1) no vertical
+     scrolling anywhere -- the planet is the ONE flexible thing and gives
+     up height so the rails, PLAY and footer always fit; (2) the Shops /
+     Hangar bottom sheet sits ABOVE the footer instead of behind it, so
+     all of its options are visible; (3) a compact footer that never
+     overflows sideways. Phones are held LANDSCAPE here (the rotate
+     gate enforces it on iPhone/iPad), so max-height:520px is the case
+     that matters most -- a landscape iPhone in Safari is ~320-430px tall. */
+  @media (max-width: 760px), (max-height: 520px){
+    #menuMain.lobby{ height:100%; height:100dvh; }
+    .lobby-top{ gap:8px 10px; padding:8px var(--lobby-pad); }
+    .profile-chip{ padding:4px 10px 4px 4px; }
+    .profile-chip .avatar{ width:36px; height:36px; }
+    .currency-pill{ padding:4px 4px 4px 9px; }
+    .cp-plus{ width:22px; height:22px; }
+    .hub-menu-btn{ width:36px; height:36px; }
+
+    .lobby-main{ overflow:hidden; padding:8px var(--lobby-pad); align-content:stretch; }
+    .lobby-left, .lobby-right{ justify-content:flex-start; }
+    .lobby-left .dest, .lobby-right .dest{ padding:8px 3px 7px; gap:5px; }
+    .lobby-left .dest-ico{ width:34px; height:34px; }
+    .lobby-right .dest-ico{ width:30px; height:30px; }
+    .lobby-left .dest-name, .lobby-right .dest-name{ font-size:8.5px; }
+
+    /* visible, not hidden: nothing overflows any more (the planet is
+       what shrinks), and clipping here cut PLAY's glow off in a hard
+       rectangle at the column's edges. */
+    .lobby-center{
+      overflow:visible; justify-content:flex-start; gap:8px;
+      min-height:0; height:100%; padding:0;
+    }
+    .hub-planet-cap{ flex:0 0 auto; }
+    .hub-planet-stage{
+      flex:1 1 0; min-height:90px; width:100%; aspect-ratio:auto;
+    }
+    .play-row{ flex:0 0 auto; }
+
+    /* bottom sheet: three options side by side, lifted above the footer
+       (the footer is a later sibling with its own z-index, so the sheet
+       -- nested in the rail's stacking context -- used to paint BEHIND
+       it and lose its third row). */
+    .rail-pop{
+      display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px;
+      bottom:calc(8px + env(safe-area-inset-bottom, 0px)); padding:10px;
+    }
+    #railHangarPop{ grid-template-columns:repeat(2, minmax(0,1fr)); }
+    .rail-pop .dest{ padding:12px 4px 10px; }
+    .rail-pop .dest-ico{ width:40px; height:40px; }
+    .rail-pop .dest-name{ font-size:10px; letter-spacing:1px; }
+    .lobby-main:has(.rail-pop:not(.hidden)),
+    .lobby-left:has(.rail-pop:not(.hidden)),
+    .lobby-right:has(.rail-pop:not(.hidden)){ z-index:10; }
+
+    .lobby-bottom{ padding:6px var(--lobby-pad) calc(6px + env(safe-area-inset-bottom, 0px)); gap:8px; }
+    .lobby-bottom .ghost-btn[data-act], .lobby-bottom .version-tag{ display:none; }
+    .lobby-bottom .chat-toggle{ flex:0 0 auto; padding:7px 10px; }
+    .lobby-bottom .chat-toggle svg{ flex:0 0 auto; width:17px; height:17px; }
+    .lobby-bottom .fs-toggle{ flex:0 0 auto; padding:7px 10px; }
+  }
+  /* Short portrait phones (SE-class, or any phone with Safari's toolbars
+     showing) -- trim the fixed-height pieces further so the planet keeps
+     a reasonable share. */
+  @media (max-width: 760px) and (max-height: 620px), (max-height: 420px){
+    .hub-planet-eyebrow{ display:none; }
+    .hub-planet-name{ font-size:16px; }
+    .lobby-center{ gap:6px; }
+    .play-missions{ padding:5px 12px; }
+    .play-content{ padding:10px 18px; }
+    #lobbyJourney .play-label{ font-size:min(20px, 8cqw); }
+    .lobby-left .dest, .lobby-right .dest{ padding:6px 3px 5px; }
+    .lobby-left .dest-ico{ width:30px; height:30px; }
+    .lobby-right .dest-ico{ width:26px; height:26px; }
+  }
+
+  /* Landscape phones (the orientation the game enforces on iPhone/iPad).
+     Height is the scarce axis here, so every row is sized off it: the
+     rail tiles share the rail's height equally (instead of each taking
+     its natural height and pushing the last one off the bottom), their
+     badges scale with vh, and PLAY drops its desktop 96px minimum. */
+  @media (max-height: 520px){
+    .lobby-top{ padding:5px var(--lobby-pad); }
+    .profile-chip .avatar{ width:32px; height:32px; }
+    .profile-chip .avatar svg{ width:16px; height:16px; }
+    .currency-pill{ padding:3px 3px 3px 9px; }
+    .cp-plus{ width:20px; height:20px; font-size:12px; }
+    .hub-menu-btn{ width:32px; height:32px; }
+
+    .lobby-main{ grid-template-columns: 88px minmax(0,1fr) 84px; padding:6px var(--lobby-pad); gap:10px; }
+    .lobby-left, .lobby-right{ gap:6px; height:100%; min-height:0; }
+    .lobby-left > *, .lobby-right > *{ flex:1 1 0; min-height:0; max-height:92px; }
+    .rail-group-btn{ height:100%; }
+    .lobby-left .dest, .lobby-right .dest{
+      justify-content:center; padding:3px 3px; gap:clamp(2px, .8vh, 5px);
+    }
+    .lobby-left .dest-ico{ width:clamp(24px, 9vh, 38px); height:clamp(24px, 9vh, 38px); }
+    .lobby-right .dest-ico{ width:clamp(22px, 8vh, 34px); height:clamp(22px, 8vh, 34px); }
+    .lobby-left .dest-name, .lobby-right .dest-name{ font-size:8.5px; letter-spacing:.6px; }
+    .lobby-right .dest-name{ white-space:nowrap; }
+
+    .lobby-center{ gap:6px; }
+    .hub-planet-stage{ min-height:60px; }
+    #lobbyJourney .play-content{ min-height:0; padding:8px 20px; }
+    #lobbyJourney .play-label{ font-size:min(clamp(17px, 5.5vh, 24px), 8cqw); }
+    .play-sub{ margin-top:3px; }
+
+    .lobby-bottom{ padding:4px var(--lobby-pad) calc(4px + env(safe-area-inset-bottom, 0px)); }
+    .lobby-bottom .chat-toggle, .lobby-bottom .fs-toggle{ padding:5px 9px; }
+  }
+  @media (max-height: 360px){
+    .play-sub{ display:none; }
+    .lobby-bottom .chat-toggle svg{ width:15px; height:15px; }
   }
 
 </style>
@@ -17575,10 +17720,20 @@ updatePortalAnchors(dt);
       if(!raf && !frozen) raf = requestAnimationFrame(tick);
     };
     let resizeT = null;
-    window.addEventListener('resize', ()=>{
+    const relayout = ()=>{
       clearTimeout(resizeT);
       resizeT = setTimeout(()=>{ if(inst && inst.P) window.drawHubPlanet(VBP.galaxyId, (vbUni()&&vbUni().galaxyById)?vbUni().galaxyById(VBP.galaxyId):null); }, 120);
-    });
+    };
+    window.addEventListener('resize', relayout);
+    // The stage is a flexible box now (it shrinks to keep PLAY on a
+    // short screen), so its size can change without the window resizing
+    // -- fonts landing, the missions teaser appearing, the lobby first
+    // becoming visible. Re-lay out on any change to the canvas's own box,
+    // or the bitmap stays at its old size and the planet draws squashed.
+    if(window.ResizeObserver){
+      const cvEl = document.getElementById('hubPlanetCanvas');
+      if(cvEl) new ResizeObserver(relayout).observe(cvEl);
+    }
   })();
 
   // Pulls the Voidbreak save. Called at boot, on sign-in/out, and every
