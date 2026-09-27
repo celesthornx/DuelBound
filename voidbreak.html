@@ -224,6 +224,7 @@ body.ingame #cv{cursor:none}
 @keyframes shardPop{40%{transform:scale(1.35);color:#fff}}
 #bossBarWrap{position:absolute;top:52px;left:50%;transform:translateX(-50%);width:46vw;min-width:420px;text-align:center;transition:opacity .4s}
 #bossBarWrap.hidden{opacity:0}
+#planetCollect.hidden{display:none}
 #bossName{font-family:'Orbitron';font-weight:700;font-size:17px;letter-spacing:8px;color:#ffd7e2;text-shadow:0 0 14px rgba(255,45,85,.8)}
 #bossPhaseLabel{font-size:12px;letter-spacing:4px;color:#ff85a3;margin:2px 0 4px}
 #bossBar{position:relative;height:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,45,85,.5);transform:skewX(-16deg)}
@@ -1483,6 +1484,8 @@ body.in-shell #sysUpGalaxy{display:block}
     <div class="uni-dock-sub" id="buildHint">SELECT A STRUCTURE, THEN TAP AN EMPTY PLOT.</div>
     <div class="build-bar" id="buildBar"></div>
     <div class="uni-dock-row">
+      <!-- Idle income: rendered only from what the server reports. -->
+      <button class="btn primary hidden" id="planetCollect">COLLECT</button>
       <button class="btn" id="planetShip">SHIP BAY</button>
       <button class="btn" id="planetGalaxy">GALAXY MAP</button>
     </div>
@@ -1820,7 +1823,7 @@ const DEF_SAVE={shards:0,forge:{vit:0,pow:0,swift:0,core:0,drive:0,edge:0},
   // the planet can be drawn offline); everything else is written by
   // this file and reported on save, at the same trust tier `shards` and
   // `beaten` have always been.
-  universe:{galaxy:1,systems:{},discovered:{},drive:{},ship:{},coins:0,coinsSpent:0,
+  universe:{galaxy:1,systems:{},discovered:{},drive:{},ship:{},coins:0,coinsSpent:0,coinsGranted:0,
     planet:{buildings:{},decorations:{}}},
   settings:{vol:0.8,music:true,sfx:true,shake:true,dmgnum:true}};
 
@@ -1973,7 +1976,7 @@ const SHELL=(function(){
 })();
 try{ if(SHELL)document.body.classList.add('in-shell'); }catch(e){}
 function emptyUniverseSave(){
-  return {galaxy:1,systems:{},discovered:{},drive:{},ship:{},coins:0,coinsSpent:0,
+  return {galaxy:1,systems:{},discovered:{},drive:{},ship:{},coins:0,coinsSpent:0,coinsGranted:0,
     planet:{buildings:{},decorations:{}}};
 }
 // The live universe sub-object. Always returns an object so no caller
@@ -2049,6 +2052,7 @@ function normalizeSave(s){
   out.universe.galaxy=Math.max(1,Math.floor(Number(out.universe.galaxy)||1));
   out.universe.coins=Math.max(0,Math.floor(Number(out.universe.coins)||0));
   out.universe.coinsSpent=Math.max(0,Math.floor(Number(out.universe.coinsSpent)||0));
+  out.universe.coinsGranted=Math.max(0,Math.floor(Number(out.universe.coinsGranted)||0));
   migrateUniverseSave(out);
   return out;
 }
@@ -2163,6 +2167,7 @@ function mergeUniverseData(a,b){
   }
   out.coins=Math.max(Math.floor(Number(ua.coins)||0),Math.floor(Number(ub.coins)||0));
   out.coinsSpent=Math.max(Math.floor(Number(ua.coinsSpent)||0),Math.floor(Number(ub.coinsSpent)||0));
+  out.coinsGranted=Math.max(Math.floor(Number(ua.coinsGranted)||0),Math.floor(Number(ub.coinsGranted)||0));
   const pa=(ua.planet||{}),pb=(ub.planet||{});
   out.planet={buildings:{},decorations:{}};
   for(const k of Object.keys(Object.assign({},pa.buildings||{},pb.buildings||{}))){
@@ -2724,6 +2729,7 @@ async function bootstrapCloudSave(){
       save=mergeSaveData(localCache.data,cloudSave);
       writeAccountCache(cloudAccountId,save,Date.now());
       if(cloudResp.endgame)adoptEndgame(cloudResp.endgame);
+      idleInfo=cloudResp.idle||null;
       await pushCloudSaveNow(); // also adopts the post-merge endgame view
     }else{
       // The normal case, and the whole point of this feature: whatever
@@ -2738,6 +2744,7 @@ async function bootstrapCloudSave(){
       writeAccountCache(cloudAccountId,save,cloudResp.updatedAt);
       setSyncStatus('synced');
       if(cloudResp.endgame)adoptEndgame(cloudResp.endgame);
+      idleInfo=cloudResp.idle||null;
     }
   }
   refreshMenuStats();syncSettingsUI();if(actx)applyAudioSettings();
@@ -2754,6 +2761,7 @@ async function refetchCloudSave(){
     const data=await res.json();
     if(!data.signedIn)return;
     if(typeof data.version==='number')cloudSaveVersion=data.version;
+    idleInfo=data.idle||null;
     if(data.data){
       save=normalizeSave(data.data);
       writeAccountCache(cloudAccountId,save,data.updatedAt);
@@ -3715,6 +3723,7 @@ function adoptEndgame(view){
   if(view.universe){
     const vu=view.universe;
     save.universe.coinsSpent=Math.max(0,Math.floor(Number(vu.coinsSpent)||0));
+    save.universe.coinsGranted=Math.max(0,Math.floor(Number(vu.coinsGranted)||0));
     if(vu.planet)save.universe.planet=
       {buildings:Object.assign({},vu.planet.buildings||{}),
        decorations:Object.assign({},vu.planet.decorations||{})};
@@ -7232,6 +7241,26 @@ function updatePlanetCam(dt){
 }
 
 /* ---- planet chrome ---- */
+// The colony's idle income as the server last reported it
+// ({pending, ratePerHour, capHours}), or null for a guest/offline.
+let idleInfo=null;
+async function collectIdleIncome(){
+  if(!cloudSyncEnabled||!cloudSessionToken||planetBusy)return;
+  planetBusy=true;
+  try{
+    const res=await fetch('/voidbreak/planet/collect',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({sessionToken:cloudSessionToken})});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok||!data.ok){SFX.error();toast((data&&data.error)||'COULD NOT COLLECT');return;}
+    if(typeof data.version==='number'&&data.version)cloudSaveVersion=data.version;
+    if(data.data)adoptServerSave(data.data,Date.now());
+    if(data.endgame)adoptEndgame(data.endgame);
+    idleInfo=data.idle||null;
+    if(data.amount>0){SFX.chest();showReveal('SALVAGE COLLECTED','+'+fmt(data.amount)+' COINS','YOUR COLONY KEPT WORKING WHILE YOU WERE AWAY',1800);}
+  }catch(e){toast('COULD NOT COLLECT');}
+  finally{planetBusy=false;if(state==='planet')refreshPlanetUI();}
+}
+el('planetCollect').addEventListener('click',()=>{SFX.ui();collectIdleIncome();});
 function refreshPlanetUI(){
   if(!UNI_OK)return;
   const u=uni();
@@ -7247,7 +7276,12 @@ function refreshPlanetUI(){
   el('planetCorner').innerHTML=
     '<div class="uni-stat coin">◆ <b>'+fmt(coinsSpendable())+'</b> COINS</div>'+
     '<div class="uni-stat">TERRITORY <b>'+owned+' / '+UNI.PLOT_COUNT+'</b></div>'+
-    '<div class="uni-stat">SALVAGE <b>×'+UNI.coinMultiplier(u).toFixed(2)+'</b></div>';
+    '<div class="uni-stat">SALVAGE <b>×'+UNI.coinMultiplier(u).toFixed(2)+'</b></div>'+
+    (idleInfo&&idleInfo.ratePerHour>0?'<div class="uni-stat">IDLE <b>+'+fmt(Math.round(idleInfo.ratePerHour))+'/H</b></div>':'');
+  // COLLECT shows only what the server says is waiting.
+  const cBtn=el('planetCollect');
+  cBtn.classList.toggle('hidden',!(idleInfo&&idleInfo.pending>0));
+  if(idleInfo)cBtn.textContent='COLLECT +'+fmt(idleInfo.pending);
 
   // Build palette
   const bar=el('buildBar');bar.innerHTML='';

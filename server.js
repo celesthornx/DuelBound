@@ -166,6 +166,11 @@ function defaultAccount(name, email) {
         // existed have no record at all and read as fully onboarded
         // (see onboarding.js), so no existing player is affected.
         onboarding: Onboarding.defaultOnboarding(),
+        // IDLE INCOME -- when the Home Planet's salvage was last
+        // collected (server clock, ms). 0 = the clock has not started;
+        // the first collect starts it without paying (voidbreak.js's
+        // collectIdle), so no account is ever paid for time before it.
+        lastCollectedAt: 0,
         dailyChallenges: defaultDailyChallenges(),
         ranked: Ranked.defaultRankedRecord(),
         // Friend lists hold stable account ids (Google "sub"), never emails.
@@ -3932,7 +3937,9 @@ const httpServer = http.createServer(async (req, res) => {
                 // being absent: a pre-feature account has no record and
                 // must keep reading as fully onboarded (onboarding.js),
                 // which defaulting it here would silently undo.
-                onboarding: existing.onboarding
+                onboarding: existing.onboarding,
+                // Server clock only -- never read from the request.
+                lastCollectedAt: existing.lastCollectedAt || 0
             };
             if (accounts[sub].onboarding === undefined) delete accounts[sub].onboarding;
             try {
@@ -4541,7 +4548,12 @@ const httpServer = http.createServer(async (req, res) => {
             // server-side, from the stored save. The client renders it
             // and never computes a price, an ownership flag or an
             // eligibility check of its own.
-            endgame: Voidbreak.endgameView(vb ? vb.data : null)
+            endgame: Voidbreak.endgameView(vb ? vb.data : null),
+            // Home Planet idle income waiting to be collected, computed
+            // here from the server clock. Null while the planet is still
+            // locked behind training.
+            idle: Onboarding.isOnboarded(account)
+                ? Voidbreak.idleView(vb ? vb.data : null, account.lastCollectedAt, Date.now()) : null
         });
         return;
     }
@@ -4814,6 +4826,53 @@ const httpServer = http.createServer(async (req, res) => {
                 endgame: Voidbreak.endgameView(result.save),
                 data: result.save,
                 version: auth.account.voidbreak.version
+            });
+        } catch (e) {
+            sendJson(res, 400, { error: "Bad request" });
+        }
+        return;
+    }
+
+    // ---- POST /voidbreak/planet/collect ---- body: { sessionToken } ----
+    // Collects the colony's idle income. Everything that decides the
+    // amount is server-side: the elapsed time is the SERVER's clock
+    // against the account's stored lastCollectedAt, and the rate is the
+    // STORED colony (voidbreak.js's collectIdle). The body carries a
+    // session and nothing else -- there is no amount or duration a
+    // client can send. Called by the hub on return and by the Home
+    // Planet's COLLECT button; either way it is naturally idempotent,
+    // since a second call finds the clock already advanced.
+    if (req.method === "POST" && req.url === "/voidbreak/planet/collect") {
+        try {
+            const body = await readJsonBody(req);
+            const auth = voidbreakUnlockAuth(body);
+            if (auth.error) { sendJson(res, auth.error, { error: auth.message }); return; }
+
+            const now = Date.now();
+            const current = auth.account.voidbreak ? auth.account.voidbreak.data : Voidbreak.defaultSaveData();
+            const result = Voidbreak.collectIdle(current, auth.account.lastCollectedAt, now);
+            const previousAt = auth.account.lastCollectedAt;
+            auth.account.lastCollectedAt = result.nextAt;
+            if (result.amount > 0) {
+                // commitVoidbreakSave persists the whole account, so the
+                // advanced clock lands in the same write as the credit.
+                if (!(await commitVoidbreakSave(auth.sub, auth.account, result.save))) {
+                    auth.account.lastCollectedAt = previousAt;
+                    sendJson(res, 503, { error: "Could not collect -- try again" });
+                    return;
+                }
+            } else if (previousAt !== result.nextAt) {
+                try { await persistAccount(auth.sub); }
+                catch (e) { auth.account.lastCollectedAt = previousAt; }
+            }
+            const data = auth.account.voidbreak ? auth.account.voidbreak.data : null;
+            sendJson(res, 200, {
+                ok: true,
+                amount: result.amount,
+                data: data,
+                endgame: Voidbreak.endgameView(data),
+                idle: Voidbreak.idleView(data, auth.account.lastCollectedAt, now),
+                version: auth.account.voidbreak ? auth.account.voidbreak.version : 0
             });
         } catch (e) {
             sendJson(res, 400, { error: "Bad request" });

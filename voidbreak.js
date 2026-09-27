@@ -156,6 +156,7 @@ const DEF_SAVE = {
         ship: {},        // { hull: 2, engine: 1, ... } -- ship part levels
         coins: 0,        // lifetime coins earned (planet construction currency)
         coinsSpent: 0,   // SERVER-OWNED monotonic spend ledger
+        coinsGranted: 0, // SERVER-OWNED monotonic credit ledger (idle income; see collectIdle)
         planet: {        // SERVER-OWNED colony state
             buildings: {},   // { "17": { id: "command", level: 2 } } -- keyed by plot index
             decorations: {}  // { "23": { id: "dec_monolith" } }
@@ -755,6 +756,7 @@ function applyClientSave(clean, stored) {
     const prevU = prev.universe || Universe.emptyUniverse();
     if (!clean.universe) clean.universe = Universe.emptyUniverse();
     clean.universe.coinsSpent = Math.max(0, Math.floor(Number(prevU.coinsSpent) || 0));
+    clean.universe.coinsGranted = Math.max(0, Math.floor(Number(prevU.coinsGranted) || 0));
     clean.universe.planet = clonePlanet(prevU.planet);
 
     // ---- universe: client-reported half, forced monotonic ----
@@ -1071,6 +1073,49 @@ function buildOnPlanet(save, plot, buildingId) {
     return { ok: true, save: next, building: building, level: currentLevel + 1, plot: plotIndex, spent: cost };
 }
 
+// =====================================================================
+// IDLE INCOME -- collecting what the colony salvaged while away.
+//
+// `lastAt` is the account's own lastCollectedAt and `now` is the
+// SERVER's clock; neither comes from a request, so a client cannot claim
+// a longer absence or a bigger payout. The amount is decided by
+// voidbreakUniverse.js's idleCoins() against the STORED colony and
+// credited to the server-owned `coinsGranted` ledger (never to the
+// MAX-merged, client-reported `coins`, where a concurrent device save
+// could swallow it).
+//
+// A missing/invalid/future `lastAt` starts the clock at `now` and pays
+// nothing -- an account's first touch after this feature ships is not a
+// windfall for all the time before it. The clock only advances when at
+// least one whole coin is paid, so checking often never loses the
+// fraction still accruing.
+// =====================================================================
+function collectIdle(save, lastAt, now) {
+    const s = save || defaultSaveData();
+    const u = s.universe || Universe.emptyUniverse();
+    const last = Math.floor(Number(lastAt));
+    if (!isFinite(last) || last <= 0 || last > now) return { save: s, amount: 0, nextAt: now };
+    const amount = Universe.idleCoins(u, now - last);
+    if (amount < 1) return { save: s, amount: 0, nextAt: last };
+    const next = cloneSave(s);
+    if (!next.universe) next.universe = Universe.emptyUniverse();
+    next.universe.coinsGranted = Math.min(MAX_COINS, Math.max(0, Math.floor(Number(u.coinsGranted) || 0)) + amount);
+    return { save: next, amount: amount, nextAt: now };
+}
+
+// What the Home Planet shows: coins waiting, the hourly rate, the cap.
+function idleView(save, lastAt, now) {
+    const s = save || defaultSaveData();
+    const u = s.universe || Universe.emptyUniverse();
+    const last = Math.floor(Number(lastAt));
+    const pending = (!isFinite(last) || last <= 0 || last > now) ? 0 : Universe.idleCoins(u, now - last);
+    return {
+        pending: pending,
+        ratePerHour: Math.round(Universe.idleRatePerHour(u) * 10) / 10,
+        capHours: Universe.IDLE.capHours
+    };
+}
+
 // Placing a decoration costs nothing -- it is unlocked by having FOUND
 // the thing, which is progress the server already holds in
 // `universe.discovered` and re-checks here. Passing a null decorationId
@@ -1201,6 +1246,7 @@ function universeView(save) {
     return {
         coins: Math.max(0, Math.floor(Number(u.coins) || 0)),
         coinsSpent: Math.max(0, Math.floor(Number(u.coinsSpent) || 0)),
+        coinsGranted: Math.max(0, Math.floor(Number(u.coinsGranted) || 0)),
         spendableCoins: Universe.spendableCoins(u),
         coinMultiplier: Universe.coinMultiplier(u),
         // The colony's combat perks, resolved by the same function the
@@ -1337,6 +1383,7 @@ function mergeUniverse(a, b) {
 
     out.coins = Math.max(Math.floor(Number(ua.coins) || 0), Math.floor(Number(ub.coins) || 0));
     out.coinsSpent = Math.max(Math.floor(Number(ua.coinsSpent) || 0), Math.floor(Number(ub.coinsSpent) || 0));
+    out.coinsGranted = Math.max(Math.floor(Number(ua.coinsGranted) || 0), Math.floor(Number(ub.coinsGranted) || 0));
 
     const pa = clonePlanet(ua.planet), pb = clonePlanet(ub.planet);
     out.planet = { buildings: {}, decorations: {} };
@@ -1715,6 +1762,8 @@ module.exports = {
     buildOnPlanet,
     placeDecoration,
     universeView,
+    collectIdle,
+    idleView,
 
     // endgame: catalog + pure transaction logic (server source of truth)
     COSMETICS,

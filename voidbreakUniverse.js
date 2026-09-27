@@ -889,6 +889,7 @@
             ship: {},        // { hull: 2, ... }
             coins: 0,
             coinsSpent: 0,
+            coinsGranted: 0, // SERVER-OWNED: coins the server credited (idle income)
             planet: { buildings: {}, decorations: {} } // plotIndex -> { id, level }
         };
     }
@@ -1088,9 +1089,16 @@
         return "";
     }
 
+    // Earned in play (`coins`, client-reported, MAX-merged) plus credited
+    // by the server (`coinsGranted`, server-owned -- idle income), minus
+    // the server's spend ledger. The grant is its own ledger rather than
+    // an addition to `coins` because `coins` is MAX-merged across
+    // devices: a grant added to it could be silently lost to another
+    // device's save that had earned a little more in a run meanwhile.
     function spendableCoins(u) {
         if (!u) return 0;
-        return Math.max(0, (Math.floor(Number(u.coins) || 0)) - (Math.floor(Number(u.coinsSpent) || 0)));
+        return Math.max(0, (Math.floor(Number(u.coins) || 0)) + (Math.floor(Number(u.coinsGranted) || 0))
+            - (Math.floor(Number(u.coinsSpent) || 0)));
     }
 
     // Coin income multiplier from the colony and the ship's cargo bay.
@@ -1107,6 +1115,48 @@
         var cargo = SHIP_SYSTEM_BY_ID.cargo;
         m += shipLevel(u, "cargo") * (cargo ? cargo.per : 0);
         return m;
+    }
+
+    // =================================================================
+    // IDLE INCOME -- the colony keeps salvaging while the pilot is away.
+    //
+    // Rate: IDLE.perLevelPerHour coins for every building level standing,
+    // times the same coinMultiplier() active play uses (so the Lab,
+    // Foundry and cargo bay raise it too), and nothing at all until a
+    // Command Center exists -- no colony, no income. Accrues for at most
+    // IDLE.capHours; a week away pays the same as half a day.
+    //
+    // A full colony (27 levels, x1.15 salvage and more with cargo parts)
+    // makes ~62-75 coins/hour, ~750-900 per 12h -- about one and a half
+    // to two system clears' worth. It helps; it never replaces play.
+    // (Proposed numbers -- they want playtesting.)
+    //
+    // Pure: elapsed time is an input. Only the SERVER ever supplies it,
+    // from its own clock (see voidbreak.js's collectIdle).
+    // =================================================================
+    var IDLE = { perLevelPerHour: 2, capHours: 12 };
+
+    function colonyLevels(u) {
+        if (!u || !u.planet || !u.planet.buildings) return 0;
+        var n = 0, b = u.planet.buildings, keys = Object.keys(b);
+        for (var i = 0; i < keys.length; i++) {
+            var e = b[keys[i]];
+            if (e && BUILDING_BY_ID[e.id]) n += Math.max(0, Math.floor(Number(e.level) || 0));
+        }
+        return n;
+    }
+
+    function idleRatePerHour(u) {
+        if (!hasBuilding(u, "command")) return 0;
+        return colonyLevels(u) * IDLE.perLevelPerHour * coinMultiplier(u);
+    }
+
+    // Whole coins accrued over `elapsedMs`, counted in whole minutes and
+    // capped at IDLE.capHours.
+    function idleCoins(u, elapsedMs) {
+        var minutes = Math.floor(Math.max(0, Number(elapsedMs) || 0) / 60000);
+        minutes = Math.min(minutes, IDLE.capHours * 60);
+        return Math.floor(idleRatePerHour(u) * minutes / 60);
     }
 
     // Every combat perk the colony grants, resolved from the building
@@ -1182,6 +1232,10 @@
         requirementText: requirementText,
         spendableCoins: spendableCoins,
         coinMultiplier: coinMultiplier,
-        colonyBonuses: colonyBonuses
+        colonyBonuses: colonyBonuses,
+        IDLE: IDLE,
+        colonyLevels: colonyLevels,
+        idleRatePerHour: idleRatePerHour,
+        idleCoins: idleCoins
     };
 });

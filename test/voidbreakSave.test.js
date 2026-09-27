@@ -159,5 +159,34 @@ t('coin multiplier unchanged by the new perks', Math.abs(U.coinMultiplier(fullCo
 t('server universe view carries the same resolved perks',
   JSON.stringify(V.universeView({ universe: Object.assign(U.emptyUniverse(), fullColony) }).colony) === JSON.stringify(cb));
 
+console.log('\n9. Idle income -- server-computed, server-owned ledger');
+const HOUR = 3600000;
+const colonySave = V.sanitizeSaveData({ shards: 0, universe: { coins: 1000 } });
+colonySave.universe.planet = { buildings: { 0: { id: 'command', level: 2 }, 1: { id: 'hangar', level: 1 } }, decorations: {} };
+colonySave.universe.coinsSpent = 400;
+t('no command center, no income', U.idleCoins(U.emptyUniverse(), 5 * HOUR) === 0);
+t('rate = 2/level/hour x salvage', U.idleRatePerHour(colonySave.universe) === 6, U.idleRatePerHour(colonySave.universe));
+t('3h away pays 18', U.idleCoins(colonySave.universe, 3 * HOUR) === 18, U.idleCoins(colonySave.universe, 3 * HOUR));
+t('capped at 12h', U.idleCoins(colonySave.universe, 72 * HOUR) === U.idleCoins(colonySave.universe, 12 * HOUR));
+const now = Date.UTC(2026, 8, 27, 12);
+const first = V.collectIdle(colonySave, 0, now);
+t('first touch starts the clock, pays nothing', first.amount === 0 && first.nextAt === now);
+const future = V.collectIdle(colonySave, now + HOUR, now);
+t('a future timestamp pays nothing and restarts', future.amount === 0 && future.nextAt === now);
+const tiny = V.collectIdle(colonySave, now - 5 * 60000, now);
+t('under one coin: clock does not advance', tiny.amount === 0 && tiny.nextAt === now - 5 * 60000, tiny);
+const got = V.collectIdle(colonySave, now - 3 * HOUR, now);
+t('collect credits coinsGranted', got.amount === 18 && got.save.universe.coinsGranted === 18 && got.nextAt === now, got.amount);
+t('...not the client-reported coins', got.save.universe.coins === 1000);
+t('...and spendable includes it', U.spendableCoins(got.save.universe) === 1000 + 18 - 400, U.spendableCoins(got.save.universe));
+t('collect does not mutate its input', colonySave.universe.coinsGranted === 0);
+const forged = V.sanitizeSaveData({ universe: { coins: 1000, coinsGranted: 99999 } });
+t('a client cannot write coinsGranted', forged.universe.coinsGranted === 0, forged.universe.coinsGranted);
+const afterSave = V.applyClientSave(forged, got.save);
+t('an ordinary save carries the stored grant', afterSave.universe.coinsGranted === 18, afterSave.universe.coinsGranted);
+const merged = V.mergeSaveData(got.save, colonySave);
+t('merge keeps the grant (MAX)', merged.universe.coinsGranted === 18, merged.universe && merged.universe.coinsGranted);
+t('idleView reports pending/rate/cap', JSON.stringify(V.idleView(colonySave, now - 3 * HOUR, now)) === JSON.stringify({ pending: 18, ratePerHour: 6, capHours: 12 }));
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

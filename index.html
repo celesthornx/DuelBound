@@ -7984,6 +7984,7 @@ const ACCOUNT_SERVER_URL = httpProtocol + "//" + SERVER_HOST;
       .finally(()=>{
         if(typeof window.__renderOnboardingGates === 'function') window.__renderOnboardingGates();
         if(typeof window.__onboardingMaybeStart === 'function') window.__onboardingMaybeStart();
+        if(typeof window.__collectIdleOnReturn === 'function') window.__collectIdleOnReturn();
       });
   }
 
@@ -16018,6 +16019,28 @@ updatePortalAnchors(dt);
     }
   }
   window.__renderOnboardingGates = renderOnboardingGates;
+
+  // WHILE YOU WERE AWAY. Once per visit, a signed-in pilot whose Home
+  // Planet is open collects what the colony salvaged in their absence.
+  // The server decides the amount from its own clock and the stored
+  // colony (POST /voidbreak/planet/collect); this only announces it.
+  let idleCollectedThisVisit = false;
+  async function collectIdleOnReturn(){
+    if(idleCollectedThisVisit || !loggedIn || !sessionToken) return;
+    if(!currentOnboarding().tutorialComplete) return;
+    idleCollectedThisVisit = true;
+    try{
+      const res = await fetch(ACCOUNT_SERVER_URL + '/voidbreak/planet/collect', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionToken: sessionToken })
+      });
+      const j = await res.json().catch(()=>({}));
+      if(res.ok && j.amount > 0){
+        lobbyToast('WHILE YOU WERE AWAY: +' + Number(j.amount).toLocaleString('en-US') + ' COINS SALVAGED FOR YOUR HOME PLANET', { gold: true, ms: 5200 });
+      }
+    } catch(e){ idleCollectedThisVisit = false; }
+  }
+  window.__collectIdleOnReturn = collectIdleOnReturn;
 
   async function recordOnboardingStep(step, path){
     if(!VBO) return;
