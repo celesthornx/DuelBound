@@ -2997,12 +2997,7 @@ const PUBLIC_FILES = new Set([
     "/icons/icon-192.png",
     "/icons/icon-512.png",
     "/icons/apple-touch-icon.png",
-    "/icons/logo-128.png",
-    // Loading-screen art (one crop per screen shape; see #vbLoader in
-    // index.html / voidbreak.html).
-    "/loading/desktop.webp",
-    "/loading/tablet.webp",
-    "/loading/phone.webp"
+    "/icons/logo-128.png"
 ]);
 
 async function serveStatic(req, res) {
